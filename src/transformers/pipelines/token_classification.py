@@ -1,6 +1,6 @@
 import types
 import warnings
-from typing import Any, overload
+from typing import Any, Dict, List, Tuple, overload
 
 import numpy as np
 
@@ -90,7 +90,13 @@ class AggregationStrategy(ExplicitEnum):
                   cannot end up with different tags. scores will be averaged first across tokens, and then the maximum
                   label is applied.
                 - "max" : (works only on word based models) Will use the `SIMPLE` strategy except that words, cannot
-                  end up with different tags. Word entity will simply be the token with the maximum score.""",
+                  end up with different tags. Word entity will simply be the token with the maximum score.
+        use_fast_grouping (`bool`, *optional*, defaults to `False`):
+            Enable the optimised BIO-grouping path. When `True` the pipeline skips `gather_pre_entities` +
+            `aggregate` and instead runs a single numpy-vectorised pass over token probabilities.
+            **Constraints**: only supported with fast tokenizers that produce offset mappings; always applies
+            the AVERAGE aggregation strategy; `aggregation_strategy` must be `"none"` (or omitted) when
+            this flag is set.""",
 )
 class TokenClassificationPipeline(ChunkPipeline):
     """
@@ -136,13 +142,58 @@ class TokenClassificationPipeline(ChunkPipeline):
     _load_feature_extractor = False
     _load_tokenizer = True
 
-    def __init__(self, args_parser=TokenClassificationArgumentHandler(), **kwargs):
+    def __init__(self, args_parser=TokenClassificationArgumentHandler(), use_fast_grouping: bool = False, **kwargs):
         super().__init__(**kwargs)
 
         self.check_model_type(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES)
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self._args_parser = args_parser
+        self.use_fast_grouping = use_fast_grouping
+
+        # Pre-compute label lookup tables used by the fast grouping path.
+        self._o_label_ids: set = set()
+        self._id2bio: np.ndarray | None = None
+        self._id2tag: np.ndarray | None = None
+        if self.use_fast_grouping:
+            self._init_label_maps()
+
+    def _init_label_maps(self) -> None:
+        """
+        Build label-index look-up tables consumed by :meth:`group_entities`.
+
+        Must be (re-)called whenever ``model.config.id2label`` changes.
+        Populates:
+          - ``_id2bio``  – numpy array mapping label index → BIO prefix ("B", "I" or "O")
+          - ``_id2tag``  – numpy array mapping label index → entity type string
+          - ``_o_label_ids`` – set of label indices that represent the Outside class
+        """
+        id2label = self.model.config.id2label
+        num_labels = len(id2label)
+
+        self._id2bio = np.empty(num_labels, dtype=object)
+        self._id2tag = np.empty(num_labels, dtype=object)
+        o_candidates = []
+        for i, label in id2label.items():
+            if label.startswith("B-"):
+                self._id2bio[i] = "B"
+                self._id2tag[i] = label[2:]
+            elif label.startswith("I-"):
+                self._id2bio[i] = "I"
+                self._id2tag[i] = label[2:]
+            else:
+                # Everything that is neither B- nor I- is treated as Outside
+                self._id2bio[i] = "O"
+                self._id2tag[i] = label
+                o_candidates.append(i)
+
+        # Keep ALL O-like label indices so that PAD, SEP, etc. are also ignored
+        self._o_label_ids = set(o_candidates) if o_candidates else {0}
+
+    @staticmethod
+    def _strip_bio_prefix(tag: str) -> str:
+        """Return the entity type with any leading B-/I- prefix removed."""
+        return tag.split("-", 1)[-1] if "-" in tag else tag
 
     def _sanitize_parameters(
         self,
@@ -166,6 +217,12 @@ class TokenClassificationPipeline(ChunkPipeline):
         if aggregation_strategy is not None:
             if isinstance(aggregation_strategy, str):
                 aggregation_strategy = AggregationStrategy[aggregation_strategy.upper()]
+            if getattr(self, "use_fast_grouping", False) and aggregation_strategy != AggregationStrategy.NONE:
+                raise ValueError(
+                    "`use_fast_grouping=True` always applies the AVERAGE aggregation strategy internally. "
+                    "Do not pass `aggregation_strategy` when `use_fast_grouping` is enabled, or set "
+                    '`aggregation_strategy="none"` explicitly.'
+                )
             if (
                 aggregation_strategy
                 in {AggregationStrategy.FIRST, AggregationStrategy.MAX, AggregationStrategy.AVERAGE}
@@ -342,27 +399,96 @@ class TokenClassificationPipeline(ChunkPipeline):
             sentence = all_outputs[0]["sentence"]
             input_ids = model_outputs["input_ids"][0]
             offset_mapping = (
-                model_outputs["offset_mapping"][0] if model_outputs["offset_mapping"] is not None else None
+                model_outputs["offset_mapping"][0].numpy()
+                if model_outputs["offset_mapping"] is not None
+                else None
             )
             special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
             word_ids = model_outputs.get("word_ids")
-
             maxes = np.max(logits, axis=-1, keepdims=True)
             shifted_exp = np.exp(logits - maxes)
             scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
 
-            pre_entities = self.gather_pre_entities(
-                sentence,
-                input_ids,
-                scores,
-                offset_mapping,
-                special_tokens_mask,
-                aggregation_strategy,
-                word_ids=word_ids,
-                word_to_chars_map=word_to_chars_map,
+            # Fast path requires: flag set, offsets available, label maps initialised,
+            # and a fast tokenizer (so offset_mapping is a real numpy array).
+            use_fast = (
+                self.use_fast_grouping
+                and offset_mapping is not None
+                and self._id2bio is not None
+                and self._id2tag is not None
+                and self.tokenizer.is_fast
             )
-            grouped_entities = self.aggregate(pre_entities, aggregation_strategy)
-            # Filter anything that is in self.ignore_labels
+
+            if use_fast:
+                # Vectorised special-token filter using numpy boolean mask
+                keep_mask = ~special_tokens_mask.astype(bool)
+                kept_input_ids = input_ids.numpy()[keep_mask]
+                kept_scores = scores[keep_mask]                     # (N, num_labels)
+                kept_offsets_arr = offset_mapping[keep_mask]        # (N, 2)
+
+                if len(kept_scores) > 0:
+                    # Resolve token strings from IDs in one batch call where possible
+                    token_strings = [
+                        self.tokenizer.convert_ids_to_tokens(int(tid)) for tid in kept_input_ids
+                    ]
+                    kept_offsets = [(int(s), int(e)) for s, e in kept_offsets_arr]
+
+                    # Use tokenizer word_ids for subword detection when available
+                    # (works for WordPiece, BPE, SentencePiece, etc.)
+                    if word_ids is not None:
+                        kept_word_ids = np.array(word_ids, dtype=object)[keep_mask]
+                        # A token is a subword if it shares its word_id with the
+                        # preceding non-special token
+                        is_subword_list = [False]
+                        for k in range(1, len(kept_word_ids)):
+                            is_subword_list.append(
+                                kept_word_ids[k] is not None
+                                and kept_word_ids[k] == kept_word_ids[k - 1]
+                            )
+                    else:
+                        # Fallback for tokenizers that expose ## prefix
+                        is_subword_list = [t.startswith("##") for t in token_strings]
+
+                    label_ids_arr = kept_scores.argmax(axis=1)
+                    label_scores_arr = kept_scores[np.arange(len(kept_scores)), label_ids_arr]
+
+                    fast_entities = self.group_entities(
+                        token_strings,
+                        label_ids_arr,
+                        label_scores_arr,
+                        kept_scores,
+                        kept_offsets,
+                        sentence,
+                        threshold=0.0,
+                        ignore_labels=ignore_labels,
+                        is_subword=is_subword_list,
+                    )
+                    # Normalise keys to match legacy pipeline output schema
+                    grouped_entities = [
+                        {
+                            "entity_group": ent["label"],
+                            "score": ent["score"],
+                            "word": ent["text"],
+                            "start": ent["start"],
+                            "end": ent["end"],
+                        }
+                        for ent in fast_entities
+                    ]
+                else:
+                    grouped_entities = []
+            else:
+                pre_entities = self.gather_pre_entities(
+                    sentence,
+                    input_ids,
+                    scores,
+                    offset_mapping,
+                    special_tokens_mask,
+                    aggregation_strategy,
+                    word_ids=word_ids,
+                    word_to_chars_map=word_to_chars_map,
+                )
+                grouped_entities = self.aggregate(pre_entities, aggregation_strategy)
+
             entities = [
                 entity
                 for entity in grouped_entities
@@ -489,7 +615,7 @@ class TokenClassificationPipeline(ChunkPipeline):
 
         if aggregation_strategy == AggregationStrategy.NONE:
             return entities
-        return self.group_entities(entities)
+        return self.group_entities_deprecated(entities)
 
     def aggregate_word(self, entities: list[dict], aggregation_strategy: AggregationStrategy) -> dict:
         word = self.tokenizer.convert_tokens_to_string([entity["word"] for entity in entities])
@@ -584,7 +710,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             tag = entity_name
         return bi, tag
 
-    def group_entities(self, entities: list[dict]) -> list[dict]:
+    def group_entities_deprecated(self, entities: list[dict]) -> list[dict]:
         """
         Find and group together the adjacent tokens with the same entity predicted.
 
@@ -620,6 +746,133 @@ class TokenClassificationPipeline(ChunkPipeline):
             entity_groups.append(self.group_sub_entities(entity_group_disagg))
 
         return entity_groups
+
+    def group_entities(
+        self,
+        tokens: List[str],
+        label_ids: np.ndarray,
+        scores: np.ndarray,
+        chunk_probs: np.ndarray,
+        offsets: List[Tuple[int, int]],
+        chunk_text: str,
+        threshold: float,
+        ignore_labels: List[str] | None = None,
+        is_subword: List[bool] | None = None,
+    ) -> List[Dict]:
+        """
+        Optimised BIO-grouping pass used when ``use_fast_grouping=True``.
+
+        Applies the AVERAGE aggregation strategy: for multi-token words, per-label
+        probabilities are averaged across sub-tokens before the winning label is chosen.
+
+        Args:
+            tokens: Token strings for the non-special tokens in the chunk.
+            label_ids: Argmax label index per token, shape ``(N,)``.
+            scores: Per-token max probability, shape ``(N,)``.
+            chunk_probs: Full probability matrix, shape ``(N, num_labels)``.
+            offsets: ``(start_char, end_char)`` pairs aligned with *tokens*.
+            chunk_text: The original sentence string (used for span extraction).
+            threshold: Tokens whose winning probability is below this value are
+                treated as Outside.
+            ignore_labels: Label strings to suppress (defaults to ``["O"]``).
+            is_subword: Boolean mask indicating which tokens are sub-tokens of the
+                preceding word. When ``None``, the ``##`` prefix heuristic is used
+                as a fallback for WordPiece models.
+
+        Returns:
+            List of entity dicts with keys ``start``, ``end``, ``text``,
+            ``label``, ``score``.
+        """
+        if not tokens:
+            return []
+
+        if ignore_labels is None:
+            ignore_labels = ["O"]
+        ignore_label_set = set(ignore_labels)
+        ignore_label_ids = {
+            idx
+            for idx, lbl in self.model.config.id2label.items()
+            if lbl in ignore_label_set or self._strip_bio_prefix(lbl) in ignore_label_set
+        }
+        # Merge with the O-label set from _init_label_maps
+        all_skip_ids = self._o_label_ids | ignore_label_ids
+
+        # Resolve subword membership
+        if is_subword is not None:
+            is_subword_arr = np.asarray(is_subword, dtype=bool)
+        else:
+            # Fallback: WordPiece ## prefix
+            is_subword_arr = np.fromiter(
+                (t.startswith("##") for t in tokens), count=len(tokens), dtype=bool
+            )
+
+        # A word starts at every non-subword token
+        word_starts = np.where(~is_subword_arr)[0]
+        if len(word_starts) == 0:
+            return []
+
+        # Build half-open [start, end) ranges for each word
+        word_ends = np.empty(len(word_starts), dtype=int)
+        word_ends[:-1] = word_starts[1:]
+        word_ends[-1] = len(tokens)
+        word_ranges = list(zip(word_starts.tolist(), word_ends.tolist()))
+
+        entities: List[Dict] = []
+
+        # BIO state machine
+        curr_ent_tag: str | None = None
+        curr_ent_start_char: int = -1
+        curr_ent_end_char: int = -1
+        curr_ent_scores: List[float] = []
+
+        def flush_entity() -> None:
+            nonlocal curr_ent_tag, curr_ent_start_char, curr_ent_end_char, curr_ent_scores
+            if curr_ent_tag is not None:
+                entities.append(
+                    {
+                        "start": curr_ent_start_char,
+                        "end": curr_ent_end_char,
+                        "text": chunk_text[curr_ent_start_char:curr_ent_end_char],
+                        "label": self._strip_bio_prefix(curr_ent_tag),
+                        "score": float(np.mean(curr_ent_scores)),
+                    }
+                )
+                curr_ent_tag = None
+                curr_ent_scores = []
+
+        for start, end in word_ranges:
+            if end - start == 1:
+                # Single-token word — no averaging needed
+                w_label_id = int(label_ids[start])
+                avg_score = float(scores[start])
+            else:
+                # Multi-token word — average probabilities across sub-tokens
+                avg_probs = np.mean(chunk_probs[start:end], axis=0)
+                w_label_id = int(np.argmax(avg_probs))
+                avg_score = float(avg_probs[w_label_id])
+
+            # Skip Outside labels and low-confidence predictions
+            if avg_score < threshold or w_label_id in all_skip_ids:
+                flush_entity()
+                continue
+
+            bi = self._id2bio[w_label_id]
+            tag = self._id2tag[w_label_id]
+
+            if curr_ent_tag == tag and bi == "I":
+                # Continue the current entity span
+                curr_ent_end_char = offsets[end - 1][1]
+                curr_ent_scores.append(avg_score)
+            else:
+                # Start a new entity (B-tag or tag change)
+                flush_entity()
+                curr_ent_tag = tag
+                curr_ent_start_char = offsets[start][0]
+                curr_ent_end_char = offsets[end - 1][1]
+                curr_ent_scores = [avg_score]
+
+        flush_entity()
+        return entities
 
 
 NerPipeline = TokenClassificationPipeline
