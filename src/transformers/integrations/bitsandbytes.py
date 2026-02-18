@@ -47,6 +47,15 @@ class Bnb4bitQuantize(ConversionOps):
         # update param name to get the weights instead of the quantized stats
         module, _ = get_module_from_name(model, full_layer_name)
 
+        # Handle untying of embedding weights before quantization
+        input_embed = model.get_input_embeddings()
+        is_embedding_param = id(module) == id(input_embed)
+        untie = getattr(self.hf_quantizer.quantization_config, "untie_embedding_weights", False)
+
+        if untie and is_embedding_param:
+            setattr(model.config.get_text_config(decoder=True), "tie_word_embeddings", False)
+            lm_head = value.clone()
+
         # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
         # Since weights are saved in the correct "orientation", we skip transposing when loading.
         if issubclass(module.source_cls, Conv1D):
@@ -55,7 +64,10 @@ class Bnb4bitQuantize(ConversionOps):
         old_value = model.get_parameter_or_buffer(full_layer_name)
         new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__).to(value.device)
         module._is_hf_initialized = True
-        return {full_layer_name: new_value}
+        result = {full_layer_name: new_value}
+        if untie and is_embedding_param:
+            result["lm_head.weight"] = lm_head
+        return result
 
 
 class Bnb4bitDeserialize(ConversionOps):
@@ -221,6 +233,21 @@ def replace_with_bnb_linear(
                     new_module.requires_grad_(False)
                     model.set_submodule(module_name, new_module)
                     has_been_replaced = True
+            elif (
+                isinstance(module, nn.Embedding)
+                and quantization_config.quantization_method() != "llm_int8"
+                and getattr(quantization_config, "include_input_output_embeddings", False)
+            ):
+                new_module = bnb.nn.Embedding4bit(
+                    module.num_embeddings,
+                    module.embedding_dim,
+                    quant_type=quantization_config.bnb_4bit_quant_type,
+                    quant_storage=quantization_config.bnb_4bit_quant_storage,
+                )
+                new_module.source_cls = type(module)
+                new_module.requires_grad_(False)
+                model.set_submodule(module_name, new_module)
+                has_been_replaced = True
 
     if not has_been_replaced:
         logger.warning(
@@ -290,6 +317,7 @@ def dequantize_and_replace(model, quantization_config=None, dtype=None):
     quant_method = quantization_config.quantization_method()
 
     target_cls = bnb.nn.Linear8bitLt if quant_method == "llm_int8" else bnb.nn.Linear4bit
+    has_been_replaced = False
     for module_name, module in model.named_modules():
         if isinstance(module, target_cls):
             with torch.device("meta"):
@@ -308,6 +336,21 @@ def dequantize_and_replace(model, quantization_config=None, dtype=None):
             new_module.weight = torch.nn.Parameter(weight)
             if bias is not None:
                 new_module.bias = bias
+            if hasattr(module, "_hf_hook"):
+                old_hook = module._hf_hook
+                new_hook = _create_accelerate_new_hook(old_hook)
+                remove_hook_from_module(module)
+                add_hook_to_module(new_module, new_hook)
+            new_module.to(module.weight.device)
+            model.set_submodule(module_name, new_module)
+            has_been_replaced = True
+        elif isinstance(module, bnb.nn.Embedding4bit):
+            with torch.device("meta"):
+                new_module = torch.nn.Embedding(module.num_embeddings, module.embedding_dim)
+            weight = dequantize_bnb_weight(module.weight, None)
+            if dtype is not None:
+                weight = weight.to(dtype)
+            new_module.weight = torch.nn.Parameter(weight)
             if hasattr(module, "_hf_hook"):
                 old_hook = module._hf_hook
                 new_hook = _create_accelerate_new_hook(old_hook)

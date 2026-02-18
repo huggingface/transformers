@@ -866,3 +866,87 @@ class Bnb4bitCompile(unittest.TestCase):
                 max_new_tokens=10,
                 cache_implementation="static",
             )
+
+
+@require_bitsandbytes
+@require_accelerate
+@require_torch
+@slow
+@apply_skip_if_not_implemented
+class Bnb4BitEmbeddingTest(unittest.TestCase):
+    model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+    def setUp(self):
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+    def tearDown(self):
+        gc.collect()
+        backend_empty_cache(torch_device)
+
+    def test_embedding_is_quantized(self):
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True, include_input_output_embeddings=True),
+            device_map="auto",
+        )
+        self.assertIsInstance(model.model.embed_tokens, bnb.nn.Embedding4bit)
+        self.assertIsInstance(model.lm_head, bnb.nn.Linear4bit)
+        del model
+
+    def test_embedding_memory_reduction(self):
+        model_no_emb = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            device_map="auto",
+        )
+        mem_no_emb = model_no_emb.get_memory_footprint()
+        del model_no_emb
+        gc.collect()
+        backend_empty_cache(torch_device)
+
+        model_with_emb = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True, include_input_output_embeddings=True),
+            device_map="auto",
+        )
+        mem_with_emb = model_with_emb.get_memory_footprint()
+        del model_with_emb
+
+        self.assertLess(mem_with_emb, mem_no_emb)
+
+    def test_embedding_generation(self):
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True, include_input_output_embeddings=True),
+            device_map="auto",
+        )
+        encoded_input = self.tokenizer("Hello my name is", return_tensors="pt")
+        output = model.generate(input_ids=encoded_input["input_ids"].to(model.device), max_new_tokens=10)
+        decoded = self.tokenizer.decode(output[0], skip_special_tokens=True)
+        self.assertGreater(len(decoded), len("Hello my name is"))
+        del model
+
+    def test_untie_embedding_weights(self):
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            quantization_config=BitsAndBytesConfig(
+                load_in_4bit=True,
+                include_input_output_embeddings=True,
+                untie_embedding_weights=True,
+            ),
+            device_map="auto",
+        )
+        self.assertFalse(model.config.tie_word_embeddings)
+        self.assertIsNot(model.get_input_embeddings().weight, model.get_output_embeddings().weight)
+        encoded_input = self.tokenizer("Hello my name is", return_tensors="pt")
+        output = model.generate(input_ids=encoded_input["input_ids"].to(model.device), max_new_tokens=10)
+        self.assertGreater(len(self.tokenizer.decode(output[0], skip_special_tokens=True)), len("Hello my name is"))
+        del model
+
+    def test_config_validation(self):
+        with self.assertRaises(ValueError):
+            BitsAndBytesConfig(
+                load_in_4bit=True,
+                untie_embedding_weights=True,
+                include_input_output_embeddings=False,
+            )

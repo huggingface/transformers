@@ -429,6 +429,12 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             quantized again.
         bnb_4bit_quant_storage (`torch.dtype` or str, *optional*, defaults to `torch.uint8`):
             This sets the storage type to pack the quantized 4-bit params.
+        include_input_output_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to quantize input/output embedding layers. When enabled, embedding layers will be
+            replaced with `bnb.nn.Embedding4bit` (4-bit only, not supported for 8-bit quantization).
+        untie_embedding_weights (`bool`, *optional*, defaults to `False`):
+            Whether to untie weights when quantizing input embeddings that are tied to the output
+            (lm_head) layer. Requires `include_input_output_embeddings=True`.
         kwargs (`dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -445,6 +451,8 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         bnb_4bit_quant_type="fp4",
         bnb_4bit_use_double_quant=False,
         bnb_4bit_quant_storage=None,
+        include_input_output_embeddings=False,
+        untie_embedding_weights=False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.BITS_AND_BYTES
@@ -482,6 +490,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             self.bnb_4bit_quant_storage = bnb_4bit_quant_storage
         else:
             raise ValueError("bnb_4bit_quant_storage must be a string or a torch.dtype")
+
+        self.include_input_output_embeddings = include_input_output_embeddings
+        self.untie_embedding_weights = untie_embedding_weights
 
         if kwargs:
             logger.info(f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__}.")
@@ -543,6 +554,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
 
         if not isinstance(self.bnb_4bit_use_double_quant, bool):
             raise TypeError("bnb_4bit_use_double_quant must be a boolean")
+
+        if self.untie_embedding_weights and not self.include_input_output_embeddings:
+            raise ValueError("`untie_embedding_weights` requires `include_input_output_embeddings=True`.")
 
     def is_quantizable(self):
         r"""
