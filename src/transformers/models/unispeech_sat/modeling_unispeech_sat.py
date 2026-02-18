@@ -440,52 +440,6 @@ class UniSpeechSatEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class UniSpeechSatEncoder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.pos_conv_embed = UniSpeechSatPositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([UniSpeechSatEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states: torch.tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs,
-    ):
-        if attention_mask is not None:
-            # make sure padded tokens output 0
-            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            hidden_states[~expand_attention_mask] = 0
-
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
-        )
-
-        position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
-
-        for layer in self.layers:
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            dropout_probability = torch.rand([])
-
-            skip_the_layer = self.training and dropout_probability < self.config.layerdrop
-            if not skip_the_layer or synced_gpus:
-                # under fsdp or deepspeed zero3 all gpus must run in sync
-                hidden_states = layer(hidden_states, attention_mask=attention_mask, **kwargs)
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
-
-
 class UniSpeechSatAttnAdapterLayer(nn.Module):
     def __init__(self, config):
         """
@@ -548,6 +502,52 @@ class UniSpeechSatEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
             hidden_states = hidden_states + self.adapter_layer(hidden_states)
 
         return hidden_states
+
+
+class UniSpeechSatEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.pos_conv_embed = UniSpeechSatPositionalConvEmbedding(config)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout)
+        self.layers = nn.ModuleList([UniSpeechSatEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
+
+    def forward(
+        self,
+        hidden_states: torch.tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ):
+        if attention_mask is not None:
+            # make sure padded tokens output 0
+            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_attention_mask] = 0
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
+
+        position_embeddings = self.pos_conv_embed(hidden_states)
+        hidden_states = hidden_states + position_embeddings
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
+
+        for layer in self.layers:
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
+            dropout_probability = torch.rand([])
+
+            skip_the_layer = self.training and dropout_probability < self.config.layerdrop
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
+                hidden_states = layer(hidden_states, attention_mask=attention_mask, **kwargs)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class UniSpeechSatEncoderStableLayerNorm(nn.Module):
@@ -680,6 +680,10 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    _can_record_outputs = {
+        "hidden_states": [UniSpeechSatEncoderLayer, UniSpeechSatEncoderLayerStableLayerNorm],
+        "attentions": UniSpeechSatAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1072,6 +1076,10 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         >>> # TODO: Add full pretraining example
         ```"""
 
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.unispeech_sat(
