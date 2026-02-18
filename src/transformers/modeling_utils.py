@@ -110,7 +110,6 @@ from .utils import (
     is_env_variable_true,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
-    is_grouped_mm_available,
     is_kernels_available,
     is_torch_flex_attn_available,
     is_torch_mlu_available,
@@ -1732,11 +1731,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if not self._can_set_experts_implementation():
             raise ValueError(f"{self.__class__.__name__} does not support setting experts implementation.")
-
-        if not is_grouped_mm_available():
-            raise ImportError(
-                "PyTorch Grouped MM requirements in Transformers are not met. Please install torch>=2.9.0."
-            )
 
         # If no error raised by this point, we can return `True`
         return True
