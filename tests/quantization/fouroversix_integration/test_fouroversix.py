@@ -177,3 +177,8 @@ class FourOverSixStatic6Test(FourOverSixBaseTest):
     @classmethod
     def getQuantizationConfig(cls):
         return FourOverSixConfig(scale_rule="static_6")
+
+class FourOverSixKeepMasterWeightsTest(FourOverSixBaseTest):
+    @classmethod
+    def getQuantizationConfig(cls):
+        return FourOverSixConfig(keep_master_weights=True)

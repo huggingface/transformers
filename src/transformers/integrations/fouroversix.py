@@ -31,6 +31,9 @@ class FourOverSixQuantize(ConversionOps):
         since we create an op per tensor.
         """
 
+        if self.hf_quantizer.quantization_config.keep_master_weights:
+            return input_dict
+
         module, _ = get_module_from_name(model, full_layer_name)
         module_name = full_layer_name.rsplit(".", 1)[0]
         high_precision_parameters = {
@@ -39,12 +42,12 @@ class FourOverSixQuantize(ConversionOps):
 
         quantized_params = module.get_quantized_parameters(**high_precision_parameters)
 
-        # Delete the high-precision parameters from the module now that we've used them to create
+        # Delete the high-precision parameters from the module after we used them to create
         # the quantized parameters
         for parameter_name in module.high_precision_parameter_names:
             delattr(module, parameter_name)
 
-        # Remove these keys from the missing_keys list since we've deleted them from hte model
+        # Remove these keys from the missing_keys list since we've deleted them from the model
         for key in input_dict:
             missing_keys.discard(key)
 

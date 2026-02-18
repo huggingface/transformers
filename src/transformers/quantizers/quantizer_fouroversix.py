@@ -78,7 +78,7 @@ class FourOverSixHfQuantizer(HfQuantizer):
 
         # If the model has already been quantized, we need to delete the weight tensor here so that
         # it's not expected when parameters are loaded from the checkpoint.
-        if self.pre_quantized:
+        if self.pre_quantized and not self.quantization_config.keep_master_weights:
             for _, module in model.named_modules():
                 if QuantizedModule.is_quantized_module_type(type(module)):
                     for parameter_name in module.high_precision_parameter_names:
@@ -98,17 +98,3 @@ class FourOverSixHfQuantizer(HfQuantizer):
         from ..integrations.fouroversix import FourOverSixQuantize
 
         return FourOverSixQuantize(self)
-
-    def get_weight_conversions(self):
-        # from ..integrations.fouroversix import FourOverSixDeserialize
-
-        # if self.pre_quantized:
-        #     return [
-        #         WeightConverter(
-        #             source_patterns=["quantized_weight_values"],
-        #             target_patterns="quantized_weight_values",
-        #             operations=[FourOverSixDeserialize(self)],
-        #         )
-        #     ]
-
-        return []
