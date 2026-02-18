@@ -739,7 +739,23 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
         output_hidden_states: bool | None = None,
         **kwargs,
     ) -> Timesfm2P5OutputForPrediction:
-        r"""TimesFM 2.5 forecasting forward pass."""
+        r"""
+        past_values (`Sequence[torch.Tensor]`):
+            Past values of the time series that serves as input to the model. Each tensor is a 1D time series.
+        window_size (`int`, *optional*):
+            Window size of trend + residual decomposition. If `None`, decomposition is not applied.
+        future_values (`torch.Tensor`, *optional*):
+            Optional future values used to compute the loss.
+        forecast_context_len (`int`, *optional*):
+            Optional context length override used during forecasting.
+        return_forecast_on_context (`bool`, *optional*):
+            Whether to return forecasts on context positions when available.
+        truncate_negative (`bool`, *optional*):
+            Whether to clamp outputs to non-negative values. If `None`, defaults to `config.infer_is_positive`.
+        force_flip_invariance (`bool`, *optional*):
+            Whether to apply the flip-invariance combination. If `None`, defaults to
+            `config.force_flip_invariance`.
+        """
         if forecast_context_len is None:
             fcontext_len = self.context_len
         else:
