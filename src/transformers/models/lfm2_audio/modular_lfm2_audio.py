@@ -33,7 +33,8 @@ from ..moshi.modeling_moshi import (
     MoshiSdpaAttention,
     MoshiUnconditionalInput,
 )
-
+from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
+from ...processing_utils import ProcessorMixin
 
 class Lfm2AudioDepthConfig(MoshiDepthConfig):
     pass
@@ -41,6 +42,12 @@ class Lfm2AudioDepthConfig(MoshiDepthConfig):
 
 class Lfm2AudioConfig(MoshiConfig):
     pass
+
+
+class Lfm2AudioProcessor(ProcessorMixin):
+    attributes = ["feature_extractor", "tokenizer"]
+    feature_extractor_class = "ParakeetFeatureExtractor"
+    tokenizer_class = "AutoTokenizer"
 
 
 class Lfm2AudioConditionalGenerationGenerateOutput(MoshiConditionalGenerationGenerateOutput):
@@ -118,6 +125,7 @@ class Lfm2AudioForConditionalGeneration(MoshiForConditionalGeneration):
 __all__ = [
     "Lfm2AudioConfig",
     "Lfm2AudioDepthConfig",
+    "Lfm2AudioProcessor",
     "Lfm2AudioForCausalLM",
     "Lfm2AudioForConditionalGeneration",
     "Lfm2AudioModel",
