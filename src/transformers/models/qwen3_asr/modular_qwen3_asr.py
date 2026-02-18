@@ -864,7 +864,7 @@ class Qwen3ASRThinkerTextDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        hidden_states, _ = self.self_attn(
+        hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -881,7 +881,7 @@ class Qwen3ASRThinkerTextDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        return hidden_states
+        return hidden_states, attn_weights
 
 
 @auto_docstring
@@ -1562,7 +1562,18 @@ class Qwen3ASRThinkerTextAttention(nn.Module):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
+
+
+        print("\n\n\n\n\n\n\n\\n\nTextAttention", attn_output, attn_weights)
+
+
         return attn_output, attn_weights
+
+
+
+
+
+
 
 
 @auto_docstring(
@@ -1576,7 +1587,7 @@ class Qwen3ASRThinkerTextModel(Qwen3ASRPreTrainedModel):
     config_class = Qwen3ASRConfig
     _can_record_outputs = {
         "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
-        "attentions": Qwen3ASRThinkerTextAttention,
+        #"attentions": Qwen3ASRThinkerTextAttention,
     }
 
     def __init__(self, config: Qwen3ASRConfig):
@@ -1646,6 +1657,7 @@ class Qwen3ASRThinkerTextModel(Qwen3ASRPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
+        all_attentions = ()  # <-- collect attention maps
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -1661,13 +1673,16 @@ class Qwen3ASRThinkerTextModel(Qwen3ASRPreTrainedModel):
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-            hidden_states = layer_outputs
+            #hidden_states = layer_outputs
+            hidden_states, attn = layer_outputs
+            all_attentions += (attn,)
 
         hidden_states = self.norm(hidden_states)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
+            attentions=all_attentions,
         )
 
 
@@ -1688,7 +1703,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
     ]
     _can_record_outputs = {
         "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
-        "attentions": Qwen3ASRThinkerTextAttention,
+    #    "attentions": Qwen3ASRThinkerTextAttention,
     }
 
     def __init__(self, config):
@@ -1858,6 +1873,10 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
             cache_position=cache_position,
             **kwargs,
         )
+    
+        print("\n\n\n\n\n\n\n\n\n\n\n\nThinkerForConditionalGeneration:", outputs, "\n\n\n\n\n\n\n")
+        #print(self.config._attn_implementation)
+
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
@@ -1925,7 +1944,7 @@ class Qwen3ASRThinkerTextPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
-        "attentions": Qwen3ASRThinkerTextAttention,
+    #    "attentions": Qwen3ASRThinkerTextAttention,
     }
     config_class = Qwen3ASRConfig
 
@@ -1972,15 +1991,8 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
         for key, value in shared_kwargs.items():
             if key not in thinker_kwargs:
                 thinker_kwargs[key] = value
-
-        ###
-        # Ensure return_dict_in_generate is set exactly once
-        if "return_dict_in_generate" not in thinker_kwargs:
-            thinker_kwargs["return_dict_in_generate"] = True
-
-        # Call the underlying thinker generate
+            
         thinker_result = self.thinker.generate(input_ids=input_ids, **thinker_kwargs)
-        ###
 
         return thinker_result
 
