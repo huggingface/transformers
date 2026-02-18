@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,67 +11,60 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for Superpoint."""
+"""Image processor class for SuperPoint."""
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
-import torch
-import torchvision.transforms.v2.functional as tvF
+import numpy as np
 
+from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    group_images_by_shape,
-    reorder_images,
-)
-from ...image_utils import (
-    PILImageResampling,
-    SizeDict,
-)
+from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-)
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
 from .image_processing_superpoint import SuperPointImageProcessorKwargs
 
 
 if TYPE_CHECKING:
     from .modeling_superpoint import SuperPointKeypointDescriptionOutput
 
+if is_torch_available():
+    import torch
 
-def is_grayscale(
-    image: "torch.Tensor",
-):
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
+
+
+def is_grayscale(image: np.ndarray) -> bool:
     """Checks if an image is grayscale (all RGB channels are identical)."""
-    if image.ndim < 3 or image.shape[0 if image.ndim == 3 else 1] == 1:
+    if image.shape[0] == 1:
         return True
-    return torch.all(image[..., 0, :, :] == image[..., 1, :, :]) and torch.all(
-        image[..., 1, :, :] == image[..., 2, :, :]
-    )
+    return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
 
 
-def convert_to_grayscale(
-    image: "torch.Tensor",
-) -> "torch.Tensor":
+def convert_to_grayscale(image: np.ndarray) -> np.ndarray:
     """
-    Converts an image to grayscale format using the NTSC formula. Only support torch.Tensor.
+    Converts an image to grayscale format using the NTSC formula. Only support numpy arrays.
 
     This function is supposed to return a 1-channel image, but it returns a 3-channel image with the same value in each
     channel, because of an issue that is discussed in :
     https://github.com/huggingface/transformers/pull/25786#issuecomment-1730176446
 
     Args:
-        image (torch.Tensor):
+        image (np.ndarray):
             The image to convert.
     """
     if is_grayscale(image):
         return image
-    return tvF.rgb_to_grayscale(image, num_output_channels=3)
+
+    gray_image = image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
+    gray_image = np.stack([gray_image] * 3, axis=0)
+    return gray_image
 
 
 @auto_docstring
-class SuperPointImageProcessorFast(BaseImageProcessorFast):
+class SuperPointImageProcessorPil(PilBackend):
+    valid_kwargs = SuperPointImageProcessorKwargs
     resample = PILImageResampling.BILINEAR
     size = {"height": 480, "width": 640}
     default_to_square = False
@@ -79,35 +72,36 @@ class SuperPointImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     rescale_factor = 1 / 255
     do_normalize = None
-    valid_kwargs = SuperPointImageProcessorKwargs
+    do_grayscale = False
 
     def __init__(self, **kwargs: Unpack[SuperPointImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
-        size: dict[str, int] | SizeDict,
-        rescale_factor: float,
-        do_rescale: bool,
+        images: list[np.ndarray],
         do_resize: bool,
-        interpolation: Optional["tvF.InterpolationMode"],
-        do_grayscale: bool,
-        disable_grouping: bool,
-        return_tensors: str | TensorType,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        return_tensors: str | TensorType | None,
+        do_grayscale: bool = False,
         **kwargs,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_grayscale:
-                stacked_images = convert_to_grayscale(stacked_images)
+        processed_images = []
+        for image in images:
+            # Resize (must happen before grayscale for PIL backend to work correctly)
             if do_resize:
-                stacked_images = self.resize(stacked_images, size=size, interpolation=interpolation)
+                image = self.resize(image, size, resample)
+            # Rescale
             if do_rescale:
-                stacked_images = self.rescale(stacked_images, rescale_factor)
-            processed_images_grouped[shape] = stacked_images
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+                image = self.rescale(image, rescale_factor)
+            # Apply grayscale conversion after rescale (if requested)
+            if do_grayscale:
+                image = convert_to_grayscale(image)
+            processed_images.append(image)
+
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def post_process_keypoint_detection(
@@ -120,14 +114,16 @@ class SuperPointImageProcessorFast(BaseImageProcessorFast):
         Args:
             outputs ([`SuperPointKeypointDescriptionOutput`]):
                 Raw outputs of the model containing keypoints in a relative (x, y) format, with scores and descriptors.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. This must be the original
                 image size (before any processing).
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints in absolute format according
+            `list[Dict]`: A list of dictionaries, each dictionary containing the keypoints in absolute format according
             to target_sizes, scores and descriptors for an image in the batch as predicted by the model.
         """
+        requires_backends(self, "torch")
+
         if len(outputs.mask) != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
 
@@ -160,4 +156,4 @@ class SuperPointImageProcessorFast(BaseImageProcessorFast):
         return results
 
 
-__all__ = ["SuperPointImageProcessorFast"]
+__all__ = ["SuperPointImageProcessorPil"]

@@ -11,30 +11,38 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for Got-OCR-2."""
+"""Image processor class for Got-OCR-2."""
 
-from typing import Optional
+import numpy as np
 
-import torch
-import torchvision.transforms.v2.functional as tvF
-
+from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    group_images_by_shape,
-    reorder_images,
+from ...image_transforms import to_channel_dimension_format
+from ...image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
+    ChannelDimension,
+    PILImageResampling,
+    SizeDict,
+    get_image_size,
+    infer_channel_dimension_format,
 )
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
+    is_torchvision_available,
 )
 from .image_processing_got_ocr2 import GotOcr2ImageProcessorKwargs, get_optimal_tiled_canvas
 
 
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
+
+
 @auto_docstring
-class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
+class GotOcr2ImageProcessorPil(PilBackend):
+    valid_kwargs = GotOcr2ImageProcessorKwargs
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -46,48 +54,45 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
     crop_to_patches = False
     min_patches = 1
     max_patches = 12
-    valid_kwargs = GotOcr2ImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[GotOcr2ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[GotOcr2ImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
     def crop_image_to_patches(
         self,
-        images: "torch.Tensor",
+        image: np.ndarray,
         min_patches: int,
         max_patches: int,
         use_thumbnail: bool = True,
-        patch_size: tuple | int | dict | None = None,
-        interpolation: Optional["tvF.InterpolationMode"] = None,
+        patch_size: SizeDict | None = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
     ):
         """
-        Crop the images to patches and return a list of cropped images.
+        Crop the image to patches and return a list of cropped images.
         The number of patches and their grid arrangement are determined by the original image size,
         the target patch size and the minimum and maximum number of patches.
         The aspect ratio of the patches grid is chosen to be the closest to the original image aspect ratio.
 
         Args:
-            images (`torch.Tensor`):
-                The images to be cropped.
+            image (`np.ndarray`):
+                The image to be cropped.
             min_patches (`int`):
                 The minimum number of patches to be extracted from the image.
             max_patches (`int`):
                 The maximum number of patches to be extracted from the image.
             use_thumbnail (`bool`, *optional*, defaults to `True`):
                 Whether to add a thumbnail image to the list of cropped patches.
-            patch_size (`int`, `tuple[int, int]`, `dict`, *optional*):
+            patch_size (`SizeDict`, *optional*):
                 The size of the output patches.
-                The format of the image data. If `None`, the format is inferred from the input image.
-
-        Returns:
-            list[`PIL.Image.Image`] or list[np.ndarray]: The list of cropped images.
+            resample (`PILImageResampling | tvF.InterpolationMode | int | None`, *optional*):
+                Resampling filter to use when resizing.
         """
+        # Ensure image is in CHW format for processing
+        input_data_format = infer_channel_dimension_format(image)
+        image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_data_format)
+
         patch_size_height, patch_size_width = patch_size.height, patch_size.width
-        original_height, original_width = images.shape[-2:]
+        original_height, original_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
         # find the closest aspect ratio to the target
         num_columns, num_rows = get_optimal_tiled_canvas(
             (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
@@ -99,9 +104,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         num_blocks = num_columns * num_rows
 
         # resize the image so that each patch is of patch_size
-        resized_image = self.resize(
-            images, SizeDict(height=target_height, width=target_width), interpolation=interpolation
-        )
+        resized_image = self.resize(image, SizeDict(height=target_height, width=target_width), resample=resample)
         # split the image into patches
         processed_images = []
         for i in range(num_blocks):
@@ -113,81 +116,65 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
                 (column + 1) * patch_size_width,
                 (row + 1) * patch_size_height,
             )
-            # split the image
+            # split the image (images are CHW format)
             patch_image = resized_image[..., box[1] : box[3], box[0] : box[2]]
+            # Convert back to original format
+            patch_image = to_channel_dimension_format(patch_image, input_data_format, ChannelDimension.FIRST)
             processed_images.append(patch_image)
 
         if use_thumbnail and len(processed_images) != 1:
-            thumbnail_img = self.resize(images, patch_size, interpolation=interpolation)
+            thumbnail_img = self.resize(image, patch_size, resample=resample)
+            thumbnail_img = to_channel_dimension_format(thumbnail_img, input_data_format, ChannelDimension.FIRST)
             processed_images.append(thumbnail_img)
-
-        processed_images = torch.stack(processed_images, dim=0).transpose(0, 1).contiguous()
 
         return processed_images
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        crop_to_patches: bool,
-        min_patches: int,
-        max_patches: int,
-        interpolation: Optional["tvF.InterpolationMode"],
-        do_center_crop: bool,
-        crop_size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
-        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        crop_to_patches: bool = False,
+        min_patches: int = 1,
+        max_patches: int = 12,
         **kwargs,
     ) -> BatchFeature:
-        if crop_to_patches:
-            grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-            processed_images_grouped = {}
-            num_patches = {}
-            for shape, stacked_images in grouped_images.items():
-                stacked_images = self.crop_image_to_patches(
-                    stacked_images,
+        num_patches = []
+        processed_images = []
+
+        for image in images:
+            if crop_to_patches and max_patches > 1:
+                patches = self.crop_image_to_patches(
+                    image,
                     min_patches,
                     max_patches,
                     patch_size=size,
-                    interpolation=interpolation,
+                    resample=resample,
                 )
-                processed_images_grouped[shape] = stacked_images
-                num_patches[shape] = [stacked_images.shape[1]] * stacked_images.shape[0]
-            images = reorder_images(processed_images_grouped, grouped_images_index)
-            images = [image for images_list in images for image in images_list]
-            num_patches = reorder_images(num_patches, grouped_images_index)
-        else:
-            num_patches = [1] * len(images)
-
-        # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-
-        # Group images by size for further processing
-        # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_center_crop:
-                stacked_images = self.center_crop(stacked_images, crop_size)
-            # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            processed_images_grouped[shape] = stacked_images
-
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+                num_patches.append(len(patches))
+                # Normalize and rescale patches
+                for patch in patches:
+                    if do_rescale:
+                        patch = self.rescale(patch, rescale_factor)
+                    if do_normalize:
+                        patch = self.normalize(patch, image_mean, image_std)
+                    processed_images.append(patch)
+            else:
+                num_patches.append(1)
+                if do_resize:
+                    image = self.resize(image, size, resample)
+                if do_rescale:
+                    image = self.rescale(image, rescale_factor)
+                if do_normalize:
+                    image = self.normalize(image, image_mean, image_std)
+                processed_images.append(image)
 
         return BatchFeature(
             data={"pixel_values": processed_images, "num_patches": num_patches}, tensor_type=return_tensors
@@ -207,15 +194,21 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `int`: Number of patches per image.
         """
-        min_patches = images_kwargs.get("min_patches", self.min_patches)
-        max_patches = images_kwargs.get("max_patches", self.max_patches)
-        patch_size = images_kwargs.get("patch_size", self.size)
-        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
+        min_patches = images_kwargs.get("min_patches", self.min_patches) if images_kwargs else self.min_patches
+        max_patches = images_kwargs.get("max_patches", self.max_patches) if images_kwargs else self.max_patches
+        patch_size = images_kwargs.get("patch_size", self.size) if images_kwargs else self.size
+        crop_to_patches = (
+            images_kwargs.get("crop_to_patches", self.crop_to_patches) if images_kwargs else self.crop_to_patches
+        )
 
         num_patches = 1
         if crop_to_patches and max_patches > 1:
+            if isinstance(patch_size, dict):
+                patch_height, patch_width = patch_size["height"], patch_size["width"]
+            else:
+                patch_height, patch_width = patch_size.height, patch_size.width
             num_columns, num_rows = get_optimal_tiled_canvas(
-                (height, width), (patch_size["height"], patch_size["width"]), min_patches, max_patches
+                (height, width), (patch_height, patch_width), min_patches, max_patches
             )
             if num_columns * num_rows > 1:
                 num_patches += num_columns * num_rows
@@ -223,4 +216,4 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         return num_patches
 
 
-__all__ = ["GotOcr2ImageProcessorFast"]
+__all__ = ["GotOcr2ImageProcessorPil"]

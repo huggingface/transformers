@@ -20,7 +20,7 @@ from datasets import load_dataset
 
 from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 from ...test_processing_common import url_to_local_path
@@ -32,10 +32,6 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import EomtImageProcessor
-
-    if is_torchvision_available():
-        from transformers import EomtImageProcessorFast
     from transformers.models.eomt.modeling_eomt import EomtForUniversalSegmentationOutput
 
 
@@ -118,9 +114,6 @@ def prepare_semantic_batch_inputs():
 @require_torch
 @require_vision
 class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = EomtImageProcessor if is_vision_available() else None
-    fast_image_processing_class = EomtImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = EomtImageProcessingTester(self)
@@ -131,7 +124,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -143,14 +136,15 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "resample"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 18})
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
-        self.assertEqual(image_processor.size, {"shortest_edge": 42})
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
+            self.assertEqual(image_processor.size, {"shortest_edge": 42})
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -173,66 +167,70 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         pass
 
     def test_call_pil(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, Image.Image)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, Image.Image)
 
-        # Test Non batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = (1, 3, 18, 18)
-        self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+            # Test Non batched input
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = (1, 3, 18, 18)
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
-        # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-        expected_output_image_shape = (2, 3, 18, 18)
-        self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+            # Test batched
+            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+            expected_output_image_shape = (2, 3, 18, 18)
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_pytorch(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
-        for image in image_inputs:
-            self.assertIsInstance(image, torch.Tensor)
+            for image in image_inputs:
+                self.assertIsInstance(image, torch.Tensor)
 
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = (1, 3, 18, 18)
-        self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = (1, 3, 18, 18)
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
-        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-        expected_output_image_shape = (2, 3, 18, 18)
-        self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+            expected_output_image_shape = (2, 3, 18, 18)
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
-    def test_slow_fast_equivalence(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+    def test_backends_equivalence(self):
+        """Test equivalence across backends including segmentation maps."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image, dummy_map = prepare_semantic_single_inputs()
 
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
 
-        image_encoding_slow = image_processor_slow(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
-        image_encoding_fast = image_processor_fast(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_pixel_values = encodings[reference_backend].pixel_values
+        reference_mask_labels = encodings[reference_backend].mask_labels
 
-        self.assertTrue(torch.allclose(image_encoding_slow.pixel_values, image_encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(image_encoding_slow.pixel_values - image_encoding_fast.pixel_values)).item(), 1e-3
-        )
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(
+                reference_pixel_values, encodings[backend_name].pixel_values, atol=1e-1, mean_atol=1e-3
+            )
 
-        # Lets check whether 99.9% of mask_labels values match or not.
-        match_ratio = (image_encoding_slow.mask_labels[0] == image_encoding_fast.mask_labels[0]).float().mean().item()
-        self.assertGreaterEqual(match_ratio, 0.999, "Mask labels do not match between slow and fast image processor.")
+            # Check whether 99.9% of mask_labels values match or not.
+            match_ratio = (reference_mask_labels[0] == encodings[backend_name].mask_labels[0]).float().mean().item()
+            self.assertGreaterEqual(
+                match_ratio, 0.999, f"Mask labels do not match between {reference_backend} and {backend_name} image processors."
+            )
 
     def test_slow_fast_equivalence_batched(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+        """Test batched equivalence across backends including segmentation maps."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
             self.skipTest(
@@ -241,70 +239,77 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         dummy_images, dummy_maps = prepare_semantic_batch_inputs()
 
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
 
-        encoding_slow = image_processor_slow(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
-        encoding_fast = image_processor_fast(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_pixel_values = encodings[reference_backend].pixel_values
+        reference_mask_labels = encodings[reference_backend].mask_labels
 
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
-
-        for idx in range(len(dummy_maps)):
-            match_ratio = (encoding_slow.mask_labels[idx] == encoding_fast.mask_labels[idx]).float().mean().item()
-            self.assertGreaterEqual(
-                match_ratio, 0.999, "Mask labels do not match between slow and fast image processors."
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(
+                reference_pixel_values, encodings[backend_name].pixel_values, atol=1e-1, mean_atol=1e-3
             )
 
+            for idx in range(len(dummy_maps)):
+                match_ratio = (reference_mask_labels[idx] == encodings[backend_name].mask_labels[idx]).float().mean().item()
+                self.assertGreaterEqual(
+                    match_ratio, 0.999, f"Mask labels do not match between {reference_backend} and {backend_name} image processors."
+                )
+
     def test_post_process_semantic_segmentation(self):
-        processor = self.image_processing_class(**self.image_processor_dict)
-        # Set longest_edge to None to test for semantic segmentatiom.
-        processor.size = {"shortest_edge": 18, "longest_edge": None}
-        image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            processor = image_processing_class(**self.image_processor_dict)
+            # Set longest_edge to None to test for semantic segmentatiom.
+            processor.size = {"shortest_edge": 18, "longest_edge": None}
+            image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
 
-        inputs = processor(images=image, do_split_image=True, return_tensors="pt")
-        patch_offsets = inputs["patch_offsets"]
+            inputs = processor(images=image, do_split_image=True, return_tensors="pt")
+            patch_offsets = inputs["patch_offsets"]
 
-        target_sizes = [image.size[::-1]]
+            target_sizes = [image.size[::-1]]
 
-        # For semantic segmentation, the BS of output is 2 coz, two patches are created for the image.
-        outputs = self.image_processor_tester.prepare_fake_eomt_outputs(inputs["pixel_values"].shape[0], patch_offsets)
-        segmentation = processor.post_process_semantic_segmentation(outputs, target_sizes)
+            # For semantic segmentation, the BS of output is 2 coz, two patches are created for the image.
+            outputs = self.image_processor_tester.prepare_fake_eomt_outputs(inputs["pixel_values"].shape[0], patch_offsets)
+            segmentation = processor.post_process_semantic_segmentation(outputs, target_sizes)
 
-        self.assertEqual(segmentation[0].shape, (image.height, image.width))
+            self.assertEqual(segmentation[0].shape, (image.height, image.width))
 
     def test_post_process_panoptic_segmentation(self):
-        processor = self.image_processing_class(**self.image_processor_dict)
-        image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            processor = image_processing_class(**self.image_processor_dict)
+            image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
 
-        original_sizes = [image.size[::-1], image.size[::-1]]
+            original_sizes = [image.size[::-1], image.size[::-1]]
 
-        # lets test for batched input of 2
-        outputs = self.image_processor_tester.prepare_fake_eomt_outputs(2)
-        segmentation = processor.post_process_panoptic_segmentation(outputs, original_sizes)
+            # lets test for batched input of 2
+            outputs = self.image_processor_tester.prepare_fake_eomt_outputs(2)
+            segmentation = processor.post_process_panoptic_segmentation(outputs, original_sizes)
 
-        self.assertTrue(len(segmentation) == 2)
-        for el in segmentation:
-            self.assertTrue("segmentation" in el)
-            self.assertTrue("segments_info" in el)
-            self.assertEqual(type(el["segments_info"]), list)
-            self.assertEqual(el["segmentation"].shape, (image.height, image.width))
+            self.assertTrue(len(segmentation) == 2)
+            for el in segmentation:
+                self.assertTrue("segmentation" in el)
+                self.assertTrue("segments_info" in el)
+                self.assertEqual(type(el["segments_info"]), list)
+                self.assertEqual(el["segmentation"].shape, (image.height, image.width))
 
     def test_post_process_instance_segmentation(self):
-        processor = self.image_processing_class(**self.image_processor_dict)
-        image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            processor = image_processing_class(**self.image_processor_dict)
+            image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
 
-        original_sizes = [image.size[::-1], image.size[::-1]]
+            original_sizes = [image.size[::-1], image.size[::-1]]
 
-        # lets test for batched input of 2
-        outputs = self.image_processor_tester.prepare_fake_eomt_outputs(2)
-        segmentation = processor.post_process_instance_segmentation(outputs, original_sizes)
+            # lets test for batched input of 2
+            outputs = self.image_processor_tester.prepare_fake_eomt_outputs(2)
+            segmentation = processor.post_process_instance_segmentation(outputs, original_sizes)
 
-        self.assertTrue(len(segmentation) == 2)
-        for el in segmentation:
-            self.assertTrue("segmentation" in el)
-            self.assertTrue("segments_info" in el)
-            self.assertEqual(type(el["segments_info"]), list)
-            self.assertEqual(el["segmentation"].shape, (image.height, image.width))
+            self.assertTrue(len(segmentation) == 2)
+            for el in segmentation:
+                self.assertTrue("segmentation" in el)
+                self.assertTrue("segments_info" in el)
+                self.assertEqual(type(el["segments_info"]), list)
+                self.assertEqual(el["segmentation"].shape, (image.height, image.width))
