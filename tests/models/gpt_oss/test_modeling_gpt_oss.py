@@ -102,6 +102,33 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
             config._attn_implementation = "flash_attention_2"
 
+    @require_kernels
+    @pytest.mark.flash_attn_test
+    @require_torch_gpu
+    def test_default_flash_implementation_auto_correction(self):
+        """
+        Tests that setting attn_implementation="flash_attention_2" during model initialization
+        automatically corrects to the model's _default_flash_implementation.
+        """
+        from kernels import get_kernel
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        expected_kernel = "kernels-community/vllm-flash-attn3"
+        flash = get_kernel(expected_kernel)
+        if flash is None:
+            self.skipTest(f"{expected_kernel} is not available, skipping auto-correction test.")
+        # Set flash_attention_2 in config before model init - should get auto-corrected
+        config._attn_implementation_internal = "flash_attention_2"
+        model = GptOssModel(config).to(device=torch_device, dtype=torch.bfloat16)
+
+        # Verify it was auto-corrected to the model's default flash implementation
+        self.assertEqual(model.config._attn_implementation, expected_kernel)
+
+        # Verify model still works
+        with torch.no_grad():
+            output = model(**inputs_dict)
+        self.assertIsNotNone(output)
+
     @unittest.skip("GptOss's forcefully disables sdpa due to Sink")
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass

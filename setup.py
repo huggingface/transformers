@@ -78,7 +78,6 @@ _deps = [
     "codecarbon>=2.8.1",
     "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
-    "diffusers",
     "dill<0.3.5",
     "evaluate>=0.4.6",
     "faiss-cpu",
@@ -88,7 +87,6 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "huggingface-hub>=1.3.0,<2.0",
-    "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "jmespath>=1.0.1",
@@ -324,7 +322,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.2.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.3.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",
