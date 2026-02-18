@@ -476,10 +476,7 @@ class XcodecModel(XcodecPreTrainedModel):
         semantic_model_kwargs = {}
         if "output_attentions" in kwargs:
             semantic_model_kwargs["output_attentions"] = kwargs["output_attentions"]
-        if "output_hidden_states" in kwargs:
-            semantic_model_kwargs["output_hidden_states"] = kwargs["output_hidden_states"]
-        else:
-            semantic_model_kwargs["output_hidden_states"] = True
+        semantic_model_kwargs["output_hidden_states"] = kwargs.get("output_hidden_states", True)
 
         with torch.no_grad():
             outputs = self.semantic_model(input_values, **semantic_model_kwargs)
