@@ -1860,6 +1860,10 @@ class Trainer:
             if self.control.should_training_stop:
                 break
 
+        if args.eval_on_end:
+            logger.info("Run final evaluation at the end of training")
+            self._evaluate(trial, ignore_keys_for_eval)
+
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         if args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
             self._load_best_model()
