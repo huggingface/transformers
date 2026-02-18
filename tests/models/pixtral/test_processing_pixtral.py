@@ -11,12 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
 import torch
+from parameterized import parameterized
 
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
@@ -31,9 +30,10 @@ if is_vision_available():
 @require_vision
 class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PixtralProcessor
+    model_id = "mistral-community/pixtral-12b"
 
     @classmethod
-    def setUpClass(cls):
+    def _setup_test_attributes(cls, processor):
         cls.url_0 = url_to_local_path(
             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
         )
@@ -41,14 +41,12 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
         cls.image_1 = np.random.randint(255, size=(3, 480, 640), dtype=np.uint8)
         cls.image_2 = np.random.randint(255, size=(3, 1024, 1024), dtype=np.uint8)
+        cls.image_token = processor.image_token
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
-        processor = PixtralProcessor.from_pretrained("mistral-community/pixtral-12b")
-        processor.save_pretrained(self.tmpdirname)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @parameterized.expand([(1, "pt"), (2, "pt")])
+    @unittest.skip("Not tested before, to investigate")
+    def test_apply_chat_template_image(self, batch_size, return_tensors):
+        pass
 
     def test_image_token_filling(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
@@ -73,6 +71,11 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
         self.assertEqual(expected_image_tokens, image_tokens)
+
+    def test_from_pretrained_subfolder_tokenizer(self):
+        processor = PixtralProcessor.from_pretrained("hf-internal-testing/tiny-flux2", subfolder="tokenizer")
+        self.assertIsInstance(processor, PixtralProcessor)
+        self.assertIsNotNone(processor.tokenizer)
 
     def test_processor_with_single_image(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)

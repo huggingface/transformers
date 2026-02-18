@@ -271,6 +271,9 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         else {}
     )
 
+    def test_enable_input_require_grads(self):
+        self.skipTest("FalconMamba currently requires CUDA/Metal/XPU to run enable_input_require_grads.")
+
     def setUp(self):
         self.model_tester = FalconMambaModelTester(self)
         self.config_tester = ConfigTester(

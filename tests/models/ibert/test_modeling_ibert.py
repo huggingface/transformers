@@ -225,6 +225,7 @@ class IBertModelTester:
 @require_torch
 class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
+    test_torch_exportable = False  # uses custom non-traceable quantization ops, not compatible with torch.export
 
     all_model_classes = (
         (

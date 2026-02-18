@@ -527,6 +527,8 @@
         title: ESM
       - local: model_doc/exaone4
         title: EXAONE-4.0
+      - local: model_doc/exaone_moe
+        title: EXAONE-MoE
       - local: in_translation
         title: Falcon
       - local: in_translation

@@ -6,7 +6,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_hunyuan_v1_moe import *
-    from .modeling_hunyuan import *
+    from .modeling_hunyuan_v1_moe import *
 else:
     import sys
 

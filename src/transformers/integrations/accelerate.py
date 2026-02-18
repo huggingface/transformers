@@ -19,9 +19,12 @@ and simplicity/ease of use.
 import copy
 import inspect
 import os
+import re
 from collections import OrderedDict, defaultdict
-from contextlib import contextmanager
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
+
+from safetensors import safe_open
+from safetensors.torch import save_file
 
 from ..utils import (
     is_accelerate_available,
@@ -41,7 +44,7 @@ if is_torch_available():
 if is_accelerate_available():
     from accelerate import dispatch_model
     from accelerate.utils import get_max_memory
-    from accelerate.utils.modeling import clean_device_map, get_max_layer_size, get_module_size_with_ties
+    from accelerate.utils.modeling import clean_device_map, get_max_layer_size
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -51,112 +54,40 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-@contextmanager
-def init_empty_weights(include_buffers: bool = False):
+def get_module_size_with_ties(
+    tied_params,
+    module_size,
+    module_sizes,
+    modules_to_treat,
+) -> tuple[int, list[str], list[nn.Module]]:
     """
-    A context manager under which models are initialized with all parameters on the meta device, therefore creating an
-    empty model. Useful when just initializing the model would blow the available RAM.
+    Calculate the total size of a module, including its tied parameters.
 
     Args:
-        include_buffers (`bool`, *optional*):
-            Whether or not to also put all buffers on the meta device while initializing.
+        tied_params (`List[str]`): The list of tied parameters.
+        module_size (`int`): The size of the module without tied parameters.
+        module_sizes (`Dict[str, int]`): A dictionary mapping each layer name to its size.
+        modules_to_treat (`List[Tuple[str, nn.Module]]`): The list of named modules to treat.
 
-    Example:
-
-    ```python
-    import torch.nn as nn
-    from accelerate import init_empty_weights
-
-    # Initialize a model with 100 billions parameters in no time and without using any RAM.
-    with init_empty_weights():
-        tst = nn.Sequential(*[nn.Linear(10000, 10000) for _ in range(1000)])
-    ```
-
-    <Tip warning={true}>
-
-    Any model created under this context manager has no weights. As such you can't do something like
-    `model.to(some_device)` with it. To load weights inside your empty model, see [`load_checkpoint_and_dispatch`].
-    Make sure to overwrite the default device_map param for [`load_checkpoint_and_dispatch`], otherwise dispatch is not
-    called.
-
-    </Tip>
+    Returns:
+        `Tuple[int, List[str], List[nn.Module]]`: The total size of the module, the names of the tied modules, and the
+        tied modules.
     """
-    with init_on_device(torch.device("meta"), include_buffers=include_buffers) as f:
-        yield f
+    if len(tied_params) < 1:
+        return module_size, [], []
+    tied_module_names = []
+    tied_modules = []
 
+    for tied_param in tied_params:
+        tied_module_index = [i for i, (n, _) in enumerate(modules_to_treat) if tied_param.startswith(n + ".")][0]
+        tied_module_names.append(modules_to_treat[tied_module_index][0])
+        tied_modules.append(modules_to_treat[tied_module_index][1])
 
-@contextmanager
-def init_on_device(device: "torch.device", include_buffers: bool = False):
-    """
-    A context manager under which models are initialized with all parameters on the specified device.
+    module_size_with_ties = module_size
+    for tied_param, tied_module_name in zip(tied_params, tied_module_names):
+        module_size_with_ties += module_sizes[tied_module_name] - module_sizes[tied_param]
 
-    Args:
-        device (`torch.device`):
-            Device to initialize all parameters on.
-        include_buffers (`bool`, *optional*):
-            Whether or not to also put all buffers on the meta device while initializing.
-
-    Example:
-
-    ```python
-    import torch.nn as nn
-    from accelerate import init_on_device
-
-    with init_on_device(device=torch.device("cuda")):
-        tst = nn.Linear(100, 100)  # on `cuda` device
-    ```
-    """
-    if include_buffers:
-        with device:
-            yield
-        return
-
-    old_register_parameter = nn.Module.register_parameter
-    if include_buffers:
-        old_register_buffer = nn.Module.register_buffer
-
-    def register_empty_parameter(module, name, param):
-        old_register_parameter(module, name, param)
-        if param is not None:
-            param_cls = type(module._parameters[name])
-            kwargs = module._parameters[name].__dict__
-            kwargs["requires_grad"] = param.requires_grad
-            module._parameters[name] = param_cls(module._parameters[name].to(device), **kwargs)
-
-    def register_empty_buffer(module, name, buffer, persistent=True):
-        old_register_buffer(module, name, buffer, persistent=persistent)
-        if buffer is not None:
-            module._buffers[name] = module._buffers[name].to(device)
-
-    # Patch tensor creation
-    if include_buffers:
-        tensor_constructors_to_patch = {
-            torch_function_name: getattr(torch, torch_function_name)
-            for torch_function_name in ["empty", "zeros", "ones", "full"]
-        }
-    else:
-        tensor_constructors_to_patch = {}
-
-    def patch_tensor_constructor(fn):
-        def wrapper(*args, **kwargs):
-            kwargs["device"] = device
-            return fn(*args, **kwargs)
-
-        return wrapper
-
-    try:
-        nn.Module.register_parameter = register_empty_parameter
-        if include_buffers:
-            nn.Module.register_buffer = register_empty_buffer
-        for torch_function_name in tensor_constructors_to_patch:
-            setattr(torch, torch_function_name, patch_tensor_constructor(getattr(torch, torch_function_name)))
-        yield
-    finally:
-        nn.Module.register_parameter = old_register_parameter
-        if include_buffers:
-            nn.Module.register_buffer = old_register_buffer
-        for torch_function_name, old_torch_function in tensor_constructors_to_patch.items():
-            setattr(torch, torch_function_name, old_torch_function)
+    return module_size_with_ties, tied_module_names, tied_modules
 
 
 def check_and_set_device_map(device_map: "torch.device | int | str | dict | None") -> dict | str | None:
@@ -178,6 +109,10 @@ def check_and_set_device_map(device_map: "torch.device | int | str | dict | None
         device_map = {"": device_map}
     elif isinstance(device_map, str) and device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
         try:
+            if device_map == "cuda":
+                # setting to the local rank
+                local_rank = int(os.environ.get("LOCAL_RANK", 0))
+                device_map = f"cuda:{local_rank}"
             device_map = {"": torch.device(device_map)}
         except RuntimeError:
             raise ValueError(
@@ -237,7 +172,7 @@ def compute_module_sizes(
         if name in tied_keys:
             continue
         if hf_quantizer is not None:
-            dtype_size = hf_quantizer.param_element_size(model, name)
+            dtype_size = hf_quantizer.param_element_size(model, name, param)
         else:
             dtype_size = param.element_size()
         size = param.numel() * dtype_size
@@ -264,7 +199,7 @@ def compute_module_total_buffer_size(model: nn.Module, hf_quantizer: "HfQuantize
 def get_balanced_memory(
     model: "PreTrainedModel",
     max_memory: dict[int | str, int | str] | None = None,
-    no_split_module_classes: list[str] | None = None,
+    no_split_module_classes: set[str] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
     low_zero: bool = False,
 ):
@@ -284,8 +219,8 @@ def get_balanced_memory(
         max_memory (`Dict`, *optional*):
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
             Example: `max_memory={0: "1GB"}`.
-        no_split_module_classes (`List[str]`, *optional*):
-            A list of layer class names that should never be split across device (for instance any layer that has a
+        no_split_module_classes (`set[str]`, *optional*):
+            A set of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
         hf_quantizer (`HfQuantizer`, *optional*):
             A quantizer for the model.
@@ -328,7 +263,7 @@ def get_balanced_memory(
     # - the mean of the layer sizes
     if no_split_module_classes is None:
         no_split_module_classes = []
-    elif not isinstance(no_split_module_classes, (list, tuple)):
+    elif not isinstance(no_split_module_classes, (list, tuple, set)):
         no_split_module_classes = [no_split_module_classes]
 
     # Identify the size of the no_split_block modules
@@ -376,7 +311,7 @@ def _get_device_map(
     Otherwise, we check for any device inconsistencies in the device_map.
     """
     if isinstance(device_map, str):
-        no_split_modules = model._get_no_split_modules(device_map)
+        no_split_modules = model._no_split_modules
 
         if device_map != "sequential":
             inferred_max_memory = get_balanced_memory(
@@ -388,6 +323,15 @@ def _get_device_map(
             )
         else:
             inferred_max_memory = get_max_memory(max_memory)
+
+        # If the user does not provide `max_memory`, accelerate sets the WHOLE cpu available memory as available.
+        # This is unwanted, as we don't want to set extremely tight bound and pressure for cpu if we are memory-constrained,
+        # especially if the model uses WeightConverter (because there will be some uncontrollable cpu memory spikes during
+        # the conversions before we resave the weights). In those cases, it's better to offload to disk a bit more
+        # if we were in-between, as otherwise we blow-up cpu memory
+        if max_memory is None and "cpu" in inferred_max_memory:
+            inferred_max_memory["cpu"] *= 0.90
+
         if hf_quantizer is not None:
             inferred_max_memory = hf_quantizer.adjust_max_memory(inferred_max_memory)
 
@@ -445,83 +389,150 @@ def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload
         dispatch_model(model, **device_map_kwargs)
 
 
-def get_disk_only_shard_files(device_map, weight_map):
-    """
-    Returns the list of shard files containing only weights offloaded to disk.
-    """
-    files_content = defaultdict(list)
-    for weight_name, filename in weight_map.items():
-        while len(weight_name) > 0 and weight_name not in device_map:
-            weight_name = ".".join(weight_name.split(".")[:-1])
-        files_content[filename].append(device_map[weight_name])
-
-    return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
-
-
-def expand_device_map(device_map, param_names):
+def expand_device_map(device_map: dict | None, param_names: list[str]):
     """
     Expand a device map to return the correspondence parameter name to device.
     """
+    if device_map is None:
+        return dict.fromkeys(param_names, "cpu")
+
+    # Here, we first sort by number of submodules, then length of the full string, to make sure to match correctly
+    device_map_regex = re.compile(
+        "|".join(rf"({k})" for k in sorted(device_map.keys(), key=lambda x: (x.count("."), len(x)), reverse=True))
+    )
     new_device_map = {}
-    for module, device in device_map.items():
-        new_device_map.update(
-            {p: device for p in param_names if p == module or p.startswith(f"{module}.") or module == ""}
-        )
+    for param in param_names:
+        device_match = device_map_regex.match(param)
+        new_device_map[param] = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
+
     return new_device_map
 
 
+def get_device(device_map: dict | None, param_name: str, valid_torch_device: bool = False) -> torch.device | str | int:
+    """Return the device on which `param_name` should be according to the `device_map`. If `valid_torch_device` is `True`,
+    then if the device is `"disk"`, `"cpu"` will be returned instead."""
+    device = expand_device_map(device_map, [param_name])[param_name]
+    if valid_torch_device and device == "disk":
+        return "cpu"
+    return device
+
+
 def accelerate_disk_offload(
-    disk_offload_folder,
-    checkpoint_files,
-    device_map,
-    checkpoint_keys,
-    sharded_metadata,
-    dtype,
+    model: "PreTrainedModel",
+    disk_offload_folder: str | None,
+    checkpoint_files: list[str] | None,
+    device_map: dict,
+    sharded_metadata: dict | None,
+    dtype: torch.dtype | None,
+    weight_mapping=None,
 ):
-    disk_only_shard_files = []
+    """
+    Prepare the `disk_offload_index` that will be used for reading offloaded parameters. If reading from a safetensors
+    file, parameters which do not need any special WeightConverter operation during loading (i.e. they are used as-is, or only
+    renamed) will be mapped to where they already reside on disk. Otherwise, the parameters will be resaved inside
+    `disk_offload_folder` during loading.
+    """
+    from ..core_model_loading import WeightRenaming, rename_source_key
+
     if disk_offload_folder is not None:
         os.makedirs(disk_offload_folder, exist_ok=True)
     is_offloaded_safetensors = checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors")
-    if disk_offload_folder is None and not is_offloaded_safetensors:
-        raise ValueError(
-            "The current `device_map` had weights offloaded to the disk. Please provide an `offload_folder`"
-            " for them. Alternatively, make sure you have `safetensors` installed if the model you are using"
-            " offers the weights in this format."
-        )
+
+    renamings = []
+    if weight_mapping is not None:
+        renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
+
+    # In this case, the offload index is simply the existing safetensors (except if using custom weight loading
+    # Operation, e.g. the MoE models, where we need to resave the weights that were changed at loading time)
     if is_offloaded_safetensors:
-        param_device_map = expand_device_map(device_map, checkpoint_keys)
+        meta_state_dict = model.state_dict()
+        param_device_map = expand_device_map(device_map, meta_state_dict.keys())
         str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
         if sharded_metadata is None:
-            weight_map = dict.fromkeys(checkpoint_keys, checkpoint_files[0])
+            weight_map = dict.fromkeys(safe_open(checkpoint_files[0], framework="pt").keys(), checkpoint_files[0])
         else:
             folder = os.path.sep.join(checkpoint_files[0].split(os.path.sep)[:-1])
-            weight_map = {k: os.path.join(folder, v) for k, v in weight_map.items()}
-            # Find potential checkpoints containing only offloaded weights
-            disk_only_shard_files = get_disk_only_shard_files(device_map, weight_map)
+            weight_map = {k: os.path.join(folder, v) for k, v in sharded_metadata["weight_map"].items()}
+
+        # Update the weight names according to the `weight_mapping`
+        weight_renaming_map = {
+            rename_source_key(k, renamings, [], model.base_model_prefix, meta_state_dict)[0]: k for k in weight_map
+        }
+
+        # Prepare the index using existing safetensors files
         disk_offload_index = {
-            name: {
-                "safetensors_file": file,
-                "weight_name": name,
+            target_name: {
+                "safetensors_file": weight_map[source_name],
+                "weight_name": source_name,
                 "dtype": str_dtype,
             }
-            for name, file in weight_map.items()
-            if param_device_map[name] == "disk"
+            for target_name, source_name in weight_renaming_map.items()
+            # Need to check if it's in the mapping in case of unexpected keys that would result in KeyError (we skip them)
+            if target_name in param_device_map and param_device_map[target_name] == "disk"
         }
+    # In this case we will resave every offloaded weight
     else:
         disk_offload_index = {}
-    return disk_offload_index, disk_only_shard_files, is_offloaded_safetensors
+
+    return disk_offload_index
+
+
+def offload_weight(weight: torch.Tensor, weight_name: str, offload_folder: str | None, offload_index: dict) -> dict:
+    """Write `weight` to disk inside `offload_folder`, and update `offload_index` accordingly. Everything is
+    saved in `safetensors` format."""
+
+    if offload_folder is None:
+        raise ValueError(
+            "The current `device_map` had weights offloaded to the disk, which needed to be re-saved. This is either "
+            "because the weights are not in `safetensors` format, or because the model uses an internal weight format "
+            "different than the one saved (i.e. most MoE models). Please provide an `offload_folder` for them in "
+            "`from_pretrained`."
+        )
+    # Write the weight to disk
+    safetensor_file = os.path.join(offload_folder, f"{weight_name}.safetensors")
+    save_file({weight_name: weight}, safetensor_file)
+    # Update the offloading index
+    str_dtype = str(weight.dtype).replace("torch.", "")
+    offload_index[weight_name] = {"safetensors_file": safetensor_file, "weight_name": weight_name, "dtype": str_dtype}
+    return offload_index
+
+
+def load_offloaded_parameter(model: "PreTrainedModel", param_name: str) -> torch.Tensor:
+    """Load `param_name` from disk, if it was offloaded due to the device_map, and thus lives as a meta parameter
+    inside `model`.
+    This is needed when resaving a model, when some parameters were offloaded (we need to load them from disk, to
+    then resave them to disk in the correct shard...)."""
+    # Start from the most inner module, and try to find the hook that was used for offloading the param
+    module_parts = param_name.split(".")
+    modules_to_check = [".".join(module_parts[:-idx]) for idx in range(1, len(module_parts))] + [""]
+    for parent_name in modules_to_check:
+        parent = model.get_submodule(parent_name)
+        if hasattr(parent, "_hf_hook"):
+            weights_map = parent._hf_hook.weights_map
+            truncated_param_name = param_name.replace(f"{parent_name}." if parent_name != "" else parent_name, "")
+            break
+    # If we did not break the loop, something is wrong
+    else:
+        raise ValueError(
+            f"{param_name} is on the meta device because it was offloaded, but we could not find "
+            "the corresponding hook for it"
+        )
+
+    # This call loads it from disk
+    tensor = weights_map[truncated_param_name]
+    return tensor
 
 
 def _init_infer_auto_device_map(
     model: nn.Module,
-    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[list[str]] = None,
-    tied_parameters: Optional[list[list[str]]] = None,
+    max_memory: dict[int | str, int | str] | None = None,
+    no_split_module_classes: set[str] | None = None,
+    tied_parameters: list[list[str]] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
 ) -> tuple[
-    list[Union[int, str]],
-    dict[Union[int, str], Union[int, str]],
-    list[Union[int, str]],
+    list[int | str],
+    dict[int | str, int | str],
+    list[int | str],
     list[int],
     dict[str, int],
     list[list[str]],
@@ -534,7 +545,7 @@ def _init_infer_auto_device_map(
     max_memory = get_max_memory(max_memory)
     if no_split_module_classes is None:
         no_split_module_classes = []
-    elif not isinstance(no_split_module_classes, (list, tuple)):
+    elif not isinstance(no_split_module_classes, (list, tuple, set)):
         no_split_module_classes = [no_split_module_classes]
 
     devices = list(max_memory.keys())
@@ -584,12 +595,12 @@ def _init_infer_auto_device_map(
 
 def infer_auto_device_map(
     model: nn.Module,
-    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[list[str]] = None,
+    max_memory: dict[int | str, int | str] | None = None,
+    no_split_module_classes: set[str] | None = None,
     verbose: bool = False,
     clean_result: bool = True,
     offload_buffers: bool = False,
-    tied_parameters: Optional[list[list[str]]] = None,
+    tied_parameters: list[list[str]] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
 ):
     """
@@ -615,8 +626,8 @@ def infer_auto_device_map(
         max_memory (`Dict`, *optional*):
             A dictionary device identifier to maximum memory. Will default to the maximum memory available if unset.
             Example: `max_memory={0: "1GB"}`.
-        no_split_module_classes (`List[str]`, *optional*):
-            A list of layer class names that should never be split across device (for instance any layer that has a
+        no_split_module_classes (`set[str]`, *optional*):
+            A set of layer class names that should never be split across device (for instance any layer that has a
             residual connection).
         verbose (`bool`, *optional*, defaults to `False`):
             Whether or not to provide debugging statements as the function builds the device_map.

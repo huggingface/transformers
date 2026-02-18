@@ -3,13 +3,11 @@ import warnings
 from abc import ABC
 from collections import OrderedDict
 from copy import deepcopy
-from typing import Optional, Union
 
 import numpy as np
 import torch
 from torch.nn import functional as F
 
-from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import add_start_docstrings, logging
 
@@ -68,7 +66,7 @@ class MaxLengthCriteria(StoppingCriteria):
             The maximum model length, as defined by the model's `config.max_position_embeddings` attribute.
     """
 
-    def __init__(self, max_length: int, max_position_embeddings: Optional[int] = None):
+    def __init__(self, max_length: int, max_position_embeddings: int | None = None):
         self.max_length = max_length
         self.max_position_embeddings = max_position_embeddings
 
@@ -98,7 +96,7 @@ class MaxTimeCriteria(StoppingCriteria):
             The start of the generation allowed time.
     """
 
-    def __init__(self, max_time: float, initial_timestamp: Optional[float] = None):
+    def __init__(self, max_time: float, initial_timestamp: float | None = None):
         self.max_time = max_time
         self.initial_timestamp = time.time() if initial_timestamp is None else initial_timestamp
 
@@ -239,7 +237,7 @@ class StopStringCriteria(StoppingCriteria):
     ```
     """
 
-    def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, list[str]]):
+    def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: str | list[str]):
         if isinstance(stop_strings, str):
             stop_strings = [stop_strings]
         self.stop_strings: tuple[str, ...] = tuple(stop_strings)
@@ -431,7 +429,7 @@ class StopStringCriteria(StoppingCriteria):
         initial_match = end_lengths > 0
 
         # Tokens continue the string if the cumsum() so far is one of the valid positions for that token
-        # Note that we're actually tracking one cumsum() for for each possible end_length
+        # Note that we're actually tracking one cumsum() for each possible end_length
         later_match = torch.any(cumsum[:, :-1, :, None] == valid_positions[:, :, :, :, None], axis=-2)
 
         # The match vector is a boolean vector that indicates which positions have valid tokens
@@ -459,7 +457,7 @@ class EosTokenCriteria(StoppingCriteria):
             The id(s) of the *end-of-sequence* token.
     """
 
-    def __init__(self, eos_token_id: Union[int, list[int], torch.Tensor]):
+    def __init__(self, eos_token_id: int | list[int] | torch.Tensor):
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
@@ -469,7 +467,7 @@ class EosTokenCriteria(StoppingCriteria):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
         self.eos_token_id = self.eos_token_id.to(input_ids.device)
-        is_done = isin_mps_friendly(input_ids[:, -1], self.eos_token_id)
+        is_done = torch.isin(input_ids[:, -1], self.eos_token_id)
         return is_done
 
 
@@ -503,7 +501,7 @@ class StoppingCriteriaList(list):
         return is_done
 
     @property
-    def max_length(self) -> Optional[int]:
+    def max_length(self) -> int | None:
         for stopping_criterium in self:
             if isinstance(stopping_criterium, MaxLengthCriteria):
                 return stopping_criterium.max_length

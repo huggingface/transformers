@@ -182,6 +182,7 @@ if __name__ == "__main__":
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         attn_implementation="sdpa",  # CP requires SDPA
+        dtype=torch.float32,
     )
 
     # Create simple dataset: just tokenize some text

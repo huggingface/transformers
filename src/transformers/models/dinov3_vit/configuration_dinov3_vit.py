@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,11 +13,9 @@
 # limitations under the License.
 """DINOv3 model configuration"""
 
-from typing import Optional
-
+from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -139,11 +136,11 @@ class DINOv3ViTConfig(BackboneConfigMixin, PreTrainedConfig):
         use_gated_mlp: bool = False,
         num_register_tokens: int = 0,
         # train augs
-        pos_embed_shift: Optional[float] = None,
-        pos_embed_jitter: Optional[float] = None,
-        pos_embed_rescale: Optional[float] = 2.0,
-        out_features: Optional[list[str]] = None,
-        out_indices: Optional[list[int]] = None,
+        pos_embed_shift: float | None = None,
+        pos_embed_jitter: float | None = None,
+        pos_embed_rescale: float | None = 2.0,
+        out_features: list[str] | None = None,
+        out_indices: list[int] | None = None,
         apply_layernorm: bool = True,
         reshape_hidden_states: bool = True,
         **kwargs,
@@ -185,9 +182,7 @@ class DINOv3ViTConfig(BackboneConfigMixin, PreTrainedConfig):
         self.stage_names = stage_names
 
         # Initialize backbone features/indices
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=stage_names
-        )
+        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
 
 
 __all__ = ["DINOv3ViTConfig"]

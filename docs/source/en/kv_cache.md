@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# KV cache strategies
+# Cache strategies
 
 The key-value (KV) vectors are used to calculate attention scores. For autoregressive models, KV scores are calculated *every* time because the model predicts one token at a time. Each prediction depends on the previous tokens, which means the model performs the same computations each time.
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
+from typing import Union
 
 import torch
 from torchvision.ops import masks_to_boxes
@@ -20,65 +19,46 @@ from torchvision.ops import masks_to_boxes
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 from ...video_utils import VideoInput
 from .modeling_sam3_video import Sam3VideoInferenceSession
 
 
 @requires(backends=("torch",))
+@auto_docstring
 class Sam3VideoProcessor(ProcessorMixin):
-    r"""
-    Constructs a SAM3 processor which wraps a SAM3 image processor and an 2D points & Bounding boxes processor into a
-    single processor.
-
-    [`Sam3Processor`] offers all the functionalities of [`Sam3ImageProcessor`] and [`Sam3VideoProcessor`]. See the docstring of
-    [`~Sam3ImageProcessor.__call__`] and [`~Sam3VideoProcessor.__call__`] for more information.
-
-    Args:
-        image_processor (`Sam3ImageProcessorFast`):
-            An instance of [`Sam3ImageProcessorFast`].
-        video_processor (`Sam2VideoVideoProcessor`):
-            An instance of [`Sam2VideoVideoProcessor`].
-        tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
-            An instance of [`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]. The tokenizer is a required input.
-        target_size (`int`, *optional*):
-            The target size (target_size, target_size) to which the image will be resized.
-    """
-
     def __init__(
         self,
         image_processor,
         video_processor,
         tokenizer,
-        target_size: Optional[int] = None,
+        target_size: int | None = None,
         **kwargs,
     ):
+        r"""
+        target_size (`int`, *optional*):
+            The target size (target_size, target_size) to which the image will be resized.
+        """
         super().__init__(image_processor, video_processor, tokenizer, **kwargs)
         self.target_size = target_size if target_size is not None else self.image_processor.size["height"]
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        segmentation_maps: Optional[ImageInput] = None,
-        original_sizes: Optional[Union[list[list[float]], torch.Tensor]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        images: ImageInput | None = None,
+        segmentation_maps: ImageInput | None = None,
+        original_sizes: list[list[float]] | torch.Tensor | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchEncoding:
         r"""
-        This method uses [`Sam3VideoImageProcessorFast.__call__`] method to prepare image(s) for the model.
-
-        Args:
-            images (`ImageInput`, *optional*):
-                The image(s) to process.
-            segmentation_maps (`ImageInput`, *optional*):
-                The segmentation maps to process (optional, for image processor).
-            original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
-                The original sizes of the images. Only used when images is not provided.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return.
-            **kwargs:
-                Additional keyword arguments to pass to the image processor.
+        images (`ImageInput`, *optional*):
+            The image(s) to process.
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to process (optional, for image processor).
+        original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
+            The original sizes of the images. Only used when images is not provided.
 
         Returns:
             A [`BatchEncoding`] with the following fields:
@@ -109,7 +89,7 @@ class Sam3VideoProcessor(ProcessorMixin):
 
         return encoding_image_processor
 
-    def add_text_prompt(self, inference_session: Sam3VideoInferenceSession, text: Union[str, list[str]]):
+    def add_text_prompt(self, inference_session: Sam3VideoInferenceSession, text: str | list[str]):
         """
         Add text prompt(s) to the inference session.
 
@@ -143,11 +123,11 @@ class Sam3VideoProcessor(ProcessorMixin):
 
     def init_video_session(
         self,
-        video: Optional[VideoInput] = None,
+        video: VideoInput | None = None,
         inference_device: Union[str, "torch.device"] = "cpu",
-        inference_state_device: Optional[Union[str, "torch.device"]] = None,
-        processing_device: Optional[Union[str, "torch.device"]] = None,
-        video_storage_device: Optional[Union[str, "torch.device"]] = None,
+        inference_state_device: Union[str, "torch.device"] | None = None,
+        processing_device: Union[str, "torch.device"] | None = None,
+        video_storage_device: Union[str, "torch.device"] | None = None,
         max_vision_features_cache_size: int = 1,
         dtype: torch.dtype = torch.float32,
     ):
@@ -259,7 +239,7 @@ class Sam3VideoProcessor(ProcessorMixin):
         self,
         inference_session,
         model_outputs,
-        original_sizes: Optional[Union[list[list[float]], torch.Tensor]] = None,
+        original_sizes: list[list[float]] | torch.Tensor | None = None,
     ):
         """
         Post-process model outputs to get final masks, boxes, and scores.
@@ -340,7 +320,7 @@ class Sam3VideoProcessor(ProcessorMixin):
 
             # slice those valid entries from the original outputs
             keep_idx = torch.nonzero(keep, as_tuple=True)[0]
-            keep_idx_gpu = keep_idx.pin_memory().to(device=out_binary_masks.device, non_blocking=True)
+            keep_idx_gpu = keep_idx.to(device=out_binary_masks.device, non_blocking=True)
 
             out_obj_ids = torch.index_select(out_obj_ids, 0, keep_idx)
             out_probs = torch.index_select(out_probs, 0, keep_idx)

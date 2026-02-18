@@ -247,6 +247,9 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             self, config_class=MambaConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
+    def test_enable_input_require_grads(self):
+        self.skipTest("Mamba currently requires CUDA/Metal/XPU to run enable_input_require_grads.")
+
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         self.assertIsInstance(past_key_values, MambaCache)
 
@@ -365,7 +368,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
-    @unittest.skip("The `input_embeds` when fed don't produce the same results.")
+    @unittest.skip("The `inputs_embeds` when fed don't produce the same results.")
     def test_beam_sample_generate(self):
         pass
 

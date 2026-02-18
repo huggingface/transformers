@@ -33,7 +33,8 @@ This guide focuses on inference with an instruction-tuned model.
 Let's begin installing the dependencies.
 
 ```bash
-pip install -q transformers accelerate flash_attn
+pip install -q transformers accelerate 
+pip install flash-attn --no-build-isolation
 ```
 
 Let's initialize the model and the processor.
@@ -45,12 +46,12 @@ import torch
 
 device = Accelerator().device
 model = AutoModelForImageTextToText.from_pretrained(
-    "HuggingFaceM4/idefics2-8b",
+    "Qwen/Qwen3-VL-4B-Instruct",
     dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 ).to(device)
 
-processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b")
+processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-4B-Instruct")
 ```
 
 This model has a [chat template](./chat_templating) that helps user parse chat outputs. Moreover, the model can also accept multiple images as input in a single conversation or message. We will now prepare the inputs.
@@ -65,24 +66,28 @@ The image inputs look like the following.
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" alt="A bee on a pink flower"/>
 </div>
 
-```python
-from PIL import Image
-import requests
-
-img_urls =["https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png",
-           "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"]
-images = [Image.open(requests.get(img_urls[0], stream=True).raw),
-          Image.open(requests.get(img_urls[1], stream=True).raw)]
-```
-
-Below is an example of the chat template. We can feed conversation turns and the last message as an input by appending it at the end of the template.
+Structure your conversation as shown below for a single prompt with image and text inputs.
 
 ```python
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
+            {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png"},
+            {"type": "text", "text": "What do we see in this image?"},
+        ]
+    }
+]
+```
+
+Alternate between the `user` and `assistant` role to ground the model with prior context to generate better responses.
+
+```python
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png"},
             {"type": "text", "text": "What do we see in this image?"},
         ]
     },
@@ -95,7 +100,7 @@ messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
+            {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"},
             {"type": "text", "text": "And how about this image?"},
         ]
     },
@@ -105,19 +110,20 @@ messages = [
 We will now call the processors' [`~ProcessorMixin.apply_chat_template`] method to preprocess its output along with the image inputs.
 
 ```python
-prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-inputs = processor(text=prompt, images=[images[0], images[1]], return_tensors="pt").to(device)
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(device)
 ```
 
 We can now pass the preprocessed inputs to the model.
 
 ```python
+input_len = len(inputs.input_ids[0])
+
 with torch.no_grad():
-    generated_ids = model.generate(**inputs, max_new_tokens=500)
-generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+    generated_ids = model.generate(**inputs, max_new_tokens=200)
+generated_texts = processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)
 
 print(generated_texts)
-## ['User: What do we see in this image? \nAssistant: In this image we can see two cats on the nets. \nUser: And how about this image? \nAssistant: In this image we can see flowers, plants and insect.']
+## ['In this image we can see flowers, plants and insect.']
 ```
 
 ## Pipeline
@@ -289,7 +295,7 @@ VLMs are often large and need to be optimized to fit on smaller hardware. Transf
 First, install dependencies.
 
 ```bash
-pip install -U quanto bitsandbytes
+pip install -U optimum-quanto bitsandbytes
 ```
 
 To quantize a model during loading, we need to first create [`QuantoConfig`]. Then load the model as usual, but pass `quantization_config` during model initialization.
@@ -297,11 +303,30 @@ To quantize a model during loading, we need to first create [`QuantoConfig`]. Th
 ```python
 from transformers import AutoModelForImageTextToText, QuantoConfig
 
-model_id = "HuggingFaceM4/idefics2-8b"
+model_id = "Qwen/Qwen3-VL-4B-Instruct"
 quantization_config = QuantoConfig(weights="int8")
 quantized_model = AutoModelForImageTextToText.from_pretrained(
     model_id, device_map="auto", quantization_config=quantization_config
 )
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png"},
+            {"type": "text", "text": "What do we see in this image?"},
+        ]
+    },
+]
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
+input_len = len(inputs.input_ids[0])
+
+with torch.no_grad():
+    generated_ids = model.generate(**inputs, cache_implementation="static", max_new_tokens=100)
+generated_texts = processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)
+
+print(generated_texts[0])
+## ['In this image, we see two tabby cats resting on a large, tangled pile of fishing nets. The nets are a mix of brown, orange, and red colors, with some blue and green ropes visible in the background. The cats appear relaxed and comfortable, nestled into the fibers of the nets. One cat is in the foreground, looking slightly to the side, while the other is positioned further back, looking directly at the camera. The scene suggests a coastal or fishing-related setting, possibly near']
 ```
 
 And that's it, we can use the model the same way with no changes.
@@ -312,3 +337,4 @@ Here are some more resources for the image-text-to-text task.
 
 - [Image-text-to-text task page](https://huggingface.co/tasks/image-text-to-text) covers model types, use cases, datasets, and more.
 - [Vision Language Models Explained](https://huggingface.co/blog/vlms) is a blog post that covers everything about vision language models and supervised fine-tuning using [TRL](https://huggingface.co/docs/trl/en/index).
+- [Learn how to fine-tune vision language models using TRL](https://huggingface.co/blog/trl-vlm-alignment)

@@ -2,7 +2,7 @@
 from ..utils import DummyObject, requires_backends
 
 
-class MistralCommonTokenizer(metaclass=DummyObject):
+class MistralCommonBackend(metaclass=DummyObject):
     _backends = ["mistral-common"]
 
     def __init__(self, *args, **kwargs):

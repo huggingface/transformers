@@ -26,7 +26,7 @@ Citation:
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
+from typing import Union
 
 import torch
 from packaging import version
@@ -90,7 +90,7 @@ def compile_friendly_flex_attention(
     value: torch.Tensor,
     training=False,
     **kwargs,
-) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
     # First call initialise singleton wrapper object, second call invokes the object method to return compiled flex attention
     # Do not use compiled version if already compiling forward (it raises issues)
     flex_attention_compiled = WrappedFlexAttention(training)() if not is_torchdynamo_compiling() else flex_attention
@@ -102,17 +102,17 @@ def compile_friendly_flex_attention(
     )
 
 
-Offset = Union[torch.Tensor, int]
+Offset = torch.Tensor | int
 
 
 # TODO: deprecate / rename to make_flex_block_mask for clarity as it's not only causal anymore
 def make_flex_block_causal_mask(
     attention_mask_2d: torch.Tensor,
-    attention_chunk_size: Optional[int] = None,
+    attention_chunk_size: int | None = None,
     query_length=None,
     key_length=None,
-    offsets: Optional[tuple[Offset, Offset]] = None,
-    is_causal: Optional[bool] = True,
+    offsets: tuple[Offset, Offset] | None = None,
+    is_causal: bool | None = True,
 ) -> "BlockMask":
     """
     IMPORTANT NOTICE: This function is deprecated in favor of using the mask primitives in `masking_utils.py`,
@@ -238,11 +238,11 @@ def flex_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Union[torch.Tensor, "BlockMask"],
-    scaling: Optional[float] = None,
-    softcap: Optional[float] = None,
-    s_aux: Optional[torch.Tensor] = None,
+    scaling: float | None = None,
+    softcap: float | None = None,
+    s_aux: torch.Tensor | None = None,
     **kwargs,
-) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+) -> tuple[torch.Tensor, torch.Tensor | None]:
     if kwargs.get("dropout", 0.0) > 0:
         raise ValueError(
             "`flex_attention` does not support `dropout`. Please use it with inference"

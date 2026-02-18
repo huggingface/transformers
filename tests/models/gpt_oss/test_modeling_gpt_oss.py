@@ -22,6 +22,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 from parameterized import parameterized
 
 from transformers import (
@@ -31,9 +32,12 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
+    require_deterministic_for_xpu,
+    require_flash_attn,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -48,7 +52,12 @@ if is_torch_available():
         GptOssModel,
     )
 
-    NUM_GPUS = torch.cuda.device_count()
+    if torch.cuda.is_available():
+        NUM_GPUS = torch.cuda.device_count()
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+        NUM_GPUS = torch.xpu.device_count()
+    else:
+        NUM_GPUS = 0
 
 
 class GptOssModelTester(CausalLMModelTester):
@@ -61,6 +70,64 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester
+
+    @require_kernels
+    @require_flash_attn
+    @pytest.mark.flash_attn_test
+    @require_torch_gpu
+    def test_initialization_raises_error_for_flash_attn(self):
+        """
+        Tests that initializing the model with unsupported Flash Attention implementations raises a ValueError,
+        but allows the specific vllm kernel.
+        """
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        kernel_attn = "kernels-community/vllm-flash-attn3"
+
+        # Checking each via `set_attn_implementation` and manually setting within the config
+        model = GptOssModel(config).to(device=torch_device, dtype=torch.bfloat16)
+        model.set_attn_implementation("kernels-community/vllm-flash-attn3")
+        self.assertTrue(model.config._attn_implementation == kernel_attn)
+
+        config._attn_implementation = kernel_attn
+        self.assertTrue(model.config._attn_implementation == kernel_attn)
+
+        with torch.no_grad():
+            output = model(**inputs_dict)
+        self.assertIsNotNone(output)
+
+        with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
+            model.set_attn_implementation("flash_attention_2")
+
+        with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
+            config._attn_implementation = "flash_attention_2"
+
+    @require_kernels
+    @pytest.mark.flash_attn_test
+    @require_torch_gpu
+    def test_default_flash_implementation_auto_correction(self):
+        """
+        Tests that setting attn_implementation="flash_attention_2" during model initialization
+        automatically corrects to the model's _default_flash_implementation.
+        """
+        from kernels import get_kernel
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        expected_kernel = "kernels-community/vllm-flash-attn3"
+        flash = get_kernel(expected_kernel)
+        if flash is None:
+            self.skipTest(f"{expected_kernel} is not available, skipping auto-correction test.")
+        # Set flash_attention_2 in config before model init - should get auto-corrected
+        config._attn_implementation_internal = "flash_attention_2"
+        model = GptOssModel(config).to(device=torch_device, dtype=torch.bfloat16)
+
+        # Verify it was auto-corrected to the model's default flash implementation
+        self.assertEqual(model.config._attn_implementation, expected_kernel)
+
+        # Verify model still works
+        with torch.no_grad():
+            output = model(**inputs_dict)
+        self.assertIsNotNone(output)
 
     @unittest.skip("GptOss's forcefully disables sdpa due to Sink")
     def test_sdpa_can_dispatch_non_composite_models(self):
@@ -86,6 +153,9 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_compile_model_forward_fullgraph(self):
         return super().test_generate_compile_model_forward_fullgraph()
 
+    def test_reverse_loading_mapping(self, check_keys_were_modified=False):
+        super().test_reverse_loading_mapping(check_keys_were_modified)
+
 
 RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integration_tests.json"
 
@@ -102,7 +172,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
 
     def generate_config_key(quantized, model, kernels, attn_impl, mode):
         """Generate a key for the restructured integration test results."""
-        return f"quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
+        return f"device={torch_device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
     input_text = [
         "Roses are red, violets",
@@ -190,7 +260,7 @@ class GptOssIntegrationTest(unittest.TestCase):
     @staticmethod
     def generate_config_key(quantized, model, kernels, attn_impl, mode):
         """Generate a key for the restructured integration test results."""
-        return f"quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
+        return f"device={torch_device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -202,7 +272,7 @@ class GptOssIntegrationTest(unittest.TestCase):
     # Non-distributed inference
     # ------------------------
     @staticmethod
-    def load_and_forward(model_id, attn_implementation, input_text, **pretrained_kwargs):
+    def load_and_forward(model_id, attn_implementation, input_text, mode="eval", **pretrained_kwargs):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,
@@ -210,6 +280,13 @@ class GptOssIntegrationTest(unittest.TestCase):
             attn_implementation=attn_implementation,
             **pretrained_kwargs,
         )
+
+        # Set the correct mode
+        if mode == "train":
+            model.train()
+        else:
+            model.eval()
+
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
         inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(model.device)
@@ -301,13 +378,17 @@ if __name__ == "__main__":
     # Non-distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_read_token
+    @require_deterministic_for_xpu
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
+        if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
+            self.skipTest("flash attention 3 is not supported on XPU yet.")
+
         model_id = f"openai/gpt-oss-{model}"
         output_texts = self.load_and_forward(
             model_id,
             attn_impl,
             self.input_text,
+            mode=mode,
             use_kernels=kernels,
         )
 
@@ -363,15 +444,16 @@ if __name__ == "__main__":
     # Distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_read_token
     def test_model_outputs_distributed(self, quantized, model, kernels, attn_impl, mode):
+        if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
+            self.skipTest("flash attention 3 is not supported on XPU yet.")
+
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
 
     # ------------------------
     # Training test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_read_token
     def test_training_step(self, quantized, model, kernels, attn_impl, mode):
         if mode != "train":
             self.skipTest("This test is only for training mode.")

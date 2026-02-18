@@ -20,8 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_mobilebert import *
     from .modeling_mobilebert import *
-    from .tokenization_mobilebert import *
-    from .tokenization_mobilebert_fast import *
+    from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 else:
     import sys
 

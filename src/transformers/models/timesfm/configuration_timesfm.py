@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google LLC and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 class TimesFmConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TimesFmModelForPrediction`] or a [`TFTimesFmModel`]. It is used to
+    This is the configuration class to store the configuration of a [`TimesFmModelForPrediction`]. It is used to
     instantiate a TimesFM model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the TimesFM
     [google/timesfm-2.0-500m-pytorch](https://huggingface.co/google/timesfm-2.0-500m-pytorch) architecture.

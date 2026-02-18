@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_sam3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -178,8 +177,8 @@ def _generate_crop_boxes(
     target_size: int,  # Is it tuple here?
     crop_n_layers: int = 0,
     overlap_ratio: float = 512 / 1500,
-    points_per_crop: Optional[int] = 32,
-    crop_n_points_downscale_factor: Optional[list[int]] = 1,
+    points_per_crop: int | None = 32,
+    crop_n_points_downscale_factor: list[int] | None = 1,
 ) -> tuple[list[list[int]], list[int]]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
@@ -420,12 +419,12 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
-        mask_size: Optional[SizeDict] = None,
-        default_to_square: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        data_format: Optional[ChannelDimension] = None,
+        size: SizeDict | None = None,
+        mask_size: SizeDict | None = None,
+        default_to_square: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        data_format: ChannelDimension | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -466,7 +465,7 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
+        segmentation_maps: ImageInput | None = None,
         **kwargs: Unpack[Sam3FastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -478,10 +477,10 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput],
+        segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[Sam3FastImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -522,14 +521,22 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
 
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> "torch.Tensor":
+        return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
+
     def generate_crop_boxes(
         self,
         image: "torch.Tensor",
         target_size,
         crop_n_layers: int = 0,
         overlap_ratio: float = 512 / 1500,
-        points_per_crop: Optional[int] = 32,
-        crop_n_points_downscale_factor: Optional[list[int]] = 1,
+        points_per_crop: int | None = 32,
+        crop_n_points_downscale_factor: list[int] | None = 1,
         device: Optional["torch.device"] = None,
     ):
         """
@@ -723,14 +730,6 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
         """
         return _post_process_for_mask_generation(all_masks, all_scores, all_boxes, crops_nms_thresh)
 
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        return_tensors: Optional[Union[str, TensorType]],
-        **kwargs,
-    ) -> "torch.Tensor":
-        return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
-
     def _apply_non_overlapping_constraints(self, pred_masks: torch.Tensor) -> torch.Tensor:
         """
         Apply non-overlapping constraints to the object scores in pred_masks. Here we
@@ -752,7 +751,7 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
         return pred_masks
 
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[list[tuple]] = None, threshold: float = 0.5
+        self, outputs, target_sizes: list[tuple] | None = None, threshold: float = 0.5
     ):
         """
         Converts the output of [`Sam3Model`] into semantic segmentation maps.
@@ -810,9 +809,7 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
 
         return semantic_segmentation
 
-    def post_process_object_detection(
-        self, outputs, threshold: float = 0.3, target_sizes: Optional[list[tuple]] = None
-    ):
+    def post_process_object_detection(self, outputs, threshold: float = 0.3, target_sizes: list[tuple] | None = None):
         """
         Converts the raw output of [`Sam3Model`] into final bounding boxes in (top_left_x, top_left_y,
         bottom_right_x, bottom_right_y) format.
@@ -868,7 +865,7 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
         outputs,
         threshold: float = 0.3,
         mask_threshold: float = 0.5,
-        target_sizes: Optional[list[tuple]] = None,
+        target_sizes: list[tuple] | None = None,
     ):
         """
         Converts the raw output of [`Sam3Model`] into instance segmentation predictions with bounding boxes and masks.

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,6 +34,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -127,12 +127,13 @@ class DeepseekVLModelTester:
 
 
 @require_torch
-class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeepseekVLModel, DeepseekVLForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": DeepseekVLModel,
             "image-text-to-text": DeepseekVLForConditionalGeneration,
+            "any-to-any": DeepseekVLForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -300,7 +301,7 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
             ],
         ]
         EXPECTED_TEXT = [
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:In the image, a majestic snow leopard is captured in a moment of tranquility. The snow leopard",  # fmt: skip
+            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:The image depicts a snowy landscape with a focus on a bear. The bear is standing on all",  # fmt: skip
             "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: What animal do you see in the image?\n\nAssistant:I see a bear in the image.What is the significance of the color red in the",  # fmt: skip
         ]
 

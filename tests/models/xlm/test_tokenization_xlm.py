@@ -15,6 +15,7 @@
 
 import json
 import os
+import tempfile
 import unittest
 
 from transformers.models.xlm.tokenization_xlm import VOCAB_FILES_NAMES, XLMTokenizer
@@ -33,6 +34,33 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUpClass()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
+        cls.vocab = [
+            "l",
+            "o",
+            "w",
+            "e",
+            "r",
+            "s",
+            "t",
+            "i",
+            "d",
+            "n",
+            "w</w>",
+            "r</w>",
+            "t</w>",
+            "lo",
+            "low",
+            "er</w>",
+            "low</w>",
+            "lowest</w>",
+            "newer</w>",
+            "wider</w>",
+            "<unk>",
+        ]
+
+    def test_full_tokenizer(self):
+        """Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt"""
+
         vocab = [
             "l",
             "o",
@@ -59,21 +87,14 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
 
-        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(cls.vocab_file, "w") as fp:
-            fp.write(json.dumps(vocab_tokens))
-        with open(cls.merges_file, "w") as fp:
-            fp.write("\n".join(merges))
-
-    def get_input_output_texts(self, tokenizer):
-        input_text = "lower newer"
-        output_text = "lower newer"
-        return input_text, output_text
-
-    def test_full_tokenizer(self):
-        """Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt"""
-        tokenizer = XLMTokenizer(self.vocab_file, self.merges_file)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vocab_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["vocab_file"])
+            merges_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["merges_file"])
+            with open(vocab_file, "w") as fp:
+                fp.write(json.dumps(vocab_tokens))
+            with open(merges_file, "w") as fp:
+                fp.write("\n".join(merges))
+            tokenizer = XLMTokenizer(vocab_file, merges_file)
 
         text = "lower"
         bpe_tokens = ["low", "er</w>"]

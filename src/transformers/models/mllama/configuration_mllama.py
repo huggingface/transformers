@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,10 +12,7 @@
 # limitations under the License.
 """Mllama model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
@@ -103,8 +99,8 @@ class MllamaVisionConfig(PreTrainedConfig):
         patch_size: int = 14,
         norm_eps: float = 1e-5,
         max_num_tiles: int = 4,
-        intermediate_layers_indices: Optional[list[int]] = None,
-        supported_aspect_ratios: Optional[list[list[int]]] = None,
+        intermediate_layers_indices: list[int] | None = None,
+        supported_aspect_ratios: list[list[int]] | None = None,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -167,7 +163,7 @@ class MllamaTextConfig(PreTrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 14336):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -208,6 +204,7 @@ class MllamaTextConfig(PreTrainedConfig):
 
     model_type = "mllama_text_model"
     base_config_key = "text_config"
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -218,17 +215,17 @@ class MllamaTextConfig(PreTrainedConfig):
         num_attention_heads: int = 32,
         num_key_value_heads: int = 8,
         intermediate_size: int = 14_336,
-        rope_parameters: Optional[dict] = None,
+        rope_parameters: dict | None = None,
         rms_norm_eps: float = 1e-5,
         max_position_embeddings: int = 131_072,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         tie_word_embeddings: bool = False,
-        cross_attention_layers: Optional[list[int]] = None,
+        cross_attention_layers: list[int] | None = None,
         dropout: float = 0,
         bos_token_id: int = 128000,
         eos_token_id: int = 128001,
-        pad_token_id: Optional[int] = 128004,
+        pad_token_id: int | None = 128004,
         **kwargs,
     ):
         if cross_attention_layers is None:
@@ -247,22 +244,13 @@ class MllamaTextConfig(PreTrainedConfig):
         self.dropout = dropout
         self.hidden_act = hidden_act
         self.max_position_embeddings = max_position_embeddings
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 class MllamaConfig(PreTrainedConfig):
