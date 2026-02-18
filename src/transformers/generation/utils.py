@@ -684,7 +684,7 @@ class GenerationMixin(ContinuousMixin):
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
             else:
                 batch_size, sequence_length = model_inputs[input_ids_key].shape[:2]
-            
+
             token_type_ids = model_inputs.get("token_type_ids")
             position_ids = model_inputs.get(position_ids_key)
             # Some models may overwrite the general one
