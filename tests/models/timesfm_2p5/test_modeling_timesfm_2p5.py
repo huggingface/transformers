@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +13,8 @@
 # limitations under the License.
 
 import inspect
+import os
+import tempfile
 import unittest
 
 import numpy as np
@@ -28,7 +29,7 @@ from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERI
 
 
 if is_torch_available():
-    from transformers import Timesfm2P5ModelForPrediction
+    from transformers import Timesfm2P5Model, Timesfm2P5ModelForPrediction
 
 TOLERANCE = 1e-4
 
@@ -103,9 +104,9 @@ class Timesfm2P5ModelTester:
 
     def prepare_config_and_inputs(self):
         forecast_input = [
-            torch.tensor(np.sin(np.linspace(0, 20, 100)), dtype=torch.float32, device=torch_device),
-            torch.tensor(np.cos(np.linspace(0, 20, 100)), dtype=torch.float32, device=torch_device),
-            torch.tensor(np.tan(np.linspace(0, 20, 100)), dtype=torch.float32, device=torch_device),
+            torch.tensor(np.sin(np.linspace(0, 20, 96)), dtype=torch.float32, device=torch_device),
+            torch.tensor(np.cos(np.linspace(0, 20, 96)), dtype=torch.float32, device=torch_device),
+            torch.tensor(np.tan(np.linspace(0, 20, 96)), dtype=torch.float32, device=torch_device),
         ]
         frequency_input = torch.tensor([0, 1, 2], dtype=torch.long, device=torch_device)
 
@@ -123,7 +124,7 @@ class Timesfm2P5ModelTester:
 
 @require_torch
 class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (Timesfm2P5ModelForPrediction,) if is_torch_available() else ()
+    all_model_classes = (Timesfm2P5Model, Timesfm2P5ModelForPrediction) if is_torch_available() else ()
     all_generative_model_classes = ()
     all_parallelizable_model_classes = ()
     fx_compatible = False
@@ -239,12 +240,36 @@ class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
         if self.has_attentions and outputs.attentions is not None:
             self.assertIsNotNone(attentions.grad)
 
+    def test_eager_sdpa_deterministic_alignment(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.infer_is_positive = False
+        config.force_flip_invariance = False
+
+        model_eager = (
+            Timesfm2P5ModelForPrediction._from_config(config, attn_implementation="eager").to(torch_device).eval()
+        )
+        model_sdpa = (
+            Timesfm2P5ModelForPrediction._from_config(config, attn_implementation="sdpa").to(torch_device).eval()
+        )
+        model_sdpa.load_state_dict(model_eager.state_dict(), strict=True)
+
+        with torch.no_grad():
+            eager_outputs = model_eager(**inputs_dict)
+            sdpa_outputs = model_sdpa(**inputs_dict)
+
+        self.assertTrue(torch.allclose(eager_outputs.mean_predictions, sdpa_outputs.mean_predictions, atol=1e-4))
+        self.assertTrue(torch.allclose(eager_outputs.full_predictions, sdpa_outputs.full_predictions, atol=1e-4))
+
 
 @require_torch
 @slow
 class Timesfm2P5ModelIntegrationTests(unittest.TestCase):
     def test_inference(self):
-        model = Timesfm2P5ModelForPrediction.from_pretrained("google/timesfm-2.0-500m-pytorch").to(torch_device)
+        model_path = os.environ.get("TIMESFM_2P5_LOCAL_MODEL_PATH")
+        if model_path is None:
+            self.skipTest("Set TIMESFM_2P5_LOCAL_MODEL_PATH to a locally converted TimesFM 2.5 checkpoint.")
+
+        model = Timesfm2P5ModelForPrediction.from_pretrained(model_path, attn_implementation="sdpa").to(torch_device)
         forecast_input = [
             np.sin(np.linspace(0, 20, 100)),
             np.sin(np.linspace(0, 20, 200)),
@@ -259,14 +284,14 @@ class Timesfm2P5ModelIntegrationTests(unittest.TestCase):
         self.assertEqual(mean_predictions.shape, torch.Size([3, model.config.horizon_length]))
         # fmt: off
         expected_slice = torch.tensor(
-            [ 0.9813,  1.0086,  0.9985,  0.9432,  0.8505,  0.7203,  0.5596,  0.3788,
-              0.1796, -0.0264, -0.2307, -0.4255, -0.5978, -0.7642, -0.8772, -0.9670,
-             -1.0110, -1.0162, -0.9848, -0.9151, -0.8016, -0.6511, -0.4707, -0.2842,
-             -0.0787,  0.1260,  0.3293,  0.5104,  0.6818,  0.8155,  0.9172,  0.9843,
-              1.0101,  1.0025,  0.9529,  0.8588,  0.7384,  0.5885,  0.4022,  0.2099,
-             -0.0035, -0.2104, -0.4146, -0.6033, -0.7661, -0.8818, -0.9725, -1.0191,
-             -1.0190, -0.9874, -0.9137, -0.8069, -0.6683, -0.4939, -0.3086, -0.1106,
-              0.0846,  0.2927,  0.4832,  0.6612,  0.8031,  0.9051,  0.9772,  1.0064
+            [ 0.9745,  1.0047,  0.9707,  0.9161,  0.8041,  0.6829,  0.5378,  0.3563,
+              0.1698, -0.0396, -0.2508, -0.4358, -0.6150, -0.7491, -0.8659, -0.9535,
+             -1.0024, -0.9977, -0.9557, -0.8840, -0.7716, -0.6092, -0.4526, -0.2582,
+             -0.0554,  0.1263,  0.3258,  0.5207,  0.6667,  0.7989,  0.9002,  0.9782,
+              0.9848,  0.9877,  0.9339,  0.8473,  0.7109,  0.5525,  0.3799,  0.1756,
+             -0.0285, -0.2325, -0.4137, -0.5926, -0.7425, -0.8532, -0.9444, -0.9878,
+             -0.9985, -0.9828, -0.8972, -0.7833, -0.6414, -0.4881, -0.2838, -0.0878,
+              0.1169,  0.3137,  0.4918,  0.6508,  0.7762,  0.8961,  0.9666,  0.9910
             ],
             device=torch_device)
         # fmt: on

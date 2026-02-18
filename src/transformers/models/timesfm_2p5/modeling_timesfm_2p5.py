@@ -633,13 +633,16 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        past_values_padding: torch.LongTensor,
+        past_values_padding: torch.LongTensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         **kwargs: Unpack[FlashAttentionKwargs],
     ):
         batch_size, seq_len = past_values.shape
         patch_len = self.config.patch_length
+
+        if past_values_padding is None:
+            past_values_padding = torch.zeros_like(past_values, dtype=torch.long)
 
         patched_inputs = past_values.view(batch_size, -1, patch_len)
         context_padding = past_values_padding[:, :seq_len]
