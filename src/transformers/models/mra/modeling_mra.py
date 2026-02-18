@@ -763,11 +763,14 @@ class MraOnlyMLMHead(nn.Module):
 
 
 @auto_docstring
-# Copied from transformers.models.yoso.modeling_yoso.YosoPreTrainedModel with Yoso->Mra,yoso->mra
 class MraPreTrainedModel(PreTrainedModel):
     config: MraConfig
     base_model_prefix = "mra"
     supports_gradient_checkpointing = True
+    _can_record_outputs = {
+        "hidden_states": MraLayer,
+        "attentions": MraAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
