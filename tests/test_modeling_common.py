@@ -4042,11 +4042,6 @@ class ModelTesterMixin:
 
         model = cls(config).to(device=torch_device)
 
-        # torch.nn.functional.grouped_mm still only supports bfloat16 when used with torch.compile
-        # bfloat16 is problematic with precisions so we use an implementation with full precision
-        if model.config._experts_implementation == "grouped_mm":
-            model.set_experts_implementation("batched_mm")
-
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
             "attention_mask": torch.tensor(
@@ -5582,9 +5577,9 @@ def seeded_weight_init():
         # `_init_weights` so that it can add the seed for composite models as well)
         original_initialize_weights = PreTrainedModel._initialize_weights
 
-        def seeded_initialize_weights(self, module):
+        def seeded_initialize_weights(*args, **kwargs):
             set_seed(42)
-            original_initialize_weights(self, module)
+            original_initialize_weights(*args, **kwargs)
 
         PreTrainedModel._initialize_weights = seeded_initialize_weights
 
@@ -5601,7 +5596,7 @@ def skip_weight_init():
         original_initialize_weights = PreTrainedModel._initialize_weights
 
         # Just do nothing instead
-        def skip_initialize_weights(self, module):
+        def skip_initialize_weights(*args, **kwargs):
             pass
 
         PreTrainedModel._initialize_weights = skip_initialize_weights
