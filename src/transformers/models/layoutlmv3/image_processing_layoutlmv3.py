@@ -13,64 +13,37 @@
 # limitations under the License.
 """Image processor class for LayoutLMv3."""
 
-from collections.abc import Iterable
-
 import numpy as np
+import torch
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import resize, to_channel_dimension_format, to_pil_image
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images, to_pil_image
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    ChannelDimension,
     ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
+    SizeDict,
 )
-from ...processing_utils import ImagesKwargs
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
-    filter_out_non_signature_kwargs,
+    auto_docstring,
     is_pytesseract_available,
-    is_vision_available,
+    is_torchvision_available,
     logging,
     requires_backends,
 )
-from ...utils.import_utils import requires
 
 
-if is_vision_available():
-    import PIL
-
-# soft dependency
 if is_pytesseract_available():
     import pytesseract
 
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
+
 logger = logging.get_logger(__name__)
-
-
-class LayoutLMv3ImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    apply_ocr (`bool`, *optional*, defaults to `True`):
-        Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
-        the `apply_ocr` parameter in the `preprocess` method.
-    ocr_lang (`str`, *optional*):
-        The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
-        used. Can be overridden by the `ocr_lang` parameter in the `preprocess` method.
-    tesseract_config (`str`, *optional*):
-        Any additional custom configuration flags that are forwarded to the `config` parameter when calling
-        Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
-        `preprocess` method.
-    """
-
-    apply_ocr: bool
-    ocr_lang: str | None
-    tesseract_config: str | None
 
 
 def normalize_box(box, width, height):
@@ -83,12 +56,21 @@ def normalize_box(box, width, height):
 
 
 def apply_tesseract(
-    image: np.ndarray,
+    image: "np.ndarray | torch.Tensor",
     lang: str | None,
-    tesseract_config: str | None,
-    input_data_format: ChannelDimension | str | None = None,
+    tesseract_config: str | None = None,
+    input_data_format: str | ChannelDimension | None = None,
 ):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
+    requires_backends(apply_tesseract, ["pytesseract"])
+
+    # Convert torch tensor to numpy if needed
+    if hasattr(image, "cpu"):
+        image = image.cpu().numpy()
+    elif not isinstance(image, np.ndarray):
+        image = np.array(image)
+
+    tesseract_config = tesseract_config if tesseract_config is not None else ""
 
     # apply OCR
     pil_image = to_pil_image(image, input_data_format=input_data_format)
@@ -120,276 +102,112 @@ def apply_tesseract(
     return words, normalized_boxes
 
 
-@requires(backends=("vision",))
-class LayoutLMv3ImageProcessor(BaseImageProcessor):
+class LayoutLMv3ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
-    Constructs a LayoutLMv3 image processor.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to `(size["height"], size["width"])`. Can be
-            overridden by `do_resize` in `preprocess`.
-        size (`dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
-            Size of the image after resizing. Can be overridden by `size` in `preprocess`.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image's pixel values by the specified `rescale_value`. Can be overridden by
-            `do_rescale` in `preprocess`.
-        rescale_factor (`float`, *optional*, defaults to 1 / 255):
-            Value by which the image's pixel values are rescaled. Can be overridden by `rescale_factor` in
-            `preprocess`.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method.
-        image_mean (`Iterable[float]` or `float`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`Iterable[float]` or `float`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        apply_ocr (`bool`, *optional*, defaults to `True`):
-            Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
-            the `apply_ocr` parameter in the `preprocess` method.
-        ocr_lang (`str`, *optional*):
-            The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
-            used. Can be overridden by the `ocr_lang` parameter in the `preprocess` method.
-        tesseract_config (`str`, *optional*):
-            Any additional custom configuration flags that are forwarded to the `config` parameter when calling
-            Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
-            `preprocess` method.
+    apply_ocr (`bool`, *optional*, defaults to `True`):
+        Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
+        the `apply_ocr` parameter in the `preprocess` method.
+    ocr_lang (`str`, *optional*):
+        The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
+        used. Can be overridden by the `ocr_lang` parameter in the `preprocess` method.
+    tesseract_config (`str`, *optional*):
+        Any additional custom configuration flags that are forwarded to the `config` parameter when calling
+        Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
+        `preprocess` method.
     """
 
-    model_input_names = ["pixel_values"]
-    valid_kwargs = LayoutLMv3ImageProcessorKwargs
+    apply_ocr: bool
+    ocr_lang: str | None
+    tesseract_config: str | None
 
-    def __init__(
+
+@auto_docstring
+class LayoutLMv3ImageProcessor(TorchvisionBackend):
+    valid_kwargs = LayoutLMv3ImageProcessorKwargs
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = {"height": 224, "width": 224}
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    apply_ocr = True
+    ocr_lang = None
+    tesseract_config = ""
+
+    def __init__(self, **kwargs: Unpack[LayoutLMv3ImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LayoutLMv3ImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _preprocess(
         self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        do_rescale: bool = True,
-        rescale_factor: float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | Iterable[float] | None = None,
-        image_std: float | Iterable[float] | None = None,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         apply_ocr: bool = True,
         ocr_lang: str | None = None,
-        tesseract_config: str | None = "",
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-        size = size if size is not None else {"height": 224, "width": 224}
-        size = get_size_dict(size)
-
-        self.do_resize = do_resize
-        self.size = size
-        self.resample = resample
-        self.do_rescale = do_rescale
-        # The standard name is rescale_factor, but this processor accepted rescale_value for a long time,
-        # so allow it as a kwarg for backward compatibility
-        self.rescale_factor = kwargs.get("rescale_value", rescale_factor)
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self.apply_ocr = apply_ocr
-        self.ocr_lang = ocr_lang
-        self.tesseract_config = tesseract_config
-
-    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
-    def resize(
-        self,
-        image: np.ndarray,
-        size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Resize an image to `(size["height"], size["width"])`.
-
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            size (`dict[str, int]`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-
-        Returns:
-            `np.ndarray`: The resized image.
-        """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        output_size = (size["height"], size["width"])
-        return resize(
-            image,
-            size=output_size,
-            resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
-
-    @filter_out_non_signature_kwargs()
-    def preprocess(
-        self,
-        images: ImageInput,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample=None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | Iterable[float] | None = None,
-        image_std: float | Iterable[float] | None = None,
-        apply_ocr: bool | None = None,
-        ocr_lang: str | None = None,
         tesseract_config: str | None = None,
-        return_tensors: str | TensorType | None = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> PIL.Image.Image:
-        """
-        Preprocess an image or batch of images.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Desired size of the output image after applying `resize`.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the `PILImageResampling` filters.
-                Only has an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image pixel values between [0, 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to apply to the image pixel values. Only has an effect if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `Iterable[float]`, *optional*, defaults to `self.image_mean`):
-                Mean values to be used for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `Iterable[float]`, *optional*, defaults to `self.image_std`):
-                Standard deviation values to be used for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
-            apply_ocr (`bool`, *optional*, defaults to `self.apply_ocr`):
-                Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
-            ocr_lang (`str`, *optional*, defaults to `self.ocr_lang`):
-                The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
-                used.
-            tesseract_config (`str`, *optional*, defaults to `self.tesseract_config`):
-                Any additional custom configuration flags that are forwarded to the `config` parameter when calling
-                Tesseract.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
-        size = get_size_dict(size)
-        resample = resample if resample is not None else self.resample
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        apply_ocr = apply_ocr if apply_ocr is not None else self.apply_ocr
-        ocr_lang = ocr_lang if ocr_lang is not None else self.ocr_lang
-        tesseract_config = tesseract_config if tesseract_config is not None else self.tesseract_config
-        images = make_flat_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if do_rescale and is_scaled_image(images[0]):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
+        **kwargs,
+    ) -> BatchFeature:
         # Tesseract OCR to get words + normalized bounding boxes
         if apply_ocr:
             requires_backends(self, "pytesseract")
             words_batch = []
             boxes_batch = []
             for image in images:
-                words, boxes = apply_tesseract(image, ocr_lang, tesseract_config, input_data_format=input_data_format)
+                if image.is_cuda:
+                    logger.warning_once(
+                        "apply_ocr can only be performed on cpu. Tensors will be transferred to cpu before processing."
+                    )
+                words, boxes = apply_tesseract(
+                    image.cpu(), ocr_lang, tesseract_config, input_data_format=ChannelDimension.FIRST
+                )
                 words_batch.append(words)
                 boxes_batch.append(boxes)
 
-        if do_resize:
-            images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(image=stacked_images, size=size, resample=resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self._rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
 
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        data = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+        data = BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
         if apply_ocr:
             data["words"] = words_batch
             data["boxes"] = boxes_batch
+
         return data
 
 
