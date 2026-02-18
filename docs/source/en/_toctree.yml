@@ -33,6 +33,10 @@
     sections:
     - local: fast_tokenizers
       title: Tokenizers
+    - local: custom_tokenizers
+      title: Customizing tokenizers
+    - local: tokenizer_summary
+      title: Tokenization algorithms
     - local: image_processors
       title: Image processors
     - local: video_processors
@@ -43,10 +47,6 @@
       title: Feature extractors
     - local: processors
       title: Processors
-    - local: tokenizer_summary
-      title: Summary of the tokenizers
-    - local: pad_truncation
-      title: Padding and truncation
     title: Preprocessors
   title: Base classes
 - isExpanded: true
@@ -303,6 +303,8 @@
         title: Audio classification
       - local: tasks/asr
         title: Automatic speech recognition
+      - local: tasks/audio_text_to_text
+        title: Audio-text-to-text
       - local: tasks/text-to-speech
         title: Text to speech
       title: Audio
