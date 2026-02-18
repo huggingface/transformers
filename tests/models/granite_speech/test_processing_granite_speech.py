@@ -197,10 +197,8 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         assert sum(num_expected_features) == num_audio_tokens
 
     @require_torch_accelerator
-    def test_device_override(self):
-        """Ensure that we regardless of the processing device, the tensors
-        produced are on the CPU.
-        """
+    def test_device_placement(self):
+        """Ensure that the device parameter controls where speech inputs are placed."""
         tokenizer = self.get_tokenizer()
         audio_processor = self.get_audio_processor()
         processor = GraniteSpeechProcessor(
@@ -218,4 +216,4 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
             device=torch_device,
         )
 
-        assert inputs["input_features"].device.type == "cpu"
+        assert inputs["input_features"].device.type == torch_device
