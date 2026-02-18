@@ -14,7 +14,6 @@
 
 import inspect
 import os
-import tempfile
 import unittest
 
 import numpy as np
