@@ -28,7 +28,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.output_capturing import capture_outputs
 from ..csm.modeling_csm import CsmBackboneModelEmbeddings
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaMLP, LlamaModel, LlamaPreTrainedModel, LlamaRMSNorm
@@ -329,7 +329,7 @@ class HiggsAudioV2Model(LlamaModel):
 
         return special_audio_mask
 
-    @check_model_inputs()
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
