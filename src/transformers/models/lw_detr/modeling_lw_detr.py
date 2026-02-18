@@ -339,14 +339,14 @@ class LwDetrViTPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["LwDetrViTEmbeddings", "LwDetrViTLayer"]
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": LwDetrViTLayer,
         "attentions": LwDetrViTSelfAttention,
     }
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:
