@@ -26,10 +26,18 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import (
+    ALL_ATTENTION_FUNCTIONS,
+    OutputRecorder,
+    PreTrainedModel,
+    can_return_tuple,
+    capture_outputs,
+)
+from ...processing_utils import Unpack
 from ...pytorch_utils import Conv1D
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
     logging,
 )
@@ -150,9 +158,8 @@ class DecisionTransformerGPT2Attention(nn.Module):
         attention_mask: torch.FloatTensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
-        **kwargs,
-    ) -> tuple[torch.Tensor | tuple[torch.Tensor], ...]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         is_cross_attention = encoder_hidden_states is not None
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
@@ -278,18 +285,16 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         use_cache: bool | None = False,
-        output_attentions: bool | None = False,
-        **kwargs,
-    ) -> tuple[torch.Tensor] | tuple[torch.Tensor, tuple[torch.FloatTensor, ...]] | None:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
-        attn_output, self_attn_weights = self.attn(
+        attn_output, _ = self.attn(
             hidden_states,
             past_key_values=past_key_values,
             cache_position=cache_position,
             attention_mask=attention_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             **kwargs,
         )
         # residual connection
@@ -304,13 +309,13 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
                 )
             residual = hidden_states
             hidden_states = self.ln_cross_attn(hidden_states)
-            cross_attn_output, cross_attn_weights = self.crossattention(
+            cross_attn_output, _ = self.crossattention(
                 hidden_states,
                 past_key_values=past_key_values,
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions,
+                **kwargs,
             )
             # residual connection
             hidden_states = residual + cross_attn_output
@@ -321,13 +326,7 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
 
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-            if encoder_hidden_states is not None:
-                outputs += (cross_attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 @auto_docstring
@@ -336,6 +335,11 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _can_compile_fullgraph = False
+    _can_record_outputs = {
+        "hidden_states": DecisionTransformerGPT2Block,
+        "attentions": OutputRecorder(DecisionTransformerGPT2Attention, layer_name="attn", index=1),
+        "cross_attentions": OutputRecorder(DecisionTransformerGPT2Attention, layer_name="crossattention", index=1),
+    }
 
     # No longer used as we directly use our masks instead
     _keys_to_ignore_on_load_unexpected = ["attn.bias", "crossattention.bias"]
@@ -384,6 +388,8 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
+    @can_return_tuple
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -396,17 +402,9 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -477,9 +475,6 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
                 )
                 use_cache = False
 
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-        all_hidden_states = () if output_hidden_states else None
         for block in self.h:
             outputs = block(
                 hidden_states,
@@ -489,37 +484,17 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 use_cache=use_cache,
-                output_attentions=output_attentions,
             )
 
             hidden_states = outputs[0]
 
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (outputs[2],)
-
         hidden_states = self.ln_f(hidden_states)
 
         hidden_states = hidden_states.view(output_shape)
-        # Add last hidden state
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        past_key_values = past_key_values if use_cache else None
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions, all_cross_attentions]
-                if v is not None
-            )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
+            past_key_values=past_key_values if use_cache else None,
         )
 
 
@@ -557,6 +532,11 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "decision_transformer"
     main_input_name = "states"
     supports_gradient_checkpointing = False
+
+    _can_record_outputs = {
+        "hidden_states": "encoder",
+        "attentions": "encoder",
+    }
 
 
 @auto_docstring(
@@ -597,7 +577,8 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
+    @can_return_tuple
+    @capture_outputs
     def forward(
         self,
         states: torch.FloatTensor | None = None,
@@ -606,10 +587,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         returns_to_go: torch.FloatTensor | None = None,
         timesteps: torch.LongTensor | None = None,
         attention_mask: torch.FloatTensor | None = None,
-        output_hidden_states: bool | None = None,
-        output_attentions: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | DecisionTransformerOutput:
         r"""
         states (`torch.FloatTensor` of shape `(batch_size, episode_length, state_dim)`):
@@ -660,12 +638,6 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         ...     )
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         batch_size, seq_length = states.shape[0], states.shape[1]
 
         if attention_mask is None:
@@ -704,9 +676,6 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
             inputs_embeds=stacked_inputs,
             attention_mask=stacked_attention_mask,
             position_ids=torch.zeros(stacked_attention_mask.shape, device=device, dtype=torch.long),
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
         x = encoder_outputs[0]
 
@@ -718,16 +687,12 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         return_preds = self.predict_return(x[:, 2])  # predict next return given state and action
         state_preds = self.predict_state(x[:, 2])  # predict next state given state and action
         action_preds = self.predict_action(x[:, 1])  # predict next action given state
-        if not return_dict:
-            return (state_preds, action_preds, return_preds)
 
         return DecisionTransformerOutput(
             last_hidden_state=encoder_outputs.last_hidden_state,
             state_preds=state_preds,
             action_preds=action_preds,
             return_preds=return_preds,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
