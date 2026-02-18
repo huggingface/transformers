@@ -115,6 +115,10 @@ class MaxTimeContinuousTimeRotaryEmbedding(nn.Module):
         super().__init__()
         assert dim % 2 == 0, "RoPE embedding dimension must be even"
 
+        self.dim = dim
+        self.max_time = max_time
+        self.period_mode = period_mode
+
         # Set max period = max_time
         if period_mode == "shortest":  # shortest period is max_time
             base = 5
@@ -372,6 +376,40 @@ class RotaryEmbedding(Module):
         return freqs
 
 
+def _move_rotary_module_to_device(module: nn.Module, device: torch.device) -> nn.Module:
+    try:
+        return module.to(device)
+    except NotImplementedError as exc:
+        if "meta tensor" not in str(exc).lower():
+            raise
+
+    if isinstance(module, MaxTimeContinuousTimeRotaryEmbedding):
+        return MaxTimeContinuousTimeRotaryEmbedding(
+            dim=module.dim,
+            max_time=module.max_time,
+            period_mode=module.period_mode,
+        ).to(device)
+
+    if isinstance(module, RotaryEmbedding):
+        return RotaryEmbedding(
+            dim=module.dim,
+            freqs_for=module.freqs_for,
+            theta=module.theta,
+            max_freq=module.max_freq,
+            num_freqs=module.num_freqs,
+            learned_freq=module.learned_freq,
+            use_xpos=module.use_xpos,
+            xpos_scale_base=module.xpos_scale_base,
+            interpolate_factor=module.interpolate_factor,
+            theta_rescale_factor=1.0,
+            seq_before_head_dim=module.seq_before_head_dim,
+            cache_if_possible=module.cache_if_possible,
+            max_time=module.max_time,
+        ).to(device)
+
+    raise TypeError(f"Unsupported rotary module type for meta materialization: {type(module)}")
+
+
 class BaseEncoder(nn.Module):
     def __init__(self, parent: nn.Module) -> None:
         super().__init__()
@@ -563,7 +601,8 @@ class BasicSoundEncoder(BaseEncoder):
             if self.time_embed_type in ["pixel", "lang"]:
                 times = times.unsqueeze(0)
                 new_times = times
-                pos_emb = self.pos_emb.to(device)
+                self.pos_emb = _move_rotary_module_to_device(self.pos_emb, device)
+                pos_emb = self.pos_emb
                 if self.period_fix == "True":
                     if self.max_time is not None:
                         angle = new_times.to(device) / self.max_time * 2 * np.pi
@@ -792,7 +831,8 @@ class TSPVideoEncoder(BasicVideoEncoder):
                     else:
                         new_times = times
 
-                    pos_emb = self.pos_emb.to(device)
+                    self.pos_emb = _move_rotary_module_to_device(self.pos_emb, device)
+                    pos_emb = self.pos_emb
                     if self.period_fix == "True":
                         if self.max_time is not None:
                             angle = new_times.to(device) / self.max_time * 2 * np.pi

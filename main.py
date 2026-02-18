@@ -11,7 +11,8 @@ from typing import Any, Dict, List, Optional, Union
 import torch
 
 from transformers.models.omnivinci.configuration_omnivinci import OmniVinciConfig
-from transformers.models.omnivinci.modeling_omnivinci import VILAForCausalLM
+from transformers.models.omnivinci.convert_omnivinci_to_hf import convert_omnivinci_to_hf
+from transformers.models.omnivinci.modeling_omnivinci import OmniVinciForCausalLM
 from transformers.models.omnivinci.processing_omnivinci import OmniVinciProcessor
 
 
@@ -51,15 +52,45 @@ class NVOmniVideoInference:
 
         return True
 
+    @staticmethod
+    def _has_top_level_weights(model_dir: Path) -> bool:
+        candidates = (
+            "model.safetensors",
+            "model.safetensors.index.json",
+            "pytorch_model.bin",
+            "pytorch_model.bin.index.json",
+        )
+        return any((model_dir / name).is_file() for name in candidates)
+
+    def _maybe_convert_legacy_checkpoint(self) -> None:
+        model_dir = Path(self.model_path)
+        if self._has_top_level_weights(model_dir):
+            return
+
+        required_components = ("llm", "vision_tower", "mm_projector")
+        if not all((model_dir / name).is_dir() for name in required_components):
+            return
+
+        logger.warning(
+            "Top-level HF weights were not found in %s. Running legacy-to-HF conversion in place.",
+            model_dir,
+        )
+        convert_omnivinci_to_hf(model_dir)
+
+        if not self._has_top_level_weights(model_dir):
+            raise OSError(
+                f"Conversion completed but no top-level checkpoint was produced in {model_dir}."
+            )
+
     def load_model(self) -> bool:
         if not self.validate_paths(self.model_path):
             return False
 
+        self._maybe_convert_legacy_checkpoint()
+
         logger.info("Loading model configuration...")
         self.config = OmniVinciConfig.from_pretrained(self.model_path)
         self.config._name_or_path = str(self.model_path)
-        if getattr(self.config, "resume_path", None) is None or not Path(str(self.config.resume_path)).exists():
-            self.config.resume_path = str(self.model_path)
 
         default_attn_impl = "sdpa"
         attn_implementation = os.environ.get("OMNIVINCI_ATTN_IMPLEMENTATION", default_attn_impl).strip() or default_attn_impl
@@ -71,10 +102,14 @@ class NVOmniVideoInference:
 
         logger.info("Loading model...")
         start_time = time.time()
-        self.model = VILAForCausalLM.from_pretrained(
+        load_dtype = self.torch_dtype
+        if isinstance(load_dtype, str) and load_dtype != "auto":
+            load_dtype = eval(load_dtype, {"torch": torch})
+
+        self.model = OmniVinciForCausalLM.from_pretrained(
             self.model_path,
             config=self.config,
-            torch_dtype=self.torch_dtype,
+            dtype=load_dtype,
             device_map=self.device_map,
             low_cpu_mem_usage=True,
         )
@@ -234,7 +269,7 @@ class NVOmniVideoInference:
 
 
 def main() -> None:
-    model_path = os.environ.get("OMNIVINCI_MODEL_PATH", "/fs/nexus-projects/JSALT_workshop/lasha/Dev/omnivinci/")
+    model_path = os.environ.get("OMNIVINCI_MODEL_PATH", "/fs/nexus-projects/JSALT_workshop/lasha/Dev/comni")
     video_path = os.environ.get("OMNIVINCI_VIDEO_PATH", "/nfshomes/lasha/Dev/omnivinci/nvidia.mp4")
     text_prompt = os.environ.get(
         "OMNIVINCI_TEXT_PROMPT",

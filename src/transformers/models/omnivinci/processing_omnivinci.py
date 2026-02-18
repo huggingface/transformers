@@ -570,15 +570,9 @@ class OmniVinciProcessor(ProcessorMixin):
         return self.convert_gpt_conv_to_vila_conv(conversation)
 
 
-# Backward-compatible aliases during migration.
-VILAProcessorKwargs = OmniVinciProcessorKwargs
-VILAProcessor = OmniVinciProcessor
-
 __all__ = [
     "OmniVinciProcessor",
     "OmniVinciProcessorKwargs",
-    "VILAProcessor",
-    "VILAProcessorKwargs",
     "tokenizer_image_token",
     "process_image",
     "process_images",

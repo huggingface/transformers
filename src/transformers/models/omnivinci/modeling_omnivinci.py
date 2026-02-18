@@ -93,20 +93,39 @@ def soft_cross_entropy(
     )
 
 
-def _resolve_component_path(config: OmniVinciConfig, key: str) -> Optional[str]:
+def _resolve_component_path(config: OmniVinciConfig, key: str) -> Optional[Union[str, dict, PretrainedConfig]]:
     value = getattr(config, key, None)
     if value in (None, "", {}):
         return None
 
-    root_path = getattr(config, "_name_or_path", None) or getattr(config, "resume_path", None)
-    if isinstance(value, (dict, PretrainedConfig)):
-        if not root_path:
-            raise ValueError(f"Cannot resolve '{key}': config root path is missing.")
-        return os.path.join(root_path, key[:-4])
-    if isinstance(value, str):
+    if isinstance(value, (str, dict, PretrainedConfig)):
         return value
 
     raise TypeError(f"Unsupported config type for '{key}': {type(value)}")
+
+
+def _resolve_model_dtype(config: PretrainedConfig, default: torch.dtype = torch.float16) -> torch.dtype:
+    model_dtype = getattr(config, "model_dtype", None)
+    if model_dtype is None:
+        model_dtype = getattr(config, "torch_dtype", None)
+    if model_dtype is None:
+        return default
+    if isinstance(model_dtype, str):
+        return eval(model_dtype)
+    return model_dtype
+
+
+def _coerce_config_from_spec(spec: Union[dict, PretrainedConfig], fallback_model_type: Optional[str] = None) -> PretrainedConfig:
+    if isinstance(spec, PretrainedConfig):
+        return spec
+    if isinstance(spec, dict):
+        model_type = spec.get("model_type", fallback_model_type)
+        if model_type is None:
+            raise ValueError("Cannot infer model_type from config dictionary.")
+        kwargs = dict(spec)
+        kwargs.pop("model_type", None)
+        return AutoConfig.for_model(model_type, **kwargs)
+    raise TypeError(f"Unsupported config spec type: {type(spec)}")
 
 
 def _get_attn_implementation(config: PretrainedConfig, default: str = "sdpa") -> str:
@@ -119,37 +138,49 @@ def _get_attn_implementation(config: PretrainedConfig, default: str = "sdpa") ->
 
 
 def build_llm_and_tokenizer(
-    model_name_or_path: str,
+    model_name_or_path: Union[str, dict, PretrainedConfig],
     config: PretrainedConfig,
     attn_implementation=None,
     model_max_length=None,
     *args,
     **kwargs,
 ) -> Tuple[PreTrainedModel, PreTrainedTokenizer]:
-    """Build language model and tokenizer from pretrained checkpoint."""
-    llm_cfg = AutoConfig.from_pretrained(model_name_or_path)
+    """Build language model and tokenizer from either a local path or an embedded config."""
     if attn_implementation is None:
         attn_implementation = _get_attn_implementation(config)
+
+    is_path = isinstance(model_name_or_path, str) and os.path.exists(model_name_or_path)
+    if is_path:
+        llm_cfg = AutoConfig.from_pretrained(model_name_or_path)
+    else:
+        llm_cfg = _coerce_config_from_spec(model_name_or_path)
+
     llm_cfg._attn_implementation = attn_implementation
     llm_cfg.model_max_length = model_max_length
     if model_max_length is not None:
         context_length_extension(llm_cfg)
 
-    if isinstance(config.model_dtype, str):
-        model_dtype = eval(config.model_dtype)
+    model_dtype = _resolve_model_dtype(config)
+
+    if is_path:
+        llm = AutoModelForCausalLM.from_pretrained(
+            model_name_or_path, config=llm_cfg, torch_dtype=model_dtype, *args, **kwargs
+        )
+        print(f"Loaded model from {model_name_or_path} with dtype {model_dtype}")
     else:
-        model_dtype = config.model_dtype
+        llm = AutoModelForCausalLM.from_config(llm_cfg, attn_implementation=attn_implementation)
+        llm = llm.to(model_dtype)
 
-    llm = AutoModelForCausalLM.from_pretrained(
-        model_name_or_path, config=llm_cfg, torch_dtype=model_dtype, *args, **kwargs
-    )
-    print(f"Loaded model from {model_name_or_path} with dtype {model_dtype}")
+    root_path = getattr(config, "_name_or_path", None) or getattr(config, "resume_path", None)
+    tokenizer_candidates = []
+    if is_path:
+        tokenizer_candidates.extend([model_name_or_path, osp.join(model_name_or_path, "llm")])
+    if root_path:
+        tokenizer_candidates.extend([osp.join(root_path, "llm"), root_path])
 
-    llm_path = model_name_or_path
-    if not has_tokenizer(llm_path):
-        llm_path = osp.join(llm_path, "llm")
-    if not has_tokenizer(llm_path):
-        raise ValueError(f"Cannot find tokenizer in {llm_path}.")
+    llm_path = next((p for p in tokenizer_candidates if isinstance(p, str) and has_tokenizer(p)), None)
+    if llm_path is None:
+        raise ValueError(f"Cannot find tokenizer for OmniVinci (checked: {tokenizer_candidates}).")
 
     tokenizer = AutoTokenizer.from_pretrained(llm_path, padding_side="right", use_fast=True, legacy=False)
     if model_max_length is not None:
@@ -158,13 +189,19 @@ def build_llm_and_tokenizer(
     if getattr(config, "chat_template", None) is not None:
         print(f"Using chat template: {config.chat_template}")
         fpath = os.path.join(os.path.dirname(__file__), "chat_templates", f"{config.chat_template}.jinja")
-        if not os.path.exists(fpath):
-            fpath = os.path.join(os.path.dirname(model_name_or_path), f"{config.chat_template}.jinja")
-        with open(fpath) as fd:
-            chat_template = fd.read()
-        tokenizer.chat_template = chat_template.replace("    ", "").replace("\n", "")
+        if not os.path.exists(fpath) and root_path:
+            fpath = os.path.join(root_path, f"{config.chat_template}.jinja")
+        if os.path.exists(fpath):
+            with open(fpath) as fd:
+                chat_template = fd.read()
+            tokenizer.chat_template = chat_template.replace("    ", "").replace("\n", "")
 
-    tokenizer.stop_tokens = infer_stop_tokens(tokenizer)
+    try:
+        tokenizer.stop_tokens = infer_stop_tokens(tokenizer)
+    except RuntimeError as exc:
+        if "meta tensor" not in str(exc).lower():
+            raise
+        tokenizer.stop_tokens = [tokenizer.eos_token]
     tokenizer.stop_token_ids = tokenizer.convert_tokens_to_ids(tokenizer.stop_tokens)
 
     tokenizer.media_tokens = MEDIA_TOKENS
@@ -334,11 +371,19 @@ class AudioTower(nn.Module):
 
 
 class Qwen2AudioTower(AudioTower):
-    def __init__(self, model_name_or_path: str, config: PretrainedConfig):
+    def __init__(self, model_name_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig):
         super().__init__()
-        self.audio_tower = Qwen2AudioEncoder.from_pretrained(
-            model_name_or_path, attn_implementation=_get_attn_implementation(config)
-        )
+        if isinstance(model_name_or_path, str) and os.path.exists(model_name_or_path):
+            self.audio_tower = Qwen2AudioEncoder.from_pretrained(
+                model_name_or_path,
+                attn_implementation=_get_attn_implementation(config),
+                torch_dtype=_resolve_model_dtype(config),
+            )
+        else:
+            audio_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="qwen2_audio_encoder")
+            audio_cfg._attn_implementation = _get_attn_implementation(config)
+            self.audio_tower = Qwen2AudioEncoder(audio_cfg).to(_resolve_model_dtype(config))
+
         self.audio_chunk_unit_duration = 30
         self.audio_chunk_unit_length = 3000
 
@@ -471,64 +516,84 @@ class VisionTowerDynamicS2(VisionTower):
 
 
 class SiglipVisionTowerDynamicS2(VisionTowerDynamicS2):
-    def __init__(self, model_name_or_path: str, config: PretrainedConfig) -> None:
+    def __init__(self, model_name_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig) -> None:
         super().__init__(config)
-        if isinstance(config.model_dtype, str):
-            model_dtype = eval(config.model_dtype)
-        else:
-            model_dtype = config.model_dtype
+        model_dtype = _resolve_model_dtype(config)
 
-        self.vision_tower = SiglipVisionModel.from_pretrained(
-            model_name_or_path,
-            attn_implementation=_get_attn_implementation(config),
-            torch_dtype=model_dtype,
-        )
-        self.image_processor = SiglipImageProcessor.from_pretrained(model_name_or_path)
+        if isinstance(model_name_or_path, str) and os.path.exists(model_name_or_path):
+            self.vision_tower = SiglipVisionModel.from_pretrained(
+                model_name_or_path,
+                attn_implementation=_get_attn_implementation(config),
+                torch_dtype=model_dtype,
+            )
+            self.image_processor = SiglipImageProcessor.from_pretrained(model_name_or_path)
+        else:
+            vision_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="siglip_vision_model")
+            vision_cfg._attn_implementation = _get_attn_implementation(config)
+            self.vision_tower = SiglipVisionModel(vision_cfg).to(model_dtype)
+
+            root_path = getattr(config, "_name_or_path", None)
+            vision_dir = os.path.join(root_path, "vision_tower") if root_path else None
+            if vision_dir and os.path.isdir(vision_dir):
+                self.image_processor = SiglipImageProcessor.from_pretrained(vision_dir)
+            else:
+                self.image_processor = SiglipImageProcessor()
+
         # Make sure it crops/resizes the image to the largest scale in self.scales to maintain high-res information
         self.image_processor.size["height"] = self.image_processor.size["width"] = self.scales[0]
 
 
-def build_mm_projector(model_type_or_path: str, config: PretrainedConfig) -> PreTrainedModel:
-    """Build multimodal projector from path or configuration."""
+def build_mm_projector(model_type_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig) -> PreTrainedModel:
+    """Build multimodal projector from local path or config object."""
     if model_type_or_path is None:
         return None
-    if config.resume_path:
-        assert os.path.exists(model_type_or_path), f"Resume mm projector path {model_type_or_path} does not exist!"
+
+    if isinstance(model_type_or_path, str) and os.path.exists(model_type_or_path):
         return MultimodalProjector.from_pretrained(model_type_or_path, config)
+
+    if isinstance(model_type_or_path, MultimodalProjectorConfig):
+        mm_projector_cfg = model_type_or_path
+    elif isinstance(model_type_or_path, dict):
+        mm_projector_cfg = MultimodalProjectorConfig(**model_type_or_path)
+    elif isinstance(model_type_or_path, str):
+        mm_projector_cfg = MultimodalProjectorConfig(mm_projector_type=model_type_or_path)
     else:
-        mm_projector_cfg = MultimodalProjectorConfig(model_type_or_path)
-        mm_projector = MultimodalProjector(mm_projector_cfg, config)
-        return mm_projector
+        raise TypeError(f"Unsupported mm_projector config type: {type(model_type_or_path)}")
+
+    return MultimodalProjector(mm_projector_cfg, config)
 
 
-def build_sound_mm_projector(model_type_or_path: str, config: PretrainedConfig) -> PreTrainedModel:
-    """Build sound multimodal projector from path or configuration."""
+def build_sound_mm_projector(
+    model_type_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig
+) -> PreTrainedModel:
+    """Build sound multimodal projector from local path or config object."""
     if model_type_or_path is None:
         return None
 
-    if isinstance(config.model_dtype, str):
-        model_dtype = eval(config.model_dtype)
+    model_dtype = _resolve_model_dtype(config)
+    if isinstance(model_type_or_path, str) and os.path.exists(model_type_or_path):
+        return SoundMultimodalProjector.from_pretrained(model_type_or_path, config, torch_dtype=model_dtype)
+
+    if isinstance(model_type_or_path, SoundMultimodalProjectorConfig):
+        sound_mm_projector_cfg = model_type_or_path
+    elif isinstance(model_type_or_path, dict):
+        sound_mm_projector_cfg = SoundMultimodalProjectorConfig(**model_type_or_path)
+    elif isinstance(model_type_or_path, str):
+        sound_mm_projector_cfg = SoundMultimodalProjectorConfig(sound_mm_projector_type=model_type_or_path)
     else:
-        model_dtype = config.model_dtype
-    if config.resume_path:
-        assert os.path.exists(
-            model_type_or_path
-        ), f"Resume sound mm projector path {model_type_or_path} does not exist!"
-        _model = SoundMultimodalProjector.from_pretrained(model_type_or_path, config, torch_dtype=model_dtype)
-        return _model
-    else:
-        sound_mm_projector_cfg = SoundMultimodalProjectorConfig(model_type_or_path)
-        sound_mm_projector = SoundMultimodalProjector(sound_mm_projector_cfg, config).to(model_dtype)
-        return sound_mm_projector
+        raise TypeError(f"Unsupported sound_mm_projector config type: {type(model_type_or_path)}")
+
+    return SoundMultimodalProjector(sound_mm_projector_cfg, config).to(model_dtype)
 
 
-def build_vision_tower(model_name_or_path: str, config: PretrainedConfig) -> PreTrainedModel:
-    """Build vision tower from path or configuration."""
+def build_vision_tower(
+    model_name_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig
+) -> PreTrainedModel:
+    """Build vision tower from local path or config object."""
     if model_name_or_path is None:
         return None
 
-    if config.resume_path and "radio" not in model_name_or_path:
-        assert os.path.exists(model_name_or_path), f"Resume vision tower path {model_name_or_path} does not exist!"
+    if isinstance(model_name_or_path, str) and os.path.exists(model_name_or_path) and "radio" not in model_name_or_path:
         vision_tower_cfg = AutoConfig.from_pretrained(model_name_or_path, trust_remote_code=True)
         vision_tower_arch = vision_tower_cfg.architectures[0].lower()
         if "siglip" not in vision_tower_arch:
@@ -542,7 +607,7 @@ def build_vision_tower(model_name_or_path: str, config: PretrainedConfig) -> Pre
     return vision_tower
 
 
-def build_audio_tower(model_name_or_path: str, config: PretrainedConfig) -> PreTrainedModel:
+def build_audio_tower(model_name_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig) -> PreTrainedModel:
     """Build the audio tower used for sound."""
     if model_name_or_path is None:
         return None
@@ -583,8 +648,7 @@ class VILAPretrainedModel(PreTrainedModel):
         if bool(sound_tower_cfg) != bool(sound_mm_projector_cfg):
             raise ValueError("`sound_tower_cfg` and `sound_mm_projector_cfg` must be both set or both empty.")
 
-        # loading on auto by default
-        device_map = kwargs.get("device_map", "auto")
+        device_map = kwargs.get("device_map", None)
         self.mm_projector = build_mm_projector(mm_projector_cfg, config)
         self.vision_tower = build_vision_tower(vision_tower_cfg, config)
 
@@ -592,15 +656,13 @@ class VILAPretrainedModel(PreTrainedModel):
             self.sound_tower = build_audio_tower(sound_tower_cfg, config)
             self.sound_mm_projector = build_sound_mm_projector(sound_mm_projector_cfg, config)
 
-        if device_map in ["auto", "cuda"]:
+        if device_map == "cuda":
             self.mm_projector = self.mm_projector.cuda()
             self.vision_tower = self.vision_tower.cuda()
             self.sound_tower = self.sound_tower.cuda() if hasattr(self, "sound_tower") else None
             self.sound_mm_projector = self.sound_mm_projector.cuda() if hasattr(self, "sound_mm_projector") else None
-        # set device_map auto can autoamtically shard llm to different devices
-        self.llm, self.tokenizer = self.init_llm(llm_cfg, config, device_map=device_map)
 
-        self.llm_model_embed_tokens = self.llm.model.embed_tokens
+        self.llm, self.tokenizer = self.init_llm(llm_cfg, config)
 
         self.tokenizer.padding_side = "left"
 
@@ -753,36 +815,12 @@ class VILAPretrainedModel(PreTrainedModel):
         # copy .py and README for next loading
         self.copy_remote_py_files(output_dir)
 
-    @classmethod
-    def from_pretrained(
-        cls,
-        pretrained_model_name_or_path: Optional[str] = None,
-        *model_args,
-        config: Optional[Union[PretrainedConfig, str, os.PathLike]] = None,
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
-        ignore_mismatched_sizes: bool = False,
-        force_download: bool = False,
-        local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
-        revision: str = "main",
-        use_safetensors: Optional[bool] = None,
-        weights_only: bool = True,
-        **kwargs,
-    ):
-        if not isinstance(config, PretrainedConfig):
-            config = OmniVinciConfig.from_pretrained(pretrained_model_name_or_path)
-        if pretrained_model_name_or_path is not None:
-            config._name_or_path = str(pretrained_model_name_or_path)
-            if getattr(config, "resume_path", None) is None or not osp.exists(str(config.resume_path)):
-                config.resume_path = str(pretrained_model_name_or_path)
-        if kwargs.get("torch_dtype", None) is not None:
-            config.torch_dtype = kwargs.get("torch_dtype", None)
-            config.model_dtype = kwargs.get("torch_dtype", None)
-            if isinstance(kwargs.get("torch_dtype", None), str):
-                kwargs["torch_dtype"] = eval(kwargs.get("torch_dtype", None))
-            else:
-                kwargs["torch_dtype"] = kwargs.get("torch_dtype", None)
-        return cls._from_config(config, **kwargs)
+
+    @property
+    def llm_model_embed_tokens(self):
+        if self.llm is None:
+            raise RuntimeError("LLM module is not initialized.")
+        return self.llm.model.embed_tokens
 
     def init_llm(self, llm_config, config, *args, **kwargs):
         """Initialize language model and tokenizer."""
@@ -844,9 +882,10 @@ class VILAPretrainedModel(PreTrainedModel):
                 sound_mm_projector.eval()
 
 
-class VILAForCausalLM(VILAPretrainedModel, GenerationMixin):
+class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
     def __init__(self, config: OmniVinciConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
+        self.post_init()
 
     def merge_features_for_dynamic_s2(self, image_features, block_sizes):
         scales = self.vision_tower.scales
@@ -1618,3 +1657,7 @@ class VILAForCausalLM(VILAPretrainedModel, GenerationMixin):
         if generation_config.eos_token_id is None:
             generation_config.eos_token_id = self.tokenizer.eos_token_id
         return generation_config
+
+# Backward-compatible aliases during migration.
+OmniVinciPreTrainedModel = VILAPretrainedModel
+VILAForCausalLM = OmniVinciForCausalLM

@@ -149,12 +149,8 @@ class OmniVinciConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-# Backward-compatible alias used by existing modules/checkpoints.
-VILAConfig = OmniVinciConfig
-
 __all__ = [
     "OmniVinciConfig",
-    "VILAConfig",
     "IGNORE_INDEX",
     "DEFAULT_IMAGE_TOKEN",
     "DEFAULT_SOUND_TOKEN",
