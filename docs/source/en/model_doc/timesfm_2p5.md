@@ -1,60 +1,83 @@
-<!--Copyright 2025 the HuggingFace Team. All rights reserved.
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
 
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
 
 -->
 
+# TimesFM 2.5
 
-# TimesFm2p5
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 ## Overview
 
-The TimesFm2p5 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+TimesFM 2.5 is the PyTorch forecasting checkpoint from Google Research:
+[`google/timesfm-2.5-200m-pytorch`](https://huggingface.co/google/timesfm-2.5-200m-pytorch).
+This Transformers implementation ports the official 2.5 architecture with rotary attention, QK normalization,
+per-dimension attention scaling, and continuous quantile prediction.
+
+The upstream model card reports an architecture update on October 2, 2025 (fused QKV for speed, unchanged results),
+and points to the TimesFM paper [2310.10688](https://huggingface.co/papers/2310.10688).
 
 The abstract from the paper is the following:
 
-<INSERT PAPER ABSTRACT HERE>
+*Motivated by recent advances in large language models for Natural Language Processing (NLP), we design a time-series foundation model for forecasting whose out-of-the-box zero-shot performance on a variety of public datasets comes close to the accuracy of state-of-the-art supervised forecasting models for each individual dataset. Our model is based on pretraining a decoder style attention model with input patching, using a large time-series corpus comprising both real-world and synthetic datasets. Experiments on a diverse set of previously unseen forecasting datasets suggests that the model can yield accurate zero-shot forecasts across different domains, forecasting horizons and temporal granularities.*
 
-Tips:
+The model was contributed by [kashif](https://huggingface.co/kashif).
 
-<INSERT TIPS ABOUT MODEL HERE>
+## Usage example
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+```python
+import numpy as np
+import torch
+from transformers import Timesfm2P5ModelForPrediction
 
-## Usage examples
 
-<INSERT SOME NICE EXAMPLES HERE>
+model = Timesfm2P5ModelForPrediction.from_pretrained(
+    # First convert from the official source checkpoint:
+    # python src/transformers/models/timesfm_2p5/convert_timesfm_2p5_original_to_hf.py \
+    #   --output_dir /tmp/timesfm_2p5_hf_local \
+    #   --huggingface_repo_id google/timesfm-2.5-200m-pytorch
+    "/tmp/timesfm_2p5_hf_local",
+    attn_implementation="sdpa",
+    dtype=torch.float32,
+    device_map="auto",
+)
+
+forecast_input = [
+    np.sin(np.linspace(0, 20, 100)),
+    np.sin(np.linspace(0, 20, 200)),
+    np.sin(np.linspace(0, 20, 400)),
+]
+forecast_input_tensor = [torch.tensor(ts, dtype=torch.float32, device=model.device) for ts in forecast_input]
+
+with torch.no_grad():
+    outputs = model(past_values=forecast_input_tensor, return_dict=True)
+    point_forecast = outputs.mean_predictions
+    quantile_forecast = outputs.full_predictions
+```
 
 ## Timesfm2P5Config
 
 [[autodoc]] Timesfm2P5Config
 
-## Timesfm2P5ModelForPrediction
-
-[[autodoc]] Timesfm2P5ModelForPrediction
-    - forward
-
-## Timesfm2P5PreTrainedModel
-
-[[autodoc]] Timesfm2P5PreTrainedModel
-    - forward
-
 ## Timesfm2P5Model
 
 [[autodoc]] Timesfm2P5Model
+    - forward
+
+## Timesfm2P5ModelForPrediction
+
+[[autodoc]] Timesfm2P5ModelForPrediction
     - forward
