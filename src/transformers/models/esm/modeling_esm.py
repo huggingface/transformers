@@ -644,6 +644,8 @@ class EsmModel(EsmPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
+            # Important, attention_mask must be passed to the embedding class
+            # This effects how the token_dropout is calculated
             inputs_embeds = self.embeddings(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
