@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional, Union
 
 import torch
 
+from transformers import AutoImageProcessor
+from transformers.models.qwen2 import Qwen2TokenizerFast
 from transformers.models.omnivinci.configuration_omnivinci import OmniVinciConfig
 from transformers.models.omnivinci.convert_omnivinci_to_hf import convert_omnivinci_to_hf
 from transformers.models.omnivinci.modeling_omnivinci import OmniVinciForCausalLM
@@ -36,6 +38,8 @@ class NVOmniVideoInference:
         self.device_map = device_map
         self.model = None
         self.processor = None
+        self.tokenizer = None
+        self.image_processor = None
         self.config = None
         self.device = None
 
@@ -82,6 +86,35 @@ class NVOmniVideoInference:
                 f"Conversion completed but no top-level checkpoint was produced in {model_dir}."
             )
 
+    def _populate_config_from_tokenizer(self, tokenizer) -> None:
+        self.config.padding_side = getattr(tokenizer, "padding_side", "left")
+
+        tokenizer_max_length = getattr(tokenizer, "model_max_length", None)
+        if tokenizer_max_length is None or tokenizer_max_length > 10_000_000:
+            llm_cfg = getattr(self.config, "llm_cfg", None)
+            if isinstance(llm_cfg, dict):
+                tokenizer_max_length = llm_cfg.get("model_max_length")
+            elif llm_cfg is not None:
+                tokenizer_max_length = getattr(llm_cfg, "model_max_length", None)
+        if tokenizer_max_length is None:
+            tokenizer_max_length = getattr(self.config, "model_max_length", 2048)
+        self.config.model_max_length = int(tokenizer_max_length)
+
+        self.config.eos_token_id = tokenizer.eos_token_id
+        self.config.pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
+        self.config.bos_token_id = tokenizer.bos_token_id if tokenizer.bos_token_id is not None else tokenizer.eos_token_id
+
+        media_token_ids = {}
+        for name, token in self.config.media_tokens.items():
+            token_id = tokenizer.convert_tokens_to_ids(token)
+            if token_id is None or token_id < 0:
+                tokenized = tokenizer(token, add_special_tokens=False).input_ids
+                if len(tokenized) != 1:
+                    raise ValueError(f"Media token `{token}` must map to a single id.")
+                token_id = tokenized[0]
+            media_token_ids[name] = int(token_id)
+        self.config.media_token_ids = media_token_ids
+
     def load_model(self) -> bool:
         if not self.validate_paths(self.model_path):
             return False
@@ -89,7 +122,7 @@ class NVOmniVideoInference:
         self._maybe_convert_legacy_checkpoint()
 
         logger.info("Loading model configuration...")
-        self.config = OmniVinciConfig.from_pretrained(self.model_path, trust_remote_code=True)
+        self.config = OmniVinciConfig.from_pretrained(self.model_path)
         self.config._name_or_path = str(self.model_path)
 
         default_attn_impl = "sdpa"
@@ -99,6 +132,12 @@ class NVOmniVideoInference:
             attn_implementation = "sdpa"
         self.config._attn_implementation = attn_implementation
         logger.info(f"Using attention implementation: {attn_implementation}")
+
+        logger.info("Loading tokenizer and image processor...")
+        self.tokenizer = Qwen2TokenizerFast.from_pretrained(self.model_path)
+        self.image_processor = AutoImageProcessor.from_pretrained(self.model_path, use_fast=False, trust_remote_code=True)
+        self.tokenizer.padding_side = "left"
+        self._populate_config_from_tokenizer(self.tokenizer)
 
         logger.info("Loading model...")
         start_time = time.time()
@@ -112,14 +151,22 @@ class NVOmniVideoInference:
             dtype=load_dtype,
             device_map=self.device_map,
             low_cpu_mem_usage=True,
-            trust_remote_code=True,
         )
         self.model.eval()
+        self.config = self.model.config
+        self._populate_config_from_tokenizer(self.tokenizer)
+        self.model.tokenizer = self.tokenizer
+
         load_time = time.time() - start_time
         logger.info(f"Model loaded in {load_time:.2f} seconds")
 
-        logger.info("Loading processor...")
-        self.processor = OmniVinciProcessor.from_pretrained(self.model_path, trust_remote_code=True)
+        logger.info("Constructing processor from loaded components...")
+        self.processor = OmniVinciProcessor(
+            image_processor=self.image_processor,
+            tokenizer=self.tokenizer,
+            config=self.config,
+            padding_side=self.tokenizer.padding_side,
+        )
 
         if hasattr(self.model, "device"):
             self.device = self.model.device
@@ -228,6 +275,10 @@ class NVOmniVideoInference:
 
         generation_config = self.model.default_generation_config
         generation_config.update(**generation_kwargs)
+        if not generation_config.do_sample:
+            generation_config.temperature = None
+            generation_config.top_p = None
+            generation_config.top_k = None
 
         logger.info(f"Generation config: {generation_config.to_dict()}")
 

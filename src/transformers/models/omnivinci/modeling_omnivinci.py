@@ -16,13 +16,8 @@
 import copy
 import json
 import math
-import os
-import os.path
-import os.path as osp
-import shutil
 import warnings
-from collections import OrderedDict, defaultdict, deque
-from pathlib import Path
+from collections import defaultdict, deque
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -31,12 +26,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import whisper
 from einops import rearrange
-from tokenizers import Tokenizer
 
 from transformers import (
     AutoConfig,
     AutoModel,
-    AutoModelForCausalLM,
     GenerationConfig,
     PretrainedConfig,
     PreTrainedModel,
@@ -46,9 +39,10 @@ from transformers import (
 )
 from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import CausalLMOutputWithPast
+from transformers.models.qwen2 import Qwen2ForCausalLM
 from transformers.models.siglip import SiglipVisionModel
 
-from .configuration_omnivinci import IGNORE_INDEX, MEDIA_TOKENS, OmniVinciConfig
+from .configuration_omnivinci import IGNORE_INDEX, OmniVinciConfig
 from .media_encoder import BasicImageEncoder, BasicSoundEncoder, CacheFeatures, TSPVideoEncoder
 
 
@@ -127,220 +121,27 @@ def _get_attn_implementation(config: PretrainedConfig, default: str = "sdpa") ->
     return attn_impl or default
 
 
-class _TokenizerCallOutput:
-    def __init__(self, input_ids):
-        self.input_ids = input_ids
-
-
-class OmniVinciTokenizerAdapter:
-    """Lightweight tokenizer wrapper backed by `tokenizers.Tokenizer`."""
-
-    def __init__(
-        self,
-        backend_tokenizer: Tokenizer,
-        *,
-        bos_token_id: Optional[int],
-        eos_token_id: Optional[int],
-        pad_token_id: Optional[int],
-        model_max_length: int,
-        padding_side: str = "right",
-        chat_template: Optional[str] = None,
-        eos_token: Optional[str] = None,
-    ) -> None:
-        self.backend_tokenizer = backend_tokenizer
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.model_max_length = model_max_length
-        self.padding_side = padding_side
-        self.chat_template = chat_template
-        self.eos_token = eos_token
-        self.media_tokens = dict(MEDIA_TOKENS)
-        self.media_token_ids = {}
-        self.stop_tokens = []
-        self.stop_token_ids = []
-
-    def __len__(self):
-        return self.backend_tokenizer.get_vocab_size(with_added_tokens=True)
-
-    def __call__(self, text: str):
-        if not isinstance(text, str):
-            raise TypeError(f"Tokenizer adapter currently supports only `str` inputs, got {type(text)}")
-        return _TokenizerCallOutput(self.backend_tokenizer.encode(text).ids)
-
-    def tokenize(self, text: str):
-        return self.backend_tokenizer.encode(text).tokens
-
-    def convert_tokens_to_ids(self, tokens):
-        if isinstance(tokens, list):
-            return [self.convert_tokens_to_ids(token) for token in tokens]
-        if tokens is None:
-            return None
-        return self.backend_tokenizer.token_to_id(tokens)
-
-    def save_pretrained(self, output_dir: str):
-        os.makedirs(output_dir, exist_ok=True)
-        self.backend_tokenizer.save(os.path.join(output_dir, "tokenizer.json"))
-        tokenizer_config = {
-            "padding_side": self.padding_side,
-            "model_max_length": self.model_max_length,
-            "bos_token_id": self.bos_token_id,
-            "eos_token_id": self.eos_token_id,
-            "pad_token_id": self.pad_token_id,
-        }
-        with open(os.path.join(output_dir, "tokenizer_config.json"), "w", encoding="utf-8") as fp:
-            json.dump(tokenizer_config, fp, ensure_ascii=False, indent=2, sort_keys=True)
-            fp.write("\n")
-
-
-def _load_json_if_exists(path: Path) -> Optional[dict[str, Any]]:
-    if not path.exists():
-        return None
-    with path.open("r", encoding="utf-8") as fp:
-        return json.load(fp)
-
-
-def _coerce_config_from_path(path: Union[str, Path], fallback_model_type: Optional[str] = None) -> PretrainedConfig:
-    config_path = Path(path) / "config.json"
-    payload = _load_json_if_exists(config_path)
-    if payload is None:
-        raise FileNotFoundError(f"Cannot find config.json under: {path}")
-    return _coerce_config_from_spec(payload, fallback_model_type=fallback_model_type)
-
-
-def _resolve_tokenizer_dir(model_name_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig) -> Path:
-    candidates = []
-    if isinstance(model_name_or_path, str):
-        model_path = Path(model_name_or_path)
-        candidates.extend([model_path, model_path / "llm"])
-
-    root_path = getattr(config, "_name_or_path", None) or getattr(config, "resume_path", None)
-    if root_path:
-        root = Path(root_path)
-        candidates.extend([root, root / "llm"])
-
-    seen = set()
-    for candidate in candidates:
-        candidate = candidate.expanduser().resolve()
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        if (candidate / "tokenizer.json").exists():
-            return candidate
-
-    raise ValueError(f"Cannot find tokenizer.json for OmniVinci (checked: {candidates}).")
-
-
-def _load_tokenizer_adapter(
-    model_name_or_path: Union[str, dict, PretrainedConfig],
-    config: PretrainedConfig,
-    llm_cfg: PretrainedConfig,
-    model_max_length: Optional[int],
-) -> OmniVinciTokenizerAdapter:
-    tokenizer_dir = _resolve_tokenizer_dir(model_name_or_path, config)
-    tokenizer_file = tokenizer_dir / "tokenizer.json"
-    tokenizer_cfg = _load_json_if_exists(tokenizer_dir / "tokenizer_config.json") or {}
-    special_tokens_map = _load_json_if_exists(tokenizer_dir / "special_tokens_map.json") or {}
-
-    backend_tokenizer = Tokenizer.from_file(str(tokenizer_file))
-
-    def _resolve_special_id(id_value: Optional[int], field_name: str):
-        if id_value is not None:
-            return int(id_value)
-        token_value = special_tokens_map.get(field_name) or tokenizer_cfg.get(field_name)
-        if isinstance(token_value, dict):
-            token_value = token_value.get("content")
-        if isinstance(token_value, str):
-            token_id = backend_tokenizer.token_to_id(token_value)
-            if token_id is not None:
-                return int(token_id)
-        return None
-
-    eos_token_id = _resolve_special_id(getattr(llm_cfg, "eos_token_id", None), "eos_token")
-    bos_token_id = _resolve_special_id(getattr(llm_cfg, "bos_token_id", None), "bos_token")
-    pad_token_id = _resolve_special_id(getattr(llm_cfg, "pad_token_id", None), "pad_token")
-    if pad_token_id is None:
-        pad_token_id = eos_token_id
-
-    effective_model_max_length = model_max_length
-    if effective_model_max_length is None:
-        effective_model_max_length = getattr(llm_cfg, "model_max_length", None)
-    if effective_model_max_length is None:
-        effective_model_max_length = tokenizer_cfg.get("model_max_length", 8192)
-
-    chat_template = tokenizer_cfg.get("chat_template", None)
-    if getattr(config, "chat_template", None) is not None:
-        fpath = os.path.join(os.path.dirname(__file__), "chat_templates", f"{config.chat_template}.jinja")
-        if not os.path.exists(fpath):
-            root_path = getattr(config, "_name_or_path", None) or getattr(config, "resume_path", None)
-            if root_path:
-                fpath = os.path.join(root_path, f"{config.chat_template}.jinja")
-        if os.path.exists(fpath):
-            with open(fpath, encoding="utf-8") as fd:
-                chat_template = fd.read().replace("    ", "").replace("\n", "")
-
-    eos_token = special_tokens_map.get("eos_token")
-    if isinstance(eos_token, dict):
-        eos_token = eos_token.get("content")
-
-    tokenizer = OmniVinciTokenizerAdapter(
-        backend_tokenizer,
-        bos_token_id=bos_token_id,
-        eos_token_id=eos_token_id,
-        pad_token_id=pad_token_id,
-        model_max_length=int(effective_model_max_length),
-        padding_side=tokenizer_cfg.get("padding_side", "right"),
-        chat_template=chat_template,
-        eos_token=eos_token,
-    )
-
-    tokenizer.media_token_ids = {}
-    for name, token in MEDIA_TOKENS.items():
-        if config.sound_tower_cfg is None and name == "sound":
-            continue
-        token_id = tokenizer.convert_tokens_to_ids(token)
-        if token_id is None:
-            raise ValueError(f"Required media token '{token}' is missing from tokenizer vocab.")
-        tokenizer.media_token_ids[name] = int(token_id)
-
-    if tokenizer.eos_token_id is not None:
-        tokenizer.stop_tokens = [tokenizer.eos_token] if tokenizer.eos_token else []
-        tokenizer.stop_token_ids = [int(tokenizer.eos_token_id)]
-
-    return tokenizer
-
-
-def build_llm_and_tokenizer(
-    model_name_or_path: Union[str, dict, PretrainedConfig],
+def build_llm(
+    llm_config: Union[dict, PretrainedConfig],
     config: PretrainedConfig,
     attn_implementation=None,
     model_max_length=None,
-    *args,
-    **kwargs,
-) -> Tuple[PreTrainedModel, OmniVinciTokenizerAdapter]:
-    """Build language model/tokenizer without internal `from_pretrained` calls."""
-    _ = (args, kwargs)
+) -> PreTrainedModel:
+    """Build language model from config only (no filesystem access)."""
     if attn_implementation is None:
         attn_implementation = _get_attn_implementation(config)
 
-    if isinstance(model_name_or_path, str) and os.path.exists(model_name_or_path):
-        llm_cfg = _coerce_config_from_path(model_name_or_path, fallback_model_type="qwen2")
-    else:
-        llm_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="qwen2")
-
+    llm_cfg = _coerce_config_from_spec(llm_config, fallback_model_type="qwen2")
     llm_cfg._attn_implementation = attn_implementation
     if model_max_length is not None:
         llm_cfg.model_max_length = model_max_length
         context_length_extension(llm_cfg)
 
     model_dtype = _resolve_model_dtype(config)
-    llm = AutoModelForCausalLM.from_config(llm_cfg, attn_implementation=attn_implementation)
-    llm = llm.to(model_dtype)
-
-    tokenizer = _load_tokenizer_adapter(model_name_or_path, config, llm_cfg, model_max_length)
+    llm = Qwen2ForCausalLM(llm_cfg).to(model_dtype)
 
     config.hidden_size = llm.config.hidden_size
-    return llm, tokenizer
+    return llm
 
 
 class DownSampleBlock(nn.Module):
@@ -499,10 +300,7 @@ class AudioTower(nn.Module):
 class Qwen2AudioTower(AudioTower):
     def __init__(self, model_name_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig):
         super().__init__()
-        if isinstance(model_name_or_path, str) and os.path.exists(model_name_or_path):
-            audio_cfg = _coerce_config_from_path(model_name_or_path, fallback_model_type="qwen2_audio_encoder")
-        else:
-            audio_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="qwen2_audio_encoder")
+        audio_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="qwen2_audio_encoder")
         audio_cfg._attn_implementation = _get_attn_implementation(config)
         self.audio_tower = Qwen2AudioEncoder(audio_cfg).to(_resolve_model_dtype(config))
 
@@ -642,51 +440,21 @@ class SiglipVisionTowerDynamicS2(VisionTowerDynamicS2):
         super().__init__(config)
         model_dtype = _resolve_model_dtype(config)
 
-        if isinstance(model_name_or_path, str) and os.path.exists(model_name_or_path):
-            vision_cfg = _coerce_config_from_path(model_name_or_path, fallback_model_type="siglip_vision_model")
-            vision_processor_candidates = [Path(model_name_or_path)]
-        else:
-            vision_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="siglip_vision_model")
-            vision_processor_candidates = []
-
+        vision_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="siglip_vision_model")
         vision_cfg._attn_implementation = _get_attn_implementation(config)
         self.vision_tower = SiglipVisionModel(vision_cfg).to(model_dtype)
 
-        root_path = getattr(config, "_name_or_path", None)
-        if root_path:
-            root = Path(root_path)
-            vision_processor_candidates.extend([root, root / "vision_tower"])
-
-        image_processor = None
-        seen = set()
-        for candidate in vision_processor_candidates:
-            candidate = candidate.expanduser().resolve()
-            if candidate in seen:
-                continue
-            seen.add(candidate)
-            preprocessor_cfg = _load_json_if_exists(candidate / "preprocessor_config.json")
-            if preprocessor_cfg is None:
-                continue
-            try:
-                image_processor = SiglipImageProcessor.from_dict(preprocessor_cfg)
-                break
-            except Exception:
-                continue
-
-        self.image_processor = image_processor if image_processor is not None else SiglipImageProcessor()
-
+        self.image_processor = SiglipImageProcessor()
         # Make sure it crops/resizes the image to the largest scale in self.scales to maintain high-res information
         self.image_processor.size["height"] = self.image_processor.size["width"] = self.scales[0]
 
 
 def build_mm_projector(model_type_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig) -> PreTrainedModel:
-    """Build multimodal projector from local path or config object."""
+    """Build multimodal projector from config object only."""
     if model_type_or_path is None:
         return None
 
-    if isinstance(model_type_or_path, str) and os.path.exists(model_type_or_path):
-        mm_projector_cfg = _coerce_config_from_path(model_type_or_path, fallback_model_type="v2l_projector")
-    elif isinstance(model_type_or_path, MultimodalProjectorConfig):
+    if isinstance(model_type_or_path, MultimodalProjectorConfig):
         mm_projector_cfg = model_type_or_path
     elif isinstance(model_type_or_path, PretrainedConfig):
         mm_projector_cfg = model_type_or_path
@@ -703,14 +471,12 @@ def build_mm_projector(model_type_or_path: Union[str, dict, PretrainedConfig], c
 def build_sound_mm_projector(
     model_type_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig
 ) -> PreTrainedModel:
-    """Build sound multimodal projector from local path or config object."""
+    """Build sound multimodal projector from config object only."""
     if model_type_or_path is None:
         return None
 
     model_dtype = _resolve_model_dtype(config)
-    if isinstance(model_type_or_path, str) and os.path.exists(model_type_or_path):
-        sound_mm_projector_cfg = _coerce_config_from_path(model_type_or_path, fallback_model_type="sound_mm_projector")
-    elif isinstance(model_type_or_path, SoundMultimodalProjectorConfig):
+    if isinstance(model_type_or_path, SoundMultimodalProjectorConfig):
         sound_mm_projector_cfg = model_type_or_path
     elif isinstance(model_type_or_path, PretrainedConfig):
         sound_mm_projector_cfg = model_type_or_path
@@ -794,12 +560,9 @@ class VILAPretrainedModel(PreTrainedModel):
             self.sound_tower = self.sound_tower.cuda() if hasattr(self, "sound_tower") else None
             self.sound_mm_projector = self.sound_mm_projector.cuda() if hasattr(self, "sound_mm_projector") else None
 
-        self.llm, self.tokenizer = self.init_llm(llm_cfg, config)
-
-        self.tokenizer.padding_side = "left"
-
-        self.vocab_size = len(self.tokenizer)
-        self.update_vocab_size = lambda: setattr(self, "vocab_size", len(self.tokenizer))
+        self.llm = self.init_llm(llm_cfg, config)
+        self.vocab_size = self.llm.config.vocab_size
+        self.update_vocab_size = lambda: setattr(self, "vocab_size", self.llm.config.vocab_size)
 
         self.encoders = {}
         for name in ["image", "video", "sound"]:
@@ -837,115 +600,6 @@ class VILAPretrainedModel(PreTrainedModel):
             self.llm is not None or self.vision_tower is not None or self.mm_projector is not None
         ), "At least one of the components must be instantiated."
 
-    @classmethod
-    def copy_remote_py_files(cls, output_dir, copy=True):
-        # copy .py and README for next loading
-        current_file_path = os.path.abspath(__file__)
-        current_folder = os.path.dirname(current_file_path)
-        for file_name in os.listdir(current_folder):
-            if file_name == "INSTRUCTIONS.md":
-                src_fname = os.path.join(current_folder, file_name)
-                dst_fname = os.path.join(output_dir, "README.md")
-                if os.path.exists(dst_fname):
-                    old_readme = open(dst_fname).read()
-                else:
-                    old_readme = ""
-                with open(src_fname) as src, open(dst_fname, "w") as dst:
-                    dst.write(src.read())
-                    dst.write(old_readme)
-                print("[HF] README", src_fname, "to", dst_fname)
-            if file_name.endswith(".py") or file_name.endswith(".jinja"):
-                full_file_name = os.path.join(current_folder, file_name)
-                if os.path.isfile(full_file_name):
-                    if copy:
-                        shutil.copy(full_file_name, output_dir)
-                        print("[HF] copying", full_file_name, "to", output_dir)
-                    else:
-                        # symlink to ease development
-                        if os.path.exists(os.path.join(output_dir, file_name)):
-                            os.remove(os.path.join(output_dir, file_name))
-                        os.symlink(full_file_name, os.path.join(output_dir, file_name))
-                        print("[HF] linking", full_file_name, "to", output_dir)
-
-    def save_pretrained(self, output_dir, state_dict=None, **kwargs):
-        if state_dict is None:
-            state_dict = self.state_dict()
-
-        if getattr(self, "tokenizer", None):
-            self.tokenizer.save_pretrained(osp.join(output_dir, "llm"))
-
-        if self.llm:
-            print(f"saving llm to {osp.join(output_dir, 'llm')}")
-            self.llm.config._name_or_path = osp.join(output_dir, "llm")
-            llm_state_dict = OrderedDict({k.split("llm.")[-1]: v for k, v in state_dict.items() if "llm" in k})
-            self.llm.save_pretrained(os.path.join(output_dir, "llm"), state_dict=llm_state_dict)
-            self.config.llm_cfg = self.llm.config
-
-        if self.vision_tower:
-            print(f"saving vision_tower to {osp.join(output_dir, 'vision_tower')}")
-            self.vision_tower.config._name_or_path = osp.join(output_dir, "vision_tower")
-            vision_tower_state_dict = OrderedDict(
-                {k.split("vision_tower.vision_tower.")[-1]: v for k, v in state_dict.items() if "vision_tower" in k}
-            )
-            self.vision_tower.vision_tower.save_pretrained(
-                os.path.join(output_dir, "vision_tower"),
-                state_dict=vision_tower_state_dict,
-            )
-            self.vision_tower.image_processor.save_pretrained(os.path.join(output_dir, "vision_tower"))
-            self.config.vision_tower_cfg = self.vision_tower.config
-            if hasattr(self.config.vision_tower_cfg, "auto_map"):
-                if "radio" not in self.vision_tower.__class__.__name__.lower():
-                    delattr(self.config.vision_tower_cfg, "auto_map")
-        if getattr(self, "sound_tower", None):
-            print(f"saving sound_tower to {osp.join(output_dir, 'sound_tower')}")
-            self.sound_tower.config._name_or_path = osp.join(output_dir, "sound_tower").replace(
-                "tmp-checkpoint", "checkpoint"
-            )
-
-            sound_tower_state_dict = OrderedDict(
-                {k.split("sound_tower.audio_tower.")[-1]: v for k, v in state_dict.items() if "sound_tower" in k}
-            )
-
-            self.sound_tower.audio_tower.save_pretrained(
-                os.path.join(output_dir, "sound_tower"),
-                state_dict=sound_tower_state_dict,
-            )
-            self.config.sound_tower_cfg = self.sound_tower.config
-
-        if self.mm_projector:
-            print(f"saving mm_projector to {osp.join(output_dir, 'mm_projector')}")
-            self.mm_projector.config._name_or_path = osp.join(output_dir, "mm_projector")
-            mm_projector_state_dict = OrderedDict(
-                {k.split("mm_projector.")[-1]: v for k, v in state_dict.items() if "mm_projector" in k}
-            )
-            self.mm_projector.save_pretrained(
-                os.path.join(output_dir, "mm_projector"),
-                state_dict=mm_projector_state_dict,
-            )
-            self.config.mm_projector_cfg = self.mm_projector.config
-
-        if getattr(self, "sound_mm_projector", None):
-            print(f"saving sound_mm_projector to {osp.join(output_dir, 'sound_mm_projector')}")
-            self.sound_mm_projector.config._name_or_path = osp.join(output_dir, "sound_mm_projector").replace(
-                "tmp-checkpoint", "checkpoint"
-            )
-
-            sound_mm_projector_state_dict = OrderedDict(
-                {k.split("sound_mm_projector.")[-1]: v for k, v in state_dict.items() if "sound_mm_projector" in k}
-            )
-            self.sound_mm_projector.save_pretrained(
-                os.path.join(output_dir, "sound_mm_projector"),
-                state_dict=sound_mm_projector_state_dict,
-            )
-            self.config.sound_mm_projector_cfg = self.sound_mm_projector.config
-
-        # update and save top-level config
-        self.config._name_or_path = output_dir
-        self.config.architectures = [self.__class__.__name__]
-        self.config.save_pretrained(output_dir)
-
-        # copy .py and README for next loading
-        self.copy_remote_py_files(output_dir)
 
 
     @property
@@ -955,22 +609,33 @@ class VILAPretrainedModel(PreTrainedModel):
         return self.llm.model.embed_tokens
 
     def init_llm(self, llm_config, config, *args, **kwargs):
-        """Initialize language model and tokenizer."""
-        self.llm, self.tokenizer = build_llm_and_tokenizer(llm_config, config, *args, **kwargs)
-
-        self.pad_token_list = (
-            self.tokenizer.pad_token_id,
-            self.tokenizer.eos_token_id,
-            self.tokenizer.tokenize("<|endoftext|>")[0],  # for Qwen
+        _ = (args, kwargs)
+        return build_llm(
+            llm_config,
+            config,
+            attn_implementation=_get_attn_implementation(config),
+            model_max_length=getattr(config, "model_max_length", None),
         )
 
-        self.vocab_size = len(self.tokenizer)
-        self.update_vocab_size = lambda: setattr(self, "vocab_size", len(self.tokenizer))
-        # XGrammar tokenizer and grammar compiler
-        # lazy init only when specified json output during inference
-        self.grammar_compiler = None
-        # self.llm.resize_token_embeddings(len(self.tokenizer))
-        return self.llm, self.tokenizer
+    def _require_media_token_ids(self) -> Dict[str, int]:
+        media_token_ids = getattr(self.config, "media_token_ids", None)
+        if not media_token_ids:
+            raise ValueError(
+                "Missing `config.media_token_ids`. Set media token ids in main.py after loading tokenizer, "
+                "then pass that config into `OmniVinciForCausalLM.from_pretrained`."
+            )
+        return media_token_ids
+
+    def _get_padding_side(self) -> str:
+        return getattr(self.config, "padding_side", "left")
+
+    def _get_model_max_length(self) -> int:
+        model_max_length = getattr(self.config, "model_max_length", None)
+        if model_max_length is None and getattr(self, "llm", None) is not None:
+            model_max_length = getattr(self.llm.config, "model_max_length", None)
+        if model_max_length is None:
+            model_max_length = 2048
+        return int(model_max_length)
 
     def post_config(self):
         self.training = self.llm.training
@@ -1412,9 +1077,8 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
         text_embeds = [text_embeds[k][attention_mask[k]] for k in range(batch_size)]
         labels = [labels[k][attention_mask[k]] for k in range(batch_size)]
         # Build inverse mapping from token ID to media name
-        media_tokens = {}
-        for name, token_id in self.tokenizer.media_token_ids.items():
-            media_tokens[token_id] = name
+        media_token_ids = self._require_media_token_ids()
+        media_tokens = {token_id: name for name, token_id in media_token_ids.items()}
 
         # Fuse text and media embeddings
         inputs_m, labels_m = [], []
@@ -1425,7 +1089,7 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
             while pos < len(labels[k]):
                 if input_ids[k][pos].item() in media_tokens:
                     name = media_tokens[input_ids[k][pos].item()]
-                    if input_ids[k][pos].item() == self.tokenizer.media_token_ids["sound"]:
+                    if input_ids[k][pos].item() == media_token_ids["sound"]:
                         if self.config.interleaved_vis_aud_in_video:
                             if sound_embeds_idx < video_sound_embeds_idx:
                                 media_embeds[name].popleft()
@@ -1573,10 +1237,11 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
     def __truncate_sequence(
         self, inputs: List[torch.Tensor], labels: List[torch.Tensor]
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        if self.training and any(len(input) > self.tokenizer.model_max_length for input in inputs):
-            warnings.warn(f"Truncating sequences to `model_max_length` ({self.tokenizer.model_max_length}).")
-            inputs = [input[: self.tokenizer.model_max_length] for input in inputs]
-            labels = [label[: self.tokenizer.model_max_length] for label in labels]
+        model_max_length = self._get_model_max_length()
+        if self.training and any(len(input) > model_max_length for input in inputs):
+            warnings.warn(f"Truncating sequences to `model_max_length` ({model_max_length}).")
+            inputs = [input[:model_max_length] for input in inputs]
+            labels = [label[:model_max_length] for label in labels]
         return inputs, labels
 
     def __batchify_sequence(
@@ -1593,7 +1258,7 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
             size_pk = max_length - inputs[k].shape[0]
             inputs_pk = torch.zeros((size_pk, hidden_size), dtype=inputs[k].dtype, device=device)
             labels_pk = torch.full((size_pk,), IGNORE_INDEX, dtype=labels[k].dtype, device=device)
-            if self.tokenizer.padding_side == "right":
+            if self._get_padding_side() == "right":
                 attention_mask[k, inputs[k].shape[0] :] = False
                 inputs_pk = torch.cat([inputs[k], inputs_pk], dim=0)
                 labels_pk = torch.cat([labels[k], labels_pk], dim=0)
@@ -1784,20 +1449,29 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
         model_inputs["media"] = None
         model_inputs["media_config"] = None
         return model_inputs
-
+    
     @property
     def default_generation_config(self) -> GenerationConfig:
         generation_config = copy.deepcopy(self.generation_config or GenerationConfig())
-        if self.tokenizer.eos_token_id is None:
-            raise ValueError("Tokenizer must have an EOS token")
+
+        eos_token_id = getattr(self.config, "eos_token_id", None)
+        if eos_token_id is None and getattr(self, "llm", None) is not None:
+            eos_token_id = getattr(self.llm.config, "eos_token_id", None)
+        if eos_token_id is None:
+            raise ValueError("Missing `eos_token_id` in config. Set tokenizer-derived ids in main.py.")
+
         if generation_config.max_length == GenerationConfig().max_length:
-            generation_config.max_length = self.tokenizer.model_max_length
+            generation_config.max_length = self._get_model_max_length()
         if generation_config.pad_token_id is None:
-            generation_config.pad_token_id = self.tokenizer.pad_token_id or self.tokenizer.eos_token_id
+            generation_config.pad_token_id = getattr(self.config, "pad_token_id", None) or eos_token_id
         if generation_config.bos_token_id is None:
-            generation_config.bos_token_id = self.tokenizer.bos_token_id or self.tokenizer.eos_token_id
+            generation_config.bos_token_id = getattr(self.config, "bos_token_id", None) or eos_token_id
         if generation_config.eos_token_id is None:
-            generation_config.eos_token_id = self.tokenizer.eos_token_id
+            generation_config.eos_token_id = eos_token_id
+        if not generation_config.do_sample:
+            generation_config.temperature = None
+            generation_config.top_p = None
+            generation_config.top_k = None
         return generation_config
 
 # Backward-compatible aliases during migration.

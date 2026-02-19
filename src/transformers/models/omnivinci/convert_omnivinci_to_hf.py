@@ -37,6 +37,8 @@ from typing import Any
 
 from safetensors.torch import safe_open, save_file
 
+from transformers import AutoTokenizer, GenerationConfig
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -209,6 +211,10 @@ def _copy_llm_metadata_to_root(src_root: Path, dst_root: Path) -> None:
             continue
         if item.name == "config.json":
             continue
+        # Legacy OmniVinci loads generation defaults from Python/runtime, not llm/generation_config.json.
+        # We export the effective runtime config explicitly in `_export_effective_generation_config`.
+        if item.name == "generation_config.json":
+            continue
         shutil.copy2(item, dst_root / item.name)
 
 
@@ -243,6 +249,92 @@ def _copy_merged_preprocessor_config(src_root: Path, dst_root: Path) -> None:
     _save_json(target_preprocessor, merged_preprocessor)
 
 
+def _resolve_tokenizer_source_dir(src_root: Path, dst_root: Path) -> Path:
+    llm_dir = src_root / "llm"
+    if (llm_dir / "tokenizer_config.json").exists():
+        return llm_dir
+    if (src_root / "tokenizer_config.json").exists():
+        return src_root
+    if (dst_root / "tokenizer_config.json").exists():
+        return dst_root
+    raise FileNotFoundError(
+        "Could not locate tokenizer files in src_root/llm, src_root, or dst_root. "
+        "Expected tokenizer_config.json."
+    )
+
+
+def _export_effective_generation_config(src_root: Path, dst_root: Path) -> None:
+    """
+    Export the *effective* legacy OmniVinci generation config.
+
+    Important behavior from legacy `modeling_vila.py`:
+    - It does not consume `llm/generation_config.json` for top-level generation.
+    - It starts from runtime defaults and then patches tokenizer-derived ids/max length
+      in `default_generation_config`.
+    """
+
+    tokenizer_src = _resolve_tokenizer_source_dir(src_root, dst_root)
+    tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_src), use_fast=True)
+
+    eos_token_id = tokenizer.eos_token_id
+    if eos_token_id is None:
+        raise ValueError("Tokenizer must define `eos_token_id` to build generation config.")
+
+    pad_token_id = tokenizer.pad_token_id or eos_token_id
+    bos_token_id = tokenizer.bos_token_id or eos_token_id
+
+    # Mirror legacy behavior: GenerationConfig defaults + tokenizer/runtime overrides.
+    # We pin commonly-used legacy defaults explicitly so behavior is stable across HF versions.
+    generation_config = GenerationConfig(
+        do_sample=False,
+        num_beams=1,
+        num_beam_groups=1,
+        num_return_sequences=1,
+        repetition_penalty=1.0,
+        length_penalty=1.0,
+        no_repeat_ngram_size=0,
+        top_k=50,
+        top_p=1.0,
+        temperature=1.0,
+        early_stopping=False,
+        use_cache=True,
+        return_dict_in_generate=False,
+        max_length=tokenizer.model_max_length,
+        min_length=0,
+        bos_token_id=bos_token_id,
+        eos_token_id=eos_token_id,
+        pad_token_id=pad_token_id,
+    )
+
+    src_transformers_version = _load_json(src_root / "config.json").get("transformers_version")
+    generation_payload = {
+        "bos_token_id": generation_config.bos_token_id,
+        "do_sample": generation_config.do_sample,
+        "early_stopping": generation_config.early_stopping,
+        "eos_token_id": generation_config.eos_token_id,
+        "length_penalty": generation_config.length_penalty,
+        "max_length": generation_config.max_length,
+        "min_length": generation_config.min_length,
+        "no_repeat_ngram_size": generation_config.no_repeat_ngram_size,
+        "num_beam_groups": generation_config.num_beam_groups,
+        "num_beams": generation_config.num_beams,
+        "num_return_sequences": generation_config.num_return_sequences,
+        "pad_token_id": generation_config.pad_token_id,
+        "repetition_penalty": generation_config.repetition_penalty,
+        "return_dict_in_generate": generation_config.return_dict_in_generate,
+        "temperature": generation_config.temperature,
+        "top_k": generation_config.top_k,
+        "top_p": generation_config.top_p,
+        "use_cache": generation_config.use_cache,
+    }
+    if src_transformers_version:
+        generation_payload["transformers_version"] = src_transformers_version
+
+    generation_path = dst_root / "generation_config.json"
+    _save_json(generation_path, generation_payload)
+    logger.info("Exported effective generation config (runtime-derived) to %s", generation_path)
+
+
 def _prepare_destination_tree(src_root: Path, dst_root: Path, clean_dst: bool = True) -> None:
     if clean_dst and dst_root.exists() and dst_root != src_root:
         logger.info("Cleaning destination directory: %s", dst_root)
@@ -253,6 +345,7 @@ def _prepare_destination_tree(src_root: Path, dst_root: Path, clean_dst: bool = 
     _copy_top_level_metadata(src_root, dst_root)
     _copy_llm_metadata_to_root(src_root, dst_root)
     _copy_merged_preprocessor_config(src_root, dst_root)
+    _export_effective_generation_config(src_root, dst_root)
 
 
 def _resolve_component_dir(dirpath: Path):

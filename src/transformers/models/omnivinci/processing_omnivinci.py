@@ -24,7 +24,6 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 
 import transformers
-from transformers import AutoImageProcessor, AutoTokenizer
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import load_image
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -33,7 +32,6 @@ from .configuration_omnivinci import (
     MEDIA_TOKENS,
     MM_BOS_EOS_TOKENS,
     SENTINEL_TOKEN,
-    OmniVinciConfig,
 )
 from .media import Sound, Video, extract_media
 
@@ -380,50 +378,29 @@ class OmniVinciProcessor(ProcessorMixin):
         # Use <|endoftext|> token as padding token for Qwen models
         self.pad_token_id = self.tokenizer("<|endoftext|>").input_ids[0]
         self.eos_token_id = self.tokenizer.eos_token_id
+
+        if self.config is not None:
+            self.config.padding_side = self.padding_side
+            self.config.pad_token_id = self.pad_token_id
+            self.config.eos_token_id = self.eos_token_id
+            if getattr(self.config, "bos_token_id", None) is None:
+                self.config.bos_token_id = self.tokenizer.bos_token_id
+            if getattr(self.config, "model_max_length", None) is None:
+                self.config.model_max_length = getattr(self.tokenizer, "model_max_length", 2048)
+
+            media_token_ids = {}
+            for name, token in self.config.media_tokens.items():
+                token_id = self.tokenizer.convert_tokens_to_ids(token)
+                if token_id is None or token_id < 0:
+                    tokenized = self.tokenizer(token, add_special_tokens=False).input_ids
+                    if len(tokenized) != 1:
+                        raise ValueError(f"Media token `{token}` must map to a single tokenizer id.")
+                    token_id = tokenized[0]
+                media_token_ids[name] = int(token_id)
+            self.config.media_token_ids = media_token_ids
+
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        padding_side = kwargs.get("padding_side", "left")
-        if not os.path.isdir(pretrained_model_name_or_path):
-            print(f"pretrained_model_name_or_path {pretrained_model_name_or_path} is not a directory, downloading")
-            from huggingface_hub import snapshot_download
-
-            pretrained_model_name_or_path = snapshot_download(pretrained_model_name_or_path)
-
-        image_processor = None
-        image_processor_errors = []
-        for candidate in [pretrained_model_name_or_path, osp.join(pretrained_model_name_or_path, "vision_tower")]:
-            try:
-                image_processor = AutoImageProcessor.from_pretrained(candidate, trust_remote_code=True)
-                break
-            except Exception as exc:
-                image_processor_errors.append(f"{candidate}: {exc}")
-        if image_processor is None:
-            raise ValueError(
-                "Cannot load image processor from OmniVinci checkpoint. Tried: "
-                + " | ".join(image_processor_errors)
-            )
-
-        tokenizer = None
-        tokenizer_errors = []
-        for candidate in [pretrained_model_name_or_path, osp.join(pretrained_model_name_or_path, "llm")]:
-            try:
-                tokenizer = AutoTokenizer.from_pretrained(candidate, trust_remote_code=True)
-                break
-            except Exception as exc:
-                tokenizer_errors.append(f"{candidate}: {exc}")
-        if tokenizer is None:
-            raise ValueError(
-                "Cannot load tokenizer from OmniVinci checkpoint. Tried: "
-                + " | ".join(tokenizer_errors)
-            )
-        config = OmniVinciConfig.from_pretrained(pretrained_model_name_or_path)
-        config._name_or_path = str(pretrained_model_name_or_path)
-        if getattr(config, "resume_path", None) is None or not osp.exists(str(config.resume_path)):
-            config.resume_path = str(pretrained_model_name_or_path)
-
-        return cls(image_processor=image_processor, tokenizer=tokenizer, config=config, padding_side=padding_side)
 
     def __repr__(self):
         return f"OmniVinciProcessor(image_processor=SigLip, tokenizer={self.tokenizer}, config={self.config})"
