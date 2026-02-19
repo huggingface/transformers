@@ -28,28 +28,11 @@ from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import load_image
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 
-from .configuration_omnivinci import (
-    MEDIA_TOKENS,
-    MM_BOS_EOS_TOKENS,
-    SENTINEL_TOKEN,
-)
+from .configuration_omnivinci import MEDIA_TOKENS, MM_BOS_EOS_TOKENS
 from .media import Sound, Video, extract_media
 
 
-DUMMY_CONVERSATION = [
-    {"from": "human", "value": "question"},
-    {"from": "gpt", "value": "answer"},
-] * 10
-
-
-def tokenizer_image_token(prompt, tokenizer, return_tensors=None, return_ids=True):
-    """Tokenize prompt with media tokens."""
-    if return_ids:
-        return tokenizer(prompt, return_tensors=return_tensors).input_ids[0]
-    return tokenizer(prompt, return_tensors=return_tensors)
-
-
-def expand2square(pil_img, background_color):
+def _expand2square(pil_img, background_color):
     """Expand a non-square PIL image with padding to make it square."""
     width, height = pil_img.size
     if pil_img.mode == "L":
@@ -65,7 +48,7 @@ def expand2square(pil_img, background_color):
     return result
 
 
-def find_closest_aspect_ratio(aspect_ratio, target_ratios, width, height, image_size):
+def _find_closest_aspect_ratio(aspect_ratio, target_ratios, width, height, image_size):
     """Find the closest aspect ratio from candidate ratios."""
     best_ratio_diff = float("inf")
     best_ratio = (1, 1)
@@ -81,7 +64,7 @@ def find_closest_aspect_ratio(aspect_ratio, target_ratios, width, height, image_
     return best_ratio
 
 
-def dynamic_s2_preprocess(image, s2_scales: Optional[List[int]] = None, max_num=12, image_size=384):
+def _dynamic_s2_preprocess(image, s2_scales: Optional[List[int]] = None, max_num=12, image_size=384):
     """Dynamically preprocess image using multi-scale S2 tiling."""
     if s2_scales is None:
         s2_scales = [384, 768, 1152]
@@ -114,7 +97,7 @@ def dynamic_s2_preprocess(image, s2_scales: Optional[List[int]] = None, max_num=
     }
     target_ratios = sorted(target_ratios, key=lambda x: x[0] * x[1])
 
-    target_aspect_ratio = find_closest_aspect_ratio(aspect_ratio, target_ratios, orig_width, orig_height, image_size)
+    target_aspect_ratio = _find_closest_aspect_ratio(aspect_ratio, target_ratios, orig_width, orig_height, image_size)
     target_width = image_size * target_aspect_ratio[0]
     target_height = image_size * target_aspect_ratio[1]
     blocks = target_aspect_ratio[0] * target_aspect_ratio[1]
@@ -132,7 +115,7 @@ def dynamic_s2_preprocess(image, s2_scales: Optional[List[int]] = None, max_num=
     return processed_images, (target_aspect_ratio[1], target_aspect_ratio[0])
 
 
-def process_image(image_file, data_args, image_folder, enable_dynamic_s2=False):
+def _process_image(image_file, data_args, image_folder, enable_dynamic_s2=False):
     processor = data_args.image_processor
     if isinstance(image_file, str):
         if image_folder is not None:
@@ -149,7 +132,7 @@ def process_image(image_file, data_args, image_folder, enable_dynamic_s2=False):
         crop_size = data_args.image_processor.size
     if "dynamic_s2" in data_args.image_aspect_ratio and enable_dynamic_s2:
         assert crop_size["height"] == crop_size["width"]
-        images, block_size = dynamic_s2_preprocess(
+        images, block_size = _dynamic_s2_preprocess(
             image, s2_scales=data_args.s2_scales, max_num=data_args.max_tiles, image_size=crop_size["height"]
         )
         images = [processor.preprocess(image, return_tensors="pt")["pixel_values"][0] for image in images]
@@ -158,17 +141,17 @@ def process_image(image_file, data_args, image_folder, enable_dynamic_s2=False):
     if data_args.image_aspect_ratio == "resize":
         image = image.resize((crop_size["width"], crop_size["height"]))
     elif data_args.image_aspect_ratio == "pad":
-        image = expand2square(image, tuple(int(x * 255) for x in processor.image_mean))
+        image = _expand2square(image, tuple(int(x * 255) for x in processor.image_mean))
         image = processor.preprocess(image, return_tensors="pt")["pixel_values"][0]
     else:
         image = processor.preprocess(image, return_tensors="pt")["pixel_values"][0]
     return image
 
 
-def process_images(images, image_processor, model_cfg):
+def _process_images(images, image_processor, model_cfg):
     """Process a batch of images using the model image processor."""
     model_cfg.image_processor = image_processor
-    new_images = [process_image(image, model_cfg, None) for image in images]
+    new_images = [_process_image(image, model_cfg, None) for image in images]
 
     if not all(x.shape == new_images[0].shape for x in new_images):
         raise ValueError("The shape of images in new_images is different!")
@@ -179,7 +162,7 @@ def process_images(images, image_processor, model_cfg):
     raise ValueError(f"new_images rank does not equal to 4, rank: {len(new_images[0].shape)}")
 
 
-def tokenize_conversation(
+def _tokenize_conversation(
     messages: Sequence[Dict[str, str]],
     tokenizer: transformers.PreTrainedTokenizer,
     mm_use_bos_eos_tokens: bool = False,
@@ -237,29 +220,13 @@ def tokenize_conversation(
 
         text = add_mm_bos_eos_tokens(text)
 
-    return tokenizer_image_token(text, tokenizer, return_tensors="pt", return_ids=return_ids_only)
+    tokenized = tokenizer(text, return_tensors="pt")
+    if return_ids_only:
+        return tokenized.input_ids[0]
+    return tokenized
 
 
-def _maybe_add_sentinel_token(tokenizer: transformers.PreTrainedTokenizer) -> None:
-    if not hasattr(tokenizer, "sentinel_token"):
-        tokenizer.add_tokens([SENTINEL_TOKEN], special_tokens=True)
-        tokenizer.sentinel_token = SENTINEL_TOKEN
-        tokenizer.sentinel_token_id = tokenizer.convert_tokens_to_ids(SENTINEL_TOKEN)
-
-
-def infer_stop_tokens(tokenizer: transformers.PreTrainedTokenizer) -> List[str]:
-    _maybe_add_sentinel_token(tokenizer)
-    template = tokenize_conversation(DUMMY_CONVERSATION, tokenizer, overrides={"gpt": SENTINEL_TOKEN})
-
-    stop_tokens = {tokenizer.eos_token}
-    for k in range(template.size(0) - 1):
-        if template[k] == tokenizer.sentinel_token_id:
-            stop_token = tokenizer.decode(template[k + 1])
-            stop_tokens.add(stop_token)
-    return list(stop_tokens)
-
-
-def fetch_image_url_or_fpath(url_or_fpath: str) -> str:
+def _fetch_image_url_or_fpath(url_or_fpath: str) -> str:
     """Return a local file path for a URL or filesystem path."""
     if url_or_fpath.startswith(("http://", "https://")):
         import tempfile
@@ -287,7 +254,7 @@ def fetch_image_url_or_fpath(url_or_fpath: str) -> str:
     return fpath
 
 
-def pad_fn(input_ids_list: List[torch.Tensor], padding_value=0, target_len=None, padding_side="left") -> torch.Tensor:
+def _pad_fn(input_ids_list: List[torch.Tensor], padding_value=0, target_len=None, padding_side="left") -> torch.Tensor:
     if not input_ids_list:
         raise ValueError("input_ids_list must not be empty")
 
@@ -315,7 +282,7 @@ def pad_fn(input_ids_list: List[torch.Tensor], padding_value=0, target_len=None,
     return padded
 
 
-def extract_value_from_conv(chat):
+def _extract_value_from_conv(chat):
     value = []
     if isinstance(chat["content"], str):
         value.append(chat["content"])
@@ -339,14 +306,14 @@ def extract_value_from_conv(chat):
         elif content["type"] == "video":
             if "video" in content:
                 # Qwen style
-                value.append(Video(fetch_image_url_or_fpath(content["video"])))
+                value.append(Video(_fetch_image_url_or_fpath(content["video"])))
             else:
                 raise ValueError(f"Type = `video` , but no `video` in {chat['content']}")
         elif content["type"] == "text":
             value.append(content["text"])
         elif content["type"] in ("audio", "sound"):
             key = "audio" if content["type"] == "audio" else "sound"
-            value.append(Sound(fetch_image_url_or_fpath(content[key])))
+            value.append(Sound(_fetch_image_url_or_fpath(content[key])))
         else:
             raise ValueError(f"Unsupported content type: {content['type']}")
     return value
@@ -440,7 +407,7 @@ class OmniVinciProcessor(ProcessorMixin):
                 media_config[name].update(feat.media_config[name])
 
         # pad the input_ids to batchfy
-        input_ids = pad_fn(
+        input_ids = _pad_fn(
             input_ids_list,
             padding_value=self.pad_token_id,
             padding_side=padding_side,
@@ -474,15 +441,15 @@ class OmniVinciProcessor(ProcessorMixin):
                     self.config.image_processor = self.image_processor
                     if isinstance(self.config.s2_scales, str):
                         self.config.s2_scales = list(map(int, self.config.s2_scales.split(",")))
-                    images, block_sizes = process_image(media["image"][0], self.config, None, enable_dynamic_s2=True)
+                    images, block_sizes = _process_image(media["image"][0], self.config, None, enable_dynamic_s2=True)
                     images = images.half()
                     media_config[name]["block_sizes"] = [block_sizes]
                 else:
-                    images = process_images(media["image"], self.image_processor, self.config).half()
+                    images = _process_images(media["image"], self.image_processor, self.config).half()
                 media[name] = list(images)
             elif name == "video":
                 media[name] = [
-                    process_images(images, self.image_processor, self.config).half() for images in media[name]
+                    _process_images(images, self.image_processor, self.config).half() for images in media[name]
                 ]
             elif name == "sound":
                 sounds = media["sound"]
@@ -498,7 +465,7 @@ class OmniVinciProcessor(ProcessorMixin):
             else:
                 raise ValueError(f"Unsupported media type: {name}")
 
-        inputs = tokenize_conversation(
+        inputs = _tokenize_conversation(
             conversation,
             self.tokenizer,
             mm_use_bos_eos_tokens=self.config.mm_use_bos_eos_tokens,
@@ -560,7 +527,7 @@ class OmniVinciProcessor(ProcessorMixin):
             role = chat["role"]
             if role not in role_map:
                 raise ValueError(f"Unsupported role: {role} in chat {chat}")
-            vila_conv.append({"from": role_map[role], "value": extract_value_from_conv(chat)})
+            vila_conv.append({"from": role_map[role], "value": _extract_value_from_conv(chat)})
 
         return vila_conv
 
@@ -571,9 +538,4 @@ class OmniVinciProcessor(ProcessorMixin):
 __all__ = [
     "OmniVinciProcessor",
     "OmniVinciProcessorKwargs",
-    "tokenizer_image_token",
-    "process_image",
-    "process_images",
-    "tokenize_conversation",
-    "infer_stop_tokens",
 ]
