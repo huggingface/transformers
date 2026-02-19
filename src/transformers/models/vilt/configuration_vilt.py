@@ -114,14 +114,14 @@ class ViltConfig(PreTrainedConfig):
         num_channels=3,
         qkv_bias=True,
         max_image_length=-1,
+        tie_word_embeddings=True,
         num_images=-1,
         pad_token_id=None,
         **kwargs,
     ):
-        # Force tie_word_embeddings to `True` for T5 family
-        kwargs.pop("tie_word_embeddings", None)
         super().__init__(**kwargs)
 
+        self.tie_word_embeddings = tie_word_embeddings
         self.pad_token_id = pad_token_id
         self.vocab_size = vocab_size
         self.type_vocab_size = type_vocab_size
