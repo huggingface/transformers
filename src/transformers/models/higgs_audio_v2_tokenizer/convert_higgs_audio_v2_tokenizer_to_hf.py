@@ -19,10 +19,10 @@ import re
 import torch
 
 from transformers import (
+    DacConfig,
     DacFeatureExtractor,
     HiggsAudioV2TokenizerConfig,
     HiggsAudioV2TokenizerModel,
-    DacConfig,
 )
 from transformers.utils.hub import cached_file
 
@@ -128,6 +128,9 @@ def convert_model(input_path_or_repo, revision=None):
     for key, value in preprocessed.items():
         # fc1 is not used in the forward pass
         if key.startswith("fc1."):
+            continue
+        # masked_spec_embed is not used in inference
+        if key == "semantic_model.masked_spec_embed":
             continue
 
         new_key = convert_key(key, ORIGINAL_TO_CONVERTED_KEY_MAPPING)
