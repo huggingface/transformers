@@ -1650,56 +1650,6 @@ class Trainer:
 
         return model, train_dataloader
 
-    def _track_num_input_tokens(self, inputs):
-        """Count input tokens seen (all or non-padding) and update state."""
-        if self.args.include_num_input_tokens_seen != "no":
-            return
-        main_input_name = getattr(self.model, "main_input_name", "input_ids")
-        if main_input_name not in inputs:
-            logger.warning(
-                "Tried to track the number of tokens seen, however the current model is "
-                "not configured properly to know what item is the input. To fix this, add "
-                "a `main_input_name` attribute to the model class you are using."
-            )
-            return
-
-        if self.args.include_num_input_tokens_seen == "non_padding":
-            if "attention_mask" in inputs:
-                input_tokens = inputs["attention_mask"].sum()
-            elif (
-                self.processing_class is not None
-                and hasattr(self.processing_class, "pad_token_id")
-                and self.processing_class.pad_token_id is not None
-            ):
-                input_tokens = (inputs[main_input_name] != self.processing_class.pad_token_id).sum()
-            else:
-                logger.warning(
-                    "Could not determine method to count non-padding tokens, falling back to counting all tokens."
-                )
-                input_tokens = inputs[main_input_name].numel()
-        else:
-            input_tokens = inputs[main_input_name].numel()
-
-        input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
-        self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
-
-    def _clip_grad_norm(self, model):
-        """Clip gradients to max_grad_norm. Returns the pre-clip gradient norm."""
-        if is_sagemaker_mp_enabled() and self.args.fp16:
-            return self.optimizer.clip_master_grads(self.args.max_grad_norm)
-        return self.accelerator.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
-
-    def _get_grad_norm(self, model, grad_norm=None):
-        """Return the gradient norm as a Python float."""
-        if grad_norm is None:
-            # Compute norm without clipping (inf means no actual clipping happens)
-            grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
-
-        if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
-            if hasattr(grad_norm, "item"):
-                grad_norm = grad_norm.item()
-        return grad_norm
-
     def _run_epoch(
         self,
         model,
@@ -2506,6 +2456,56 @@ class Trainer:
             self.args.per_device_train_batch_size = self._train_batch_size // max(1, self.args.n_gpu)
             propagate_args_to_deepspeed(self.accelerator, self.args, auto_find_batch_size=True)
             self.args.per_device_train_batch_size = original_bs
+
+    def _track_num_input_tokens(self, inputs):
+        """Count input tokens seen (all or non-padding) and update state."""
+        if self.args.include_num_input_tokens_seen != "no":
+            return
+        main_input_name = getattr(self.model, "main_input_name", "input_ids")
+        if main_input_name not in inputs:
+            logger.warning(
+                "Tried to track the number of tokens seen, however the current model is "
+                "not configured properly to know what item is the input. To fix this, add "
+                "a `main_input_name` attribute to the model class you are using."
+            )
+            return
+
+        if self.args.include_num_input_tokens_seen == "non_padding":
+            if "attention_mask" in inputs:
+                input_tokens = inputs["attention_mask"].sum()
+            elif (
+                self.processing_class is not None
+                and hasattr(self.processing_class, "pad_token_id")
+                and self.processing_class.pad_token_id is not None
+            ):
+                input_tokens = (inputs[main_input_name] != self.processing_class.pad_token_id).sum()
+            else:
+                logger.warning(
+                    "Could not determine method to count non-padding tokens, falling back to counting all tokens."
+                )
+                input_tokens = inputs[main_input_name].numel()
+        else:
+            input_tokens = inputs[main_input_name].numel()
+
+        input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
+        self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
+
+    def _clip_grad_norm(self, model):
+        """Clip gradients to max_grad_norm. Returns the pre-clip gradient norm."""
+        if is_sagemaker_mp_enabled() and self.args.fp16:
+            return self.optimizer.clip_master_grads(self.args.max_grad_norm)
+        return self.accelerator.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
+
+    def _get_grad_norm(self, model, grad_norm=None):
+        """Return the gradient norm as a Python float."""
+        if grad_norm is None:
+            # Compute norm without clipping (inf means no actual clipping happens)
+            grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
+
+        if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+            if hasattr(grad_norm, "item"):
+                grad_norm = grad_norm.item()
+        return grad_norm
 
     # ---- Evaluation & Prediction ----
 
