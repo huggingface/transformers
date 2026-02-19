@@ -1499,7 +1499,6 @@ class Trainer:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
         for epoch in range(epochs_trained, num_train_epochs):
-            
             self.control = self.callback_handler.on_epoch_begin(self.args, self.state, self.control)
             self._run_epoch(
                 model=model,
@@ -1691,7 +1690,9 @@ class Trainer:
         # `gradient_accumulation_steps` batches (fewer for the last step if the epoch
         # doesn't divide evenly).
         for update_step in range(num_update_steps_trained, num_update_steps_per_epoch):
-            num_batches = self.args.gradient_accumulation_steps if update_step != (num_update_steps_per_epoch - 1) else remainder
+            num_batches = (
+                self.args.gradient_accumulation_steps if update_step != (num_update_steps_per_epoch - 1) else remainder
+            )
             batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches, self.args.device)
 
             # This is used to correctly scale the loss when the last accumulation step has fewer batches.
@@ -2375,7 +2376,7 @@ class Trainer:
             )
             # Case 3: We have a length but are using epochs, we can extrapolate the number of steps
             if epoch_based:
-                max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)        
+                max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
         # Now we figure out `num_examples`, `num_train_epochs`, and `train_samples`
         if len_dataloader:
             num_examples = self.num_examples(dataloader)
