@@ -784,7 +784,9 @@ class XLMModel(XLMPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+            "position_ids",
+            torch.arange(config.max_position_embeddings).expand((1, -1)).clone(),
+            persistent=False,
         )
         self.post_init()
 
@@ -897,17 +899,19 @@ class XLMModel(XLMPreTrainedModel):
         # because XLM includes the embedding output as the first entry,
         # which cannot be captured by a submodule hook.
         hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
         for layer in self.layers:
             if output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
-            tensor, _ = layer(
-    tensor,
-    attn_mask,
-    mask,
-    cache=cache,
-    cache_position=cache_position,
-)
-
+            tensor, attn_weights = layer(
+                tensor,
+                attn_mask,
+                mask,
+                cache=cache,
+                cache_position=cache_position,
+            )
+            if output_attentions:
+                all_attentions = all_attentions + (attn_weights,)
         # Add last hidden state
         if output_hidden_states:
             hidden_states = hidden_states + (tensor,)
@@ -915,7 +919,7 @@ class XLMModel(XLMPreTrainedModel):
         return BaseModelOutput(
             last_hidden_state=tensor,
             hidden_states=hidden_states,
-            attentions=None,
+            attentions=all_attentions,
         )
 
 

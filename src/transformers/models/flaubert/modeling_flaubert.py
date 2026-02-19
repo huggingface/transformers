@@ -180,6 +180,7 @@ class TransformerFFN(nn.Module):
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         return x
 
+
 # Copied from transformers.models.xlm.modeling_xlm.XLMLayer with XLM->Flaubert
 class FlaubertLayer(nn.Module):
     """
@@ -797,7 +798,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
 
             self.layers.append(FlaubertLayer(attn, ln1, ffn, ln2, config.dropout))
 
-
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
         self.register_buffer(
@@ -936,7 +936,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
         attentions = () if output_attentions else None
 
         for layer in self.layers:
-
             # LayerDrop
             if self.training:
                 dropout_probability = torch.rand([])
@@ -956,7 +955,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
 
             if output_attentions:
                 attentions = attentions + (attn_weights,)
-
 
         # Add last hidden state
         if output_hidden_states:
