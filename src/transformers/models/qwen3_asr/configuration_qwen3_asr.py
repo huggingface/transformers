@@ -7,18 +7,20 @@
 
 from transformers.configuration_utils import PretrainedConfig
 
+from ...configuration_utils import PreTrainedConfig
 
-class Qwen3ASRAudioEncoderConfig(PretrainedConfig):
+
+class Qwen3ASRAudioEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRAudioEncoder`]. It is used to instantiate a
-    Qwen3-ASR audio encoder according to the specified arguments, defining the model architecture. Instantiating a
+    Qwen2.5-Omni-Thinker audio encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the audio encoder of the Qwen2-Audio
     architecture.
 
-    e.g. [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B)
+    e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_mel_bins (`int`, *optional*, defaults to 128):
@@ -71,24 +73,23 @@ class Qwen3ASRAudioEncoderConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_mel_bins=128,
-        encoder_layers=32,
-        encoder_attention_heads=20,
-        encoder_ffn_dim=5120,
-        d_model=1280,
-        dropout=0,
-        attention_dropout=0,
-        activation_function="gelu",
-        activation_dropout=0,
-        scale_embedding=False,
-        initializer_range=0.02,
-        max_source_positions=1500,
-        n_window=100,
-        output_dim=3584,
-        n_window_infer=400,
-        conv_chunksize=500,
-        downsample_hidden_size=480,
-        attn_implementation=None,
+        num_mel_bins: int | None = 128,
+        encoder_layers: int | None = 32,
+        encoder_attention_heads: int | None = 20,
+        encoder_ffn_dim: int | None = 5120,
+        d_model: int | None = 1280,
+        dropout: int | None = 0,
+        attention_dropout: int | None = 0,
+        activation_function: int | None = "gelu",
+        activation_dropout: int | None = 0,
+        scale_embedding: int | None = False,
+        initializer_range: int | None = 0.02,
+        max_source_positions: int | None = 1500,
+        n_window: int | None = 100,
+        output_dim: int | None = 3584,
+        n_window_infer: int | None = 400,
+        conv_chunksize: int | None = 500,
+        downsample_hidden_size: int | None = 480,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -111,7 +112,6 @@ class Qwen3ASRAudioEncoderConfig(PretrainedConfig):
         self.n_window_infer = n_window_infer
         self.conv_chunksize = conv_chunksize
         self.downsample_hidden_size = downsample_hidden_size
-        self._attn_implementation = attn_implementation
 
 
 class Qwen3ASRTextConfig(PretrainedConfig):

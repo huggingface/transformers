@@ -295,8 +295,6 @@ class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3ASRPreTrainedModel):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        # device: torch.device,
-        # min_dtype: float,
         cache_position: torch.Tensor,
         batch_size: int,
         config=None,
@@ -1205,6 +1203,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         else:
             audio_feature_lengths = None
 
+        ### Old implementation
         # if attention_mask is not None and position_ids is None:
         #    if (
         #        cache_position is None
@@ -1265,6 +1264,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         # -------------------------------------------------
         if self.rope_deltas is not None:
             position_ids = position_ids + self.rope_deltas.unsqueeze(0)
+        ###
 
         batch_size, seq_length = inputs_embeds.shape[:2]
 
