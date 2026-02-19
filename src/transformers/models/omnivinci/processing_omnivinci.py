@@ -19,11 +19,14 @@ import os.path as osp
 from collections import defaultdict
 from collections.abc import Sequence
 
+import numpy as np
 import PIL.Image
 import torch
+import whisper
 from torch.nn.utils.rnn import pad_sequence
 
 import transformers
+from transformers import WhisperFeatureExtractor
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import load_image
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -281,6 +284,86 @@ def _pad_fn(input_ids_list: list[torch.Tensor], padding_value=0, target_len=None
     return padded
 
 
+def _resolve_sound_feature_size(config) -> int:
+    sound_tower_cfg = getattr(config, "sound_tower_cfg", None)
+    if isinstance(sound_tower_cfg, dict):
+        feature_size = sound_tower_cfg.get("num_mel_bins")
+    else:
+        feature_size = getattr(sound_tower_cfg, "num_mel_bins", None)
+    if feature_size is None:
+        feature_size = 128
+    return int(feature_size)
+
+
+def _resolve_target_audio_samples(sound: np.ndarray, audio_info, config) -> int:
+    sampling_rate = config.audio_sampling_rate
+    audio_n_samples = sound.shape[0]
+    if isinstance(audio_info, dict) and audio_info.get("new_audio_n_samples") is not None:
+        return int(audio_info["new_audio_n_samples"])
+
+    target = int(np.ceil(audio_n_samples / (sampling_rate * 30)) * (sampling_rate * 30))
+    if config.audio_chunk_length and not (
+        isinstance(config.audio_chunk_length, str) and "max" in config.audio_chunk_length
+    ):
+        target = min(target, int(config.audio_chunk_length) * sampling_rate)
+    return int(target)
+
+
+def _extract_sound_features(sound_media: list, audio_infos: list | None, config) -> list:
+    if audio_infos is None:
+        audio_infos = []
+    if audio_infos and len(audio_infos) != len(sound_media):
+        raise ValueError("The number of audio info does not match the number of audio samples.")
+
+    feature_size = _resolve_sound_feature_size(config)
+    sampling_rate = config.audio_sampling_rate
+    hop_length = config.audio_hop_length
+    new_media = []
+
+    for idx, sound in enumerate(sound_media):
+        audio_info = audio_infos[idx] if idx < len(audio_infos) else None
+        if isinstance(sound, dict) and "input_features" in sound:
+            stft_features = sound
+        else:
+            if isinstance(sound, torch.Tensor):
+                audio = sound.detach().cpu().float().numpy()
+            else:
+                audio = np.asarray(sound, dtype=np.float32)
+            if audio.ndim != 1:
+                audio = np.squeeze(audio)
+            if audio.ndim != 1:
+                raise ValueError(f"Expected mono waveform for sound input, got shape {audio.shape}.")
+
+            cur_audio_n_samples = _resolve_target_audio_samples(audio, audio_info, config)
+            cur_audio_duration = cur_audio_n_samples // sampling_rate
+            whisper_feature_extractor = WhisperFeatureExtractor(
+                feature_size=feature_size,
+                chunk_length=cur_audio_duration,
+                sampling_rate=sampling_rate,
+                hop_length=hop_length,
+            )
+            audio = whisper.pad_or_trim(audio, length=cur_audio_n_samples)
+            stft_features = whisper_feature_extractor(
+                audio,
+                sampling_rate=sampling_rate,
+                return_attention_mask=True,
+                padding="max_length",
+                return_tensors="pt",
+            )
+
+            if isinstance(audio_info, dict):
+                audio_info["new_audio_chunk_length"] = cur_audio_duration
+                audio_info["new_audio_n_samples"] = cur_audio_n_samples
+                audio_info["audio_end_sample_sec"] = audio_info["audio_start_sec"] + cur_audio_duration
+                audio_info["new_audio_n_stft_frames"] = stft_features["input_features"].shape[-1]
+
+        if isinstance(audio_info, dict) and "new_audio_n_stft_frames" not in audio_info:
+            audio_info["new_audio_n_stft_frames"] = stft_features["input_features"].shape[-1]
+        new_media.append(stft_features)
+
+    return new_media
+
+
 def _extract_value_from_conv(chat):
     value = []
     if isinstance(chat["content"], str):
@@ -451,11 +534,8 @@ class OmniVinciProcessor(ProcessorMixin):
                 ]
             elif name == "sound":
                 sounds = media["sound"]
-                for sound in sounds:
-                    if isinstance(sound, dict):
-                        for k, v in sound.items():
-                            sound[k] = v.half()
-                media[name] = list(sounds)
+                audio_infos = media.get("audio_info", [])
+                media[name] = _extract_sound_features(list(sounds), audio_infos, self.config)
             elif name == "video_info":
                 media[name] = [media["video_info"]]
             elif name == "audio_info":

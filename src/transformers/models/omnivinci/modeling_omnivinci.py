@@ -24,7 +24,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import whisper
 from einops import rearrange
 
 from transformers import (
@@ -32,7 +31,6 @@ from transformers import (
     PretrainedConfig,
     PreTrainedModel,
     SiglipImageProcessor,
-    WhisperFeatureExtractor,
 )
 from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import CausalLMOutputWithPast
@@ -172,6 +170,7 @@ class Qwen2AudioTower(nn.Module):
             for sound in sounds:
                 if hasattr(sound, "input_features") or (isinstance(sound, dict) and "input_features" in sound):
                     sound = sound["input_features"]
+                sound = sound.to(device=self.device, dtype=self.dtype)
 
                 sound_feature = self.forward_audio_tower_batch(sound)
                 sound_feature = sound_feature.to(sound.dtype)
@@ -934,68 +933,6 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
     ) -> dict[str, list[torch.Tensor]]:
         embeds = defaultdict(deque)
 
-        def _prepare_sound_media(sound_media: list[Any], max_audio_duration: int) -> list[Any]:
-            cur_batch_max_audio_samples = max_audio_duration * self.config.audio_sampling_rate
-            sound_tower_cfg = getattr(self.config, "sound_tower_cfg", None)
-            if isinstance(sound_tower_cfg, dict):
-                feature_size = sound_tower_cfg.get("num_mel_bins", 128)
-            else:
-                feature_size = getattr(sound_tower_cfg, "num_mel_bins", None)
-            if feature_size is None and getattr(self, "sound_tower", None) is not None:
-                feature_size = getattr(self.sound_tower.config, "num_mel_bins", None)
-            if feature_size is None:
-                feature_size = 128
-
-            whisper_feature_extractor = WhisperFeatureExtractor(
-                feature_size=int(feature_size),
-                chunk_length=max_audio_duration,
-                sampling_rate=self.config.audio_sampling_rate,
-                hop_length=self.config.audio_hop_length,
-            )
-
-            new_media = []
-            aud_idx = 0
-            audio_infos = mm_info.get("audio_info", [])
-            for _batch_idx in range(len(audio_infos)):
-                _audio_info = audio_infos[_batch_idx]
-                if _audio_info is None:
-                    continue
-                for _mm_idx in range(len(_audio_info)):
-                    if aud_idx >= len(sound_media):
-                        raise ValueError("The number of audio info does not match the number of audio samples.")
-
-                    _audio = sound_media[aud_idx]
-                    if isinstance(_audio, torch.Tensor):
-                        device = _audio.device
-                        dtype = _audio.dtype
-                        _audio = _audio.cpu().float()
-                    else:
-                        device = self.device
-                        dtype = self.dtype
-
-                    _audio = whisper.pad_or_trim(_audio, length=cur_batch_max_audio_samples)
-                    aud_idx += 1
-                    stft_features = whisper_feature_extractor(
-                        _audio,
-                        sampling_rate=self.config.audio_sampling_rate,
-                        return_attention_mask=True,
-                        padding="max_length",
-                        return_tensors="pt",
-                    ).to(device, dtype)
-
-                    new_media.append(stft_features)
-                    if _audio_info[_mm_idx] != "dummy":
-                        _audio_info[_mm_idx]["new_audio_chunk_length"] = max_audio_duration
-                        _audio_info[_mm_idx]["new_audio_n_samples"] = cur_batch_max_audio_samples
-                        _audio_info[_mm_idx]["audio_end_sample_sec"] = (
-                            _audio_info[_mm_idx]["audio_start_sec"] + max_audio_duration
-                        )
-                        _audio_info[_mm_idx]["new_audio_n_stft_frames"] = stft_features["input_features"].shape[-1]
-
-            if aud_idx != len(sound_media):
-                raise ValueError("The number of audio info does not match the number of audio samples.")
-            return new_media
-
         for name in media:
             _encoder = self.encoders[name]
 
@@ -1003,31 +940,14 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
                 sound_media = media.get(name, [])
                 if len(sound_media) == 0:
                     continue
-
-                if self.training:
-                    cur_batch_max_audio_samples = max(len(_audio) for _audio in sound_media)
-                    cur_batch_max_audio_samples = int(
-                        np.ceil(cur_batch_max_audio_samples / (self.config.audio_sampling_rate * 30))
-                        * (self.config.audio_sampling_rate * 30)
-                    )  # should be multiple of 30 seconds
-                    cur_batch_max_audio_samples = min(
-                        cur_batch_max_audio_samples,
-                        self.config.audio_chunk_length * self.config.audio_sampling_rate,
+                if not all(
+                    hasattr(sound, "input_features") or (isinstance(sound, dict) and "input_features" in sound)
+                    for sound in sound_media
+                ):
+                    raise ValueError(
+                        "Expected pre-extracted sound features in `media['sound']`. "
+                        "Run audio preprocessing through `OmniVinciProcessor`."
                     )
-                    cur_batch_max_audio_duration = cur_batch_max_audio_samples // self.config.audio_sampling_rate
-                else:
-                    all_audio_chunk_lengths = []
-                    audio_infos = mm_info.get("audio_info", [])
-                    for _audio_info in audio_infos:
-                        if _audio_info is None:
-                            continue
-                        for _mm_idx in range(len(_audio_info)):
-                            all_audio_chunk_lengths.append(_audio_info[_mm_idx]["new_audio_chunk_length"])
-                    if not all_audio_chunk_lengths:
-                        continue
-                    cur_batch_max_audio_duration = max(all_audio_chunk_lengths)
-
-                media[name] = _prepare_sound_media(sound_media, cur_batch_max_audio_duration)
 
             if len(media[name]) > 0:
                 embeds[name] = deque(_encoder(media[name], media_config[name], mm_info))
