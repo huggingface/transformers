@@ -262,6 +262,7 @@ class RegNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "regnet"
     main_input_name = "pixel_values"
     _no_split_modules = ["RegNetYLayer"]
+    _can_record_outputs = {"hidden_states": RegNetStage}
 
     @torch.no_grad()
     def _init_weights(self, module):
