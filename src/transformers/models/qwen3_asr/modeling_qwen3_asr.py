@@ -295,10 +295,14 @@ class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3ASRPreTrainedModel):
         sequence_length: int,
         target_length: int,
         dtype: torch.dtype,
-        device: torch.device,
-        min_dtype: float,
+        # device: torch.device,
+        # min_dtype: float,
         cache_position: torch.Tensor,
         batch_size: int,
+        config=None,
+        past_key_values=None,
+        device: torch.device = None,
+        min_dtype: float = None,
     ):
         """
         Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -322,6 +326,10 @@ class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3ASRPreTrainedModel):
             batch_size (`torch.Tensor`):
                 Batch size.
         """
+        ###
+        device = device or attention_mask.device
+        min_dtype = min_dtype if min_dtype is not None else torch.finfo(dtype).min
+        ###
         if attention_mask is not None and attention_mask.dim() == 4:
             # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
             causal_mask = attention_mask
@@ -381,41 +389,41 @@ class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3ASRPreTrainedModel):
 
         return list(_iter())
 
-    def get_rope_index(
-        self,
-        attention_mask: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Calculate the rope index in LLM.
+    # def get_rope_index(
+    #    self,
+    #    attention_mask: Optional[torch.Tensor] = None,
+    # ) -> tuple[torch.Tensor, torch.Tensor]:
+    #    """
+    #    Calculate the rope index in LLM.
 
-        Explanation:
-            Each embedding sequence contains text embedding.
+    #    Explanation:
+    #        Each embedding sequence contains text embedding.
 
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-                it.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+    #    Args:
+    #        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+    #            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+    #            it.
+    #        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+    #            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-            audio_seqlens (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-                The length of feature shape of each audio in LLM.
+    #            - 1 for tokens that are **not masked**,
+    #            - 0 for tokens that are **masked**.
+    #        audio_seqlens (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+    #            The length of feature shape of each audio in LLM.
 
-        Returns:
-            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
-            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
-        """
-        mrope_position_deltas = []
+    #    Returns:
+    #        position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+    #        mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
+    #    """
+    #    mrope_position_deltas = []
 
-        position_ids = attention_mask.float().cumsum(-1) - 1
-        position_ids.masked_fill_(attention_mask == 0, 1)
-        position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
-        max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
-        mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
+    #    position_ids = attention_mask.float().cumsum(-1) - 1
+    #    position_ids.masked_fill_(attention_mask == 0, 1)
+    #    position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
+    #    max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
+    #    mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
 
-        return position_ids, mrope_position_deltas
+    #    return position_ids, mrope_position_deltas
 
 
 class Qwen3ASRAudioAttention(nn.Module):
@@ -1197,25 +1205,68 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         else:
             audio_feature_lengths = None
 
-        if attention_mask is not None and position_ids is None:
-            if (
-                cache_position is None
-                or (cache_position is not None and cache_position[0] == 0)
-                or self.rope_deltas is None
-            ):
-                delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
-                position_ids, rope_deltas = self.get_rope_index(
-                    attention_mask,
-                )
-                rope_deltas = rope_deltas - delta0
-                self.rope_deltas = rope_deltas
-            else:
-                batch_size, seq_length = input_ids.shape
-                delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
-                position_ids = torch.arange(seq_length, device=input_ids.device)
-                position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-                position_ids = position_ids.add(delta)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+        # if attention_mask is not None and position_ids is None:
+        #    if (
+        #        cache_position is None
+        #        or (cache_position is not None and cache_position[0] == 0)
+        #        or self.rope_deltas is None
+        #    ):
+        #        delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
+        #        position_ids, rope_deltas = self.get_rope_index(
+        #            attention_mask,
+        #        )
+        #        rope_deltas = rope_deltas - delta0
+        #        self.rope_deltas = rope_deltas
+        #    else:
+        #        batch_size, seq_length = input_ids.shape
+        #        delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
+        #        position_ids = torch.arange(seq_length, device=input_ids.device)
+        #        position_ids = position_ids.view(1, -1).expand(batch_size, -1)
+        #        position_ids = position_ids.add(delta)
+        #        position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+
+        # Determine batch and sequence length early
+        batch_size, seq_length = inputs_embeds.shape[:2]
+
+        # -------------------------------------------------
+        # 1. Build cache_position if missing
+        # -------------------------------------------------
+        if cache_position is None:
+            past_seen = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen,
+                past_seen + seq_length,
+                device=inputs_embeds.device,
+            )
+
+        # -------------------------------------------------
+        # 2. Build position_ids only if not provided
+        # -------------------------------------------------
+        if position_ids is None:
+            position_ids = cache_position.view(1, 1, -1).expand(3, batch_size, -1)
+
+        # -------------------------------------------------
+        # 3. Compute rope_deltas ONLY during prefill
+        # -------------------------------------------------
+        if (
+            self.rope_deltas is None
+            and attention_mask is not None
+            and attention_mask.dim() == 2
+            and cache_position is not None
+            and cache_position[0] == 0
+        ):
+            max_position = cache_position[-1]
+            valid_tokens = attention_mask.sum(dim=-1)
+            rope_deltas = (max_position + 1 - valid_tokens).unsqueeze(-1)
+            self.rope_deltas = rope_deltas
+
+        # -------------------------------------------------
+        # 4. Apply rope delta if it exists
+        # -------------------------------------------------
+        if self.rope_deltas is not None:
+            position_ids = position_ids + self.rope_deltas.unsqueeze(0)
+
+        batch_size, seq_length = inputs_embeds.shape[:2]
 
         outputs = self.model(
             attention_mask=attention_mask,
@@ -1273,7 +1324,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
 
         model_inputs["position_ids"] = None
 
-        if cache_position[0] != 0:
+        if cache_position is not None and cache_position[0] != 0:
             model_inputs["input_features"] = None
 
         return model_inputs
