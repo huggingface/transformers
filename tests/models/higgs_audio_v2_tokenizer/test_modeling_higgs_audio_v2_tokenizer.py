@@ -114,6 +114,10 @@ class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_torchscript = False
     test_can_init_all_missing_weights = False
+    # The quantizer module takes ~78% of model size, so default split percents (0.5, 0.7, 0.9)
+    # are too low — at 0.7 the GPU budget can't fit any module and everything lands on a single
+    # device, preventing accelerate from creating a multi-device map.
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not support returning hidden states
