@@ -533,11 +533,17 @@ class SiglipVisionTowerDynamicS2(VisionTowerDynamicS2):
             self.vision_tower = SiglipVisionModel(vision_cfg).to(model_dtype)
 
             root_path = getattr(config, "_name_or_path", None)
-            vision_dir = os.path.join(root_path, "vision_tower") if root_path else None
-            if vision_dir and os.path.isdir(vision_dir):
-                self.image_processor = SiglipImageProcessor.from_pretrained(vision_dir)
-            else:
-                self.image_processor = SiglipImageProcessor()
+            image_processor = None
+            if root_path:
+                for candidate in [root_path, os.path.join(root_path, "vision_tower")]:
+                    if not os.path.isdir(candidate):
+                        continue
+                    try:
+                        image_processor = SiglipImageProcessor.from_pretrained(candidate)
+                        break
+                    except Exception:
+                        continue
+            self.image_processor = image_processor if image_processor is not None else SiglipImageProcessor()
 
         # Make sure it crops/resizes the image to the largest scale in self.scales to maintain high-res information
         self.image_processor.size["height"] = self.image_processor.size["width"] = self.scales[0]
@@ -1341,8 +1347,16 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
 
         def _prepare_sound_media(sound_media: List[Any], max_audio_duration: int) -> List[Any]:
             cur_batch_max_audio_samples = max_audio_duration * self.config.audio_sampling_rate
-            whisper_feature_extractor = WhisperFeatureExtractor.from_pretrained(
-                self.config._name_or_path,
+            sound_tower = getattr(self, "sound_tower", None)
+            num_mel_bins = getattr(getattr(sound_tower, "config", None), "num_mel_bins", None)
+            if num_mel_bins is None:
+                sound_tower_cfg = getattr(self.config, "sound_tower_cfg", None)
+                if isinstance(sound_tower_cfg, dict):
+                    num_mel_bins = sound_tower_cfg.get("num_mel_bins")
+            num_mel_bins = int(num_mel_bins) if num_mel_bins is not None else 80
+
+            whisper_feature_extractor = WhisperFeatureExtractor(
+                feature_size=num_mel_bins,
                 chunk_length=max_audio_duration,
                 sampling_rate=self.config.audio_sampling_rate,
                 hop_length=self.config.audio_hop_length,

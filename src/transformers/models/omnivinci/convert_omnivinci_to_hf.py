@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Convert legacy OmniVinci/VILA checkpoints to a standard HF-loadable layout.
+"""Convert legacy OmniVinci/VILA checkpoints to a flat HF-loadable layout.
 
 This conversion script:
 1) rewrites legacy VILA class strings to canonical OmniVinci names,
-2) normalizes top-level config fields for local HF loading,
+2) normalizes a single top-level config for local HF loading,
 3) merges component safetensors into a top-level `model.safetensors`.
 
-The destination is treated as an export directory and receives only model artifacts
-(config/tokenizer/processor/chat-template metadata + merged weights). Source files
-under the original repository are never copied verbatim as Python modules.
+The destination is treated as an export directory and contains only root-level
+artifacts (weights/config/tokenizer/processor/chat-template). Python source files
+and component subfolder configs are not copied.
 """
 
 from __future__ import annotations
@@ -172,29 +172,36 @@ def _rewrite_json_file(path: Path) -> bool:
     return True
 
 
-def _copy_tree_metadata_only(src_dir: Path, dst_dir: Path) -> None:
-    if not src_dir.exists() or not src_dir.is_dir():
+def _copy_top_level_metadata(src_root: Path, dst_root: Path) -> None:
+    for item in src_root.iterdir():
+        if not item.is_file():
+            continue
+        if _is_top_level_metadata_file(item.name):
+            shutil.copy2(item, dst_root / item.name)
+
+
+def _copy_llm_metadata_to_root(src_root: Path, dst_root: Path) -> None:
+    llm_dir = src_root / "llm"
+    if not llm_dir.is_dir():
         return
 
-    for item in src_dir.rglob("*"):
-        if "__pycache__" in item.parts or ".git" in item.parts:
+    for item in llm_dir.iterdir():
+        if not item.is_file():
             continue
-
-        rel = item.relative_to(src_dir)
-        out = dst_dir / rel
-
-        if item.is_dir():
-            out.mkdir(parents=True, exist_ok=True)
-            continue
-
         if _is_weight_file(item.name):
             continue
-
         if item.suffix in {".py", ".pyc", ".pyo", ".pyi"}:
             continue
+        if item.name == "config.json":
+            continue
+        shutil.copy2(item, dst_root / item.name)
 
-        out.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(item, out)
+
+def _copy_vision_preprocessor_fallback(src_root: Path, dst_root: Path) -> None:
+    vision_preprocessor = src_root / "vision_tower" / "preprocessor_config.json"
+    if vision_preprocessor.exists():
+        # Flat export uses a single root preprocessor config, so prefer the vision processor one.
+        shutil.copy2(vision_preprocessor, dst_root / "preprocessor_config.json")
 
 
 def _prepare_destination_tree(src_root: Path, dst_root: Path, clean_dst: bool = True) -> None:
@@ -204,15 +211,9 @@ def _prepare_destination_tree(src_root: Path, dst_root: Path, clean_dst: bool = 
 
     dst_root.mkdir(parents=True, exist_ok=True)
 
-    for item in src_root.iterdir():
-        if not item.is_file():
-            continue
-        if not _is_top_level_metadata_file(item.name):
-            continue
-        shutil.copy2(item, dst_root / item.name)
-
-    for component in COMPONENT_TO_PREFIX:
-        _copy_tree_metadata_only(src_root / component, dst_root / component)
+    _copy_top_level_metadata(src_root, dst_root)
+    _copy_llm_metadata_to_root(src_root, dst_root)
+    _copy_vision_preprocessor_fallback(src_root, dst_root)
 
 
 def _resolve_component_dir(dirpath: Path):
@@ -269,7 +270,7 @@ def _collect_component_state(src_root: Path) -> dict[str, Any]:
     return state
 
 
-def _normalize_top_level_config(dst_root: Path) -> None:
+def _normalize_top_level_config(dst_root: Path, src_root: Path) -> None:
     cfg_path = dst_root / "config.json"
     if not cfg_path.exists():
         raise FileNotFoundError(f"Missing required top-level config: {cfg_path}")
@@ -278,9 +279,9 @@ def _normalize_top_level_config(dst_root: Path) -> None:
     cfg = _deep_rewrite(cfg)
 
     for field, component in CONFIG_FIELD_TO_COMPONENT.items():
-        component_cfg_path = dst_root / component / "config.json"
+        component_cfg_path = src_root / component / "config.json"
         if component_cfg_path.exists():
-            cfg[field] = _load_json(component_cfg_path)
+            cfg[field] = _deep_rewrite(_load_json(component_cfg_path))
         elif field in OPTIONAL_COMPONENT_FIELDS:
             cfg[field] = None
 
@@ -369,7 +370,7 @@ def convert_omnivinci_to_hf(
         _prepare_destination_tree(src_root, dst_root, clean_dst=clean_dst)
 
     touched, missing = _rewrite_metadata_jsons(dst_root)
-    _normalize_top_level_config(dst_root)
+    _normalize_top_level_config(dst_root, src_root)
 
     if not skip_weights:
         state = _collect_component_state(src_root)

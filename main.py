@@ -89,7 +89,7 @@ class NVOmniVideoInference:
         self._maybe_convert_legacy_checkpoint()
 
         logger.info("Loading model configuration...")
-        self.config = OmniVinciConfig.from_pretrained(self.model_path)
+        self.config = OmniVinciConfig.from_pretrained(self.model_path, trust_remote_code=True)
         self.config._name_or_path = str(self.model_path)
 
         default_attn_impl = "sdpa"
@@ -112,13 +112,14 @@ class NVOmniVideoInference:
             dtype=load_dtype,
             device_map=self.device_map,
             low_cpu_mem_usage=True,
+            trust_remote_code=True,
         )
         self.model.eval()
         load_time = time.time() - start_time
         logger.info(f"Model loaded in {load_time:.2f} seconds")
 
         logger.info("Loading processor...")
-        self.processor = OmniVinciProcessor.from_pretrained(self.model_path)
+        self.processor = OmniVinciProcessor.from_pretrained(self.model_path, trust_remote_code=True)
 
         if hasattr(self.model, "device"):
             self.device = self.model.device

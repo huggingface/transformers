@@ -391,12 +391,33 @@ class OmniVinciProcessor(ProcessorMixin):
 
             pretrained_model_name_or_path = snapshot_download(pretrained_model_name_or_path)
 
-        image_processor = AutoImageProcessor.from_pretrained(
-            osp.join(pretrained_model_name_or_path, "vision_tower"), trust_remote_code=True
-        )
-        tokenizer = AutoTokenizer.from_pretrained(
-            osp.join(pretrained_model_name_or_path, "llm"), trust_remote_code=True
-        )
+        image_processor = None
+        image_processor_errors = []
+        for candidate in [pretrained_model_name_or_path, osp.join(pretrained_model_name_or_path, "vision_tower")]:
+            try:
+                image_processor = AutoImageProcessor.from_pretrained(candidate, trust_remote_code=True)
+                break
+            except Exception as exc:
+                image_processor_errors.append(f"{candidate}: {exc}")
+        if image_processor is None:
+            raise ValueError(
+                "Cannot load image processor from OmniVinci checkpoint. Tried: "
+                + " | ".join(image_processor_errors)
+            )
+
+        tokenizer = None
+        tokenizer_errors = []
+        for candidate in [pretrained_model_name_or_path, osp.join(pretrained_model_name_or_path, "llm")]:
+            try:
+                tokenizer = AutoTokenizer.from_pretrained(candidate, trust_remote_code=True)
+                break
+            except Exception as exc:
+                tokenizer_errors.append(f"{candidate}: {exc}")
+        if tokenizer is None:
+            raise ValueError(
+                "Cannot load tokenizer from OmniVinci checkpoint. Tried: "
+                + " | ".join(tokenizer_errors)
+            )
         config = OmniVinciConfig.from_pretrained(pretrained_model_name_or_path)
         config._name_or_path = str(pretrained_model_name_or_path)
         if getattr(config, "resume_path", None) is None or not osp.exists(str(config.resume_path)):
