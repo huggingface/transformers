@@ -29,7 +29,6 @@ from einops import rearrange
 
 from transformers import (
     AutoConfig,
-    AutoModel,
     PretrainedConfig,
     PreTrainedModel,
     SiglipImageProcessor,
@@ -107,29 +106,11 @@ class DownSampleBlock(nn.Module):
         return x
 
 
-class MultimodalProjectorConfig(PretrainedConfig):
-    """Configuration for vision-to-language projector."""
-
-    model_type = "v2l_projector"
-
-    def __init__(self, mm_projector_type: str | None = None, **kwargs):
-        super().__init__(**kwargs)
-        self.mm_projector_type = mm_projector_type
-
-
-class MultimodalProjector(PreTrainedModel):
+class MultimodalProjector(nn.Module):
     """Multimodal projector for mapping vision features to LLM space."""
 
-    config_class = MultimodalProjectorConfig
-
-    def __init__(self, mm_projector_cfg: MultimodalProjectorConfig, config: PretrainedConfig):
-        super().__init__(mm_projector_cfg)
-        mm_projector_type = mm_projector_cfg.mm_projector_type or "mlp_downsample"
-        if mm_projector_type != "mlp_downsample":
-            raise ValueError(
-                f"Unsupported mm_projector_type '{mm_projector_type}'. "
-                "Current OmniVinci checkpoint requires 'mlp_downsample'."
-            )
+    def __init__(self, config: PretrainedConfig):
+        super().__init__()
         self.downsample_rate = 2
         self.layers = nn.Sequential(
             DownSampleBlock(),
@@ -139,59 +120,23 @@ class MultimodalProjector(PreTrainedModel):
             nn.Linear(config.hidden_size, config.hidden_size),
         )
 
-        self.post_init()
-
     def forward(self, x, *args, **kwargs):
         return self.layers(x)
 
 
-class SoundMultimodalProjectorConfig(PretrainedConfig):
-    """Configuration for sound multimodal projector."""
-
-    model_type = "sound_mm_projector"
-
-    def __init__(self, sound_mm_projector_type: str | None = None, **kwargs):
-        super().__init__(**kwargs)
-        self.sound_mm_projector_type = sound_mm_projector_type
-
-
-class SoundMultimodalProjector(PreTrainedModel):
+class SoundMultimodalProjector(nn.Module):
     """Sound multimodal projector for mapping audio features to LLM space."""
 
-    config_class = SoundMultimodalProjectorConfig
-
-    def __init__(self, sound_mm_projector_cfg: SoundMultimodalProjectorConfig, config: PretrainedConfig):
-        super().__init__(sound_mm_projector_cfg)
-        if hasattr(config, "sound_mm_projector"):
-            sound_mm_projector_type = config.sound_mm_projector
-        else:
-            sound_mm_projector_type = sound_mm_projector_cfg.sound_mm_projector_type
-        self.sound_mm_projector_type = sound_mm_projector_type
-        self.config.sound_mm_projector_type = sound_mm_projector_type
-
-        if hasattr(config, "sound_mm_projector_cfg") and isinstance(config.sound_mm_projector_cfg, dict):
-            config.sound_mm_projector_cfg["sound_mm_projector_type"] = sound_mm_projector_type
-
-        if sound_mm_projector_type != "mlp":
-            raise ValueError(
-                f"Unsupported sound_mm_projector_type '{sound_mm_projector_type}'. "
-                "Current OmniVinci checkpoint requires 'mlp'."
-            )
-
+    def __init__(self, config: PretrainedConfig):
+        super().__init__()
         self.layers = nn.Sequential(
             nn.Linear(config.sound_hidden_size, config.hidden_size),
             nn.GELU(),
             nn.Linear(config.hidden_size, config.hidden_size),
         )
 
-        self.post_init()
-
     def forward(self, x, *args, **kwargs):
         return self.layers(x)
-
-
-AutoConfig.register("sound_mm_projector", SoundMultimodalProjectorConfig)
-AutoModel.register(SoundMultimodalProjectorConfig, SoundMultimodalProjector)
 
 
 class Qwen2AudioTower(nn.Module):
@@ -403,15 +348,7 @@ class VILAPretrainedModel(PreTrainedModel):
         if has_sound_tower != has_sound_projector:
             raise ValueError("`sound_tower_cfg` and `sound_mm_projector_cfg` must be both set or both empty.")
 
-        if isinstance(mm_projector_spec, (MultimodalProjectorConfig, PretrainedConfig)):
-            mm_projector_cfg = mm_projector_spec
-        elif isinstance(mm_projector_spec, dict):
-            mm_projector_cfg = MultimodalProjectorConfig(**mm_projector_spec)
-        elif isinstance(mm_projector_spec, str):
-            mm_projector_cfg = MultimodalProjectorConfig(mm_projector_type=mm_projector_spec)
-        else:
-            raise TypeError(f"Unsupported mm_projector config type: {type(mm_projector_spec)}")
-        self.mm_projector = MultimodalProjector(mm_projector_cfg, config)
+        self.mm_projector = MultimodalProjector(config)
 
         if not getattr(config, "dynamic_s2", False):
             raise NotImplementedError("Current OmniVinci checkpoint requires `dynamic_s2=True`.")
@@ -421,18 +358,7 @@ class VILAPretrainedModel(PreTrainedModel):
         if has_sound_tower:
             self.sound_tower = Qwen2AudioTower(sound_tower_spec, config)
             config.sound_hidden_size = 1280
-
-            if isinstance(sound_mm_projector_spec, (SoundMultimodalProjectorConfig, PretrainedConfig)):
-                sound_mm_projector_cfg = sound_mm_projector_spec
-            elif isinstance(sound_mm_projector_spec, dict):
-                sound_mm_projector_cfg = SoundMultimodalProjectorConfig(**sound_mm_projector_spec)
-            elif isinstance(sound_mm_projector_spec, str):
-                sound_mm_projector_cfg = SoundMultimodalProjectorConfig(
-                    sound_mm_projector_type=sound_mm_projector_spec
-                )
-            else:
-                raise TypeError(f"Unsupported sound_mm_projector config type: {type(sound_mm_projector_spec)}")
-            self.sound_mm_projector = SoundMultimodalProjector(sound_mm_projector_cfg, config)
+            self.sound_mm_projector = SoundMultimodalProjector(config)
 
         llm_cfg = _coerce_config_from_spec(llm_spec, fallback_model_type="qwen2")
         llm_cfg._attn_implementation = _get_attn_implementation(config)
@@ -525,11 +451,11 @@ class VILAPretrainedModel(PreTrainedModel):
         if getattr(self.config, "vision_tower_cfg", None) is None:
             self.config.vision_tower_cfg = self.vision_tower.config
         if getattr(self.config, "mm_projector_cfg", None) is None:
-            self.config.mm_projector_cfg = self.mm_projector.config
+            self.config.mm_projector_cfg = {"mm_projector_type": "mlp_downsample"}
         if getattr(self.config, "sound_tower_cfg", None) is None and hasattr(self, "sound_tower"):
             self.config.sound_tower_cfg = self.sound_tower.config
         if getattr(self.config, "sound_mm_projector_cfg", None) is None and hasattr(self, "sound_mm_projector"):
-            self.config.sound_mm_projector_cfg = self.sound_mm_projector.config
+            self.config.sound_mm_projector_cfg = {"sound_mm_projector_type": "mlp"}
 
     def freezed_module_patch(self):
         """
