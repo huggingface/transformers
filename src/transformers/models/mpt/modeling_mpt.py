@@ -690,6 +690,7 @@ class MptForQuestionAnswering(MptPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -702,7 +703,7 @@ class MptForQuestionAnswering(MptPreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | QuestionAnsweringModelOutput:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
@@ -716,15 +717,13 @@ class MptForQuestionAnswering(MptPreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         sequence_output = outputs[0]
@@ -750,10 +749,6 @@ class MptForQuestionAnswering(MptPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,

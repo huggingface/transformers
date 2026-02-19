@@ -346,8 +346,6 @@ class CpmAntEncoder(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: torch.Tensor,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         cache_position: torch.Tensor | None = None,
@@ -360,40 +358,24 @@ class CpmAntEncoder(nn.Module):
                 Avoid invalid areas to participate in the calculation of shape `(batch, seq_len, seq_len)`
             position_bias (`torch.Tensor`):
                 Provides position information to attention mechanism of shape `(num_heads, seq_len, seq_len)`
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers.
             past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
         """
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-
-        for i, layer in enumerate(self.layers):
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-            layer_outputs = layer(
+        for layer in self.layers:
+            hidden_states, _attn_weights = layer(
                 hidden_states,
                 attention_mask,
                 position_bias,
-                output_attentions=output_attentions,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
             )
-            hidden_states, attn_weights = layer_outputs
-            if output_attentions:
-                all_self_attns += (attn_weights,)
 
         hidden_states = self.output_layernorm(hidden_states)
 
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        return hidden_states, all_hidden_states, all_self_attns
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states)
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->CPMAnt
@@ -523,6 +505,10 @@ class CpmAntOutput(nn.Module):
 class CpmAntPreTrainedModel(PreTrainedModel):
     config: CpmAntConfig
     base_model_prefix = "cpmant"
+    _can_record_outputs = {
+        "hidden_states": CpmAntTransformerBlock,
+        "attentions": CpmAntAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
