@@ -28,7 +28,7 @@ from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERI
 
 
 if is_torch_available():
-    from transformers import Timesfm2P5Model, Timesfm2P5ModelForPrediction
+    from transformers import Timesfm2P5ModelForPrediction
 
 TOLERANCE = 1e-4
 
@@ -123,7 +123,7 @@ class Timesfm2P5ModelTester:
 
 @require_torch
 class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (Timesfm2P5Model, Timesfm2P5ModelForPrediction) if is_torch_available() else ()
+    all_model_classes = (Timesfm2P5ModelForPrediction,) if is_torch_available() else ()
     all_generative_model_classes = ()
     all_parallelizable_model_classes = ()
     fx_compatible = False
