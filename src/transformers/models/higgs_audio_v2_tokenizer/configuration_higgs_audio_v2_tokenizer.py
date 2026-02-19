@@ -23,13 +23,8 @@ import math
 
 import numpy as np
 
-from transformers import AutoConfig, DacConfig, HubertConfig, WavLMConfig
-
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
@@ -43,9 +38,9 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-            target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2, 4]`):
+            target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2]`):
                 The range of different bandwidths (in kbps) the model can encode audio with.
-            sample_rate (`int`, *optional*, defaults to 16000):
+            sample_rate (`int`, *optional*, defaults to 24000):
                 The sampling rate at which the audio waveform should be digitalized, in hertz (Hz).
             kernel_size (`int`, *optional*, defaults to 3):
                 Kernel size for the initial semantic convolution.
@@ -59,14 +54,18 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
                 Kernel size inside each ResidualUnit in semantic blocks.
             codebook_size (`int`, *optional*, defaults to 1024):
                 Number of entries in each residual quantizer's codebook.
-            codebook_dim (`int`, *optional*):
-                Dimensionality of each codebook vector. Defaults to sum of hidden size of acoustic and semantic models.
+            codebook_dim (`int`, *optional*, defaults to 64):
+                Dimensionality of each codebook vector.
             initializer_range (`float`, *optional*, defaults to 0.02):
                 Standard deviation of the truncated normal initializer for all weight matrices.
-            acoustic_model_config (`Union[Dict, DacConfig]`, *optional*):
+            acoustic_model_config (`Union[Dict, AutoConfig]`, *optional*):
                 An instance of the configuration for the acoustic (DAC) model.
-            semantic_model_config (`Union[Dict, HubertConfig, WavLMConfig]`, *optional*):
+            semantic_model_config (`Union[Dict, AutoConfig]`, *optional*):
                 An instance of the configuration object for the semantic (HuBERT) model.
+            semantic_sample_rate (`int`, *optional*, defaults to 16000):
+                The sampling rate at which the semantic model expects audio input, in hertz (Hz).
+            downsample_factor (`int`, *optional*, defaults to 320):
+                Downsampling factor for the semantic features.
 
     Example:
 
@@ -86,13 +85,27 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
     model_type = "higgs_audio_v2_tokenizer"
 
     sub_configs = {
-        "acoustic_model_config": DacConfig,
+        "acoustic_model_config": AutoConfig,
         "semantic_model_config": AutoConfig,
+    }
+
+    _default_acoustic_model_config_kwargs = {
+        "encoder_hidden_size": 64,
+        # NOTE: original DAC uses [2, 4, 8, 8] `downsampling ratios`, namely reverse of `upsampling_ratios`
+        # (not sure if intentional by HiggsAudioV2Tokenizer but we keep it)
+        "downsampling_ratios": [8, 5, 4, 2],
+        "decoder_hidden_size": 1024,
+        "upsampling_ratios": [8, 5, 4, 2],
+        "hidden_size": 256,
+    }
+
+    _default_semantic_model_config_kwargs = {
+        "mask_time_prob": 0.0,
     }
 
     def __init__(
         self,
-        target_bandwidths=None,
+        target_bandwidths=[0.5, 1, 1.5, 2],
         sample_rate=24000,
         kernel_size=3,
         channel_ratios=[1, 1],
@@ -100,7 +113,7 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
         block_dilations=[1, 1],
         unit_kernel_size=3,
         codebook_size=1024,
-        codebook_dim=None,
+        codebook_dim=64,
         initializer_range=0.02,
         acoustic_model_config=None,
         semantic_model_config=None,
@@ -108,43 +121,23 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
         downsample_factor=320,
         **kwargs,
     ):
-        if acoustic_model_config is None:
-            self.acoustic_model_config = DacConfig(
-                encoder_hidden_size=64,
-                # NOTE: original DAC uses [2, 4, 8, 8] `downsampling ratios`, namely reverse of `upsampling_ratios`
-                # (not sure if intentional by HiggsAudioV2Tokenizer but we keep it)
-                downsampling_ratios=[8, 5, 4, 2],
-                decoder_hidden_size=1024,
-                upsampling_ratios=[8, 5, 4, 2],
-                hidden_size=256,
+        if isinstance(acoustic_model_config, dict):
+            acoustic_model_config["model_type"] = acoustic_model_config.get("model_type", "dac")
+            acoustic_model_config = CONFIG_MAPPING[acoustic_model_config["model_type"]](
+                **{**self._default_acoustic_model_config_kwargs, **acoustic_model_config}
             )
-        elif isinstance(acoustic_model_config, dict):
-            self.acoustic_model_config = DacConfig(**acoustic_model_config)
-        elif isinstance(acoustic_model_config, DacConfig):
-            self.acoustic_model_config = acoustic_model_config
-        else:
-            raise ValueError(
-                f"acoustic_model_config must be a dict or DacConfig instance, but got {type(acoustic_model_config)}"
-            )
+        elif acoustic_model_config is None:
+            acoustic_model_config = CONFIG_MAPPING["dac"](**self._default_acoustic_model_config_kwargs)
+        self.acoustic_model_config = acoustic_model_config
 
-        if semantic_model_config is None:
-            self.semantic_model_config = HubertConfig()
-        elif isinstance(semantic_model_config, dict):
-            if "_name_or_path" in semantic_model_config:
-                # If the config is a path, load it using AutoConfig
-                self.semantic_model_config = AutoConfig.from_pretrained(semantic_model_config["_name_or_path"])
-            else:
-                # assume HubertConfig as probably created from scratch
-                logger.warning(
-                    "Could not determine semantic model type from config architecture. Defaulting to `HubertConfig`."
-                )
-                self.semantic_model_config = HubertConfig(**semantic_model_config)
-        elif isinstance(semantic_model_config, WavLMConfig) or isinstance(semantic_model_config, HubertConfig):
-            self.semantic_model_config = semantic_model_config
-        else:
-            raise ValueError(
-                f"semantic_model_config must be a dict, HubertConfig, or WavLMConfig instance, but got {type(semantic_model_config)}"
+        if isinstance(semantic_model_config, dict):
+            semantic_model_config["model_type"] = semantic_model_config.get("model_type", "hubert")
+            semantic_model_config = CONFIG_MAPPING[semantic_model_config["model_type"]](
+                **{**self._default_semantic_model_config_kwargs, **semantic_model_config}
             )
+        elif semantic_model_config is None:
+            semantic_model_config = CONFIG_MAPPING["hubert"](**self._default_semantic_model_config_kwargs)
+        self.semantic_model_config = semantic_model_config
 
         if target_bandwidths is None:
             target_bandwidths = [0.5, 1, 1.5, 2, 4]

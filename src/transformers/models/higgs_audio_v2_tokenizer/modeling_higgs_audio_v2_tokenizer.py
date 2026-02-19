@@ -46,7 +46,8 @@ class HiggsAudioV2TokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     base_model_prefix = "higgs_audio_v2_tokenizer"
     main_input_name = "input_values"
     input_modalities = "audio"
-    _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization"]
+    _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization", "DacResidualUnit"]
+    _keys_to_ignore_on_load_unexpected = ["semantic_model.masked_spec_embed"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -88,9 +89,7 @@ class HiggsAudioV2TokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
 
     def apply_weight_norm(self):
         """Apply weight norm in the acoustic encoder and decoder because the original checkpoint has weight norm applied."""
-        weight_norm = torch.nn.utils.weight_norm
-        if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
-            weight_norm = torch.nn.utils.parametrizations.weight_norm
+        weight_norm = torch.nn.utils.parametrizations.weight_norm
 
         weight_norm(self.acoustic_encoder.conv1)
         weight_norm(self.acoustic_encoder.conv2)
