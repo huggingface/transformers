@@ -171,7 +171,6 @@ class CpmAntSelfAttentionBlock(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: torch.Tensor | None = None,
-        output_attentions: bool | None = False,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         cache_position: torch.Tensor | None = None,
@@ -184,8 +183,6 @@ class CpmAntSelfAttentionBlock(nn.Module):
                 Avoid invalid areas to participate in the calculation of self-attention.
             position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
                 Provide positional information to self-attention block.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
             past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
@@ -198,7 +195,6 @@ class CpmAntSelfAttentionBlock(nn.Module):
             outputs,
             attention_mask,
             position_bias,
-            output_attentions,
             past_key_values,
             use_cache,
             cache_position,
@@ -295,7 +291,6 @@ class CpmAntTransformerBlock(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: torch.Tensor | None = None,
-        output_attentions: bool | None = False,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         cache_position: torch.Tensor | None = None,
@@ -308,8 +303,6 @@ class CpmAntTransformerBlock(nn.Module):
                 Avoid invalid areas to participate in the calculation of shape `(batch, seq_len, seq_len)`
             position_bias (`torch.Tensor`):
                 Provides position information to attention mechanism of shape `(num_heads, seq_len, seq_len)`
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
             past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
@@ -320,7 +313,6 @@ class CpmAntTransformerBlock(nn.Module):
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
-            output_attentions=output_attentions,
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -343,8 +335,6 @@ class CpmAntEncoder(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: torch.Tensor,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         cache_position: torch.Tensor | None = None,
@@ -357,40 +347,24 @@ class CpmAntEncoder(nn.Module):
                 Avoid invalid areas to participate in the calculation of shape `(batch, seq_len, seq_len)`
             position_bias (`torch.Tensor`):
                 Provides position information to attention mechanism of shape `(num_heads, seq_len, seq_len)`
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers.
             past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
         """
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-
-        for i, layer in enumerate(self.layers):
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-            layer_outputs = layer(
+        for layer in self.layers:
+            hidden_states, _attn_weights = layer(
                 hidden_states,
                 attention_mask,
                 position_bias,
-                output_attentions=output_attentions,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
             )
-            hidden_states, attn_weights = layer_outputs
-            if output_attentions:
-                all_self_attns += (attn_weights,)
 
         hidden_states = self.output_layernorm(hidden_states)
 
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        return hidden_states, all_hidden_states, all_self_attns
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states)
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->CPMAnt
@@ -520,6 +494,10 @@ class CpmAntOutput(nn.Module):
 class CpmAntPreTrainedModel(PreTrainedModel):
     config: CpmAntConfig
     base_model_prefix = "cpmant"
+    _can_record_outputs = {
+        "hidden_states": CpmAntTransformerBlock,
+        "attentions": CpmAntAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -570,18 +548,16 @@ class CpmAntModel(CpmAntPreTrainedModel):
         attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
         return attention_mask
 
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        return_dict: bool | None = None,
         cache_position: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor] | BaseModelOutputWithPast:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
             Indices of input sequence tokens in the vocabulary.
@@ -591,11 +567,6 @@ class CpmAntModel(CpmAntPreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # add prompts ahead
@@ -641,41 +612,23 @@ class CpmAntModel(CpmAntPreTrainedModel):
         position_bias = position_bias[:, :, past_length:, :]
         hidden_states = hidden_states[:, past_length:, :]
 
-        hidden_states, all_hidden_states, all_attentions = self.encoder(
+        encoder_outputs = self.encoder(
             hidden_states,
             attention_mask,
             position_bias,
-            output_attentions,
-            output_hidden_states,
-            past_key_values,
-            use_cache,
-            cache_position,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            cache_position=cache_position,
         )
+
+        hidden_states = encoder_outputs.last_hidden_state
 
         if past_length == 0:
             hidden_states = hidden_states[:, self.prompt_length :, :]
-            # drop the prompt
-            if all_attentions is not None:
-                new_attentions = ()
-                for attention in all_attentions:
-                    new_attentions += (attention[:, :, self.prompt_length :, self.prompt_length :],)
-                all_attentions = new_attentions
-            if all_hidden_states is not None:
-                new_hidden_states = ()
-                for hidden_state in all_hidden_states:
-                    new_hidden_states += (hidden_state[:, self.prompt_length :, :],)
-                all_hidden_states = new_hidden_states
-
-        if not return_dict:
-            return tuple(
-                v for v in [hidden_states, past_key_values, all_hidden_states, all_attentions] if v is not None
-            )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
         )
 
 
@@ -697,21 +650,19 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         )
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        labels: torch.Tensor | None = None,
-        return_dict: bool | None = None,
         attention_mask: torch.Tensor | None = None,  # dummy parameter for text-generation pipeline
         cache_position: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **kwargs,
-    ) -> tuple | CausalLMOutputWithPast:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
             Indices of input sequence tokens in the vocabulary.
@@ -736,21 +687,18 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         >>> outputs = model.generate(**input_ids)
         >>> output_texts = tokenizer.batch_decode(outputs)
         >>> print(output_texts)
-        ['今天天气不错，阳光明媚，我和妈妈一起去超市买东西。\n在超市里，我看到了一个很好玩的玩具，它的名字叫“机器人”。它有一个圆圆的脑袋，两只圆圆的眼睛，还有一个圆圆的']
+        ['今天天气不错，阳光明媚，我和妈妈一起去超市买东西。\n在超市里，我看到了一个很好玩的玩具，它的名字叫"机器人"。它有一个圆圆的脑袋，两只圆圆的眼睛，还有一个圆圆的']
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         model_output = self.cpmant(
             input_ids,
-            output_attentions,
-            output_hidden_states,
-            past_key_values,
-            use_cache,
-            return_dict,
-            cache_position,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            return_dict=True,
+            **kwargs,
         )
-        hidden_states = model_output.last_hidden_state if return_dict else model_output[0]
+        hidden_states = model_output.last_hidden_state
         # Only compute necessary logits
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -759,10 +707,6 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         if labels is not None:
             loss_func = CrossEntropyLoss()
             loss = loss_func(logits.view(-1, logits.size(-1)), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + model_output[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
