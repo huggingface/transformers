@@ -1407,6 +1407,11 @@ class Trainer:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
         if resume_from_checkpoint is not None:
+            # Load model checkpoint before accelerator.prepare() for regular models,
+            # so that buffers and parameters are on the right device after prepare.
+            # Deepspeed/FSDP models are loaded after prepare in _prepare_model_and_optimizer.
+            if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
+                self._load_from_checkpoint(resume_from_checkpoint)
             state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
             if state.train_batch_size is not None and args.auto_find_batch_size:
                 # Only restore the checkpoint's train_batch_size when using auto_find_batch_size,
