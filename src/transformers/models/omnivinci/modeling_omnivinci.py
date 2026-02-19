@@ -211,12 +211,23 @@ class Qwen2AudioTower(nn.Module):
         return hidden_states
 
 
-class VisionTower(nn.Module):
-    def __init__(self, args):
+class SiglipVisionTowerDynamicS2(nn.Module):
+    def __init__(self, model_name_or_path: str | dict | PretrainedConfig, config: PretrainedConfig) -> None:
         super().__init__()
 
-        self.select_layer = getattr(args, "mm_vision_select_layer", -2)
-        self.select_feature = getattr(args, "mm_vision_select_feature", "patch")
+        self.select_layer = getattr(config, "mm_vision_select_layer", -2)
+        self.select_feature = getattr(config, "mm_vision_select_feature", "patch")
+        self.scales = sorted(map(int, config.s2_scales.split(",")))
+        self.max_split_size = config.s2_max_split_size
+        self.resize_output_to_scale_idx = getattr(config, "s2_resize_output_to_scale_idx", 0)
+
+        vision_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="siglip_vision_model")
+        vision_cfg._attn_implementation = _get_attn_implementation(config)
+        self.vision_tower = SiglipVisionModel(vision_cfg)
+
+        self.image_processor = SiglipImageProcessor()
+        # Make sure it crops/resizes the image to the largest scale in self.scales to maintain high-res information
+        self.image_processor.size["height"] = self.image_processor.size["width"] = self.scales[0]
 
     def feature_select(self, image_forward_outs):
         image_features = image_forward_outs.hidden_states[self.select_layer]
@@ -230,10 +241,9 @@ class VisionTower(nn.Module):
 
     def forward(self, images):
         if isinstance(images, list):
-            raise ValueError("VisionTower expects batched tensor input, not list.")
+            raise ValueError("VisionTowerDynamicS2 expects tensor input, not list.")
         image_forward_outs = self.vision_tower(
-            images.to(device=self.device, dtype=self.dtype),
-            output_hidden_states=True,
+            images.to(device=self.device, dtype=self.dtype), output_hidden_states=True
         )
         return self.feature_select(image_forward_outs).to(images.dtype)
 
@@ -251,42 +261,7 @@ class VisionTower(nn.Module):
 
     @property
     def hidden_size(self):
-        return self.config.hidden_size
-
-
-class VisionTowerDynamicS2(VisionTower):
-    def __init__(self, args):
-        super().__init__(args)
-
-        self.scales = list(map(int, args.s2_scales.split(",")))
-        self.scales.sort()
-        self.max_split_size = args.s2_max_split_size
-        self.resize_output_to_scale_idx = getattr(args, "s2_resize_output_to_scale_idx", 0)
-
-    def forward(self, images):
-        if isinstance(images, list):
-            raise ValueError("VisionTowerDynamicS2 expects tensor input, not list.")
-        image_forward_outs = self.vision_tower(
-            images.to(device=self.device, dtype=self.dtype), output_hidden_states=True
-        )
-        return self.feature_select(image_forward_outs).to(images.dtype)
-
-    @property
-    def hidden_size(self):
         return self.config.hidden_size * len(self.scales)
-
-
-class SiglipVisionTowerDynamicS2(VisionTowerDynamicS2):
-    def __init__(self, model_name_or_path: str | dict | PretrainedConfig, config: PretrainedConfig) -> None:
-        super().__init__(config)
-
-        vision_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="siglip_vision_model")
-        vision_cfg._attn_implementation = _get_attn_implementation(config)
-        self.vision_tower = SiglipVisionModel(vision_cfg)
-
-        self.image_processor = SiglipImageProcessor()
-        # Make sure it crops/resizes the image to the largest scale in self.scales to maintain high-res information
-        self.image_processor.size["height"] = self.image_processor.size["width"] = self.scales[0]
 
 
 class VILAPretrainedModel(PreTrainedModel):
