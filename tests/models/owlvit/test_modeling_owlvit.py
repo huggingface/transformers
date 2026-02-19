@@ -19,9 +19,11 @@ import unittest
 
 import numpy as np
 import requests
+from parameterized import parameterized
 
 from transformers import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
 from transformers.testing_utils import (
+    is_flaky,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -33,6 +35,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
@@ -150,6 +153,12 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @is_flaky()
+    def test_eager_matches_sdpa_inference(self, *args):
+        # adding only flaky decorator here and call the parent test method
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
 
     @unittest.skip(reason="OWLVIT does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -407,8 +416,10 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
+    additional_model_inputs = ["pixel_values"]
     test_resize_embeddings = False
     test_attention_outputs = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = OwlViTModelTester(self)
@@ -528,9 +539,11 @@ class OwlViTForObjectDetectionTester:
 @require_torch
 class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (OwlViTForObjectDetection,) if is_torch_available() else ()
+    additional_model_inputs = ["pixel_values"]
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = OwlViTForObjectDetectionTester(self)
@@ -538,6 +551,11 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(reason="OwlViTForObjectDetection output format is incompatible with the generic SDPA test")
+    def test_eager_matches_sdpa_inference(self, *args):
+        pass
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
