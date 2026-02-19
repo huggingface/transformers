@@ -55,26 +55,6 @@ def context_length_extension(config):
     return config
 
 
-def soft_cross_entropy(
-    logits: torch.Tensor,
-    labels: torch.Tensor,
-    soft_tokens: list[int] | None = None,
-    std: float = 1.0,
-) -> torch.Tensor:
-    """Fallback soft CE helper; preserves training path without affecting inference."""
-    _ = (soft_tokens, std)
-    if labels is None:
-        return logits.new_zeros(())
-
-    shift_logits = logits[..., :-1, :].contiguous()
-    shift_labels = labels[..., 1:].contiguous()
-    return F.cross_entropy(
-        shift_logits.view(-1, shift_logits.size(-1)),
-        shift_labels.view(-1),
-        ignore_index=IGNORE_INDEX,
-    )
-
-
 def _coerce_config_from_spec(
     spec: dict | PretrainedConfig, fallback_model_type: str | None = None
 ) -> PretrainedConfig:
@@ -1302,14 +1282,6 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
             labels=labels,
             **kwargs,
         )
-
-        if self.training and getattr(self.config, "time_token_ids", []):
-            outputs.loss = soft_cross_entropy(
-                outputs.logits,
-                labels,
-                soft_tokens=self.config.time_token_ids,
-                std=self.config.soft_ce_std,
-            )
 
         if dpo_forward:
             return outputs.logits, labels
