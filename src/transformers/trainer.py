@@ -1650,6 +1650,56 @@ class Trainer:
 
         return model, train_dataloader
 
+    def _track_num_input_tokens(self, inputs):
+        """Count input tokens seen (all or non-padding) and update state."""
+        if self.args.include_num_input_tokens_seen != "no":
+            return
+        main_input_name = getattr(self.model, "main_input_name", "input_ids")
+        if main_input_name not in inputs:
+            logger.warning(
+                "Tried to track the number of tokens seen, however the current model is "
+                "not configured properly to know what item is the input. To fix this, add "
+                "a `main_input_name` attribute to the model class you are using."
+            )
+            return
+
+        if self.args.include_num_input_tokens_seen == "non_padding":
+            if "attention_mask" in inputs:
+                input_tokens = inputs["attention_mask"].sum()
+            elif (
+                self.processing_class is not None
+                and hasattr(self.processing_class, "pad_token_id")
+                and self.processing_class.pad_token_id is not None
+            ):
+                input_tokens = (inputs[main_input_name] != self.processing_class.pad_token_id).sum()
+            else:
+                logger.warning(
+                    "Could not determine method to count non-padding tokens, falling back to counting all tokens."
+                )
+                input_tokens = inputs[main_input_name].numel()
+        else:
+            input_tokens = inputs[main_input_name].numel()
+
+        input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
+        self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
+
+    def _clip_grad_norm(self, model):
+        """Clip gradients to max_grad_norm. Returns the pre-clip gradient norm."""
+        if is_sagemaker_mp_enabled() and self.args.fp16:
+            return self.optimizer.clip_master_grads(self.args.max_grad_norm)
+        return self.accelerator.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
+
+    def _get_grad_norm(self, model, grad_norm=None):
+        """Return the gradient norm as a Python float."""
+        if grad_norm is None:
+            # Compute norm without clipping (inf means no actual clipping happens)
+            grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
+
+        if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+            if hasattr(grad_norm, "item"):
+                grad_norm = grad_norm.item()
+        return grad_norm
+
     def _run_epoch(
         self,
         model,
@@ -1718,35 +1768,6 @@ class Trainer:
                 # Since we perform prefetching, we need to manually set sync_gradients
                 self.accelerator.gradient_state._set_sync_gradients(do_sync_step)
 
-                if self.args.include_num_input_tokens_seen != "no":
-                    main_input_name = getattr(self.model, "main_input_name", "input_ids")
-                    if main_input_name not in inputs:
-                        logger.warning(
-                            "Tried to track the number of tokens seen, however the current model is "
-                            "not configured properly to know what item is the input. To fix this, add "
-                            "a `main_input_name` attribute to the model class you are using."
-                        )
-                    else:
-                        if self.args.include_num_input_tokens_seen == "non_padding":
-                            if "attention_mask" in inputs:
-                                input_tokens = inputs["attention_mask"].sum()
-                            elif (
-                                self.processing_class is not None
-                                and hasattr(self.processing_class, "pad_token_id")
-                                and self.processing_class.pad_token_id is not None
-                            ):
-                                input_tokens = (inputs[main_input_name] != self.processing_class.pad_token_id).sum()
-                            else:
-                                logger.warning(
-                                    "Could not determine method to count non-padding tokens, falling back to counting all tokens."
-                                )
-                                input_tokens = inputs[main_input_name].numel()
-                        else:
-                            input_tokens = inputs[main_input_name].numel()
-
-                        input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
-                        self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
-
                 if step % self.args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(self.args, self.state, self.control)
 
@@ -1777,48 +1798,18 @@ class Trainer:
                     self._tr_loss += tr_loss_step
 
                 self.current_flos += float(self.floating_point_ops(inputs))
+                self._track_num_input_tokens(inputs)
 
                 if do_sync_step:
-                    # Since we perform prefetching, we need to manually set sync_gradients to True
-                    self.accelerator.gradient_state._set_sync_gradients(True)
-
-                    # Gradient clipping
-                    if self.args.max_grad_norm is not None and self.args.max_grad_norm > 0:
-                        if is_sagemaker_mp_enabled() and self.args.fp16:
-                            _grad_norm = self.optimizer.clip_master_grads(self.args.max_grad_norm)
-                        else:
-                            grad_norm_context = contextlib.nullcontext
-                            if self.is_tp_enabled:
-                                from torch.distributed._tensor.experimental import implicit_replication
-
-                                grad_norm_context = implicit_replication
-                            with grad_norm_context():
-                                _grad_norm = self.accelerator.clip_grad_norm_(
-                                    model.parameters(),
-                                    self.args.max_grad_norm,
-                                )
-
-                        if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
-                            grad_norm = model.get_global_grad_norm()
-                            # In some cases the grad norm may not return a float
-                            if hasattr(grad_norm, "item"):
-                                grad_norm = grad_norm.item()
-                        else:
-                            grad_norm = _grad_norm
+                    if self.args.max_grad_norm > 0:
+                        grad_norm = self._clip_grad_norm(model)
+                    grad_norm = self._get_grad_norm(model, grad_norm=grad_norm)
 
                     self.control = self.callback_handler.on_pre_optimizer_step(self.args, self.state, self.control)
-
-                    context = contextlib.nullcontext
-                    if self.is_tp_enabled:
-                        from torch.distributed._tensor.experimental import implicit_replication
-
-                        context = implicit_replication
-
-                    with context():
-                        self.optimizer.step()
-
+                    self.optimizer.step()
                     self.control = self.callback_handler.on_optimizer_step(self.args, self.state, self.control)
 
+                    # get leaning rate before update
                     learning_rate = self._get_learning_rate()
 
                     if not self.accelerator.optimizer_step_was_skipped:
@@ -1843,18 +1834,16 @@ class Trainer:
                 else:
                     self.control = self.callback_handler.on_substep_end(self.args, self.state, self.control)
 
-                # PyTorch/XLA relies on the data loader to insert the mark_step for
-                # each step. Since we are breaking the loop early, we need to manually
-                # insert the mark_step here.
                 if self.control.should_epoch_stop or self.control.should_training_stop:
-                    if is_torch_xla_available():
-                        xm.mark_step()
                     break
-            # We also need to break out of the nested loop
             if self.control.should_epoch_stop or self.control.should_training_stop:
-                if is_torch_xla_available():
-                    xm.mark_step()
                 break
+
+        # PyTorch/XLA relies on the dataloader to insert mark_step each iteration.
+        # When we break out of the loop early, we flush the pending graph manually.
+        if is_torch_xla_available():
+            xm.mark_step()
+
         if step < 0:
             logger.warning(
                 "There seems not to be a single sample in your epoch_iterator, stopping training at step"
