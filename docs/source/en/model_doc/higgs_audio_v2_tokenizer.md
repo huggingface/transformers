@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-01-22.*
+*This model was released on 2025-07-22 and added to Hugging Face Transformers on 2026-02-19.*
 
 # Higgs Audio V2 Tokenizer
 
@@ -33,15 +33,11 @@ rendered properly in your Markdown viewer.
 ```python
 from transformers import HiggsAudioV2TokenizerModel, AutoFeatureExtractor
 from datasets import load_dataset, Audio
-import torch
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # load model and feature extractor
 model_id = "eustlb/higgs-audio-v2-tokenizer"
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-model = HiggsAudioV2TokenizerModel.from_pretrained(model_id, device_map=device)
-
+model = HiggsAudioV2TokenizerModel.from_pretrained(model_id, device_map="auto")
 
 # load audio sample
 dummy_dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -55,8 +51,7 @@ decoder_outputs = model.decode(encoder_outputs.audio_codes)
 audio_values = decoder_outputs.audio_values
 
 # or the equivalent with a forward pass
-audio_values = model(**inputs).audio_values
-
+audio_values = model(inputs["input_values"]).audio_values
 ```
 
 ## HiggsAudioV2TokenizerConfig
