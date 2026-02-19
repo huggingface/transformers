@@ -1448,6 +1448,7 @@ class Trainer:
             num_examples,
             num_train_samples,
             total_train_batch_size,
+            steps_in_epoch,
             max_steps,
         ) = self.set_initial_training_values(args, train_dataloader)
 
@@ -1462,6 +1463,7 @@ class Trainer:
         logger.info("***** Running training *****")
         logger.info(f"  Num examples = {num_examples:,}")
         logger.info(f"  Num Epochs = {num_train_epochs:,}")
+        logger.info(f"  Num update steps per epoch = {num_update_steps_per_epoch:,}")
         logger.info(f"  Instantaneous batch size per device = {self.args.per_device_train_batch_size:,}")
         if self.args.per_device_train_batch_size != self._train_batch_size:
             logger.info(f"  Training with DataParallel so batch size has been adjusted to: {self._train_batch_size:,}")
@@ -1497,10 +1499,14 @@ class Trainer:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
         for epoch in range(epochs_trained, num_train_epochs):
+            
+            self.control = self.callback_handler.on_epoch_begin(self.args, self.state, self.control)
             self._run_epoch(
                 model=model,
                 epoch=epoch,
                 train_dataloader=train_dataloader,
+                steps_in_epoch=steps_in_epoch,
+                num_update_steps_per_epoch=num_update_steps_per_epoch,
                 trial=trial,
                 ignore_keys_for_eval=ignore_keys_for_eval,
                 start_time=start_time,
@@ -1572,8 +1578,6 @@ class Trainer:
 
         # prepare using `accelerator` prepare
         if use_accelerator_prepare:
-            from accelerate.utils import DummyScheduler
-
             if delay_optimizer_creation:
                 # TODO: check if we can move this somewhere else
                 if self.is_fsdp_enabled and _is_peft_model(self.model):
@@ -1583,7 +1587,7 @@ class Trainer:
                 # using the model we prepared to create the optimizer
                 self.create_optimizer(model)
                 self.optimizer = self.accelerator.prepare(self.optimizer)
-            elif self.is_deepspeed_enabled and isinstance(self.lr_scheduler, DummyScheduler):
+            elif self.is_deepspeed_enabled and type(self.lr_scheduler).__name__ == "DummyScheduler":
                 model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
                     self.model, self.optimizer, self.lr_scheduler
                 )
@@ -1647,6 +1651,8 @@ class Trainer:
         model,
         epoch,
         train_dataloader,
+        steps_in_epoch,
+        num_update_steps_per_epoch,
         trial,
         ignore_keys_for_eval,
         start_time,
@@ -1655,53 +1661,51 @@ class Trainer:
         steps_trained_in_current_epoch,
     ):
         """Run one full pass over the dataloader."""
-        steps_in_epoch = (
-            len(train_dataloader)
-            if has_length(train_dataloader) is not None
-            else self.args.max_steps * self.args.gradient_accumulation_steps
-        )
 
         step = -1
-        grad_norm: float | None = None
+        grad_norm = None
         learning_rate = None
         rng_to_sync = False
 
-        self.control = self.callback_handler.on_epoch_begin(self.args, self.state, self.control)
-
         # Handle resumption from checkpoint: skip already-trained batches in the resumed epoch
+        num_update_steps_trained = 0
         if epoch == epochs_trained and resume_from_checkpoint is not None:
             if steps_trained_in_current_epoch > 0 and not self.args.ignore_data_skip:
                 train_dataloader = skip_first_batches(train_dataloader, steps_trained_in_current_epoch)
                 step = steps_trained_in_current_epoch - 1
+                num_update_steps_trained = steps_trained_in_current_epoch // self.args.gradient_accumulation_steps
                 rng_to_sync = True
             elif steps_trained_in_current_epoch == 0:
                 self._load_rng_state(resume_from_checkpoint)
 
         if hasattr(train_dataloader, "set_epoch"):
             train_dataloader.set_epoch(epoch)
-
         epoch_iterator = iter(train_dataloader)
+
         # We chunkify the epoch iterator into gradient accumulation steps `n` batches
         remainder = steps_in_epoch % self.args.gradient_accumulation_steps
         if remainder == 0:
             remainder = self.args.gradient_accumulation_steps
-        update_step = -1
-        total_updates = steps_in_epoch // self.args.gradient_accumulation_steps + int(
-            remainder < self.args.gradient_accumulation_steps
-        )
-        for _ in range(total_updates):
-            update_step += 1
-            num_batches = self.args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
+
+        # Outer loop: one iteration per optimizer step. Each iteration prefetches
+        # `gradient_accumulation_steps` batches (fewer for the last step if the epoch
+        # doesn't divide evenly).
+        for update_step in range(num_update_steps_trained, num_update_steps_per_epoch):
+            num_batches = self.args.gradient_accumulation_steps if update_step != (num_update_steps_per_epoch - 1) else remainder
             batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches, self.args.device)
-            # Store the number of batches for current gradient accumulation
-            # This is used to correctly scale the loss when the last accumulation step has fewer batches
+
+            # This is used to correctly scale the loss when the last accumulation step has fewer batches.
+            # Not used if `num_items_in_batch` is not None.
             self.current_gradient_accumulation_steps = len(batch_samples)
 
-            # need to sync after we skipped the batched in `get_batch_samples`
+            # need to sync after if we skipped the batches in `get_batch_samples` for shuffle order reason
             if rng_to_sync:
                 self._load_rng_state(resume_from_checkpoint)
                 rng_to_sync = False
 
+            # Inner loop: forward + backward for each micro-batch. Gradients are
+            # accumulated without syncing until the last micro-batch, then we clip,
+            # step the optimizer, and log/save/evaluate.
             for i, inputs in enumerate(batch_samples):
                 step += 1
                 do_sync_step = (step + 1) % self.args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
@@ -1864,16 +1868,8 @@ class Trainer:
             start_time,
             learning_rate=learning_rate,
         )
-
         if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
-            if is_torch_xla_available():
-                # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
-                xm.master_print(met.metrics_report())
-            else:
-                logger.warning(
-                    "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
-                    "configured. Check your training configuration if this is unexpected."
-                )
+            xm.master_print(met.metrics_report())
 
     def _finalize_training(self, trial, num_train_samples, start_time):
         """Finalize training: metrics, best-model loading, cleanup. Returns TrainOutput."""
@@ -2355,6 +2351,7 @@ class Trainer:
         - `num_examples`
         - `num_train_samples`
         - `total_train_batch_size`
+        - `steps_in_epoch` (total batches per epoch)
         - `max_steps`
         """
         # Case 1: we rely on `args.max_steps` first
@@ -2378,8 +2375,7 @@ class Trainer:
             )
             # Case 3: We have a length but are using epochs, we can extrapolate the number of steps
             if epoch_based:
-                max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
-
+                max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)        
         # Now we figure out `num_examples`, `num_train_epochs`, and `train_samples`
         if len_dataloader:
             num_examples = self.num_examples(dataloader)
@@ -2404,12 +2400,14 @@ class Trainer:
                 "args.max_steps must be set to a positive value if dataloader does not have a length, was"
                 f" {args.max_steps}"
             )
+        steps_in_epoch = len_dataloader if len_dataloader is not None else max_steps * args.gradient_accumulation_steps
         return (
             num_train_epochs,
             num_update_steps_per_epoch,
             num_examples,
             num_train_samples,
             total_train_batch_size,
+            steps_in_epoch,
             max_steps,
         )
 
@@ -2608,7 +2606,6 @@ class Trainer:
         self.log(output.metrics)
 
         if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
-            # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
