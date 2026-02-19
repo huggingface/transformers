@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torchaudio,
-    torch_device,
 )
 from transformers.utils import is_torchaudio_available
 
