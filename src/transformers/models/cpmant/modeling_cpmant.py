@@ -26,7 +26,10 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import capture_outputs
 from .configuration_cpmant import CpmAntConfig
 
 
@@ -85,7 +88,6 @@ class CpmAntAttention(nn.Module):
         hidden_kv: torch.Tensor,
         attention_mask: torch.BoolTensor,
         position_bias: torch.Tensor,
-        output_attentions: bool | None = False,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         cache_position: torch.Tensor | None = None,
@@ -100,8 +102,6 @@ class CpmAntAttention(nn.Module):
                 Avoid invalid areas to participate in the calculation of self-attention.
             position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
                 Provide positional information to self-attention block.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers.
             past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
@@ -140,10 +140,7 @@ class CpmAntAttention(nn.Module):
             attention_mask.view(batch_size, 1, len_q, len_k) == torch.tensor(False),
             torch.scalar_tensor(0, device=score.device, dtype=score.dtype),
         )
-        if output_attentions:
-            attn_weights = score
-        else:
-            attn_weights = None
+        attn_weights = score
 
         if self.dropout is not None:
             score = self.dropout(score)
