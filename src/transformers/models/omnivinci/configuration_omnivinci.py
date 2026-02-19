@@ -16,7 +16,6 @@
 """OmniVinci configuration (HF-style canonical config file)."""
 
 from copy import deepcopy
-from typing import Optional
 
 from transformers import PretrainedConfig
 
@@ -80,8 +79,8 @@ class OmniVinciConfig(PretrainedConfig):
         s2_scales=None,
         s2_max_split_size=None,
         s2_resize_output_to_scale_idx=0,
-        min_tiles: Optional[int] = 1,
-        max_tiles: Optional[int] = 12,
+        min_tiles: int | None = 1,
+        max_tiles: int | None = 12,
         num_time_tokens=None,
         time_token_format=None,
         image_encoder: str = '{"_target_": "llava.model.encoders.BasicImageEncoder"}',

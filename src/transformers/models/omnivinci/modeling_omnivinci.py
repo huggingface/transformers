@@ -18,7 +18,7 @@ import json
 import math
 import warnings
 from collections import defaultdict, deque
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -58,7 +58,7 @@ def context_length_extension(config):
 def soft_cross_entropy(
     logits: torch.Tensor,
     labels: torch.Tensor,
-    soft_tokens: Optional[List[int]] = None,
+    soft_tokens: list[int] | None = None,
     std: float = 1.0,
 ) -> torch.Tensor:
     """Fallback soft CE helper; preserves training path without affecting inference."""
@@ -75,9 +75,9 @@ def soft_cross_entropy(
     )
 
 
-
-
-def _coerce_config_from_spec(spec: Union[dict, PretrainedConfig], fallback_model_type: Optional[str] = None) -> PretrainedConfig:
+def _coerce_config_from_spec(
+    spec: dict | PretrainedConfig, fallback_model_type: str | None = None
+) -> PretrainedConfig:
     if isinstance(spec, PretrainedConfig):
         return spec
     if isinstance(spec, dict):
@@ -114,8 +114,6 @@ def _build_model_from_config_mapping(
     return model_cls(model_config)
 
 
-
-
 class DownSampleBlock(nn.Module):
     """Downsample 2D feature maps by rearranging into 2x2 blocks."""
 
@@ -148,7 +146,7 @@ class MultimodalProjectorConfig(PretrainedConfig):
 
     model_type = "v2l_projector"
 
-    def __init__(self, mm_projector_type: str = None, **kwargs):
+    def __init__(self, mm_projector_type: str | None = None, **kwargs):
         super().__init__(**kwargs)
         self.mm_projector_type = mm_projector_type
 
@@ -186,7 +184,7 @@ class SoundMultimodalProjectorConfig(PretrainedConfig):
 
     model_type = "sound_mm_projector"
 
-    def __init__(self, sound_mm_projector_type: str = None, **kwargs):
+    def __init__(self, sound_mm_projector_type: str | None = None, **kwargs):
         super().__init__(**kwargs)
         self.sound_mm_projector_type = sound_mm_projector_type
 
@@ -231,7 +229,7 @@ AutoModel.register(SoundMultimodalProjectorConfig, SoundMultimodalProjector)
 
 
 class Qwen2AudioTower(nn.Module):
-    def __init__(self, model_name_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig):
+    def __init__(self, model_name_or_path: str | dict | PretrainedConfig, config: PretrainedConfig):
         super().__init__()
         audio_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="qwen2_audio_encoder")
         audio_cfg._attn_implementation = _get_attn_implementation(config)
@@ -361,7 +359,6 @@ class VisionTower(nn.Module):
         return self.config.hidden_size
 
 
-
 class VisionTowerDynamicS2(VisionTower):
     def __init__(self, args):
         super().__init__(args)
@@ -385,7 +382,7 @@ class VisionTowerDynamicS2(VisionTower):
 
 
 class SiglipVisionTowerDynamicS2(VisionTowerDynamicS2):
-    def __init__(self, model_name_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig) -> None:
+    def __init__(self, model_name_or_path: str | dict | PretrainedConfig, config: PretrainedConfig) -> None:
         super().__init__(config)
 
         vision_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="siglip_vision_model")
@@ -395,8 +392,6 @@ class SiglipVisionTowerDynamicS2(VisionTowerDynamicS2):
         self.image_processor = SiglipImageProcessor()
         # Make sure it crops/resizes the image to the largest scale in self.scales to maintain high-res information
         self.image_processor.size["height"] = self.image_processor.size["width"] = self.scales[0]
-
-
 
 
 class VILAPretrainedModel(PreTrainedModel):
@@ -466,7 +461,9 @@ class VILAPretrainedModel(PreTrainedModel):
             elif isinstance(sound_mm_projector_spec, dict):
                 sound_mm_projector_cfg = SoundMultimodalProjectorConfig(**sound_mm_projector_spec)
             elif isinstance(sound_mm_projector_spec, str):
-                sound_mm_projector_cfg = SoundMultimodalProjectorConfig(sound_mm_projector_type=sound_mm_projector_spec)
+                sound_mm_projector_cfg = SoundMultimodalProjectorConfig(
+                    sound_mm_projector_type=sound_mm_projector_spec
+                )
             else:
                 raise TypeError(f"Unsupported sound_mm_projector config type: {type(sound_mm_projector_spec)}")
             self.sound_mm_projector = SoundMultimodalProjector(sound_mm_projector_cfg, config)
@@ -516,10 +513,9 @@ class VILAPretrainedModel(PreTrainedModel):
             self.llm = None
             torch.cuda.empty_cache()
 
-        assert (
-            self.llm is not None or self.vision_tower is not None or self.mm_projector is not None
-        ), "At least one of the components must be instantiated."
-
+        assert self.llm is not None or self.vision_tower is not None or self.mm_projector is not None, (
+            "At least one of the components must be instantiated."
+        )
 
     @property
     def llm_model_embed_tokens(self):
@@ -527,8 +523,7 @@ class VILAPretrainedModel(PreTrainedModel):
             raise RuntimeError("LLM module is not initialized.")
         return self.llm.model.embed_tokens
 
-
-    def _require_media_token_ids(self) -> Dict[str, int]:
+    def _require_media_token_ids(self) -> dict[str, int]:
         media_token_ids = getattr(self.config, "media_token_ids", None)
         if not media_token_ids:
             raise ValueError(
@@ -711,9 +706,9 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
     def encode_video(
         self,
         inp,
-        block_sizes: Optional[Optional[Tuple[int, ...]]] = None,
-        mm_info: Optional[dict] = None,
-        num_frames: Optional[List[int]] = None,
+        block_sizes: tuple[int, ...] | None = None,
+        mm_info: dict | None = None,
+        num_frames: list[int] | None = None,
     ):
         _ = (mm_info, num_frames)
         if not getattr(self.config, "dynamic_s2", False):
@@ -802,9 +797,9 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
     def encode_images(
         self,
         images,
-        block_sizes: Optional[Optional[Tuple[int, ...]]] = None,
-        mm_info: Optional[dict] = None,
-        num_frames: Optional[List[int]] = None,
+        block_sizes: tuple[int, ...] | None = None,
+        mm_info: dict | None = None,
+        num_frames: list[int] | None = None,
     ):
         _ = (mm_info, num_frames)
         if not getattr(self.config, "dynamic_s2", False):
@@ -836,7 +831,7 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
             image_features = torch.stack(image_features, dim=0)
         return image_features
 
-    def encode_sound(self, sounds, mm_info: Optional[dict] = None):
+    def encode_sound(self, sounds, mm_info: dict | None = None):
         _ = mm_info
         sound_tower = getattr(self, "sound_tower", None)
         sound_mm_projector = getattr(self, "sound_mm_projector", None)
@@ -863,11 +858,11 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
     def _embed(
         self,
         input_ids: torch.Tensor,
-        media: Dict[str, List[torch.Tensor]],
-        media_config: Dict[str, Dict[str, Any]],
-        labels: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        media: dict[str, list[torch.Tensor]],
+        media_config: dict[str, dict[str, Any]],
+        labels: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         media = copy.deepcopy(media)
         media_config = copy.deepcopy(media_config)
 
@@ -906,9 +901,9 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
         sep_embed = sep_embed.to(text_embeds.dtype)
 
         if video_info is not None and self.config.load_audio_in_video and self.config.interleaved_vis_aud_in_video:
-            assert (
-                self.encoders["video"].end_tokens is None
-            ), "end_tokens must be None for interleaved vis-aud in video"
+            assert self.encoders["video"].end_tokens is None, (
+                "end_tokens must be None for interleaved vis-aud in video"
+            )
             new_video_embeds = deque()
             video_embeds_idx = 0
             for k in range(len(video_info)):
@@ -954,7 +949,7 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
                                 j == len(segment_vis_indices_list) - 1
                                 and i == len(video_info) - 1
                                 and k == len(video_info[i]) - 1
-                                and not _vis_fea_end == media_embeds["video"][video_embeds_idx].shape[0]
+                                and _vis_fea_end != media_embeds["video"][video_embeds_idx].shape[0]
                             ):
                                 print(
                                     f"Warning: The number of last interleaved video features does not match the video feature length. Expected: {media_embeds['video'][video_embeds_idx].shape[0]}, Got: {_vis_fea_end}"
@@ -980,9 +975,9 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
                     new_video_embeds.append(torch.cat(_new_video_embed, dim=0))
                     video_embeds_idx += 1
 
-            assert len(new_video_embeds) == len(
-                media_embeds["video"]
-            ), "The number of new video embeddings does not match the number of original video embeddings."
+            assert len(new_video_embeds) == len(media_embeds["video"]), (
+                "The number of new video embeddings does not match the number of original video embeddings."
+            )
             media_embeds["video"] = new_video_embeds
         # Remove padding
         batch_size = labels.shape[0]
@@ -1041,13 +1036,13 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
 
     def __embed_media_tokens(
         self,
-        media: Dict[str, List[torch.Tensor]],
-        media_config: Dict[str, Dict[str, Any]],
+        media: dict[str, list[torch.Tensor]],
+        media_config: dict[str, dict[str, Any]],
         mm_info,
-    ) -> Dict[str, List[torch.Tensor]]:
+    ) -> dict[str, list[torch.Tensor]]:
         embeds = defaultdict(deque)
 
-        def _prepare_sound_media(sound_media: List[Any], max_audio_duration: int) -> List[Any]:
+        def _prepare_sound_media(sound_media: list[Any], max_audio_duration: int) -> list[Any]:
             cur_batch_max_audio_samples = max_audio_duration * self.config.audio_sampling_rate
             sound_tower_cfg = getattr(self.config, "sound_tower_cfg", None)
             if isinstance(sound_tower_cfg, dict):
@@ -1147,8 +1142,8 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
         return embeds
 
     def __truncate_sequence(
-        self, inputs: List[torch.Tensor], labels: List[torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        self, inputs: list[torch.Tensor], labels: list[torch.Tensor]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         model_max_length = self._get_model_max_length()
         if self.training and any(len(input) > model_max_length for input in inputs):
             warnings.warn(f"Truncating sequences to `model_max_length` ({model_max_length}).")
@@ -1157,8 +1152,8 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
         return inputs, labels
 
     def __batchify_sequence(
-        self, inputs: List[torch.Tensor], labels: List[torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        self, inputs: list[torch.Tensor], labels: list[torch.Tensor]
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         batch_size = len(inputs)
         device = inputs[0].device
         hidden_size = inputs[0].shape[1]
@@ -1250,21 +1245,21 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        media: Optional[Dict[str, List[torch.Tensor]]] = None,
-        images: Optional[torch.FloatTensor] = None,
-        media_config: Optional[List] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        media: dict[str, list[torch.Tensor]] | None = None,
+        images: torch.FloatTensor | None = None,
+        media_config: list | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         packing: bool = True,
         force_packing: bool = False,
-        seqlens_in_batch: Optional[torch.LongTensor] = None,
+        seqlens_in_batch: torch.LongTensor | None = None,
         dpo_forward: bool = False,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> tuple | CausalLMOutputWithPast:
         self.freezed_module_patch()
 
         if images is not None:

@@ -17,7 +17,7 @@ import copy
 import os
 import os.path as osp
 from collections import defaultdict
-from typing import Dict, List, Optional, Sequence
+from collections.abc import Sequence
 
 import PIL.Image
 import torch
@@ -64,7 +64,7 @@ def _find_closest_aspect_ratio(aspect_ratio, target_ratios, width, height, image
     return best_ratio
 
 
-def _dynamic_s2_preprocess(image, s2_scales: Optional[List[int]] = None, max_num=12, image_size=384):
+def _dynamic_s2_preprocess(image, s2_scales: list[int] | None = None, max_num=12, image_size=384):
     """Dynamically preprocess image using multi-scale S2 tiling."""
     if s2_scales is None:
         s2_scales = [384, 768, 1152]
@@ -163,11 +163,11 @@ def _process_images(images, image_processor, model_cfg):
 
 
 def _tokenize_conversation(
-    messages: Sequence[Dict[str, str]],
+    messages: Sequence[dict[str, str]],
     tokenizer: transformers.PreTrainedTokenizer,
     mm_use_bos_eos_tokens: bool = False,
     add_generation_prompt: bool = False,
-    overrides: Optional[Dict[str, str]] = None,
+    overrides: dict[str, str] | None = None,
     no_system_prompt: bool = False,
     return_ids_only: bool = True,
 ) -> torch.Tensor:
@@ -241,8 +241,7 @@ def _fetch_image_url_or_fpath(url_or_fpath: str) -> str:
         response.raise_for_status()
 
         with open(temp_file, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
+            f.writelines(response.iter_content(chunk_size=8192))
 
         return temp_file
 
@@ -254,7 +253,7 @@ def _fetch_image_url_or_fpath(url_or_fpath: str) -> str:
     return fpath
 
 
-def _pad_fn(input_ids_list: List[torch.Tensor], padding_value=0, target_len=None, padding_side="left") -> torch.Tensor:
+def _pad_fn(input_ids_list: list[torch.Tensor], padding_value=0, target_len=None, padding_side="left") -> torch.Tensor:
     if not input_ids_list:
         raise ValueError("input_ids_list must not be empty")
 
@@ -368,7 +367,6 @@ class OmniVinciProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-
     def __repr__(self):
         return f"OmniVinciProcessor(image_processor=SigLip, tokenizer={self.tokenizer}, config={self.config})"
 
@@ -390,7 +388,7 @@ class OmniVinciProcessor(ProcessorMixin):
         ]
         and `conversation` will be a list of such `conv`s
         """
-        if kwargs.get("text", None) is not None:
+        if kwargs.get("text") is not None:
             conversation = kwargs.get("text")
         assert conversation is not None, "`conversation` or `text` is required"
         padding_side = kwargs.get("padding_side", self.padding_side)

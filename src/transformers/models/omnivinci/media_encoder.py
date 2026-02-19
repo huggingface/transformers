@@ -16,7 +16,7 @@
 import math
 from functools import partial
 from math import pi
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -26,7 +26,7 @@ from torch import Tensor, broadcast_tensors, einsum, nn
 from torch.nn import Module
 
 
-class CacheFeatures(object):
+class CacheFeatures:
     def __init__(self, value, type):
         self.value = value
         self.type = type
@@ -101,9 +101,9 @@ def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
         rot_dim = freqs.shape[-1]
         end_index = start_index + rot_dim
 
-        assert (
-            rot_dim <= t.shape[-1]
-        ), f"feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
+        assert rot_dim <= t.shape[-1], (
+            f"feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
+        )
 
         t_left, t, t_right = t[..., :start_index], t[..., start_index:end_index], t[..., end_index:]
         t = (t * freqs.cos() * scale) + (rotate_half(t) * freqs.sin() * scale)
@@ -167,7 +167,7 @@ class RotaryEmbedding(Module):
     def __init__(
         self,
         dim,
-        custom_freqs: Optional[Tensor] = None,
+        custom_freqs: Tensor | None = None,
         freqs_for: Literal["lang", "pixel", "constant"] = "lang",
         theta=10000,
         max_freq=10,
@@ -262,7 +262,9 @@ class RotaryEmbedding(Module):
     def rotate_queries_or_keys(self, t, seq_dim=None, offset=0):
         seq_dim = default(seq_dim, self.default_seq_dim)
 
-        assert not self.use_xpos, "you must use `.rotate_queries_and_keys` method instead and pass in both queries and keys, for length extrapolatable rotary embeddings"
+        assert not self.use_xpos, (
+            "you must use `.rotate_queries_and_keys` method instead and pass in both queries and keys, for length extrapolatable rotary embeddings"
+        )
 
         device, dtype, seq_len = t.device, t.dtype, t.shape[seq_dim]
 
@@ -313,7 +315,7 @@ class RotaryEmbedding(Module):
         return rotated_q, rotated_k
 
     @beartype
-    def get_scale(self, t: Tensor, seq_len: Optional[int] = None, offset=0):
+    def get_scale(self, t: Tensor, seq_len: int | None = None, offset=0):
         assert self.use_xpos
 
         should_cache = self.cache_if_possible and exists(seq_len)
@@ -424,15 +426,15 @@ class BasicImageEncoder(BaseEncoder):
     def __init__(
         self,
         parent: torch.nn.Module,
-        start_tokens: Optional[str] = None,
-        end_tokens: Optional[str] = "\n",
+        start_tokens: str | None = None,
+        end_tokens: str | None = "\n",
     ) -> None:
         super().__init__(parent)
         end_tokens = None if end_tokens == "None" else end_tokens
         self.start_tokens = start_tokens
         self.end_tokens = end_tokens
 
-    def embed_tokens(self, tokens: Optional[str]) -> Optional[torch.Tensor]:
+    def embed_tokens(self, tokens: str | None) -> torch.Tensor | None:
         if tokens is None:
             return None
         token_ids = self.parent.tokenizer(tokens).input_ids
@@ -442,8 +444,8 @@ class BasicImageEncoder(BaseEncoder):
     def _process_features(
         self,
         features: torch.Tensor,
-        start_token_embeds: Optional[torch.Tensor],
-        end_token_embeds: Optional[torch.Tensor],
+        start_token_embeds: torch.Tensor | None,
+        end_token_embeds: torch.Tensor | None,
     ) -> torch.Tensor:
         if start_token_embeds is not None:
             features = torch.cat([start_token_embeds, features], dim=0)
@@ -451,7 +453,7 @@ class BasicImageEncoder(BaseEncoder):
             features = torch.cat([features, end_token_embeds], dim=0)
         return features
 
-    def forward(self, images: List[torch.Tensor], config: Dict[str, Any], mm_info: dict) -> List[torch.Tensor]:
+    def forward(self, images: list[torch.Tensor], config: dict[str, Any], mm_info: dict) -> list[torch.Tensor]:
         images = torch.stack(images, dim=0)
         features = self.parent.encode_images(images, block_sizes=config.get("block_sizes"))
         process_features = partial(
@@ -466,15 +468,15 @@ class BasicVideoEncoder(BaseEncoder):
     def __init__(
         self,
         parent: torch.nn.Module,
-        start_tokens: Optional[str] = None,
-        end_tokens: Optional[str] = "\n",
+        start_tokens: str | None = None,
+        end_tokens: str | None = "\n",
     ) -> None:
         super().__init__(parent)
         end_tokens = None if end_tokens == "None" else end_tokens
         self.start_tokens = start_tokens
         self.end_tokens = end_tokens
 
-    def embed_tokens(self, tokens: Optional[str]) -> Optional[torch.Tensor]:
+    def embed_tokens(self, tokens: str | None) -> torch.Tensor | None:
         if tokens is None:
             return None
         token_ids = self.parent.tokenizer(tokens).input_ids
@@ -484,8 +486,8 @@ class BasicVideoEncoder(BaseEncoder):
     def _process_features(
         self,
         features: torch.Tensor,
-        start_token_embeds: Optional[torch.Tensor],
-        end_token_embeds: Optional[torch.Tensor],
+        start_token_embeds: torch.Tensor | None,
+        end_token_embeds: torch.Tensor | None,
     ) -> torch.Tensor:
         if start_token_embeds is not None:
             start_embeds = torch.stack([start_token_embeds] * features.shape[0], dim=0)
@@ -495,7 +497,7 @@ class BasicVideoEncoder(BaseEncoder):
             features = torch.cat([features, end_embeds], dim=1)
         return features.flatten(0, 1)
 
-    def forward(self, videos: List[torch.Tensor], config: Dict[str, Any]) -> List[torch.Tensor]:
+    def forward(self, videos: list[torch.Tensor], config: dict[str, Any]) -> list[torch.Tensor]:
         num_frames = [video.shape[0] for video in videos]
         images = torch.cat(videos, dim=0)
         features = self.parent.encode_images(images)
@@ -512,8 +514,8 @@ class BasicSoundEncoder(BaseEncoder):
     def __init__(
         self,
         parent: torch.nn.Module,
-        start_tokens: Optional[str] = None,
-        end_tokens: Optional[str] = "\n",
+        start_tokens: str | None = None,
+        end_tokens: str | None = "\n",
         embed_time="True",
         trope_theta=50000,
         trope_dim=128,
@@ -575,7 +577,7 @@ class BasicSoundEncoder(BaseEncoder):
             else:
                 raise ValueError(f"Invalid time_embed_type: {time_embed_type}")
 
-    def embed_tokens(self, tokens: Optional[str]) -> Optional[torch.Tensor]:
+    def embed_tokens(self, tokens: str | None) -> torch.Tensor | None:
         if tokens is None:
             return None
         token_ids = self.parent.tokenizer(tokens).input_ids
@@ -586,10 +588,10 @@ class BasicSoundEncoder(BaseEncoder):
     def _process_features(
         self,
         features: torch.Tensor,
-        start_token_embeds: Optional[torch.Tensor],
-        end_token_embeds: Optional[torch.Tensor],
-        times: Optional[torch.Tensor] = None,
-        time_embed: Optional[torch.Tensor] = None,
+        start_token_embeds: torch.Tensor | None,
+        end_token_embeds: torch.Tensor | None,
+        times: torch.Tensor | None = None,
+        time_embed: torch.Tensor | None = None,
     ) -> torch.Tensor:
         features = features.to(self.parent.device)
         device = features.device
@@ -615,7 +617,7 @@ class BasicSoundEncoder(BaseEncoder):
                 else:
                     angle = (-new_times * 2 * np.pi).to(device)
 
-                if not self.period_fix == "MTCT":
+                if self.period_fix != "MTCT":
                     freqs = pos_emb.get_axial_freqs(new_times.shape[0], features.shape[-2]).to(device)
                     angle_expanded = angle.unsqueeze(2)
                     angle_expanded = angle_expanded.expand(new_times.shape[0], features.shape[-2], freqs.shape[-1])
@@ -638,7 +640,7 @@ class BasicSoundEncoder(BaseEncoder):
             features = torch.cat([features, end_token_embeds], dim=0)
         return features
 
-    def forward(self, sounds: List[torch.Tensor], config: Dict[str, Any], mm_info: dict) -> List[torch.Tensor]:
+    def forward(self, sounds: list[torch.Tensor], config: dict[str, Any], mm_info: dict) -> list[torch.Tensor]:
         # sounds = torch.stack(sounds, dim=0)
         features = self.parent.encode_sound(sounds, mm_info=mm_info)
         process_features = partial(
@@ -710,7 +712,7 @@ class BasicSoundEncoder(BaseEncoder):
                         new_features.append(_feature)
                         aud_idx += 1
 
-            assert aud_idx == fea_count, "aud_idx: {}, fea_count: {}".format(aud_idx, fea_count)
+            assert aud_idx == fea_count, f"aud_idx: {aud_idx}, fea_count: {fea_count}"
             features = new_features
         else:
             features = [process_features(f) for f in features]
@@ -723,10 +725,10 @@ class TSPVideoEncoder(BasicVideoEncoder):
     def __init__(
         self,
         parent: torch.nn.Module,
-        pool_sizes: List[Tuple[int, int, int]],
-        start_tokens: Optional[str] = None,
-        end_tokens: Optional[str] = "\n",
-        sep_tokens: Optional[str] = None,
+        pool_sizes: list[tuple[int, int, int]],
+        start_tokens: str | None = None,
+        end_tokens: str | None = "\n",
+        sep_tokens: str | None = None,
         embed_time: str = "False",
         trope_theta=50000,
         trope_dim=128,
@@ -790,11 +792,11 @@ class TSPVideoEncoder(BasicVideoEncoder):
     def _process_features(
         self,
         inputs: torch.Tensor,
-        start_token_embeds: Optional[torch.Tensor],
-        end_token_embeds: Optional[torch.Tensor],
-        sep_token_embeds: Optional[torch.Tensor],
-        times: Optional[torch.Tensor] = None,
-        time_embed: Optional[torch.Tensor] = None,
+        start_token_embeds: torch.Tensor | None,
+        end_token_embeds: torch.Tensor | None,
+        sep_token_embeds: torch.Tensor | None,
+        times: torch.Tensor | None = None,
+        time_embed: torch.Tensor | None = None,
     ) -> torch.Tensor:
         nt, ns = inputs.shape[:2]
         nl = int(ns**0.5)
@@ -848,7 +850,7 @@ class TSPVideoEncoder(BasicVideoEncoder):
                     else:
                         angle = (-new_times * 2 * np.pi).to(device)
 
-                    if not self.period_fix == "MTCT":
+                    if self.period_fix != "MTCT":
                         freqs = pos_emb.get_axial_freqs(new_times.shape[0], features.shape[-2]).to(device)
                         angle_expanded = angle.unsqueeze(1).unsqueeze(2)
                         angle_expanded = angle_expanded.expand(new_times.shape[0], features.shape[-2], freqs.shape[-1])
@@ -874,7 +876,7 @@ class TSPVideoEncoder(BasicVideoEncoder):
             outputs.append(features)
         return torch.cat(outputs, dim=0)
 
-    def forward(self, videos: List[torch.Tensor], config: Dict[str, Any], mm_info: dict) -> List[torch.Tensor]:
+    def forward(self, videos: list[torch.Tensor], config: dict[str, Any], mm_info: dict) -> list[torch.Tensor]:
         cache_feas = []
         cache_feas_index = []
         for _idx in range(len(videos)):
@@ -973,7 +975,7 @@ class TSPVideoEncoder(BasicVideoEncoder):
                         new_features.append(_feature)
                         vid_idx += 1
 
-            assert vid_idx == fea_count, "vid_idx: {}, fea_count: {}".format(vid_idx, fea_count)
+            assert vid_idx == fea_count, f"vid_idx: {vid_idx}, fea_count: {fea_count}"
             features = new_features
         else:
             features = [process_features(f) for f in features]

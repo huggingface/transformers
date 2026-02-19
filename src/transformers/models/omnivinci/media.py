@@ -19,7 +19,7 @@ import random
 import tempfile
 from collections import defaultdict
 from io import BytesIO
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import cv2
 import decord
@@ -64,17 +64,17 @@ class Video(File):
 class Sound(File):
     """Sound/music audio media object."""
 
-    def __init__(self, path, extension: str = None) -> None:
+    def __init__(self, path, extension: str | None = None) -> None:
         self.path = path
         self.extension = extension
 
 
-def make_list(obj: Any) -> List:
+def make_list(obj: Any) -> list:
     """Convert object to list if not already a list."""
     return obj if isinstance(obj, list) else [obj]
 
 
-def _extract_image(image: Union[Image, PIL.Image.Image]) -> PIL.Image.Image:
+def _extract_image(image: Image | PIL.Image.Image) -> PIL.Image.Image:
     """Extract PIL image from Image object or return PIL image as-is."""
     if isinstance(image, Image):
         image = load_image(image.path)
@@ -83,7 +83,7 @@ def _extract_image(image: Union[Image, PIL.Image.Image]) -> PIL.Image.Image:
 
 def _load_video_bytesio(
     video_bytesio: BytesIO, *, num_frames: int, config: PretrainedConfig, load_aud: bool = False
-) -> List[PIL.Image.Image]:
+) -> list[PIL.Image.Image]:
     """Load video from BytesIO object by writing to temporary file."""
     with tempfile.NamedTemporaryFile(delete=True, suffix=".mp4") as temp_video:
         temp_video.write(video_bytesio.read())
@@ -100,7 +100,7 @@ def get_overlap(inp1, inp2):
 
 def _load_video(
     video_path: str, *, num_frames: int, config: PretrainedConfig, load_aud: bool = False
-) -> List[PIL.Image.Image]:
+) -> list[PIL.Image.Image]:
     # Load video frames from a directory
     if os.path.isdir(video_path):
         frame_paths = sorted(glob.glob(os.path.join(video_path, "*")))
@@ -225,7 +225,7 @@ def _load_video(
         vidcap.release()
 
 
-def _extract_video(video: Video, config: PretrainedConfig) -> List[PIL.Image.Image]:
+def _extract_video(video: Video, config: PretrainedConfig) -> list[PIL.Image.Image]:
     num_frames = config.num_video_frames
     if getattr(config, "fps") != 0:
         print("Extracting frames from video with specified FPS is not supported yet. Ignored.")
@@ -346,9 +346,9 @@ def _extract_sound(sound: Sound, config: PretrainedConfig):
 
 
 def extract_media(
-    messages: List[Dict[str, Any]],
-    config: Optional[PretrainedConfig] = None,
-) -> Dict[str, List[Any]]:
+    messages: list[dict[str, Any]],
+    config: PretrainedConfig | None = None,
+) -> dict[str, list[Any]]:
     media = defaultdict(list)
 
     if not hasattr(config, "load_audio_in_video"):

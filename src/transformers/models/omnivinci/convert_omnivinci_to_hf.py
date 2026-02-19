@@ -258,8 +258,7 @@ def _resolve_tokenizer_source_dir(src_root: Path, dst_root: Path) -> Path:
     if (dst_root / "tokenizer_config.json").exists():
         return dst_root
     raise FileNotFoundError(
-        "Could not locate tokenizer files in src_root/llm, src_root, or dst_root. "
-        "Expected tokenizer_config.json."
+        "Could not locate tokenizer files in src_root/llm, src_root, or dst_root. Expected tokenizer_config.json."
     )
 
 
