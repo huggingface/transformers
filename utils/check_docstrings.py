@@ -104,6 +104,7 @@ ALWAYS_OVERRIDE = ["labels"]
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
 OBJECTS_TO_IGNORE = {
+    "GlmMoeDsaConfig",
     "GlmAsrProcessor",
     "AudioFlamingo3Processor",
     "ApertusConfig",
