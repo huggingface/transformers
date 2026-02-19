@@ -156,6 +156,10 @@ class VoxtralProcessor(ProcessorMixin):
             is_batched = False
             conversations = [conversation]
 
+        # - `sampling_rate` is already fixed in `VoxtralProcessorKwargs._defaults` and audio loading is
+        #   delegated to `mistral_common`'s tokenizer which handles it internally.
+        # - `load_audio_from_video` is irrelevant as Voxtral is a speech-only model with no video support.
+        # We strip them here to avoid passing unrecognized kwargs to `_merge_kwargs`.
         unsupported_keys = {"sampling_rate", "load_audio_from_video"} & kwargs.keys()
         if unsupported_keys:
             for key in unsupported_keys:
