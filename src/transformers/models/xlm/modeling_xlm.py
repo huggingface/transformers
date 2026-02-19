@@ -617,10 +617,8 @@ class XLMLayer(nn.Module):
         attn_mask,
         mask,
         cache=None,
-        output_attentions=False,
         cache_position=None,
     ):
-        # self attention — always returns (attn_output, attn_weights)
         attn_output, attn_weights = self.attention(
             x,
             attn_mask,
@@ -630,11 +628,9 @@ class XLMLayer(nn.Module):
 
         attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
 
-        # Residual connection
         tensor = x + attn_output
         tensor = self.layer_norm1(tensor)
 
-        # FFN
         ffn_output = self.ffn(tensor)
         tensor = tensor + ffn_output
         tensor = self.layer_norm2(tensor)
@@ -905,13 +901,12 @@ class XLMModel(XLMPreTrainedModel):
             if output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
             tensor, _ = layer(
-                tensor,
-                attn_mask,
-                mask,
-                cache=cache,
-                output_attentions=output_attentions,
-                cache_position=cache_position,
-            )
+    tensor,
+    attn_mask,
+    mask,
+    cache=cache,
+    cache_position=cache_position,
+)
 
         # Add last hidden state
         if output_hidden_states:

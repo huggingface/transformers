@@ -180,6 +180,53 @@ class TransformerFFN(nn.Module):
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         return x
 
+# Copied from transformers.models.xlm.modeling_xlm.XLMLayer with XLM->Flaubert
+class FlaubertLayer(nn.Module):
+    """
+    A single transformer layer wrapping attention + FFN.
+
+    This class exists so that `@capture_outputs` can hook into it for
+    attention weights via `_can_record_outputs`. The layer returns
+    `(hidden_state, attn_weights)` so the attentions hook records the
+    second element (index 1).
+    """
+
+    def __init__(self, attention, layer_norm1, ffn, layer_norm2, dropout):
+        super().__init__()
+        self.attention = attention
+        self.layer_norm1 = layer_norm1
+        self.ffn = ffn
+        self.layer_norm2 = layer_norm2
+        self.dropout = dropout
+
+    def forward(
+        self,
+        x,
+        attn_mask,
+        mask,
+        cache=None,
+        cache_position=None,
+    ):
+        attn_output, attn_weights = self.attention(
+            x,
+            attn_mask,
+            cache=cache,
+            cache_position=cache_position,
+        )
+
+        attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
+
+        tensor = x + attn_output
+        tensor = self.layer_norm1(tensor)
+
+        ffn_output = self.ffn(tensor)
+        tensor = tensor + ffn_output
+        tensor = self.layer_norm2(tensor)
+
+        tensor *= mask.unsqueeze(-1).to(tensor.dtype)
+
+        return tensor, attn_weights
+
 
 @auto_docstring(
     custom_intro="""
@@ -740,22 +787,16 @@ class FlaubertModel(FlaubertPreTrainedModel):
         self.layer_norm_emb = nn.LayerNorm(self.dim, eps=config.layer_norm_eps)
 
         # transformer layers
-        self.attentions = nn.ModuleList()
-        self.layer_norm1 = nn.ModuleList()
-        self.ffns = nn.ModuleList()
-        self.layer_norm2 = nn.ModuleList()
-        # if self.is_decoder:
-        #     self.layer_norm15 = nn.ModuleList()
-        #     self.encoder_attn = nn.ModuleList()
+        self.layers = nn.ModuleList()
 
         for i in range(self.n_layers):
-            self.attentions.append(MultiHeadAttention(self.n_heads, self.dim, config=config, layer_idx=i))
-            self.layer_norm1.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
-            # if self.is_decoder:
-            #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
-            #     self.encoder_attn.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
-            self.ffns.append(TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config))
-            self.layer_norm2.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
+            attn = MultiHeadAttention(self.n_heads, self.dim, config=config, layer_idx=i)
+            ln1 = nn.LayerNorm(self.dim, eps=config.layer_norm_eps)
+            ffn = TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config)
+            ln2 = nn.LayerNorm(self.dim, eps=config.layer_norm_eps)
+
+            self.layers.append(FlaubertLayer(attn, ln1, ffn, ln2, config.dropout))
+
 
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
@@ -890,10 +931,12 @@ class FlaubertModel(FlaubertPreTrainedModel):
         tensor = nn.functional.dropout(tensor, p=self.dropout, training=self.training)
         tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
-        # transformer layers
+        # transformer layers — using FlaubertLayer abstraction
         hidden_states = () if output_hidden_states else None
         attentions = () if output_attentions else None
-        for i in range(self.n_layers):
+
+        for layer in self.layers:
+
             # LayerDrop
             if self.training:
                 dropout_probability = torch.rand([])
@@ -903,39 +946,17 @@ class FlaubertModel(FlaubertPreTrainedModel):
             if output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
 
-            # self attention
-            if not self.pre_norm:
-                attn_outputs = self.attentions[i](
-                    tensor,
-                    attn_mask,
-                    cache=cache,
-                    output_attentions=output_attentions,
-                    cache_position=cache_position,
-                )
-                attn = attn_outputs[0]
-                if output_attentions:
-                    attentions = attentions + (attn_outputs[1],)
-                attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
-                tensor = tensor + attn
-                tensor = self.layer_norm1[i](tensor)
-            else:
-                tensor_normalized = self.layer_norm1[i](tensor)
-                attn_outputs = self.attentions[i](tensor_normalized, attn_mask, cache=cache[i])
-                attn = attn_outputs[0]
-                if output_attentions:
-                    attentions = attentions + (attn_outputs[1],)
-                attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
-                tensor = tensor + attn
+            tensor, attn_weights = layer(
+                tensor,
+                attn_mask,
+                mask,
+                cache=cache,
+                cache_position=cache_position,
+            )
 
-            # FFN
-            if not self.pre_norm:
-                tensor = tensor + self.ffns[i](tensor)
-                tensor = self.layer_norm2[i](tensor)
-            else:
-                tensor_normalized = self.layer_norm2[i](tensor)
-                tensor = tensor + self.ffns[i](tensor_normalized)
+            if output_attentions:
+                attentions = attentions + (attn_weights,)
 
-            tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
         # Add last hidden state
         if output_hidden_states:
