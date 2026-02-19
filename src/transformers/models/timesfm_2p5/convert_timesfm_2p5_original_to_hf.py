@@ -6,6 +6,7 @@ import shutil
 import numpy as np
 import timesfm
 import torch
+from huggingface_hub import snapshot_download
 
 from transformers import Timesfm2P5Config, Timesfm2P5ModelForPrediction
 
@@ -33,16 +34,24 @@ def get_nested_attr(obj, key):
     return obj
 
 
+def download_checkpoint_from_hub(huggingface_repo_id: str) -> str:
+    """Download the official checkpoint and return the local safetensors path."""
+    checkpoint_dir = snapshot_download(repo_id=huggingface_repo_id, allow_patterns=["model.safetensors"])
+    checkpoint_path = os.path.join(checkpoint_dir, "model.safetensors")
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(
+            f"`model.safetensors` was not found in {huggingface_repo_id}. "
+            "Please verify the repo contains a non-sharded safetensors checkpoint."
+        )
+    return checkpoint_path
+
+
 def write_model(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytorch", safe_serialization=True):
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
     os.makedirs(tmp_model_path, exist_ok=True)
 
-    # Load TimesFM 2.5 model - workaround for huggingface_hub version issues
-    from huggingface_hub import hf_hub_download
-
-    # Download the checkpoint file
-    checkpoint_path = hf_hub_download(repo_id=huggingface_repo_id, filename="model.safetensors")
+    checkpoint_path = download_checkpoint_from_hub(huggingface_repo_id)
 
     # Create model instance and load checkpoint
     tfm = timesfm.TimesFM_2p5_200M_torch()
@@ -214,11 +223,8 @@ def check_outputs(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytor
     """Compares outputs between original and converted models."""
     print("\nChecking model outputs...")
 
-    # Load original TimesFM 2.5 model using same method as write_model
-    from huggingface_hub import hf_hub_download
-
-    # Download the checkpoint file
-    checkpoint_path = hf_hub_download(repo_id=huggingface_repo_id, filename="model.safetensors")
+    # Load original TimesFM 2.5 model using the same Hub download path as conversion.
+    checkpoint_path = download_checkpoint_from_hub(huggingface_repo_id)
 
     # Create model instance and load checkpoint
     tfm = timesfm.TimesFM_2p5_200M_torch()

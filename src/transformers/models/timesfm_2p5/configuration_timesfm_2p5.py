@@ -23,7 +23,11 @@ from ...configuration_utils import PreTrainedConfig
 
 
 class Timesfm2P5Config(PreTrainedConfig):
-    """Configuration class for TimesFM 2.5 model."""
+    """
+    Configuration class for TimesFM 2.5 model.
+
+    Example checkpoint: [google/timesfm-2.5-200m-pytorch](https://huggingface.co/google/timesfm-2.5-200m-pytorch).
+    """
 
     model_type = "timesfm_2p5"
     keys_to_ignore_at_inference = []
