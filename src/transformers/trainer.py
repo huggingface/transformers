@@ -694,6 +694,48 @@ class Trainer:
                 "Samplers cannot be used with IterableDataset as they require indexed access to the dataset."
             )
 
+    def _build_accelerator_args(self, **kwargs) -> dict[str, Any]:
+        """Helper method to build accelerator-specific keyword arguments."""
+        args = {
+            "mixed_precision": self.args.mixed_precision,
+            "deepspeed_plugin": self.args.deepspeed_plugin,
+        }
+        args.update(kwargs)
+
+        # We defer compatibility checks to accelerator
+        if self.args.parallelism_config is not None:
+            min_accelerate_version = "1.12.0"
+            if not is_accelerate_available(min_accelerate_version):
+                raise ImportError(
+                    f"ParallelismConfig requires accelerate>={min_accelerate_version}). Please upgrade accelerate to use this feature."
+                )
+            args["parallelism_config"] = self.args.parallelism_config
+
+        self.is_tp_enabled = False
+        if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
+            self.is_tp_enabled = True
+            if self.args.parallelism_config is None:
+                if is_accelerate_available("1.12.0"):
+                    if self.args.parallelism_config is None:
+                        from accelerate import ParallelismConfig
+
+                        args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
+                else:
+                    raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
+            elif args["parallelism_config"].tp_size != self.model.tp_size:
+                args["parallelism_config"].tp_size = self.model.tp_size
+
+        if is_accelerate_available("1.2.0"):
+            # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
+            from accelerate.utils import TorchDynamoPlugin
+
+            dynamo_plugin = TorchDynamoPlugin(
+                backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode
+            )
+            args["dynamo_plugin"] = dynamo_plugin
+
+        return args
+
     def create_accelerator_and_postprocess(self) -> None:
         """Create the accelerator and perform post-creation setup (FSDP, DeepSpeed, etc.)."""
         # We explicitly don't rely on the `Accelerator` to do gradient accumulation
@@ -744,44 +786,11 @@ class Trainer:
 
             fsdp_plugin = FullyShardedDataParallelPlugin(**self.args.fsdp_plugin_args)
 
-        args = {
-            "mixed_precision": self.args.mixed_precision,
-            "dataloader_config": dataloader_config,
-            "fsdp_plugin": fsdp_plugin,
-            "deepspeed_plugin": self.args.deepspeed_plugin,
-            "gradient_accumulation_plugin": gradient_accumulation_plugin,
-        }
-
-        # We defer compatibility checks to accelerator
-        if self.args.parallelism_config is not None:
-            min_accelerate_version = "1.12.0"
-            if not is_accelerate_available(min_accelerate_version):
-                raise ImportError(
-                    f"ParallelismConfig requires accelerate>={min_accelerate_version}). Please upgrade accelerate to use this feature."
-                )
-            args["parallelism_config"] = self.args.parallelism_config
-
-        self.is_tp_enabled = False
-        if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
-            self.is_tp_enabled = True
-            if self.args.parallelism_config is None:
-                if is_accelerate_available("1.12.0"):
-                    if self.args.parallelism_config is None:
-                        from accelerate import ParallelismConfig
-
-                        args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
-                else:
-                    raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
-            elif args["parallelism_config"].tp_size != self.model.tp_size:
-                args["parallelism_config"].tp_size = self.model.tp_size
-        if is_accelerate_available("1.2.0"):
-            # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
-            from accelerate.utils import TorchDynamoPlugin
-
-            dynamo_plugin = TorchDynamoPlugin(
-                backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode
-            )
-            args["dynamo_plugin"] = dynamo_plugin
+        args = self._build_accelerator_args(
+            dataloader_config=dataloader_config,
+            fsdp_plugin=fsdp_plugin,
+            gradient_accumulation_plugin=gradient_accumulation_plugin,
+        )
 
         # create accelerator object
         self.accelerator = Accelerator(**args)
@@ -1735,7 +1744,7 @@ class Trainer:
                     if (
                         args.logging_nan_inf_filter
                         and not is_torch_xla_available()
-                        and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
+                        and not torch.isfinite(tr_loss_step)
                     ):
                         # if loss is nan or inf simply add the average of previous logged losses
                         tr_loss = tr_loss + tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
