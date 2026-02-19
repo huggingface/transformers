@@ -37,8 +37,9 @@ from transformers import (
 )
 from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import CausalLMOutputWithPast
-from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING, MODEL_MAPPING
+from transformers.models.qwen2.modeling_qwen2 import Qwen2ForCausalLM
 from transformers.models.qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoder
+from transformers.models.siglip.modeling_siglip import SiglipVisionModel
 
 from .configuration_omnivinci import IGNORE_INDEX, OmniVinciConfig
 from .media_encoder import BasicImageEncoder, BasicSoundEncoder, CacheFeatures, TSPVideoEncoder
@@ -77,21 +78,6 @@ def _get_attn_implementation(config: PretrainedConfig, default: str = "sdpa") ->
     if attn_impl == "flash_attention_2":
         return default
     return attn_impl or default
-
-
-def _build_model_from_config_mapping(
-    model_config: PretrainedConfig,
-    mapping,
-    component_name: str,
-) -> PreTrainedModel:
-    try:
-        model_cls = mapping[type(model_config)]
-    except KeyError as exc:
-        raise ValueError(
-            f"Unsupported {component_name} config class '{type(model_config).__name__}' "
-            f"(model_type='{getattr(model_config, 'model_type', None)}')."
-        ) from exc
-    return model_cls(model_config)
 
 
 class DownSampleBlock(nn.Module):
@@ -367,7 +353,7 @@ class SiglipVisionTowerDynamicS2(VisionTowerDynamicS2):
 
         vision_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="siglip_vision_model")
         vision_cfg._attn_implementation = _get_attn_implementation(config)
-        self.vision_tower = _build_model_from_config_mapping(vision_cfg, MODEL_MAPPING, component_name="vision_tower")
+        self.vision_tower = SiglipVisionModel(vision_cfg)
 
         self.image_processor = SiglipImageProcessor()
         # Make sure it crops/resizes the image to the largest scale in self.scales to maintain high-res information
@@ -455,7 +441,7 @@ class VILAPretrainedModel(PreTrainedModel):
             llm_cfg.model_max_length = model_max_length
             context_length_extension(llm_cfg)
 
-        self.llm = _build_model_from_config_mapping(llm_cfg, MODEL_FOR_CAUSAL_LM_MAPPING, component_name="llm")
+        self.llm = Qwen2ForCausalLM(llm_cfg)
         config.hidden_size = self.llm.config.hidden_size
 
         self.vocab_size = self.llm.config.vocab_size
