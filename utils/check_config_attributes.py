@@ -60,6 +60,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Pop2PianoConfig": ["feed_forward_proj"],
     "BioGptConfig": ["layer_norm_eps"],
     "GLPNConfig": ["layer_norm_eps"],
+    "HrmConfig": ["dtype", "num_hidden_layers"],
     "SegformerConfig": ["layer_norm_eps"],
     "CvtConfig": ["layer_norm_eps"],
     "PerceiverConfig": ["layer_norm_eps"],
