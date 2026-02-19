@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import copy
 import inspect
 import logging
 import os
@@ -11,11 +12,11 @@ from typing import Any, Dict, List, Optional, Union
 import torch
 
 from transformers import AutoImageProcessor
-from transformers.models.qwen2 import Qwen2TokenizerFast
 from transformers.models.omnivinci.configuration_omnivinci import OmniVinciConfig
 from transformers.models.omnivinci.convert_omnivinci_to_hf import convert_omnivinci_to_hf
 from transformers.models.omnivinci.modeling_omnivinci import OmniVinciForCausalLM
 from transformers.models.omnivinci.processing_omnivinci import OmniVinciProcessor
+from transformers.models.qwen2 import Qwen2TokenizerFast
 
 
 os.environ["HF_HUB_OFFLINE"] = "1"
@@ -273,7 +274,7 @@ class NVOmniVideoInference:
         if do_sample and temperature is not None:
             generation_kwargs["temperature"] = temperature
 
-        generation_config = self.model.default_generation_config
+        generation_config = copy.deepcopy(self.model.generation_config)
         generation_config.update(**generation_kwargs)
         if not generation_config.do_sample:
             generation_config.temperature = None

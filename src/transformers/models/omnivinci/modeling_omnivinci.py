@@ -30,7 +30,6 @@ from einops import rearrange
 from transformers import (
     AutoConfig,
     AutoModel,
-    GenerationConfig,
     PretrainedConfig,
     PreTrainedModel,
     Qwen2AudioEncoder,
@@ -1449,31 +1448,4 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
         model_inputs["media"] = None
         model_inputs["media_config"] = None
         return model_inputs
-    
-    @property
-    def default_generation_config(self) -> GenerationConfig:
-        generation_config = copy.deepcopy(self.generation_config or GenerationConfig())
 
-        eos_token_id = getattr(self.config, "eos_token_id", None)
-        if eos_token_id is None and getattr(self, "llm", None) is not None:
-            eos_token_id = getattr(self.llm.config, "eos_token_id", None)
-        if eos_token_id is None:
-            raise ValueError("Missing `eos_token_id` in config. Set tokenizer-derived ids in main.py.")
-
-        if generation_config.max_length == GenerationConfig().max_length:
-            generation_config.max_length = self._get_model_max_length()
-        if generation_config.pad_token_id is None:
-            generation_config.pad_token_id = getattr(self.config, "pad_token_id", None) or eos_token_id
-        if generation_config.bos_token_id is None:
-            generation_config.bos_token_id = getattr(self.config, "bos_token_id", None) or eos_token_id
-        if generation_config.eos_token_id is None:
-            generation_config.eos_token_id = eos_token_id
-        if not generation_config.do_sample:
-            generation_config.temperature = None
-            generation_config.top_p = None
-            generation_config.top_k = None
-        return generation_config
-
-# Backward-compatible aliases during migration.
-OmniVinciPreTrainedModel = VILAPretrainedModel
-VILAForCausalLM = OmniVinciForCausalLM
