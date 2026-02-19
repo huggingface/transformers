@@ -33,6 +33,8 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import capture_outputs
 from .configuration_mpt import MptConfig
 
 
@@ -220,6 +222,10 @@ class MptPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MptBlock"]
+    _can_record_outputs = {
+        "hidden_states": MptBlock,
+        "attentions": MptAttention,
+    }
 
 
 @auto_docstring

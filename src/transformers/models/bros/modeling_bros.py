@@ -963,10 +963,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
         r"""
         bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
@@ -995,8 +992,6 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
 
         >>> outputs = model(**encoding)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.bros(
             input_ids=input_ids,
             bbox=bbox,
@@ -1004,9 +999,8 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
+            **kwargs,
         )
 
         last_hidden_states = outputs[0]
