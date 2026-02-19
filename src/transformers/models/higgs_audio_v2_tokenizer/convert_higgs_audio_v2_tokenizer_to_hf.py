@@ -1,5 +1,4 @@
-# Adapted from https://github.com/huggingface/transformers/blob/main/src/transformers/models/xcodec/convert_xcodec_weights_to_hf.py
-# Copyright 2025 BosonAI, Descript and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,273 +11,181 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert HiggsAudioV2 Tokenizer to Hugging Face format."""
 
 import argparse
-import io
+import gc
 import re
 
 import torch
-import yaml
 
 from transformers import (
-    AutoConfig,
     DacFeatureExtractor,
     HiggsAudioV2TokenizerConfig,
     HiggsAudioV2TokenizerModel,
-    logging,
+    DacConfig,
 )
+from transformers.utils.hub import cached_file
 
 
-logging.set_verbosity_info()
-logger = logging.get_logger(__name__)
+INNER_LAYER_NAMES = ["snake1", "conv1", "snake2", "conv2"]
 
+# fmt: off
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    # Encoder: initial conv, final snake + conv
+    r"^encoder\.block\.0":                                                           "acoustic_encoder.conv1",
+    r"^encoder\.block\.6":                                                          "acoustic_encoder.snake1",
+    r"^encoder\.block\.7":                                                           "acoustic_encoder.conv2",
 
-torch.serialization.add_safe_globals([io.BytesIO])
+    # Encoder: res_unit inner layers (block.M res_unit index 0-2 → 1-3, block.K layer index 0-3 → snake1/conv1/snake2/conv2)
+    r"^encoder\.block\.(\d+)\.block\.([012])\.block\.([0123])": lambda m: f"acoustic_encoder.block.{int(m[1])-1}.res_unit{int(m[2])+1}.{INNER_LAYER_NAMES[int(m[3])]}",
+    # Encoder: block-level snake + downsampling conv
+    r"^encoder\.block\.(\d+)\.block\.3":                        lambda m: f"acoustic_encoder.block.{int(m[1])-1}.snake1",
+    r"^encoder\.block\.(\d+)\.block\.4":                        lambda m: f"acoustic_encoder.block.{int(m[1])-1}.conv1",
 
-MAPPING_ACOUSTIC_ENCODER = {
-    r"^block\.0": ["conv1"],
-    r"^block\.(\d+)\.block\.(\d+)\.block\.0": ["block", "res_unit", "snake1"],
-    r"^block\.(\d+)\.block\.(\d+)\.block\.1": ["block", "res_unit", "conv1"],
-    r"^block\.(\d+)\.block\.(\d+)\.block\.2": ["block", "res_unit", "snake2"],
-    r"^block\.(\d+)\.block\.(\d+)\.block\.3": ["block", "res_unit", "conv2"],
-    r"^block\.(\d+)\.block\.3": ["block", "snake1"],
-    r"^block\.(\d+)\.block\.4": ["block", "conv1"],
-    r"^block\.6": ["snake1"],
-    r"^block\.7": ["conv2"],
+    # Decoder: initial conv, final snake + conv
+    r"^decoder_2\.model\.0":                                                         "acoustic_decoder.conv1",
+    r"^decoder_2\.model\.6":                                                        "acoustic_decoder.snake1",
+    r"^decoder_2\.model\.7":                                                         "acoustic_decoder.conv2",
+
+    # Decoder: block-level snake + upsample conv_t
+    r"^decoder_2\.model\.(\d+)\.block\.0":                      lambda m: f"acoustic_decoder.block.{int(m[1])-1}.snake1",
+    r"^decoder_2\.model\.(\d+)\.block\.1":                      lambda m: f"acoustic_decoder.block.{int(m[1])-1}.conv_t1",
+    # Decoder: res_unit inner layers (block.M res_unit index 2-4 → 1-3, block.K layer index 0-3 → snake1/conv1/snake2/conv2)
+    r"^decoder_2\.model\.(\d+)\.block\.([234])\.block\.([0123])": lambda m: f"acoustic_decoder.block.{int(m[1])-1}.res_unit{int(m[2])-1}.{INNER_LAYER_NAMES[int(m[3])]}",
+
+    # Quantizer
+    r"^quantizer\.vq\.layers":                                                "quantizer.quantizers",
+    r"\._codebook\.":                                                             ".codebook.",
+
+    # FC layers
+    r"^fc_prior\.":                                                                         "fc.",
+    r"^fc_post1\.":                                                                        "fc1.",
+    r"^fc_post2\.":                                                                        "fc2.",
+
+    # Semantic encoder/decoder: unwrap nested conv modules
+    r"\.conv\.conv\.":                                                                ".conv.",
+    r"\.conv1\.conv\.":                                                              ".conv1.",
+    r"\.conv2\.conv\.":                                                              ".conv2.",
 }
-
-MAPPING_ACOUSTIC_DECODER = {
-    r"^model\.0": ["conv1"],
-    r"^model\.(\d+)\.block\.0": ["block", "snake1"],
-    r"^model\.(\d+)\.block\.1": ["block", "conv_t1"],
-    r"^model\.(\d+)\.block\.(\d+)\.block\.0": ["block", "res_unit", "snake1"],
-    r"^model\.(\d+)\.block\.(\d+)\.block\.1": ["block", "res_unit", "conv1"],
-    r"^model\.(\d+)\.block\.(\d+)\.block\.2": ["block", "res_unit", "snake2"],
-    r"^model\.(\d+)\.block\.(\d+)\.block\.3": ["block", "res_unit", "conv2"],
-    r"^model\.6": ["snake1"],
-    r"^model\.7": ["conv2"],
-}
-
-MAPPING_SEMANTIC_ENCODER = {
-    "conv.conv.": "conv.",
-    "conv1.conv.": "conv1.",
-    "conv2.conv.": "conv2.",
-}
-
-MAPPING_SEMANTIC_DECODER = {
-    "conv1.conv.": "conv1.",
-    "conv2.conv.": "conv2.",
-    "conv.conv.": "conv.",
-}
-
-MAPPING_QUANTIZER = {
-    "quantizer.vq.layers": "quantizer.quantizers",
-    "._codebook.": ".codebook.",
-}
+# fmt: on
 
 
-def safe_load(path: str) -> dict[str, torch.Tensor]:
-    """
-    Load only the tensor objects from a checkpoint, skipping any BytesIO
-    """
-    shard = torch.load(path, map_location="cpu", weights_only=True)
-    return {k: v for k, v in shard.items() if not isinstance(v, io.BytesIO)}
-
-
-def _rewrite_weight_norm(key: str) -> str:
-    if key.endswith("weight_g"):
-        return key[: -len("weight_g")] + "parametrizations.weight.original0"
-    if key.endswith("weight_v"):
-        return key[: -len("weight_v")] + "parametrizations.weight.original1"
+def convert_key(key, mapping):
+    for pattern, replacement in mapping.items():
+        key = re.sub(pattern, replacement, key)
     return key
 
 
-def convert_old_keys_to_new_keys(original_state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    converted_checkpoint: dict[str, torch.Tensor] = {}
-
-    for old_key, value in original_state_dict.items():
-        if old_key.startswith("encoder."):
-            layer_key = old_key[len("encoder.") :]
-            for pattern, path_parts in MAPPING_ACOUSTIC_ENCODER.items():
-                pattern_match = re.match(pattern, layer_key)
-                if pattern_match is None:
-                    continue
-
-                digit_strings = [g for g in pattern_match.groups() if g is not None]
-                digit_indices = [int(ds) for ds in digit_strings]
-                remainder = layer_key[pattern_match.end() :]
-
-                if len(path_parts) == 1:
-                    mapped_subkey = f"{path_parts[0]}{remainder}"
-                elif len(path_parts) == 2:
-                    encoder_layer = digit_indices[0] - 1
-                    mapped_subkey = f"{path_parts[0]}.{encoder_layer}.{path_parts[1]}{remainder}"
-                else:
-                    encoder_layer, unit_idx = digit_indices
-                    mapped_subkey = (
-                        f"{path_parts[0]}.{encoder_layer - 1}.{path_parts[1]}{unit_idx + 1}.{path_parts[2]}{remainder}"
-                    )
-
-                new_key = f"acoustic_encoder.{_rewrite_weight_norm(mapped_subkey)}"
-                converted_checkpoint[new_key] = value
-                break
-
-        elif old_key.startswith("decoder_2."):
-            layer_key = old_key[len("decoder_2.") :]
-
-            for pattern, path_parts in MAPPING_ACOUSTIC_DECODER.items():
-                pattern_match = re.match(pattern, layer_key)
-                if pattern_match is None:
-                    continue
-                digit_strings = [g for g in pattern_match.groups() if g is not None]
-                digit_indices = [int(ds) for ds in digit_strings]
-                remainder = layer_key[pattern_match.end() :]
-
-                if len(path_parts) == 1:
-                    mapped_subkey = f"{path_parts[0]}{remainder}"
-                elif len(path_parts) == 2:
-                    decoder_layer = digit_indices[0] - 1
-                    mapped_subkey = f"{path_parts[0]}.{decoder_layer}.{path_parts[1]}{remainder}"
-                else:
-                    decoder_layer, unit_idx = digit_indices
-                    mapped_subkey = (
-                        f"{path_parts[0]}.{decoder_layer - 1}.{path_parts[1]}{unit_idx - 1}.{path_parts[2]}{remainder}"
-                    )
-                new_key = f"acoustic_decoder.{_rewrite_weight_norm(mapped_subkey)}"
-                converted_checkpoint[new_key] = value
-                break
-
-        elif old_key.startswith("encoder_semantic."):
-            semantic_key = old_key[len("encoder_semantic.") :]
-            for old, new in MAPPING_SEMANTIC_ENCODER.items():
-                semantic_key = semantic_key.replace(old, new)
-            converted_checkpoint[f"encoder_semantic.{semantic_key}"] = value
-
-        elif old_key.startswith("decoder_semantic."):
-            semantic_key = old_key[len("decoder_semantic.") :]
-            for old, new in MAPPING_SEMANTIC_DECODER.items():
-                semantic_key = semantic_key.replace(old, new)
-            converted_checkpoint[f"decoder_semantic.{semantic_key}"] = value
-
-        elif old_key.startswith("semantic_model."):
-            converted_checkpoint[old_key] = value
-
-        elif old_key.startswith("fc_prior."):
-            converted_checkpoint[f"fc.{old_key[len('fc_prior.') :]}"] = value
-
-        elif old_key.startswith("fc_post1."):
-            converted_checkpoint[f"fc1.{old_key[len('fc_post1.') :]}"] = value
-
-        elif old_key.startswith("fc_post2."):
-            converted_checkpoint[f"fc2.{old_key[len('fc_post2.') :]}"] = value
-
-        elif old_key.startswith("quantizer.vq.layers"):
-            new_key = old_key
-            for old_sub, new_sub in MAPPING_QUANTIZER.items():
-                new_key = new_key.replace(old_sub, new_sub)
-            converted_checkpoint[new_key] = value
-
-    return converted_checkpoint
+def compute_weight_from_weight_norm(weight_v, weight_g):
+    """Combine weight_v and weight_g from weight normalization into a plain weight."""
+    dims = list(range(1, weight_v.dim()))
+    norm = weight_v.norm(dim=dims, keepdim=True)
+    return weight_g * weight_v / norm
 
 
-@torch.no_grad()
-def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None, push_to_hub=None):
-    # load config yaml file
-    with open(config_path, "r") as f:
-        original_model_config = yaml.safe_load(f)
-
-    target_bandwidths = original_model_config["target_bandwidths"]
-    codebook_dim = original_model_config["codebook_dim"]
-    sample_rate = original_model_config["sample_rate"]
-    bins = original_model_config["bins"]
-    n_q = original_model_config["n_q"]
-    semantic_teacher = original_model_config["semantic_techer"]
-
-    if semantic_teacher == "hubert_base_general":
-        semantic_model_config = AutoConfig.from_pretrained("bosonai/hubert_base")
-    else:
-        raise ValueError(f"Unknown semantic model: {semantic_teacher}")
+def convert_model(input_path_or_repo, revision=None):
+    print("Converting the model.")
 
     config = HiggsAudioV2TokenizerConfig(
-        target_bandwidths=target_bandwidths,
-        sample_rate=sample_rate,
-        codebook_dim=codebook_dim,
-        num_quantizers=n_q,
-        codebook_size=bins,
-        semantic_model_config=semantic_model_config,
+        acoustic_model_config=DacConfig(
+            encoder_hidden_size=64,
+            downsampling_ratios=[8, 5, 4, 2, 3],
+            decoder_hidden_size=1024,
+            upsampling_ratios=[8, 5, 4, 2, 3],
+            hidden_size=256,
+        ),
     )
 
-    # create model
-    if not torch.cuda.is_available():
-        raise ValueError("Run this script on a machine with a GPU for weight norm layers to be correctly copied.")
-    torch_device = "cuda"
-    model = HiggsAudioV2TokenizerModel(config).to(torch_device)
+    model_path = cached_file(input_path_or_repo, "model.pth", revision=revision)
+    print(f"Fetching all parameters from the checkpoint at {model_path}...")
+    loaded = torch.load(model_path, map_location="cpu", weights_only=False)
 
-    logger.info("Loading original checkpoint ...")
+    print("Converting model...")
 
-    state_dict = safe_load(checkpoint_path)
+    # -----------------------------------------
+    # Preprocess: merge weight_norm into weight
+    # -----------------------------------------
 
-    # the original checkpoint has weight norm applied
-    model.apply_weight_norm()
+    preprocessed = {}
+    for key, value in loaded.items():
+        if key.endswith(".weight_g"):
+            base = key.removesuffix(".weight_g")
+            weight = compute_weight_from_weight_norm(loaded[base + ".weight_v"], value)
+            preprocessed[base + ".weight"] = weight
+        elif key.endswith(".weight_v"):
+            continue  # already handled with weight_g
+        else:
+            preprocessed[key] = value
 
-    logger.info("Converting model ...")
+    del loaded
+    gc.collect()
 
-    new_state_dict = convert_old_keys_to_new_keys(state_dict)
+    # -----------------------
+    # Convert parameter names
+    # -----------------------
 
-    missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=True, assign=True)  # strict=False)
+    state_dict = {}
+    for key, value in preprocessed.items():
+        # fc1 is not used in the forward pass
+        if key.startswith("fc1."):
+            continue
 
-    if len(unexpected_keys) != 0:
-        raise ValueError(f"Unexpected keys: {unexpected_keys}")
+        new_key = convert_key(key, ORIGINAL_TO_CONVERTED_KEY_MAPPING)
+        state_dict[new_key] = value
 
-    if len(missing_keys) != 0:
-        raise ValueError(f"missing keys found: {missing_keys}")
+    del preprocessed
+    gc.collect()
 
-    model.remove_weight_norm()
+    # -------------------------
+    # Load the weights
+    # -------------------------
 
-    model.save_pretrained(pytorch_dump_folder_path)
+    print("Loading the checkpoint in a HiggsAudioV2TokenizerModel.")
+    with torch.device("meta"):
+        model = HiggsAudioV2TokenizerModel(config)
+    model.load_state_dict(state_dict, strict=True, assign=True)
+    print("Model converted successfully.")
+    del model.config._name_or_path
 
+    return model
+
+
+def create_feature_extractor():
     feature_extractor = DacFeatureExtractor(
-        sampling_rate=config.sample_rate,
-        hop_length=config.acoustic_model_config.hop_length,
+        feature_size=1,
+        hop_length=960,
+        padding_side="right",
+        padding_value=0.0,
+        return_attention_mask=True,
+        sampling_rate=24000,
     )
-
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
-
-    if push_to_hub:
-        print("Pushing to the hub...")
-        feature_extractor.push_to_hub(push_to_hub)
-        model.push_to_hub(push_to_hub)
+    return feature_extractor
 
 
-"""
-```
-# Download config and checkpoint files
-wget https://huggingface.co/bosonai/higgs-audio-v2-tokenizer/resolve/main/model.pth -P /workspace/higgs_audio_v2_tokenizer_original
-wget https://huggingface.co/bosonai/higgs-audio-v2-tokenizer/resolve/main/config.json -P /workspace/higgs_audio_v2_tokenizer_original
-# The bosonai/higgs-audio-v2-tokenizer repo does not have complete config, so we will just use the default config which has been matched with the actual config.
-# Run conversion:
-python src/transformers/models/higgs_audio_v2_tokenizer/convert_higgs_audio_v2_tokenizer_to_hf.py \
-    --checkpoint_path /workspace/higgs_audio_v2_tokenizer_original/model.pth \
-    --config_path /workspace/higgs_audio_v2_tokenizer_original/config.json \
-    --push_to_hub hf-audio/higgs-audio-v2-tokenizer
-```
-"""
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
-    parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
-    )
-    parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
-    )
-
+def main():
+    parser = argparse.ArgumentParser(description="Convert HiggsAudioV2Tokenizer weights to HuggingFace format")
+    parser.add_argument("--input_path_or_repo", type=str, default="bosonai/higgs-audio-v2-tokenizer")
+    parser.add_argument("--input_revision", type=str, default=None)
+    parser.add_argument("--output_dir", type=str, default=None)
+    parser.add_argument("--push_to_hub_path", type=str, default=None)
     args = parser.parse_args()
-    convert_checkpoint(
-        args.checkpoint_path,
-        args.pytorch_dump_folder_path,
-        args.config_path,
-        args.push_to_hub,
-    )
+
+    if args.output_dir is None and args.push_to_hub_path is None:
+        raise ValueError("Either --output_dir or --push_to_hub_path must be provided.")
+
+    model = convert_model(args.input_path_or_repo, revision=args.input_revision)
+    feature_extractor = create_feature_extractor()
+
+    if args.output_dir is not None:
+        model.save_pretrained(args.output_dir)
+        feature_extractor.save_pretrained(args.output_dir)
+        print(f"Model and feature extractor saved to {args.output_dir}")
+
+    if args.push_to_hub_path is not None:
+        model.push_to_hub(args.push_to_hub_path)
+        feature_extractor.push_to_hub(args.push_to_hub_path)
+        print(f"Model and feature extractor pushed to {args.push_to_hub_path}")
+
+
+if __name__ == "__main__":
+    main()
