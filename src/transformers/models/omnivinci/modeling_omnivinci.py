@@ -38,6 +38,7 @@ from transformers import (
 from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING, MODEL_MAPPING
+from transformers.models.qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoder
 
 from .configuration_omnivinci import IGNORE_INDEX, OmniVinciConfig
 from .media_encoder import BasicImageEncoder, BasicSoundEncoder, CacheFeatures, TSPVideoEncoder
@@ -229,27 +230,15 @@ AutoConfig.register("sound_mm_projector", SoundMultimodalProjectorConfig)
 AutoModel.register(SoundMultimodalProjectorConfig, SoundMultimodalProjector)
 
 
-class AudioTower(nn.Module):
-    def __init__(self):
+class Qwen2AudioTower(nn.Module):
+    def __init__(self, model_name_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig):
         super().__init__()
+        audio_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="qwen2_audio_encoder")
+        audio_cfg._attn_implementation = _get_attn_implementation(config)
+        self.audio_tower = Qwen2AudioEncoder(audio_cfg)
 
-    def forward(self, sounds):
-        if isinstance(sounds, list):
-            sound_features = []
-            audio_output_lengths = []
-            for sound in sounds:
-                if hasattr(sound, "input_features"):
-                    sound = sound["input_features"]
-                sound_feature = self.audio_tower(sound)
-                sound_feature = sound_feature.last_hidden_state
-                sound_feature = sound_feature.to(sound.dtype)
-                sound_features.append(sound_feature)
-                audio_output_lengths.append(sound_feature.shape[1])
-            sound_features = torch.cat(sound_features, dim=1).squeeze(0)
-        else:
-            raise NotImplementedError("Not implemented for this encoder")
-
-        return sound_features, audio_output_lengths
+        self.audio_chunk_unit_duration = 30
+        self.audio_chunk_unit_length = 3000
 
     @property
     def dtype(self):
@@ -266,17 +255,6 @@ class AudioTower(nn.Module):
     @property
     def hidden_size(self):
         return self.config.hidden_size
-
-
-class Qwen2AudioTower(AudioTower):
-    def __init__(self, model_name_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig):
-        super().__init__()
-        audio_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="qwen2_audio_encoder")
-        audio_cfg._attn_implementation = _get_attn_implementation(config)
-        self.audio_tower = _build_model_from_config_mapping(audio_cfg, MODEL_MAPPING, component_name="audio_tower")
-
-        self.audio_chunk_unit_duration = 30
-        self.audio_chunk_unit_length = 3000
 
     def forward(self, sounds):
         if isinstance(sounds, list):
@@ -1383,4 +1361,3 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
         model_inputs["media"] = None
         model_inputs["media_config"] = None
         return model_inputs
-
