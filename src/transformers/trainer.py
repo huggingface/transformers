@@ -2459,7 +2459,7 @@ class Trainer:
 
     def _track_num_input_tokens(self, inputs):
         """Count input tokens seen (all or non-padding) and update state."""
-        if self.args.include_num_input_tokens_seen != "no":
+        if self.args.include_num_input_tokens_seen == "no":
             return
         main_input_name = getattr(self.model, "main_input_name", "input_ids")
         if main_input_name not in inputs:
