@@ -117,6 +117,21 @@ STRING_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 
+AUDIO_PREPROCESSOR_KEYS = (
+    "feature_extractor_type",
+    "feature_size",
+    "sampling_rate",
+    "chunk_length",
+    "hop_length",
+    "n_fft",
+    "n_samples",
+    "nb_max_frames",
+    "padding_side",
+    "padding_value",
+    "return_attention_mask",
+)
+
+
 def _is_weight_file(name: str) -> bool:
     return name.endswith(WEIGHT_FILE_PATTERNS) or name == "model.safetensors.index.json"
 
@@ -197,11 +212,35 @@ def _copy_llm_metadata_to_root(src_root: Path, dst_root: Path) -> None:
         shutil.copy2(item, dst_root / item.name)
 
 
-def _copy_vision_preprocessor_fallback(src_root: Path, dst_root: Path) -> None:
+def _copy_merged_preprocessor_config(src_root: Path, dst_root: Path) -> None:
+    target_preprocessor = dst_root / "preprocessor_config.json"
+    root_preprocessor = src_root / "preprocessor_config.json"
     vision_preprocessor = src_root / "vision_tower" / "preprocessor_config.json"
+
     if vision_preprocessor.exists():
-        # Flat export uses a single root preprocessor config, so prefer the vision processor one.
-        shutil.copy2(vision_preprocessor, dst_root / "preprocessor_config.json")
+        merged_preprocessor = _load_json(vision_preprocessor)
+    elif root_preprocessor.exists():
+        merged_preprocessor = _load_json(root_preprocessor)
+    else:
+        return
+
+    if root_preprocessor.exists():
+        audio_preprocessor = _load_json(root_preprocessor)
+        for key in AUDIO_PREPROCESSOR_KEYS:
+            if key in audio_preprocessor:
+                merged_preprocessor[key] = audio_preprocessor[key]
+
+    if "feature_size" not in merged_preprocessor:
+        sound_tower_cfg = src_root / "sound_tower" / "config.json"
+        if sound_tower_cfg.exists():
+            num_mel_bins = _load_json(sound_tower_cfg).get("num_mel_bins")
+            if num_mel_bins is not None:
+                merged_preprocessor["feature_size"] = int(num_mel_bins)
+
+    if "feature_size" in merged_preprocessor and "feature_extractor_type" not in merged_preprocessor:
+        merged_preprocessor["feature_extractor_type"] = "WhisperFeatureExtractor"
+
+    _save_json(target_preprocessor, merged_preprocessor)
 
 
 def _prepare_destination_tree(src_root: Path, dst_root: Path, clean_dst: bool = True) -> None:
@@ -213,7 +252,7 @@ def _prepare_destination_tree(src_root: Path, dst_root: Path, clean_dst: bool = 
 
     _copy_top_level_metadata(src_root, dst_root)
     _copy_llm_metadata_to_root(src_root, dst_root)
-    _copy_vision_preprocessor_fallback(src_root, dst_root)
+    _copy_merged_preprocessor_config(src_root, dst_root)
 
 
 def _resolve_component_dir(dirpath: Path):

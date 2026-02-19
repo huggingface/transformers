@@ -1347,16 +1347,8 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
 
         def _prepare_sound_media(sound_media: List[Any], max_audio_duration: int) -> List[Any]:
             cur_batch_max_audio_samples = max_audio_duration * self.config.audio_sampling_rate
-            sound_tower = getattr(self, "sound_tower", None)
-            num_mel_bins = getattr(getattr(sound_tower, "config", None), "num_mel_bins", None)
-            if num_mel_bins is None:
-                sound_tower_cfg = getattr(self.config, "sound_tower_cfg", None)
-                if isinstance(sound_tower_cfg, dict):
-                    num_mel_bins = sound_tower_cfg.get("num_mel_bins")
-            num_mel_bins = int(num_mel_bins) if num_mel_bins is not None else 80
-
-            whisper_feature_extractor = WhisperFeatureExtractor(
-                feature_size=num_mel_bins,
+            whisper_feature_extractor = WhisperFeatureExtractor.from_pretrained(
+                self.config._name_or_path,
                 chunk_length=max_audio_duration,
                 sampling_rate=self.config.audio_sampling_rate,
                 hop_length=self.config.audio_hop_length,
