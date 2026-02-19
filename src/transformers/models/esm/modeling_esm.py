@@ -646,6 +646,7 @@ class EsmModel(EsmPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(
                 input_ids=input_ids,
+                attention_mask=attention_mask,
                 position_ids=position_ids,
             )
 
