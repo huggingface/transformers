@@ -325,6 +325,7 @@ def _normalize_top_level_config(dst_root: Path, src_root: Path) -> None:
             cfg[field] = None
 
     cfg["architectures"] = ["OmniVinciForCausalLM"]
+    cfg["_name_or_path"] = str(dst_root)
     cfg["resume_path"] = None
 
     auto_map = cfg.get("auto_map") or {}
