@@ -416,7 +416,7 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 
 class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint_name = "eustlb/higgs-v2"
+        self.checkpoint_name = "eustlb/higgs-audio-v2-generation-3B-base"
         self.processor = AutoProcessor.from_pretrained(self.checkpoint_name, device_map=torch_device)
 
     def tearDown(self):

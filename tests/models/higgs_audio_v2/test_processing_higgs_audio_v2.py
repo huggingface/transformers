@@ -111,7 +111,7 @@ class HiggsAudioV2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.checkpoint = "eustlb/higgs-v2"
+        cls.checkpoint = "eustlb/higgs-audio-v2-generation-3B-base"
         cls.audio_tokenizer_checkpoint = "eustlb/higgs-audio-v2-tokenizer"
 
         processor = HiggsAudioV2Processor.from_pretrained(cls.checkpoint)

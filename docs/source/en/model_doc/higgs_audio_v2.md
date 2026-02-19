@@ -50,7 +50,7 @@ All of the snippets below mirror the integration tests in `test_higgs_audio.py`,
 ```python
 from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
 
-model_id = "eustlb/higgs-v2"
+model_id = "eustlb/higgs-audio-v2-generation-3B-base"
 processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
 model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
@@ -103,7 +103,7 @@ processor.save_audio(decoded, "output_single_speaker_smart_voice.wav")
 ```python
 from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
 
-model_id = "eustlb/higgs-v2"
+model_id = "eustlb/higgs-audio-v2-generation-3B-base"
 processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
 model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
@@ -173,7 +173,7 @@ processor.save_audio(decoded, "output_multi_speaker_smart_voice.wav")
 ```python
 from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
 
-model_id = "eustlb/higgs-v2"
+model_id = "eustlb/higgs-audio-v2-generation-3B-base"
 processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
 model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
@@ -244,7 +244,7 @@ processor.save_audio(decoded, "output_zero_shot_voice_cloning.wav")
 ```python
 from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
 
-model_id = "eustlb/higgs-v2"
+model_id = "eustlb/higgs-audio-v2-generation-3B-base"
 processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
 model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
@@ -318,7 +318,7 @@ processor.save_audio(decoded, "output_multi_speaker_voice_cloning.wav")
 ```python
 from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
 
-model_id = "eustlb/higgs-v2"
+model_id = "eustlb/higgs-audio-v2-generation-3B-base"
 processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
 model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
@@ -441,7 +441,7 @@ processor.save_audio(decoded, ["output_batched_1.wav", "output_batched_2.wav"])
 ```python
 from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
 
-model_id = "eustlb/higgs-v2"
+model_id = "eustlb/higgs-audio-v2-generation-3B-base"
 processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
 model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto", use_text_head=True)
 

@@ -455,8 +455,8 @@ class HiggsAudioV2Model(HiggsAudioV2PreTrainedModel):
         >>> from transformers import AutoProcessor, HiggsAudioV2Model
         >>> import torch
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-        >>> processor = AutoProcessor.from_pretrained("eustlb/higgs-v2", device_map=device)
-        >>> model = HiggsAudioV2Model.from_pretrained("eustlb/higgs-v2", device_map=device)
+        >>> processor = AutoProcessor.from_pretrained("eustlb/higgs-audio-v2-generation-3B-base", device_map=device)
+        >>> model = HiggsAudioV2Model.from_pretrained("eustlb/higgs-audio-v2-generation-3B-base", device_map=device)
         >>> conversation = [
         ...     {
         ...         "role": "system",
@@ -697,7 +697,7 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
 
         ```python
         >>> from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
-        >>> model_id = "eustlb/higgs-v2"
+        >>> model_id = "eustlb/higgs-audio-v2-generation-3B-base"
         >>> processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
         >>> model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
         >>> conversation = [
