@@ -34,6 +34,7 @@ from transformers import (
 )
 from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import CausalLMOutputWithPast
+from transformers.models.perceiver.modeling_perceiver import space_to_depth
 from transformers.models.qwen2.modeling_qwen2 import Qwen2ForCausalLM
 from transformers.models.qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoder
 from transformers.models.siglip.modeling_siglip import SiglipVisionModel
@@ -77,33 +78,6 @@ def _get_attn_implementation(config: PretrainedConfig, default: str = "sdpa") ->
     return attn_impl or default
 
 
-class DownSampleBlock(nn.Module):
-    """Downsample 2D feature maps by rearranging into 2x2 blocks."""
-
-    def forward(self, x):
-        vit_embeds = x
-        h = w = int(vit_embeds.shape[1] ** 0.5)
-        vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], h, w, -1)
-        vit_embeds = self.flat_square(vit_embeds)
-        vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], -1, vit_embeds.shape[-1])
-        return vit_embeds
-
-    def flat_square(self, x):
-        n, w, h, c = x.size()
-        if w % 2 == 1:
-            x = torch.concat([x, torch.zeros((n, 1, h, c), dtype=x.dtype).to(x.device)], dim=1).contiguous()
-            n, w, h, c = x.size()
-        if h % 2 == 1:
-            x = torch.concat([x, torch.zeros((n, w, 1, c), dtype=x.dtype).to(x.device)], dim=2).contiguous()
-            n, w, h, c = x.size()
-        x = x.contiguous()
-        x = x.view(n, w, int(h / 2), int(c * 2))
-        x = x.permute(0, 2, 1, 3).contiguous()
-        x = x.view(n, int(h / 2), int(w / 2), int(c * 4))
-        x = x.permute(0, 2, 1, 3).contiguous()
-        return x
-
-
 class MultimodalProjector(nn.Module):
     """Multimodal projector for mapping vision features to LLM space."""
 
@@ -111,7 +85,7 @@ class MultimodalProjector(nn.Module):
         super().__init__()
         self.downsample_rate = 2
         self.layers = nn.Sequential(
-            DownSampleBlock(),
+            nn.Identity(),
             nn.LayerNorm(config.mm_hidden_size * 4),
             nn.Linear(config.mm_hidden_size * 4, config.hidden_size),
             nn.GELU(),
@@ -119,6 +93,17 @@ class MultimodalProjector(nn.Module):
         )
 
     def forward(self, x, *args, **kwargs):
+        bsz, num_tokens, channels = x.shape
+        h = w = int(num_tokens**0.5)
+        x = x.reshape(bsz, h, w, channels).permute(0, 3, 1, 2).contiguous()
+        if h % self.downsample_rate != 0 or w % self.downsample_rate != 0:
+            x = F.pad(
+                x,
+                (0, w % self.downsample_rate, 0, h % self.downsample_rate),
+                mode="constant",
+                value=0,
+            )
+        x = space_to_depth(x, spatial_block_size=self.downsample_rate).reshape(bsz, -1, channels * 4)
         return self.layers(x)
 
 
