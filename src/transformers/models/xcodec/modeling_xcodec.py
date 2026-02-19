@@ -469,12 +469,21 @@ class XcodecModel(XcodecPreTrainedModel):
         if hasattr(decoder, "tanh") and isinstance(decoder.tanh, nn.Tanh):
             decoder.tanh = nn.Identity()
 
-    def _extract_semantic_features(self, input_values: torch.FloatTensor) -> torch.FloatTensor:
+    def _extract_semantic_features(self, input_values: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         input_values = input_values[:, 0, :]
         input_values = F.pad(input_values, (self.pad, self.pad))
+
+        semantic_model_kwargs = {}
+        if "output_attentions" in kwargs:
+            semantic_model_kwargs["output_attentions"] = kwargs["output_attentions"]
+        semantic_model_kwargs["output_hidden_states"] = kwargs.get("output_hidden_states", True)
+
         with torch.no_grad():
-            outputs = self.semantic_model(input_values, output_hidden_states=True)
+            outputs = self.semantic_model(input_values, **semantic_model_kwargs)
             hidden_states = outputs.hidden_states
+
+        if hidden_states is None:
+            hidden_states = (outputs.last_hidden_state,)
 
         stacked = torch.stack(hidden_states, dim=1)
         return stacked.mean(dim=1)
@@ -485,6 +494,7 @@ class XcodecModel(XcodecPreTrainedModel):
         input_values: torch.Tensor,
         bandwidth: float | None = None,
         return_dict: bool | None = None,
+        **kwargs,
     ) -> torch.Tensor | XcodecEncoderOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
@@ -511,7 +521,7 @@ class XcodecModel(XcodecPreTrainedModel):
                 f"This model doesn't support the bandwidth {bandwidth}. Select one of {self.config.target_bandwidths}."
             )
 
-        e_semantic_input = self._extract_semantic_features(input_values).detach()
+        e_semantic_input = self._extract_semantic_features(input_values, **kwargs).detach()
         e_semantic = self.encoder_semantic(e_semantic_input.transpose(1, 2))
 
         # original codebase infer to get the output length, but we can directly infer it
@@ -566,6 +576,7 @@ class XcodecModel(XcodecPreTrainedModel):
         audio_codes: torch.Tensor | None = None,
         bandwidth: float | None = None,
         return_dict: bool | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor] | XcodecOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
@@ -609,7 +620,7 @@ class XcodecModel(XcodecPreTrainedModel):
         length = input_values.shape[-1]
 
         if audio_codes is None:
-            audio_codes = self.encode(input_values, bandwidth, return_dict=False)
+            audio_codes = self.encode(input_values, bandwidth, return_dict=False, **kwargs)
 
         audio_values = self.decode(audio_codes, return_dict=return_dict)[0][..., :length]
 

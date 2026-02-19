@@ -24,7 +24,10 @@ from ...modeling_outputs import ModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ..wav2vec2.modeling_wav2vec2 import (
+    Wav2Vec2Attention,
     Wav2Vec2Encoder,
+    Wav2Vec2EncoderLayer,
+    Wav2Vec2EncoderLayerStableLayerNorm,
     Wav2Vec2EncoderStableLayerNorm,
     Wav2Vec2FeatureEncoder,
     Wav2Vec2FeatureProjection,
@@ -86,6 +89,18 @@ class UniSpeechSatFeatureEncoder(Wav2Vec2FeatureEncoder):
 
 
 class UniSpeechSatFeatureProjection(Wav2Vec2FeatureProjection):
+    pass
+
+
+class UniSpeechSatAttention(Wav2Vec2Attention):
+    pass
+
+
+class UniSpeechSatEncoderLayer(Wav2Vec2EncoderLayer):
+    pass
+
+
+class UniSpeechSatEncoderLayerStableLayerNorm(Wav2Vec2EncoderLayerStableLayerNorm):
     pass
 
 
@@ -156,6 +171,10 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    _can_record_outputs = {
+        "hidden_states": [UniSpeechSatEncoderLayer, UniSpeechSatEncoderLayerStableLayerNorm],
+        "attentions": UniSpeechSatAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -383,6 +402,10 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         >>> # TODO: Add full pretraining example
         ```"""
 
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.unispeech_sat(

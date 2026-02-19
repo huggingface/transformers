@@ -104,7 +104,6 @@ class PatchTSTAttention(nn.Module):
         hidden_states: torch.Tensor,
         key_value_states: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -133,7 +132,7 @@ class PatchTSTAttention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        attn_output, attn_weights = attention_interface(
+        attention_outputs = attention_interface(
             self,
             query_states,
             key_states,
@@ -141,14 +140,18 @@ class PatchTSTAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
-            output_attentions=output_attentions,
             **kwargs,
         )
+        if len(attention_outputs) == 2:
+            attn_output, attn_weights = attention_outputs
+            past_key_value = None
+        else:
+            attn_output, attn_weights, past_key_value = attention_outputs
 
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, None
+        return attn_output, attn_weights, past_key_value
 
 
 class PatchTSTBatchNorm(nn.Module):

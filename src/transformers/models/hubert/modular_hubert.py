@@ -23,7 +23,10 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from ..wav2vec2.modeling_wav2vec2 import (
+    Wav2Vec2Attention,
     Wav2Vec2Encoder,
+    Wav2Vec2EncoderLayer,
+    Wav2Vec2EncoderLayerStableLayerNorm,
     Wav2Vec2EncoderStableLayerNorm,
     Wav2Vec2FeatureEncoder,
     Wav2Vec2ForCTC,
@@ -113,6 +116,18 @@ class HubertFeatureProjection(nn.Module):
         return hidden_states
 
 
+class HubertAttention(Wav2Vec2Attention):
+    pass
+
+
+class HubertEncoderLayer(Wav2Vec2EncoderLayer):
+    pass
+
+
+class HubertEncoderLayerStableLayerNorm(Wav2Vec2EncoderLayerStableLayerNorm):
+    pass
+
+
 class HubertEncoder(Wav2Vec2Encoder):
     pass
 
@@ -131,6 +146,10 @@ class HubertPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    _can_record_outputs = {
+        "hidden_states": [HubertEncoderLayer, HubertEncoderLayerStableLayerNorm],
+        "attentions": HubertAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
