@@ -1482,7 +1482,7 @@ class Trainer:
 
         start_time = time.time()
         # needed to calculate tokens/s
-        self.initial_num_input_tokens_seen_for_session = self.state.num_input_tokens_seen
+        self._initial_num_input_tokens_seen = self.state.num_input_tokens_seen
         # Logging state: _tr_loss accumulates on-device between logging steps (avoiding costly .item() syncs
         # on TPUs), then gets drained into _total_loss_scalar at each logging step.
         self._tr_loss = torch.tensor(0.0, device=args.device)
@@ -3865,7 +3865,7 @@ class Trainer:
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
             if start_time is not None:
                 current_session_num_tokens = (
-                    self.state.num_input_tokens_seen - self.initial_num_input_tokens_seen_for_session
+                    self.state.num_input_tokens_seen - self._initial_num_input_tokens_seen
                 )
                 logs.update(speed_metrics("train", start_time, num_tokens=current_session_num_tokens))
 
