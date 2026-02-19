@@ -196,8 +196,9 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         assert num_calculated_features == [90, 171]
         assert sum(num_expected_features) == num_audio_tokens
 
+    @parameterized.expand(["cpu", "cuda"])
     @require_torch_accelerator
-    def test_device_placement(self):
+    def test_device_placement(self, device):
         """Ensure that the device parameter controls where speech inputs are placed."""
         tokenizer = self.get_tokenizer()
         audio_processor = self.get_audio_processor()
@@ -213,7 +214,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
             text=f"{processor.audio_token} Can you transcribe this audio?",
             audio=wav,
             return_tensors="pt",
-            device=torch_device,
+            device=device,
         )
 
-        assert inputs["input_features"].device.type == torch_device
+        assert inputs["input_features"].device.type == device
