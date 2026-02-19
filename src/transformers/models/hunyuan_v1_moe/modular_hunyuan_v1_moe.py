@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (C) 2025 THL A29 Limited, a Tencent company and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,20 +14,17 @@
 """PyTorch HunYuanMoEV1 model."""
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
-from transformers.cache_utils import Cache
-from transformers.utils import (
-    logging,
-)
-
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ... import initialization as init
+from ...cache_utils import Cache
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs
+from ...utils import TransformersKwargs, logging
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import HunYuanDenseV1RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -71,9 +67,9 @@ class HunYuanMoEV1Attention(LlamaAttention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -93,9 +89,9 @@ class HunYuanMoEV1Attention(LlamaAttention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -114,7 +110,7 @@ class HunYuanMoEV1Attention(LlamaAttention):
 
 
 class HunYuanMoEV1Gate(nn.Module):
-    def __init__(self, config: HunYuanMoEV1Config, layer_idx: Optional[int] = None):
+    def __init__(self, config: HunYuanMoEV1Config, layer_idx: int | None = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -135,7 +131,7 @@ class HunYuanMoEV1Experts(MixtralExperts):
 
 
 class HunYuanMoEV1Moe(nn.Module):
-    def __init__(self, config: HunYuanMoEV1Config, layer_idx: Optional[int] = None):
+    def __init__(self, config: HunYuanMoEV1Config, layer_idx: int | None = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -175,18 +171,30 @@ class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
 
 
 class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
-    _can_compile_fullgraph = False
-
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, HunYuanMoEV1Experts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        # DynamicNTKAlphaRotary - unique to this model
+        elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
+            if module.rope_type == "dynamic" and module.config.rope_parameters.get("alpha"):
+                dim = module.config.head_dim
+                rope_theta = module.config.rope_parameters["rope_theta"]
+                alpha = module.config.rope_parameters["alpha"]
+
+                base = rope_theta * alpha ** (dim / (dim - 2))
+                buffer_value = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+            else:
+                rope_fn = (
+                    ROPE_INIT_FUNCTIONS[module.rope_type]
+                    if module.rope_type != "default"
+                    else module.compute_default_rope_parameters
+                )
+                buffer_value, _ = rope_fn(module.config)
+            init.copy_(module.inv_freq, buffer_value)
+            init.copy_(module.original_inv_freq, buffer_value)
 
 
 class HunYuanMoEV1RotaryEmbedding(HunYuanDenseV1RotaryEmbedding):

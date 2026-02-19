@@ -25,6 +25,8 @@
     title: 分享您的模型
   - local: llm_tutorial
     title: 使用LLMs进行生成
+  - local: generation_strategies
+    title: 生成策略
   title: 教程
 - sections:
   - isExpanded: false
@@ -107,8 +109,6 @@
       title: 模型
     - local: main_classes/text_generation
       title: 文本生成
-    - local: main_classes/onnx
-      title: ONNX
     - local: main_classes/optimizer_schedules
       title: Optimization
     - local: main_classes/output

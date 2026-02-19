@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 import torch
 
@@ -75,7 +73,7 @@ class VaultGemmaConfig(Gemma2Config):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -105,30 +103,30 @@ class VaultGemmaConfig(Gemma2Config):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 256000,
-        hidden_size: Optional[int] = 2304,
-        intermediate_size: Optional[int] = 9216,
-        num_hidden_layers: Optional[int] = 26,
-        num_attention_heads: Optional[int] = 8,
-        num_key_value_heads: Optional[int] = 4,
-        head_dim: Optional[int] = 256,
-        hidden_activation: Optional[str] = "gelu_pytorch_tanh",
-        max_position_embeddings: Optional[int] = 8192,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 1,
-        bos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        query_pre_attn_scalar: Optional[int] = 256,
-        sliding_window: Optional[int] = 4096,
-        layer_types: Optional[list[str]] = None,
-        final_logit_softcapping: Optional[float] = 30.0,
-        attn_logit_softcapping: Optional[float] = 50.0,
+        vocab_size: int | None = 256000,
+        hidden_size: int | None = 2304,
+        intermediate_size: int | None = 9216,
+        num_hidden_layers: int | None = 26,
+        num_attention_heads: int | None = 8,
+        num_key_value_heads: int | None = 4,
+        head_dim: int | None = 256,
+        hidden_activation: str | None = "gelu_pytorch_tanh",
+        max_position_embeddings: int | None = 8192,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        eos_token_id: int | None = 1,
+        bos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        query_pre_attn_scalar: int | None = 256,
+        sliding_window: int | None = 4096,
+        layer_types: list[str] | None = None,
+        final_logit_softcapping: float | None = 30.0,
+        attn_logit_softcapping: float | None = 50.0,
         **kwargs,
     ):
         super().__init__(
@@ -188,25 +186,21 @@ class VaultGemmaDecoderLayer(Gemma2DecoderLayer):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
             cache_position=cache_position,
             **kwargs,
         )
@@ -217,11 +211,7 @@ class VaultGemmaDecoderLayer(Gemma2DecoderLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class VaultGemmaForCausalLM(Gemma2ForCausalLM):

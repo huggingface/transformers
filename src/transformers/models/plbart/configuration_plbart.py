@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022, UCLA NLP, The Facebook AI Research Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,11 +13,7 @@
 # limitations under the License.
 """PLBART model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfigWithPast
 from ...utils import logging
 
 
@@ -133,8 +128,12 @@ class PLBartConfig(PreTrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         forced_eos_token_id=2,
+        is_decoder=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
@@ -155,43 +154,14 @@ class PLBartConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.forced_eos_token_id = forced_eos_token_id
         super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
-
-
-class PLBartOnnxConfig(OnnxConfigWithPast):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.use_past:
-            return OrderedDict(
-                [
-                    ("last_hidden_state", {0: "batch", 1: "sequence"}),
-                    ("past_keys", {0: "batch", 2: "sequence"}),
-                    ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
-                ]
-            )
-        else:
-            return OrderedDict(
-                [
-                    ("last_hidden_state", {0: "batch", 1: "sequence"}),
-                    ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
-                ]
-            )
 
 
 __all__ = ["PLBartConfig"]

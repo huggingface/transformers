@@ -19,11 +19,12 @@ in the ./benches directory, organizing outputs into model-specific subfolders.
 """
 
 import argparse
+import json
 import logging
 import sys
 import uuid
 
-from framework.benchmark_config import BenchmarkConfig, generate_all_configs, generate_main_configs
+from framework.benchmark_config import BenchmarkConfig, adapt_configs, get_config_by_level
 from framework.benchmark_runner import BenchmarkRunner
 
 
@@ -31,7 +32,7 @@ if __name__ == "__main__":
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=str, default=None, help="Output dir for benchmark results")
-    parser.add_argument("--log-level", type=str, choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="INFO")
+    parser.add_argument("--log-level", type=str, choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="WARNING")
     parser.add_argument("--model-id", type=str, help="Specific model ID to benchmark (if supported by benchmarks)")
     parser.add_argument("--warmup", "-w", type=int, default=3, help="Number of warmup iterations")
     parser.add_argument("--iterations", "-i", type=int, default=10, help="Number of measurement iterations")
@@ -40,7 +41,15 @@ if __name__ == "__main__":
     parser.add_argument("--sequence-length", "-s", type=int, nargs="+", help="Sequence length")
     parser.add_argument("--num-tokens-to-generate", "-n", type=int, nargs="+", help="Number of tokens to generate")
 
-    parser.add_argument("--cross-generate", action="store_true", help="Cross-generate all combinations of configs")
+    parser.add_argument(
+        "--level",
+        type=int,
+        default=1,
+        help="Level of coverage for the benchmark. 0: only the main config, 1: a few important configs, 2: a config for"
+        " each attn implementation an option, 3: cross-generate all combinations of configs, 4: cross-generate all"
+        " combinations of configs w/ all compile modes",
+    )
+    parser.add_argument("--config-file", type=str, help="Path to a config file stored as a json or jsonl format")
     parser.add_argument("--num-tokens-to-profile", "-p", type=int, default=0, help="Number of tokens to profile")
 
     parser.add_argument("--branch-name", type=str, help="Git branch name")
@@ -74,69 +83,46 @@ if __name__ == "__main__":
     logger.info(f"Output directory: {args.output_dir}")
 
     # Error out if one of the arguments is not provided
-    if len(args.batch_size) * len(args.sequence_length) * len(args.num_tokens_to_generate) == 0:
+    if any(arg is None for arg in [args.batch_size, args.sequence_length, args.num_tokens_to_generate]):
         raise ValueError(
-            "At least one of the arguments --batch-size, --sequence-length, or --num-tokens-to-generate is required"
+            "All of the arguments --batch-size, --sequence-length, and --num-tokens-to-generate are required"
         )
 
-    # If there is only one (batch_size, sequence_length, num_tokens_to_generate), we benchmark across configs
-    elif len(args.batch_size) * len(args.sequence_length) * len(args.num_tokens_to_generate) == 1:
-        if args.cross_generate:
-            benchmark_configs = generate_all_configs(
-                warmup_iterations=args.warmup,
-                measurement_iterations=args.iterations,
-                batch_size=args.batch_size[0],
-                sequence_length=args.sequence_length[0],
-                num_tokens_to_generate=args.num_tokens_to_generate[0],
-                gpu_monitoring=not args.no_gpu_monitoring,
-            )
+    # We cannot compute ITL if we don't have at least two measurements
+    if any(n <= 1 for n in args.num_tokens_to_generate):
+        raise ValueError("--num_tokens_to_generate arguments should be larger than 1")
+
+    # If a config file is provided, read it and use the configs therein. They will still be adapted to the given arguments.
+    if args.config_file is not None:
+        if args.config_file.endswith(".json"):
+            with open(args.config_file, "r") as f:
+                config_as_dicts = [json.load(f)]
+        elif args.config_file.endswith(".jsonl"):
+            with open(args.config_file, "r") as f:
+                config_as_dicts = [json.loads(line) for line in f if line.startswith("{")]
         else:
-            benchmark_configs = generate_main_configs(
-                warmup_iterations=args.warmup,
-                measurement_iterations=args.iterations,
-                batch_size=args.batch_size[0],
-                sequence_length=args.sequence_length[0],
-                num_tokens_to_generate=args.num_tokens_to_generate[0],
-            )
-
-    # Otherwise, we benchmark across all combinations of dimensions
+            raise ValueError(f"Unsupported config file format: {args.config_file}")
+        configs = [BenchmarkConfig.from_dict(config) for config in config_as_dicts]
     else:
-        main_config = generate_main_configs(
-            warmup_iterations=args.warmup,
-            measurement_iterations=args.iterations,
-            batch_size=args.batch_size[0],
-            sequence_length=args.sequence_length[0],
-            num_tokens_to_generate=args.num_tokens_to_generate[0],
-        )[0]
-        benchmark_configs = []
-        for num_tokens_to_generate in args.num_tokens_to_generate:
-            for sequence_length in args.sequence_length:
-                for batch_size in args.batch_size:
-                    cfg_dict = main_config.to_dict()
-                    cfg_dict["batch_size"] = batch_size
-                    cfg_dict["sequence_length"] = sequence_length
-                    cfg_dict["num_tokens_to_generate"] = num_tokens_to_generate
-                    cfg_dict.pop("name")
-                    benchmark_configs.append(BenchmarkConfig.from_dict(cfg_dict))
+        # Otherwise, get the configs for the given coverage level
+        configs = get_config_by_level(args.level)
 
-    runner = BenchmarkRunner(
-        logger,
-        args.output_dir,
-        args.branch_name,
-        args.commit_id,
-        args.commit_message,
+    # Adapt the configs to the given arguments
+    configs = adapt_configs(
+        configs,
+        args.warmup,
+        args.iterations,
+        args.batch_size,
+        args.sequence_length,
+        args.num_tokens_to_generate,
+        not args.no_gpu_monitoring,
     )
+
+    runner = BenchmarkRunner(logger, args.output_dir, args.branch_name, args.commit_id, args.commit_message)
     timestamp, results = runner.run_benchmarks(
-        args.model_id,
-        benchmark_configs,
-        args.num_tokens_to_profile,
-        pretty_print_summary=True,
+        args.model_id, configs, args.num_tokens_to_profile, pretty_print_summary=True
     )
 
     dataset_id = args.push_result_to_dataset
     if dataset_id is not None and len(results) > 0:
-        runner.push_results_to_hub(
-            dataset_id,
-            results,
-            timestamp,
-        )
+        runner.push_results_to_hub(dataset_id, results, timestamp)

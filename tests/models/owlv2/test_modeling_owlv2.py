@@ -51,7 +51,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import OwlViTProcessor
+    from transformers import OwlViTImageProcessor, OwlViTProcessor
 
 
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTVisionModelTester with OwlViT->Owlv2
@@ -182,24 +182,20 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -315,24 +311,20 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="OWLV2 does not use inputs_embeds")
@@ -574,24 +566,20 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     def test_forward_signature(self):
         pass
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -615,7 +603,8 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2Model.from_pretrained(model_name).to(torch_device)
-        processor = OwlViTProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
         inputs = processor(
@@ -646,7 +635,8 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference_interpolate_pos_encoding(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2Model.from_pretrained(model_name).to(torch_device)
-        processor = OwlViTProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
         processor.image_processor.size = {"height": 1024, "width": 1024}
 
         image = prepare_img()
@@ -709,7 +699,8 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
 
         # Deactivate interpolate_pos_encoding on same model, and use default image size.
         # Verify the dynamic change caused by the activation/deactivation of interpolate_pos_encoding of variables: self.sqrt_num_patches, self.box_bias from (OwlViTForObjectDetection).
-        processor = OwlViTProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
         inputs = processor(
@@ -732,7 +723,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
                 [-3.3644, -4.0717, -4.0717, -4.0717],
                 [-2.9425, -4.0717, -4.0717, -4.0717],
             ]
-        )
+        ).to(torch_device)
 
         torch.testing.assert_close(model.box_bias[:3, :4], expected_default_box_bias, rtol=1e-4, atol=1e-4)
 
@@ -784,8 +775,8 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference_object_detection(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name).to(torch_device)
-
-        processor = OwlViTProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
         text_labels = [["a photo of a cat", "a photo of a dog"]]
@@ -834,8 +825,8 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference_one_shot_object_detection(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name).to(torch_device)
-
-        processor = OwlViTProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
         query_image = prepare_img()
@@ -865,7 +856,8 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name, dtype=torch.float16).to(torch_device)
 
-        processor = OwlViTProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
         query_image = prepare_img()

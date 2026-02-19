@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,9 @@
 # limitations under the License.
 """Swin Transformer model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from packaging import version
-
+from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -155,25 +148,7 @@ class SwinConfig(BackboneConfigMixin, PreTrainedConfig):
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
+        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
 
 
-class SwinOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-
-__all__ = ["SwinConfig", "SwinOnnxConfig"]
+__all__ = ["SwinConfig"]

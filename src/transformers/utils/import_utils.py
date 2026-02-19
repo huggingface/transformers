@@ -33,6 +33,7 @@ from itertools import chain
 from types import ModuleType
 from typing import Any
 
+import packaging.version
 from packaging import version
 
 from . import logging
@@ -47,19 +48,24 @@ PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
 def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[bool, str] | bool:
     """Check if `pkg_name` exist, and optionally try to get its version"""
     spec = importlib.util.find_spec(pkg_name)
-    # the spec might be not None but not importable
-    package_exists = spec is not None and spec.loader is not None
+    package_exists = spec is not None
     package_version = "N/A"
     if package_exists and return_version:
         try:
             # importlib.metadata works with the distribution package, which may be different from the import
             # name (e.g. `PIL` is the import name, but `pillow` is the distribution name)
             distributions = PACKAGE_DISTRIBUTION_MAPPING[pkg_name]
-            # In most cases, the packages are well-behaved and both have the same name. If it's not the case, we
-            # pick the first item of the list as best guess (it's almost always a list of length 1 anyway)
-            distribution_name = pkg_name if pkg_name in distributions else distributions[0]
+            # Per PEP 503, underscores and hyphens are equivalent in package names.
+            # Prefer the distribution that matches the (normalized) package name.
+            normalized_pkg_name = pkg_name.replace("_", "-")
+            if normalized_pkg_name in distributions:
+                distribution_name = normalized_pkg_name
+            elif pkg_name in distributions:
+                distribution_name = pkg_name
+            else:
+                distribution_name = distributions[0]
             package_version = importlib.metadata.version(distribution_name)
-        except importlib.metadata.PackageNotFoundError:
+        except (importlib.metadata.PackageNotFoundError, KeyError):
             # If we cannot find the metadata (because of editable install for example), try to import directly.
             # Note that this branch will almost never be run, so we do not import packages for nothing here
             package = importlib.import_module(pkg_name)
@@ -69,6 +75,16 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
         return package_exists, package_version
     else:
         return package_exists
+
+
+def is_env_variable_true(env_variable: str) -> bool:
+    """Detect whether `env_variable` has been set to a true value in the environment"""
+    return os.getenv(env_variable, "false").lower() in ("true", "1", "y", "yes", "on")
+
+
+def is_env_variable_false(env_variable: str) -> bool:
+    """Detect whether `env_variable` has been set to a false value in the environment"""
+    return os.getenv(env_variable, "true").lower() in ("false", "0", "n", "no", "off")
 
 
 ENV_VARS_TRUE_VALUES = {"1", "ON", "YES", "TRUE"}
@@ -88,14 +104,19 @@ VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
+KERNELS_MIN_VERSION = "0.10.2"
 
 
 @lru_cache
 def is_torch_available() -> bool:
-    is_available, torch_version = _is_package_available("torch", return_version=True)
-    if is_available and version.parse(torch_version) < version.parse("2.2.0"):
-        logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.2 is required but found {torch_version}")
-    return is_available and version.parse(torch_version) >= version.parse("2.2.0")
+    try:
+        is_available, torch_version = _is_package_available("torch", return_version=True)
+        parsed_version = version.parse(torch_version)
+        if is_available and parsed_version < version.parse("2.4.0"):
+            logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.4 is required but found {torch_version}")
+        return is_available and version.parse(torch_version) >= version.parse("2.4.0")
+    except packaging.version.InvalidVersion:
+        return False
 
 
 @lru_cache
@@ -189,12 +210,11 @@ def is_torch_mps_available(min_version: str | None = None) -> bool:
     if is_torch_available():
         import torch
 
-        if hasattr(torch.backends, "mps"):
-            backend_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
-            if min_version is not None:
-                flag = version.parse(get_torch_version()) >= version.parse(min_version)
-                backend_available = backend_available and flag
-            return backend_available
+        backend_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
+        if min_version is not None:
+            flag = version.parse(get_torch_version()) >= version.parse(min_version)
+            backend_available = backend_available and flag
+        return backend_available
     return False
 
 
@@ -220,25 +240,21 @@ def is_torch_npu_available(check_device=False) -> bool:
 @lru_cache
 def is_torch_xpu_available(check_device: bool = False) -> bool:
     """
-    Checks if XPU acceleration is available either via native PyTorch (>=2.6),
-    `intel_extension_for_pytorch` or via stock PyTorch (>=2.4) and potentially
-    if a XPU is in the environment.
+    Checks if XPU acceleration is available via stock PyTorch (>=2.6) and
+    potentially if a XPU is in the environment.
     """
     if not is_torch_available():
         return False
 
     torch_version = version.parse(get_torch_version())
     if torch_version.major == 2 and torch_version.minor < 6:
-        if is_ipex_available():
-            import intel_extension_for_pytorch  # noqa: F401
-        elif torch_version.major == 2 and torch_version.minor < 4:
-            return False
+        return False
 
     import torch
 
     if check_device:
         try:
-            # Will raise a RuntimeError if no XPU  is found
+            # Will raise a RuntimeError if no XPU is found
             _ = torch.xpu.device_count()
             return torch.xpu.is_available()
         except RuntimeError:
@@ -504,8 +520,36 @@ def is_torch_tf32_available() -> bool:
 
 
 @lru_cache
+def enable_tf32(enable: bool) -> None:
+    """
+    Set TF32 mode using the appropriate PyTorch API.
+    For PyTorch 2.9+, uses the new fp32_precision API.
+    For older versions, uses the legacy allow_tf32 flags.
+    Args:
+        enable: Whether to enable TF32 mode
+    """
+    import torch
+
+    pytorch_version = version.parse(get_torch_version())
+    if pytorch_version >= version.parse("2.9.0"):
+        precision_mode = "tf32" if enable else "ieee"
+        torch.backends.fp32_precision = precision_mode
+    else:
+        if is_torch_musa_available():
+            torch.backends.mudnn.allow_tf32 = enable
+        else:
+            torch.backends.cuda.matmul.allow_tf32 = enable
+            torch.backends.cudnn.allow_tf32 = enable
+
+
+@lru_cache
 def is_torch_flex_attn_available() -> bool:
     return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.5.0")
+
+
+@lru_cache
+def is_grouped_mm_available() -> bool:
+    return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.9.0")
 
 
 @lru_cache
@@ -514,8 +558,9 @@ def is_kenlm_available() -> bool:
 
 
 @lru_cache
-def is_kernels_available() -> bool:
-    return _is_package_available("kernels")
+def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION) -> bool:
+    is_available, kernels_version = _is_package_available("kernels", return_version=True)
+    return is_available and version.parse(kernels_version) >= version.parse(MIN_VERSION)
 
 
 @lru_cache
@@ -701,11 +746,6 @@ def is_flute_available() -> bool:
 
 
 @lru_cache
-def is_ftfy_available() -> bool:
-    return _is_package_available("ftfy")
-
-
-@lru_cache
 def is_g2p_en_available() -> bool:
     return _is_package_available("g2p_en")
 
@@ -804,29 +844,6 @@ def is_ninja_available() -> bool:
 
 
 @lru_cache
-def is_ipex_available(min_version: str = "") -> bool:
-    def get_major_and_minor_from_version(full_version):
-        return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
-
-    ipex_available, ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
-
-    if not is_torch_available() or not ipex_available:
-        return False
-
-    torch_major_and_minor = get_major_and_minor_from_version(get_torch_version())
-    ipex_major_and_minor = get_major_and_minor_from_version(ipex_version)
-    if torch_major_and_minor != ipex_major_and_minor:
-        logger.warning_once(
-            f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
-            f" but PyTorch {get_torch_version()} is found. Please switch to the matching version and run again."
-        )
-        return False
-    if min_version:
-        return version.parse(ipex_version) >= version.parse(min_version)
-    return True
-
-
-@lru_cache
 def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bool:
     is_available, bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
     return is_available and version.parse(bitsandbytes_version) >= version.parse(min_version)
@@ -840,14 +857,17 @@ def is_flash_attn_2_available() -> bool:
 
     import torch
 
-    if torch.version.cuda:
-        return version.parse(flash_attn_version) >= version.parse("2.1.0")
-    elif torch.version.hip:
-        # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
-        return version.parse(flash_attn_version) >= version.parse("2.0.4")
-    elif is_torch_mlu_available():
-        return version.parse(flash_attn_version) >= version.parse("2.3.3")
-    else:
+    try:
+        if torch.version.cuda:
+            return version.parse(flash_attn_version) >= version.parse("2.1.0")
+        elif torch.version.hip:
+            # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
+            return version.parse(flash_attn_version) >= version.parse("2.0.4")
+        elif is_torch_mlu_available():
+            return version.parse(flash_attn_version) >= version.parse("2.3.3")
+        else:
+            return False
+    except packaging.version.InvalidVersion:
         return False
 
 
@@ -865,7 +885,12 @@ def is_flash_attn_greater_or_equal_2_10() -> bool:
 @lru_cache
 def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
-    return is_available and version.parse(flash_attn_version) >= version.parse(library_version)
+    if not is_available:
+        return False
+    try:
+        return version.parse(flash_attn_version) >= version.parse(library_version)
+    except packaging.version.InvalidVersion:
+        return False
 
 
 @lru_cache
@@ -949,7 +974,7 @@ def is_optimum_available() -> bool:
 
 
 @lru_cache
-def is_auto_awq_available() -> bool:
+def is_llm_awq_available() -> bool:
     return _is_package_available("awq")
 
 
@@ -972,13 +997,13 @@ def is_quark_available() -> bool:
 @lru_cache
 def is_fp_quant_available():
     is_available, fp_quant_version = _is_package_available("fp_quant", return_version=True)
-    return is_available and version.parse(fp_quant_version) >= version.parse("0.2.0")
+    return is_available and version.parse(fp_quant_version) >= version.parse("0.3.2")
 
 
 @lru_cache
 def is_qutlass_available():
     is_available, qutlass_version = _is_package_available("qutlass", return_version=True)
-    return is_available and version.parse(qutlass_version) >= version.parse("0.1.0")
+    return is_available and version.parse(qutlass_version) >= version.parse("0.2.0")
 
 
 @lru_cache
@@ -987,18 +1012,13 @@ def is_compressed_tensors_available() -> bool:
 
 
 @lru_cache
-def is_auto_gptq_available() -> bool:
-    return _is_package_available("auto_gptq")
+def is_sinq_available() -> bool:
+    return _is_package_available("sinq")
 
 
 @lru_cache
 def is_gptqmodel_available() -> bool:
     return _is_package_available("gptqmodel")
-
-
-@lru_cache
-def is_eetq_available() -> bool:
-    return _is_package_available("eetq")
 
 
 @lru_cache
@@ -1037,6 +1057,11 @@ def is_pytest_available() -> bool:
 
 
 @lru_cache
+def is_pytest_order_available() -> bool:
+    return is_pytest_available() and _is_package_available("pytest_order")
+
+
+@lru_cache
 def is_spacy_available() -> bool:
     return _is_package_available("spacy")
 
@@ -1072,6 +1097,16 @@ def is_nltk_available() -> bool:
 
 
 @lru_cache
+def is_numba_available() -> bool:
+    is_available = _is_package_available("numba")
+    if not is_available:
+        return False
+
+    numpy_available, numpy_version = _is_package_available("numpy", return_version=True)
+    return not numpy_available or version.parse(numpy_version) < version.parse("2.2.0")
+
+
+@lru_cache
 def is_torchaudio_available() -> bool:
     return _is_package_available("torchaudio")
 
@@ -1104,11 +1139,6 @@ def is_uroman_available() -> bool:
 
 
 @lru_cache
-def is_ccl_available() -> bool:
-    return _is_package_available("torch_ccl") or _is_package_available("oneccl_bindings_for_pytorch")
-
-
-@lru_cache
 def is_sudachi_available() -> bool:
     return _is_package_available("sudachipy")
 
@@ -1132,6 +1162,11 @@ def is_cython_available() -> bool:
 @lru_cache
 def is_jinja_available() -> bool:
     return _is_package_available("jinja2")
+
+
+@lru_cache
+def is_jmespath_available() -> bool:
+    return _is_package_available("jmespath")
 
 
 @lru_cache
@@ -1172,9 +1207,12 @@ def is_mistral_common_available() -> bool:
 
 @lru_cache
 def is_opentelemetry_available() -> bool:
-    return _is_package_available("opentelemetry") and version.parse(
-        importlib.metadata.version("opentelemetry-api")
-    ) >= version.parse("1.30.0")
+    try:
+        return _is_package_available("opentelemetry") and version.parse(
+            importlib.metadata.version("opentelemetry-api")
+        ) >= version.parse("1.30.0")
+    except Exception as _:
+        return False
 
 
 def check_torch_load_is_safe() -> None:
@@ -1229,12 +1267,7 @@ def is_torchdynamo_compiling() -> bool:
 
         return torch.compiler.is_compiling()
     except Exception:
-        try:
-            import torch._dynamo as dynamo
-
-            return dynamo.is_compiling()
-        except Exception:
-            return False
+        return False
 
 
 def is_torchdynamo_exporting() -> bool:
@@ -1243,19 +1276,51 @@ def is_torchdynamo_exporting() -> bool:
 
         return torch.compiler.is_exporting()
     except Exception:
-        try:
-            import torch._dynamo as dynamo
-
-            return dynamo.is_exporting()
-        except Exception:
-            return False
+        return False
 
 
-def is_torch_fx_proxy(x):
+def is_torch_fx_proxy(x) -> bool:
     try:
         import torch.fx
 
         return isinstance(x, torch.fx.Proxy)
+    except Exception:
+        return False
+
+
+def is_fake_tensor(x) -> bool:
+    try:
+        import torch
+
+        return isinstance(x, torch._subclasses.FakeTensor)
+    except Exception:
+        return False
+
+
+def is_jax_jitting(x):
+    """returns True if we are inside of `jax.jit` context, False otherwise.
+
+    When a torch model is being compiled with `jax.jit` using torchax,
+    the tensor that goes through the model would be an instance of
+    `torchax.tensor.Tensor`, which is a tensor subclass. This tensor has
+    a `jax` method to return the inner Jax array
+    (https://github.com/google/torchax/blob/13ce870a1d9adb2430333c27bb623469e3aea34e/torchax/tensor.py#L134).
+    Here we use ducktyping to detect if the inner jax array is a jax Tracer
+    then we are in tracing context. (See more at: https://github.com/jax-ml/jax/discussions/9241)
+
+    Args:
+      x: torch.Tensor
+
+    Returns:
+      bool: whether we are inside of jax jit tracing.
+    """
+
+    if not hasattr(x, "jax"):
+        return False
+    try:
+        import jax
+
+        return isinstance(x.jax(), jax.core.Tracer)
     except Exception:
         return False
 
@@ -1269,14 +1334,67 @@ def is_jit_tracing() -> bool:
         return False
 
 
+def is_cuda_stream_capturing() -> bool:
+    try:
+        import torch
+
+        return torch.cuda.is_current_stream_capturing()
+    except Exception:
+        return False
+
+
 def is_tracing(tensor=None) -> bool:
-    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, or torch.fx"""
+    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, torch.fx, jax.jit (with torchax) or
+    CUDA stream capturing or FakeTensor"""
+
     # Note that `is_torchdynamo_compiling` checks both compiling and exporting (the export check is stricter and
     # only checks export)
-    _is_tracing = is_torchdynamo_compiling() or is_jit_tracing()
+    _is_tracing = is_torchdynamo_compiling() or is_jit_tracing() or is_cuda_stream_capturing()
     if tensor is not None:
         _is_tracing |= is_torch_fx_proxy(tensor)
+        _is_tracing |= is_fake_tensor(tensor)
+        _is_tracing |= is_jax_jitting(tensor)
+
     return _is_tracing
+
+
+def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: type[Exception] = ValueError) -> None:
+    """
+    Combines the functionalities of `torch._check`, `torch._check_with` and `torch._check_tensor_all_with` to provide a
+    unified way to perform checks that are compatible with TorchDynamo (torch.compile & torch.export).
+
+    The advantage of using `torch._check(cond, msg, error_type)` over `if cond: raise error_type(msg)` is that the former
+    works as a truthfulness hint for TorchDynamo, instead of failing with a data-dependent control flow error during compilation.
+
+    All checks using this method can be disabled in production environments by setting `TRANSFORMERS_DISABLE_TORCH_CHECK=1`.
+
+    Args:
+        cond (`bool`, `torch.Tensor` or `Callable[[], bool | torch.Tensor]`): The condition to check.
+        msg (`str` or `Callable[[], str]`): The error message to display if the condition is not met.
+        error_type (`type[Exception]`, *optional*, defaults to `ValueError`): The type of error to raise if the condition is not met.
+
+    Raises:
+        error_type: If the condition is not met.
+    """
+    if os.getenv("TRANSFORMERS_DISABLE_TORCH_CHECK", "0") == "1":
+        return
+
+    import torch
+
+    if not callable(msg):
+        # torch._check requires msg to be a callable but we want to keep the API simple for users
+        def msg_callable():
+            return msg
+    else:
+        msg_callable = msg
+
+    if callable(cond):
+        cond = cond()
+
+    if isinstance(cond, torch.Tensor):
+        torch._check_tensor_all_with(error_type, cond, msg_callable)
+    else:
+        torch._check_with(error_type, cond, msg_callable)
 
 
 @lru_cache
@@ -1486,13 +1604,6 @@ that match your environment. Please note that you may need to restart your runti
 """
 
 
-# docstyle-ignore
-FTFY_IMPORT_ERROR = """
-{0} requires the ftfy library but it was not found in your environment. Check out the instructions on the
-installation section: https://github.com/rspeer/python-ftfy/tree/master#installing and follow the ones
-that match your environment. Please note that you may need to restart your runtime after installation.
-"""
-
 LEVENSHTEIN_IMPORT_ERROR = """
 {0} requires the python-Levenshtein library but it was not found in your environment. You can install it with pip: `pip
 install python-Levenshtein`. Please note that you may need to restart your runtime after installation.
@@ -1631,13 +1742,6 @@ runtime after installation.
 """
 
 # docstyle-ignore
-CCL_IMPORT_ERROR = """
-{0} requires the torch ccl library but it was not found in your environment. You can install it with pip:
-`pip install oneccl_bind_pt -f https://developer.intel.com/ipex-whl-stable`
-Please note that you may need to restart your runtime after installation.
-"""
-
-# docstyle-ignore
 ESSENTIA_IMPORT_ERROR = """
 {0} requires essentia library. But that was not found in your environment. You can install them with pip:
 `pip install essentia==2.1b6.dev1034`
@@ -1699,7 +1803,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("essentia", (is_essentia_available, ESSENTIA_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
-        ("ftfy", (is_ftfy_available, FTFY_IMPORT_ERROR)),
         ("g2p_en", (is_g2p_en_available, G2P_EN_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
@@ -1726,7 +1829,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
-        ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("rjieba", (is_rjieba_available, RJIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
@@ -1743,6 +1845,20 @@ BACKENDS_MAPPING = OrderedDict(
 
 
 def requires_backends(obj, backends):
+    """
+    Method that automatically raises in case the specified backends are not available. It is often used during class
+    initialization to ensure the required dependencies are installed:
+
+    ```py
+    requires_backends(self, ["torch"])
+    ```
+
+    The backends should be defined in the `BACKEND_MAPPING` defined in `transformers.utils.import_utils`.
+
+    Args:
+        obj: object to be checked
+        backends: list or tuple of backends to check.
+    """
     if not isinstance(backends, (list, tuple)):
         backends = [backends]
 
@@ -1927,10 +2043,95 @@ class _LazyModule(ModuleType):
             try:
                 module = self._get_module(self._class_to_module[name])
                 value = getattr(module, name)
-            except (ModuleNotFoundError, RuntimeError) as e:
-                raise ModuleNotFoundError(
-                    f"Could not import module '{name}'. Are this object's requirements defined correctly?"
-                ) from e
+            except (ModuleNotFoundError, RuntimeError, AttributeError) as e:
+                # V5: If trying to import a *TokenizerFast symbol, transparently fall back to the
+                # non-Fast symbol from the same module when available. This lets us keep only one
+                # backend tokenizer class while preserving legacy public names.
+                if name.endswith("TokenizerFast"):
+                    fallback_name = name[:-4]
+                    # Prefer importing the module that declares the fallback symbol if known
+                    try:
+                        if fallback_name in self._class_to_module:
+                            fb_module = self._get_module(self._class_to_module[fallback_name])
+                            fallback_value = getattr(fb_module, fallback_name)
+                        else:
+                            module = self._get_module(self._class_to_module[name])
+                            fallback_value = getattr(module, fallback_name)
+                        setattr(self, fallback_name, fallback_value)
+                        value = fallback_value
+                    except Exception:
+                        # If we can't find the fallback here, try converter logic as a last resort
+                        # before giving up
+                        value = None
+                        # Try converter mapping for Fast tokenizers that don't exist
+                        if value is None and name.endswith("TokenizerFast"):
+                            lookup_name = name[:-4]
+                            try:
+                                from ..convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
+
+                                if lookup_name in SLOW_TO_FAST_CONVERTERS:
+                                    converter_class = SLOW_TO_FAST_CONVERTERS[lookup_name]
+                                    converter_base_name = converter_class.__name__.replace("Converter", "")
+                                    preferred_tokenizer_name = f"{converter_base_name}Tokenizer"
+
+                                    candidate_names = [preferred_tokenizer_name]
+                                    for tokenizer_name, tokenizer_converter in SLOW_TO_FAST_CONVERTERS.items():
+                                        if tokenizer_converter is converter_class and tokenizer_name != lookup_name:
+                                            if tokenizer_name not in candidate_names:
+                                                candidate_names.append(tokenizer_name)
+
+                                    # Try to import the preferred candidate directly
+                                    import importlib
+
+                                    for candidate_name in candidate_names:
+                                        base_tokenizer_class = None
+
+                                        # Try to derive module path from tokenizer name (e.g., "AlbertTokenizer" -> "albert")
+                                        # Remove "Tokenizer" suffix and convert to lowercase
+                                        if candidate_name.endswith("Tokenizer"):
+                                            model_name = candidate_name[:-10].lower()  # Remove "Tokenizer"
+                                            module_path = f"transformers.models.{model_name}.tokenization_{model_name}"
+                                            try:
+                                                module = importlib.import_module(module_path)
+                                                base_tokenizer_class = getattr(module, candidate_name)
+                                            except Exception:
+                                                logger.debug(f"{module_path} does not have {candidate_name} defined.")
+
+                                        # Fallback: try via _class_to_module
+                                        if base_tokenizer_class is None and candidate_name in self._class_to_module:
+                                            try:
+                                                alias_module_name = self._class_to_module[candidate_name]
+                                                alias_module = self._get_module(alias_module_name)
+                                                base_tokenizer_class = getattr(alias_module, candidate_name)
+                                            except Exception:
+                                                logger.debug(
+                                                    f"{alias_module_name} does not have {candidate_name} defined"
+                                                )
+
+                                        # If we still don't have base_tokenizer_class, skip this candidate
+                                        if base_tokenizer_class is None:
+                                            logger.debug(f"skipping candidate {candidate_name}")
+                                            continue
+
+                                        # If we got here, we have base_tokenizer_class
+                                        value = base_tokenizer_class
+
+                                        setattr(self, candidate_name, base_tokenizer_class)
+                                        if lookup_name != candidate_name:
+                                            setattr(self, lookup_name, value)
+                                        setattr(self, name, value)
+                                        break
+                            except Exception as e:
+                                logger.debug(f"Could not create tokenizer alias: {e}")
+
+                        if value is None:
+                            raise ModuleNotFoundError(
+                                f"Could not import module '{name}'. Are this object's requirements defined correctly?"
+                            ) from e
+                else:
+                    raise ModuleNotFoundError(
+                        f"Could not import module '{name}'. Are this object's requirements defined correctly?"
+                    ) from e
 
         elif name in self._modules:
             try:
@@ -1940,10 +2141,89 @@ class _LazyModule(ModuleType):
                     f"Could not import module '{name}'. Are this object's requirements defined correctly?"
                 ) from e
         else:
+            # V5: If a *TokenizerFast symbol is requested but not present in the import structure,
+            # try to resolve to the corresponding non-Fast symbol's module if available.
+            if name.endswith("TokenizerFast"):
+                fallback_name = name[:-4]
+                if fallback_name in self._class_to_module:
+                    try:
+                        fb_module = self._get_module(self._class_to_module[fallback_name])
+                        value = getattr(fb_module, fallback_name)
+                        setattr(self, fallback_name, value)
+                        setattr(self, name, value)
+                        return value
+                    except Exception as e:
+                        logger.debug(f"Could not load fallback {fallback_name}: {e}")
+            # V5: If a tokenizer class doesn't exist, check if it should alias to another tokenizer
+            # via the converter mapping (e.g., FNetTokenizer -> AlbertTokenizer via AlbertConverter)
             value = None
-            for key, values in self._explicit_import_shortcut.items():
-                if name in values:
-                    value = self._get_module(key)
+            if name.endswith("Tokenizer") or name.endswith("TokenizerFast"):
+                # Strip "Fast" suffix for converter lookup if present
+                lookup_name = name[:-4] if name.endswith("TokenizerFast") else name
+
+                try:
+                    # Lazy import to avoid circular dependencies
+                    from ..convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
+
+                    # Check if this tokenizer has a converter mapping
+                    if lookup_name in SLOW_TO_FAST_CONVERTERS:
+                        converter_class = SLOW_TO_FAST_CONVERTERS[lookup_name]
+
+                        # Find which tokenizer class uses the same converter (reverse lookup)
+                        # Prefer the tokenizer that matches the converter name pattern
+                        # (e.g., AlbertConverter -> AlbertTokenizer)
+                        converter_base_name = converter_class.__name__.replace("Converter", "")
+                        preferred_tokenizer_name = f"{converter_base_name}Tokenizer"
+
+                        # Try preferred tokenizer first
+                        candidate_names = [preferred_tokenizer_name]
+                        # Then try all other tokenizers with the same converter
+                        for tokenizer_name, tokenizer_converter in SLOW_TO_FAST_CONVERTERS.items():
+                            if tokenizer_converter is converter_class and tokenizer_name != lookup_name:
+                                if tokenizer_name not in candidate_names:
+                                    candidate_names.append(tokenizer_name)
+
+                        # Try to import one of the candidate tokenizers
+                        for candidate_name in candidate_names:
+                            if candidate_name in self._class_to_module:
+                                try:
+                                    alias_module = self._get_module(self._class_to_module[candidate_name])
+                                    base_tokenizer_class = getattr(alias_module, candidate_name)
+                                    value = base_tokenizer_class
+
+                                    # Cache both names for future imports
+                                    setattr(self, candidate_name, base_tokenizer_class)
+                                    if lookup_name != candidate_name:
+                                        setattr(self, lookup_name, value)
+                                    setattr(self, name, value)
+                                    break
+                                except Exception:
+                                    # If this candidate fails, try the next one
+                                    continue
+                            else:
+                                # Candidate not in _class_to_module - might need recursive resolution
+                                # Try importing it directly to trigger lazy loading
+                                try:
+                                    # Try to get it from transformers module to trigger lazy loading
+                                    transformers_module = sys.modules.get("transformers")
+                                    if transformers_module and hasattr(transformers_module, candidate_name):
+                                        base_tokenizer_class = getattr(transformers_module, candidate_name)
+                                        value = base_tokenizer_class
+
+                                        if lookup_name != candidate_name:
+                                            setattr(self, lookup_name, value)
+                                        setattr(self, name, value)
+                                        break
+                                except Exception:
+                                    continue
+                except (ImportError, AttributeError):
+                    pass
+
+            if value is None:
+                for key, values in self._explicit_import_shortcut.items():
+                    if name in values:
+                        value = self._get_module(key)
+                        break
 
             if value is None:
                 raise AttributeError(f"module {self.__name__} has no attribute {name}")
@@ -2161,10 +2441,10 @@ def create_import_structure_from_path(module_path):
     {
         'albert': {
             frozenset(): {
-                'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
+                'configuration_albert': {'AlbertConfig'}
             },
             frozenset({'tokenizers'}): {
-                'tokenization_albert_fast': {'AlbertTokenizerFast'}
+                'tokenization_albert_fast': {'AlbertTokenizer'}
             },
         },
         'align': {
@@ -2337,10 +2617,10 @@ def spread_import_structure(nested_import_structure):
     {
         'albert': {
             frozenset(): {
-                'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
+                'configuration_albert': {'AlbertConfig'}
             },
             frozenset({'tokenizers'}): {
-                'tokenization_albert_fast': {'AlbertTokenizerFast'}
+                'tokenization_albert_fast': {'AlbertTokenizer'}
             },
         },
         'align': {
@@ -2361,10 +2641,10 @@ def spread_import_structure(nested_import_structure):
 
     {
         frozenset({'tokenizers'}): {
-            'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
+            'albert.tokenization_albert_fast': {'AlbertTokenizer'}
         },
         frozenset(): {
-            'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
+            'albert.configuration_albert': {'AlbertConfig'},
             'align.processing_align': {'AlignProcessor'},
             'align.configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
             'altclip.configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
@@ -2462,10 +2742,10 @@ def define_import_structure(module_path: str, prefix: str | None = None) -> IMPO
 
     {
         frozenset({'tokenizers'}): {
-            'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
+            'albert.tokenization_albert_fast': {'AlbertTokenizer'}
         },
         frozenset(): {
-            'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
+            'albert.configuration_albert': {'AlbertConfig'},
             'align.processing_align': {'AlignProcessor'},
             'align.configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
             'altclip.configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},

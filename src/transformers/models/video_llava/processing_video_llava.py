@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,55 +15,20 @@
 Processor class for VideoLlava.
 """
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType, logging
+from ...utils import TensorType, auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class VideoLlavaProcessor(ProcessorMixin):
-    r"""
-    Constructs a VideoLlava processor which wraps a VideoLlava image processor and a Llava tokenizer into a single processor.
-
-    [`VideoLlavaProcessor`] offers all the functionalities of [`VideoLlavaImageProcessor`] and [`LlamaTokenizerFast`]. See the
-    [`~VideoLlavaProcessor.__call__`] and [`~VideoLlavaProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`VideoLlavaImageProcessor`], *optional*):
-            The image processor is a required input.
-        video_processor ([`VideoLlavaVideoProcessor`], *optional*):
-            The video processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        patch_size (`int`, *optional*, defaults to 14):
-            Patch size from the vision tower.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Should be same as in model's config
-        image_token (`str`, *optional*, defaults to `"<image>"`):
-            Special token used to denote image location.
-        video_token (`str`, *optional*, defaults to `"<video>"`):
-            Special token used to denote video location.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        num_additional_image_tokens (`int`, *optional*, defaults to 1):
-            Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
-            extra tokens appended, no need to set this arg.
-    """
-
-    attributes = ["image_processor", "video_processor", "tokenizer"]
-    image_processor_class = "VideoLlavaImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor=None,
@@ -78,6 +42,20 @@ class VideoLlavaProcessor(ProcessorMixin):
         num_additional_image_tokens=1,
         **kwargs,
     ):
+        r"""
+        patch_size (`int`, *optional*, defaults to 14):
+            Patch size from the vision tower.
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Should be same as in model's config
+        image_token (`str`, *optional*, defaults to `"<image>"`):
+            Special token used to denote image location.
+        video_token (`str`, *optional*, defaults to `"<video>"`):
+            Special token used to denote video location.
+        num_additional_image_tokens (`int`, *optional*, defaults to 1):
+            Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
+            extra tokens appended, no need to set this arg.
+        """
         self.patch_size = patch_size
         self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
@@ -87,54 +65,31 @@ class VideoLlavaProcessor(ProcessorMixin):
         self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: Optional[ImageInput] = None,
-        videos: Optional[ImageInput] = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        images: ImageInput | None = None,
+        videos: ImageInput | None = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy | None = None,
+        max_length: int | None = None,
+        return_tensors: str | TensorType | None = TensorType.PYTORCH,
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        VideoLlavaImageProcessor's [`~VideoLlavaImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
-            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                Video frames to preprocess. Expects a single or batch of video frames in NumPy array or PyTorch
-                tensor. Each video should be of shape (T, C, H, W), where T is number of frames, C is
-                number of channels, H and W are image height and width.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
+        r"""
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
+            Select a strategy to pad the returned sequences (according to the model's padding side and padding
+            index) among:
+            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                sequence if provided).
+            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                acceptable input length for the model if that argument is not provided.
+            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                lengths).
+        truncation (`bool`, *optional*):
+            Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+        max_length (`int`, *optional*):
+            Maximum length of the returned list and optionally padding length (see above).
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

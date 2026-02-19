@@ -15,11 +15,11 @@ import argparse
 import gc
 import json
 import os
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 import yaml
-from accelerate import init_empty_weights
 from PIL import Image
 
 from transformers import (
@@ -373,11 +373,11 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         vq_config=vq_config,
         vocabulary_map=vocabulary_map,
     )
-    with init_empty_weights():
+    with torch.device("meta"):
         model = ChameleonForConditionalGeneration(config)
 
     model.load_state_dict(state_dict, assign=True, strict=False)
-    model.save_pretrained(model_path, safe_serialization=True)
+    model.save_pretrained(model_path)
 
     # Load and save the processor
     tokenizer = LlamaTokenizerFast(
@@ -405,11 +405,9 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     processor = ChameleonProcessor.from_pretrained(model_path)
 
     prompt = "I'm very intrigued by this work of art:<image>Please tell me about the artist."
-    image = Image.open(
-        requests.get(
-            "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg", stream=True
-        ).raw
-    )
+    url = "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg"
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     inputs = processor(prompt, images=image, return_tensors="pt").to(model.device, torch.bfloat16)
     length = inputs.input_ids.shape[1]
 
@@ -421,14 +419,14 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
 
     # Multi-image example
     prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
-    image = Image.open(
-        requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
-    )
-    image_2 = Image.open(
-        requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
-    )
+    url = "https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg"
+    with httpx.stream("GET", url) as response:
+        image_1 = Image.open(BytesIO(response.read()))
+    url = "https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg"
+    with httpx.stream("GET", url) as response:
+        image_2 = Image.open(BytesIO(response.read()))
 
-    inputs = processor(prompt, images=[image, image_2], return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+    inputs = processor(prompt, images=[image_1, image_2], return_tensors="pt").to(model.device, dtype=torch.bfloat16)
     length = inputs.input_ids.shape[1]
     out = model.generate(**inputs, max_new_tokens=50, do_sample=False)
     generated_text = processor.batch_decode(out[:, length:], skip_special_tokens=True)[0]

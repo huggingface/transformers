@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Meta Platforms, Inc. and affiliates, and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +15,11 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import (
     ModelOutput,
@@ -46,8 +45,8 @@ class EncodecOutput(ModelOutput):
         Decoded audio values, obtained using the decoder part of Encodec.
     """
 
-    audio_codes: Optional[torch.LongTensor] = None
-    audio_values: Optional[torch.FloatTensor] = None
+    audio_codes: torch.LongTensor | None = None
+    audio_values: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -64,9 +63,9 @@ class EncodecEncoderOutput(ModelOutput):
         encoded frames.
     """
 
-    audio_codes: Optional[torch.LongTensor] = None
-    audio_scales: Optional[torch.FloatTensor] = None
-    last_frame_pad_length: Optional[int] = None
+    audio_codes: torch.LongTensor | None = None
+    audio_scales: torch.FloatTensor | None = None
+    last_frame_pad_length: int | None = None
 
 
 @dataclass
@@ -77,7 +76,7 @@ class EncodecDecoderOutput(ModelOutput):
         Decoded audio values, obtained using the decoder part of Encodec.
     """
 
-    audio_values: Optional[torch.FloatTensor] = None
+    audio_values: torch.FloatTensor | None = None
 
 
 class EncodecConv1d(nn.Module):
@@ -414,7 +413,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
         self.num_quantizers = config.num_quantizers
         self.layers = nn.ModuleList([EncodecVectorQuantization(config) for _ in range(config.num_quantizers)])
 
-    def get_num_quantizers_for_bandwidth(self, bandwidth: Optional[float] = None) -> int:
+    def get_num_quantizers_for_bandwidth(self, bandwidth: float | None = None) -> int:
         """Return num_quantizers based on specified target bandwidth."""
         bw_per_q = math.log2(self.codebook_size) * self.frame_rate
         num_quantizers = self.num_quantizers
@@ -422,7 +421,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
             num_quantizers = int(max(1, math.floor(bandwidth * 1000 / bw_per_q)))
         return num_quantizers
 
-    def encode(self, embeddings: torch.Tensor, bandwidth: Optional[float] = None) -> torch.Tensor:
+    def encode(self, embeddings: torch.Tensor, bandwidth: float | None = None) -> torch.Tensor:
         """
         Encode a given input tensor with the specified frame rate at the given bandwidth. The RVQ encode method sets
         the appropriate number of quantizers to use and returns indices for each quantizer.
@@ -454,24 +453,39 @@ class EncodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     base_model_prefix = "encodec"
     main_input_name = "input_values"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.GroupNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+                init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, nn.ConvTranspose1d):
             module.reset_parameters()
         elif isinstance(module, nn.LSTM):
             for name, param in module.named_parameters():
                 if "weight" in name:
-                    nn.init.xavier_uniform_(param)
+                    init.xavier_uniform_(param)
                 elif "bias" in name:
-                    nn.init.constant_(param, 0.0)
+                    init.constant_(param, 0.0)
+        elif isinstance(module, EncodecConv1d):
+            kernel_size = module.conv.kernel_size[0]
+            stride = torch.tensor(module.conv.stride[0], dtype=torch.int64)
+            dilation = module.conv.dilation[0]
+            # Effective kernel size with dilations.
+            kernel_size = torch.tensor((kernel_size - 1) * dilation + 1, dtype=torch.int64)
+            init.copy_(module.stride, stride)
+            init.copy_(module.kernel_size, kernel_size)
+            init.copy_(module.padding_total, kernel_size - stride)
+        elif isinstance(module, EncodecEuclideanCodebook):
+            init.copy_(module.inited, torch.Tensor([True]))
+            init.zeros_(module.cluster_size)
+            init.zeros_(module.embed)
+            init.zeros_(module.embed_avg)
 
 
 @auto_docstring(
@@ -496,12 +510,7 @@ class EncodecModel(EncodecPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
-    def _encode_frame(
-        self, input_values: torch.Tensor, bandwidth: float
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    def _encode_frame(self, input_values: torch.Tensor, bandwidth: float) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Encodes the given input using the underlying VQVAE. If `config.normalize` is set to `True` the input is first
         normalized. The padding mask is required to compute the correct scale.
@@ -527,10 +536,10 @@ class EncodecModel(EncodecPreTrainedModel):
     def encode(
         self,
         input_values: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
-        bandwidth: Optional[float] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor, Optional[torch.Tensor], int], EncodecEncoderOutput]:
+        padding_mask: torch.Tensor | None = None,
+        bandwidth: float | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, int] | EncodecEncoderOutput:
         """
         Encodes the input audio waveform into discrete codes of shape
         `(nb_frames, batch_size, nb_quantizers, frame_len)`.
@@ -652,7 +661,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
         return out / sum_weight
 
-    def _decode_frame(self, codes: torch.Tensor, scale: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def _decode_frame(self, codes: torch.Tensor, scale: torch.Tensor | None = None) -> torch.Tensor:
         codes = codes.transpose(0, 1)
         embeddings = self.quantizer.decode(codes)
         outputs = self.decoder(embeddings)
@@ -664,10 +673,10 @@ class EncodecModel(EncodecPreTrainedModel):
         self,
         audio_codes: torch.LongTensor,
         audio_scales: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
-        last_frame_pad_length: Optional[int] = 0,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], EncodecDecoderOutput]:
+        padding_mask: torch.Tensor | None = None,
+        return_dict: bool | None = None,
+        last_frame_pad_length: int | None = 0,
+    ) -> tuple[torch.Tensor, torch.Tensor] | EncodecDecoderOutput:
         """
         Decodes the given frames into an output audio waveform.
 
@@ -719,13 +728,13 @@ class EncodecModel(EncodecPreTrainedModel):
     def forward(
         self,
         input_values: torch.FloatTensor,
-        padding_mask: Optional[torch.BoolTensor] = None,
-        bandwidth: Optional[float] = None,
-        audio_codes: Optional[torch.LongTensor] = None,
-        audio_scales: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
-        last_frame_pad_length: Optional[int] = 0,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], EncodecOutput]:
+        padding_mask: torch.BoolTensor | None = None,
+        bandwidth: float | None = None,
+        audio_codes: torch.LongTensor | None = None,
+        audio_scales: torch.Tensor | None = None,
+        return_dict: bool | None = None,
+        last_frame_pad_length: int | None = 0,
+    ) -> tuple[torch.Tensor, torch.Tensor] | EncodecOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Raw audio input converted to Float and padded to the appropriate length in order to be encoded using chunks

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,16 +27,16 @@
 """PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/tree/master/examples/wmt19"""
 
 import math
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -220,21 +219,21 @@ class PretrainedFSMTModel(PreTrainedModel):
     config: FSMTConfig
     base_model_prefix = "model"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, SinusoidalPositionalEmbedding):
             weight = module.get_embedding(*module.weight.shape, module.padding_idx)
-            weight = nn.Parameter(weight, requires_grad=False)
-            weight.detach_()
-            module.weight = weight
+            init.copy_(module.weight, weight)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
 
     @property
     def dummy_inputs(self):
@@ -338,13 +337,13 @@ class FSMTEncoder(nn.Module):
         config: FSMTConfig
     """
 
-    def __init__(self, config: FSMTConfig, embed_tokens):
+    def __init__(self, config: FSMTConfig):
         super().__init__()
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-        self.padding_idx = embed_tokens.padding_idx
-        self.embed_tokens = embed_tokens
-        embed_dim = embed_tokens.embedding_dim
+        self.padding_idx = config.pad_token_id
+        self.embed_tokens = nn.Embedding(config.src_vocab_size, config.d_model, config.pad_token_id)
+        embed_dim = self.embed_tokens.embedding_dim
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
@@ -354,8 +353,8 @@ class FSMTEncoder(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -531,31 +530,19 @@ class FSMTDecoder(nn.Module):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: FSMTConfig, embed_tokens: nn.Embedding):
+    def __init__(self, config: FSMTConfig):
         super().__init__()
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = embed_tokens.padding_idx
+        self.padding_idx = config.pad_token_id
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
-        self.embed_tokens = embed_tokens
-        embed_dim = embed_tokens.embedding_dim
+        self.embed_tokens = nn.Embedding(config.tgt_vocab_size, config.d_model, self.padding_idx)
+        embed_dim = self.embed_tokens.embedding_dim
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList([DecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])  # type: list[DecoderLayer]
-
-        if is_deepspeed_zero3_enabled():
-            import deepspeed
-
-            with deepspeed.zero.GatheredParameters(self.embed_tokens.weight, modifier_rank=None):
-                embed_tokens_weight_shape = self.embed_tokens.weight.shape
-        else:
-            embed_tokens_weight_shape = self.embed_tokens.weight.shape
-        self.output_projection = nn.Linear(embed_tokens_weight_shape[1], embed_tokens_weight_shape[0], bias=False)
-        self.output_projection.weight = self.embed_tokens.weight
-
-    def _tie_weights(self):
-        self.embed_tokens.weight = self.output_projection.weight
+        self.output_projection = nn.Linear(config.d_model, config.tgt_vocab_size, bias=False)
 
     def forward(
         self,
@@ -564,13 +551,13 @@ class FSMTDecoder(nn.Module):
         encoder_padding_mask: torch.Tensor,
         decoder_padding_mask: torch.Tensor,
         decoder_causal_mask: torch.Tensor,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-        cache_position: Optional[torch.Tensor] = None,
+        inputs_embeds: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        output_attentions: bool | None = False,
+        output_hidden_states: bool | None = False,
+        return_dict: bool | None = True,
+        cache_position: torch.Tensor | None = None,
     ):
         """
         Includes several features from "Jointly Learning to Align and Translate with Transformer Models" (Garg et al.,
@@ -717,13 +704,13 @@ class Attention(nn.Module):
     def forward(
         self,
         query,
-        key: Optional[Tensor],
-        key_padding_mask: Optional[Tensor] = None,
-        layer_state: Optional[Cache] = None,
-        attn_mask: Optional[Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> tuple[Tensor, Optional[Tensor]]:
+        key: Tensor | None,
+        key_padding_mask: Tensor | None = None,
+        layer_state: Cache | None = None,
+        attn_mask: Tensor | None = None,
+        output_attentions: bool | None = False,
+        cache_position: torch.Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None]:
         """Input shape: Time(SeqLen) x Batch x Channel"""
         tgt_len, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
@@ -828,46 +815,35 @@ def _get_shape(t):
 
 @auto_docstring
 class FSMTModel(PretrainedFSMTModel):
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "decoder.embed_tokens.weight",
+        "decoder.output_projection.weight": "decoder.embed_tokens.weight",
+    }
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
-
-        padding_idx = config.pad_token_id
-        encoder_embed_tokens = nn.Embedding(config.src_vocab_size, config.d_model, padding_idx)
-        decoder_embed_tokens = nn.Embedding(config.tgt_vocab_size, config.d_model, padding_idx)
-
-        self.encoder = FSMTEncoder(config, encoder_embed_tokens)
-        self.decoder = FSMTDecoder(config, decoder_embed_tokens)
-
-        # Initialize weights and apply final processing
+        self.encoder = FSMTEncoder(config)
+        self.decoder = FSMTDecoder(config)
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.get_input_embeddings())
-            self._tie_embedding_weights(self.decoder.output_projection, self.get_input_embeddings())
 
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[tuple[torch.Tensor], Seq2SeqModelOutput]:
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -978,7 +954,6 @@ class FSMTModel(PretrainedFSMTModel):
 )
 class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
     base_model_prefix = "model"
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
@@ -991,21 +966,22 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[tuple[torch.Tensor], Seq2SeqLMOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | Seq2SeqLMOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1088,12 +1064,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id)
 
-    def get_encoder(self):
-        return self.model.encoder
-
-    def get_decoder(self):
-        return self.model.decoder
-
     def get_output_embeddings(self):
         return self.model.decoder.embed_tokens
 
@@ -1160,8 +1130,8 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
     def forward(
         self,
         input,
-        incremental_state: Optional[Any] = None,
-        timestep: Optional[Tensor] = None,
+        incremental_state: Any | None = None,
+        timestep: Tensor | None = None,
     ):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input.shape[:2]

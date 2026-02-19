@@ -10,7 +10,7 @@ RUN apt-get -y update && apt-get install -y libsndfile1-dev && apt install -y te
 # Torch needs to be installed before deepspeed
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed]
 
-RUN python3 -m pip install --no-cache-dir torchvision git+https://github.com/facebookresearch/detectron2.git pytesseract
+RUN python3 -m pip install --no-cache-dir --no-build-isolation torchvision git+https://github.com/facebookresearch/detectron2.git pytesseract
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
 # Test if the image could successfully build the doc. before publishing the image

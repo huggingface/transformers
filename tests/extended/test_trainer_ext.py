@@ -277,7 +277,7 @@ class TestTrainerExt(TestCasePlus):
             --logging_steps 0
             --logging_strategy no
             --save_steps {str(eval_steps)}
-            --group_by_length
+            --train_sampling_strategy group_by_length
             --label_smoothing_factor 0.1
             --target_lang ro_RO
             --source_lang en_XX

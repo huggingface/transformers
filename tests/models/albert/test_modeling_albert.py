@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import AlbertConfig, AutoTokenizer, is_torch_available
 from transformers.models.auto import get_values
@@ -333,9 +332,6 @@ class AlbertModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.torch_export_test
     def test_export(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         distilbert_model = "albert/albert-base-v2"
         device = "cpu"
         attn_implementation = "sdpa"

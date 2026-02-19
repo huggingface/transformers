@@ -14,19 +14,14 @@
 "HIGGS through FLUTE (Flexible Lookup Table Engine for LUT-quantized LLMs) integration file"
 
 from math import sqrt
-from typing import Optional
 
-from ..utils import (
-    is_flute_available,
-    is_hadamard_available,
-    is_torch_available,
-)
+from ..quantizers.quantizers_utils import should_convert_module
+from ..utils import is_flute_available, is_hadamard_available, is_torch_available, logging
 
 
 if is_torch_available():
     import torch
-    from torch import nn
-
+    import torch.nn as nn
 
 if is_flute_available():
     from flute.integrations.higgs import prepare_data_transposed
@@ -34,6 +29,8 @@ if is_flute_available():
 
 if is_hadamard_available():
     from fast_hadamard_transform import hadamard_transform
+
+logger = logging.get_logger(__name__)
 
 
 def pad_to_block(tensor, dims, had_block_size, value=0):
@@ -497,8 +494,8 @@ class HiggsLinear(torch.nn.Module):
         out_features: int,
         num_bits: int,
         bias=True,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
         group_size: int = 256,
         hadamard_size: int = 1024,
     ):
@@ -550,70 +547,47 @@ class HiggsLinear(torch.nn.Module):
         )
 
 
-def replace_with_higgs_linear(
-    model,
-    quantization_config=None,
-    current_key_name=None,
-    has_been_replaced=False,
-    modules_to_not_convert=None,
-):
+def replace_with_higgs_linear(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):
     """
-    Public method that recursively replaces the Linear layers of the given model with HIGGS quantized layers.
-    `accelerate` is needed to use this method. Returns the converted model and a boolean that indicates if the
-    conversion has been successful or not.
+    Public method that replaces the Linear layers of the given model with HIGGS quantized layers.
 
     Args:
         model (`torch.nn.Module`):
             The model to convert, can be any `torch.nn.Module` instance.
+        modules_to_not_convert (`list[str]`, *optional*, defaults to `None`):
+            A list of nn.Linear weights to not convert. If a parameter path is in the list (e.g. `lm_head.weight`), the corresponding module will not be
+            converted.
         quantization_config (`HiggsConfig`):
             The quantization config object that contains the quantization parameters.
-        current_key_name (`list`, *optional*):
-            A list that contains the current key name. This is used for recursion and should not be passed by the user.
-        has_been_replaced (`bool`, *optional*):
-            A boolean that indicates if the conversion has been successful or not. This is used for recursion and
-            should not be passed by the user.
     """
 
-    from accelerate import init_empty_weights
+    has_been_replaced = False
+    # we need this to correctly materialize the weights during quantization
+    for module_name, module in model.named_modules():
+        if not should_convert_module(module_name, modules_to_not_convert):
+            continue
+        with torch.device("meta"):
+            if isinstance(module, nn.Linear):
+                new_module = HiggsLinear(
+                    module.in_features,
+                    module.out_features,
+                    bias=module.bias is not None,
+                    num_bits=quantization_config.bits,
+                    hadamard_size=quantization_config.hadamard_size,
+                    group_size=quantization_config.group_size,
+                )
+                new_module.source_cls = type(module)
+                new_module.requires_grad_(False)
+                model.set_submodule(module_name, new_module)
+                has_been_replaced = True
 
-    for name, module in model.named_children():
-        if current_key_name is None:
-            current_key_name = []
-        current_key_name.append(name)
-
-        if isinstance(module, nn.Linear):
-            # Check if the current key is not in the `quantization_config.modules_to_not_convert`
-            current_key_name_str = ".".join(current_key_name)
-            if not any(current_key_name_str.endswith(key) for key in modules_to_not_convert):
-                with init_empty_weights():
-                    in_features = module.in_features
-                    out_features = module.out_features
-
-                    model._modules[name] = HiggsLinear(
-                        in_features,
-                        out_features,
-                        bias=module.bias is not None,
-                        num_bits=quantization_config.bits,
-                        hadamard_size=quantization_config.hadamard_size,
-                        group_size=quantization_config.group_size,
-                    )
-                    has_been_replaced = True
-
-                    # Store the module class in case we need to transpose the weight later
-                    model._modules[name].source_cls = type(module)
-                    # Force requires grad to False to avoid unexpected errors
-                    model._modules[name].requires_grad_(False)
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = replace_with_higgs_linear(
-                module,
-                quantization_config=quantization_config,
-                current_key_name=current_key_name,
-                has_been_replaced=has_been_replaced,
-                modules_to_not_convert=modules_to_not_convert,
-            )
-        # Remove the last key for recursion
-        current_key_name.pop(-1)
-    return model, has_been_replaced
+    if not has_been_replaced:
+        logger.warning(
+            "You are loading your model using eetq but no linear modules were found in your model."
+            " Please double check your model architecture, or submit an issue on github if you think this is"
+            " a bug."
+        )
+    return model
 
 
 def dequantize_higgs(model, current_key_name=None):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022, Google and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -39,6 +37,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_pegasus_x import PegasusXConfig
 
 
@@ -83,7 +82,7 @@ class PegasusXScaledWordEmbedding(nn.Embedding):
     This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float | None = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.embed_scale = embed_scale
 
@@ -99,21 +98,22 @@ class PegasusXSinusoidalPositionalEmbedding(nn.Module):
         self.embed_dim = embed_dim
         self.max_scale = max_scale
 
+    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     @torch.no_grad()
     def forward(
-        self, input_embeds: torch.Tensor, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+        self, inputs_embeds: torch.Tensor, past_key_values_length: int = 0, position_ids: torch.Tensor | None = None
     ) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        batch_size, seq_len = input_embeds.shape[:2]
+        batch_size, seq_len = inputs_embeds.shape[:2]
         if position_ids is None:
             position_ids = torch.arange(
-                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=input_embeds.device
+                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=inputs_embeds.device
             )[:, None]
 
-        pe = torch.zeros((seq_len, self.embed_dim), device=input_embeds.device, dtype=input_embeds.dtype)
+        pe = torch.zeros((seq_len, self.embed_dim), device=inputs_embeds.device, dtype=inputs_embeds.dtype)
         half_d_feature = self.embed_dim // 2
         div_term = torch.exp(
-            torch.arange(half_d_feature, device=input_embeds.device, dtype=torch.int64).type_as(input_embeds)
+            torch.arange(half_d_feature, device=inputs_embeds.device, dtype=torch.int64).type_as(inputs_embeds)
             * -(np.log(float(self.max_scale)) / (half_d_feature - 1))
         )
         pe[:, :half_d_feature] = torch.sin(position_ids * div_term)
@@ -127,8 +127,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -139,7 +139,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -163,8 +162,8 @@ class PegasusXAttention(nn.Module):
         is_decoder: bool = False,
         bias: bool = True,
         is_causal: bool = False,
-        config: Optional[PegasusXConfig] = None,
-        layer_idx: Optional[int] = None,
+        config: PegasusXConfig | None = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -197,15 +196,15 @@ class PegasusXAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: Optional[torch.Tensor] = None,
+        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -255,9 +254,9 @@ class PegasusXAttention(nn.Module):
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -315,9 +314,9 @@ class PegasusXGlobalLocalAttention(nn.Module):
         self,
         token_hidden_states: torch.Tensor,
         global_hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
         dim = DimensionInfo(
             batch_size=token_hidden_states.shape[0],
@@ -627,7 +626,7 @@ class PegasusXEncoderLayer(GradientCheckpointingLayer):
 
 
 class PegasusXDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: PegasusXConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: PegasusXConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -662,13 +661,13 @@ class PegasusXDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = True,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = True,
+        cache_position: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -744,20 +743,7 @@ class PegasusXPreTrainedModel(PreTrainedModel):
     # Flaky logits
     _supports_sdpa = False
     _supports_flex_attn = True
-
     _can_compile_fullgraph = True
-
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
 
 
 class PegasusXEncoder(PegasusXPreTrainedModel):
@@ -770,7 +756,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: PegasusXConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: PegasusXConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -781,12 +767,9 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = PegasusXScaledWordEmbedding(
-                config.vocab_size, embed_dim, padding_idx, embed_scale=embed_scale
-            )
+        self.embed_tokens = PegasusXScaledWordEmbedding(
+            config.vocab_size, embed_dim, padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_global = nn.Embedding(config.num_global_tokens, embed_dim)
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(embed_dim)
@@ -837,6 +820,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -972,7 +956,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: PegasusXConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: PegasusXConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -980,12 +964,9 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         padding_idx = config.pad_token_id
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = PegasusXScaledWordEmbedding(
-                config.vocab_size, config.d_model, padding_idx=padding_idx, embed_scale=embed_scale
-            )
+        self.embed_tokens = PegasusXScaledWordEmbedding(
+            config.vocab_size, config.d_model, padding_idx=padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(config.d_model)
         self.layers = nn.ModuleList([PegasusXDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])
@@ -1008,6 +989,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         cache_position=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1118,14 +1100,14 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=self_attn_cache,
         )
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
         )
@@ -1192,7 +1174,10 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
 
 @auto_docstring
 class PegasusXModel(PegasusXPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: PegasusXConfig):
         super().__init__(config)
@@ -1204,8 +1189,8 @@ class PegasusXModel(PegasusXPreTrainedModel):
             vocab_size, config.d_model, padding_idx=padding_idx, embed_scale=embed_scale
         )
 
-        self.encoder = PegasusXEncoder(config, self.shared)
-        self.decoder = PegasusXDecoder(config, self.shared)
+        self.encoder = PegasusXEncoder(config)
+        self.decoder = PegasusXDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1217,9 +1202,6 @@ class PegasusXModel(PegasusXPreTrainedModel):
         self.shared = value
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
-
-    def get_encoder(self):
-        return self.encoder
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
@@ -1247,20 +1229,21 @@ class PegasusXModel(PegasusXPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.Tensor] = None,
-        decoder_attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[tuple, Seq2SeqModelOutput]:
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.Tensor | None = None,
+        decoder_attention_mask: torch.Tensor | None = None,
+        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple | Seq2SeqModelOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1355,7 +1338,9 @@ class PegasusXModel(PegasusXPreTrainedModel):
 )
 class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config: PegasusXConfig):
         super().__init__(config)
@@ -1364,12 +1349,6 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
@@ -1397,21 +1376,22 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.Tensor] = None,
-        decoder_attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[tuple, Seq2SeqLMOutput]:
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.Tensor | None = None,
+        decoder_attention_mask: torch.Tensor | None = None,
+        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple | Seq2SeqLMOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1495,6 +1475,7 @@ class PegasusXDecoderWrapper(PegasusXPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.decoder = PegasusXDecoder(config)
+        self.post_init()
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The OFA-Sys Team Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +15,12 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_layers import GradientCheckpointingLayer
@@ -30,8 +30,9 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs, logging, torch_int
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from .configuration_chinese_clip import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
 
 
@@ -74,11 +75,11 @@ class ChineseCLIPOutput(ModelOutput):
         The output of the [`ChineseCLIPVisionModel`].
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits_per_image: Optional[torch.FloatTensor] = None
-    logits_per_text: Optional[torch.FloatTensor] = None
-    text_embeds: Optional[torch.FloatTensor] = None
-    image_embeds: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits_per_image: torch.FloatTensor | None = None
+    logits_per_text: torch.FloatTensor | None = None
+    text_embeds: torch.FloatTensor | None = None
+    image_embeds: torch.FloatTensor | None = None
     text_model_output: BaseModelOutputWithPoolingAndCrossAttentions = None
     vision_model_output: BaseModelOutputWithPoolingAndCrossAttentions = None
 
@@ -111,10 +112,10 @@ class ChineseCLIPTextEmbeddings(nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -240,15 +241,14 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
 ):
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -284,9 +284,9 @@ class ChineseCLIPTextSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        **kwargs,
+        attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.attention_head_size)
@@ -295,9 +295,9 @@ class ChineseCLIPTextSelfAttention(nn.Module):
         key_states = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -340,9 +340,9 @@ class ChineseCLIPTextAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        **kwargs,
+        attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
@@ -378,8 +378,8 @@ class ChineseCLIPVisionAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def forward(
-        self, hidden_states: torch.Tensor, output_attentions: Optional[bool] = False, **kwargs
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        self, hidden_states: torch.Tensor, output_attentions: bool | None = False, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         input_shape = hidden_states.shape[:-1]
@@ -389,9 +389,9 @@ class ChineseCLIPVisionAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -470,9 +470,9 @@ class ChineseCLIPTextLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        **kwargs,
+        attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
@@ -508,7 +508,7 @@ class ChineseCLIPVisionLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.FloatTensor]:
         """
         Args:
@@ -559,55 +559,59 @@ class ChineseCLIPTextPooler(nn.Module):
 class ChineseCLIPPreTrainedModel(PreTrainedModel):
     config: ChineseCLIPConfig
     base_model_prefix = "chinese_clip"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
         if isinstance(module, ChineseCLIPVisionEmbeddings):
             factor = self.config.initializer_factor
-            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
+            init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+            init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, ChineseCLIPTextEmbeddings):
-            nn.init.normal_(module.word_embeddings.weight, mean=0.0, std=self.config.initializer_range)
-            nn.init.normal_(module.position_embeddings.weight, mean=0.0, std=self.config.initializer_range)
-            nn.init.normal_(module.token_type_embeddings.weight, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.word_embeddings.weight, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.position_embeddings.weight, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.token_type_embeddings.weight, mean=0.0, std=self.config.initializer_range)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
             for embedding in [module.word_embeddings, module.position_embeddings, module.token_type_embeddings]:
                 if embedding.padding_idx is not None:
-                    embedding.weight.data[embedding.padding_idx].zero_()
+                    init.zeros_(embedding.weight[embedding.padding_idx])
         elif isinstance(module, ChineseCLIPVisionAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
-            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
+            init.normal_(module.q_proj.weight, std=in_proj_std)
+            init.normal_(module.k_proj.weight, std=in_proj_std)
+            init.normal_(module.v_proj.weight, std=in_proj_std)
+            init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, ChineseCLIPVisionMLP):
             factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.weight, std=fc_std)
-            nn.init.normal_(module.fc2.weight, std=in_proj_std)
+            init.normal_(module.fc1.weight, std=fc_std)
+            init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, ChineseCLIPModel):
-            nn.init.normal_(
+            init.normal_(
                 module.text_projection.weight,
                 std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
             )
-            nn.init.normal_(
+            init.normal_(
                 module.visual_projection.weight,
                 std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
             )
 
         if isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
 
 
 # Copied from transformers.models.align.modeling_align.AlignTextEncoder with Align->ChineseCLIP
@@ -622,12 +626,12 @@ class ChineseCLIPTextEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-        **kwargs,
-    ) -> Union[tuple[torch.Tensor], BaseModelOutput]:
+        attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
+        output_hidden_states: bool | None = False,
+        return_dict: bool | None = True,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor] | BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -636,9 +640,9 @@ class ChineseCLIPTextEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
+                hidden_states,
+                attention_mask,
+                output_attentions,
                 **kwargs,
             )
 
@@ -675,10 +679,10 @@ class ChineseCLIPVisionEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -740,12 +744,12 @@ class ChineseCLIPVisionTransformer(nn.Module):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -796,7 +800,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     """
 
     config: ChineseCLIPTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
     _no_split_modules = ["ChineseCLIPTextEmbeddings"]
 
     def __init__(self, config, add_pooling_layer=True):
@@ -825,19 +829,20 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPooling]:
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -904,7 +909,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
 class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
     config: ChineseCLIPVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["ChineseCLIPVisionEmbeddings", "ChineseCLIPVisionAttention"]
 
     def __init__(self, config: ChineseCLIPVisionConfig):
@@ -919,25 +924,28 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Examples:
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import CLIPProcessor, ChineseCLIPVisionModel
 
         >>> model = ChineseCLIPVisionModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
         >>> processor = CLIPProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
 
         >>> url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -994,20 +1002,17 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the final [CLS] hidden state of Text-Transformer.
-
         Examples:
 
         ```python
@@ -1027,25 +1032,23 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            return_dict=True,
+            **kwargs,
         )
+        pooled_output = text_outputs.last_hidden_state[:, 0, :]
+        text_outputs.pooler_output = self.text_projection(pooled_output)
 
-        pooled_output = text_outputs.pooler_output
-        text_features = self.text_projection(pooled_output)
+        return text_outputs
 
-        return text_features
-
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the final [CLS] hidden state of Vision-Transformer.
-
         Examples:
 
         ```python
@@ -1068,28 +1071,30 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
+            **kwargs,
         )
-
         pooled_output = vision_outputs.pooler_output
-        image_features = self.visual_projection(pooled_output)
+        vision_outputs.pooler_output = self.visual_projection(pooled_output)
 
-        return image_features
+        return vision_outputs
 
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        return_loss: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        return_loss: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ChineseCLIPOutput]:
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | ChineseCLIPOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.

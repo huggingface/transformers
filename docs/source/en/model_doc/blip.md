@@ -99,6 +99,7 @@ Refer to this [notebook](https://github.com/huggingface/notebooks/blob/main/exam
 ## BlipProcessor
 
 [[autodoc]] BlipProcessor
+    - __call__
 
 ## BlipImageProcessor
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -15,11 +14,7 @@
 # limitations under the License.
 """ELECTRA model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -28,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class ElectraConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ElectraModel`] or a [`TFElectraModel`]. It is
+    This is the configuration class to store the configuration of a [`ElectraModel`]. It is
     used to instantiate a ELECTRA model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the ELECTRA
     [google/electra-small-discriminator](https://huggingface.co/google/electra-small-discriminator) architecture.
@@ -40,7 +35,7 @@ class ElectraConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the ELECTRA model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`ElectraModel`] or [`TFElectraModel`].
+            `inputs_ids` passed when calling [`ElectraModel`].
         embedding_size (`int`, *optional*, defaults to 128):
             Dimensionality of the encoder layers and the pooler layer.
         hidden_size (`int`, *optional*, defaults to 256):
@@ -62,7 +57,7 @@ class ElectraConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`ElectraModel`] or [`TFElectraModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`ElectraModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -134,10 +129,21 @@ class ElectraConfig(PreTrainedConfig):
         pad_token_id=0,
         use_cache=True,
         classifier_dropout=None,
+        is_decoder=False,
+        add_cross_attention=False,
+        bos_token_id=None,
+        eos_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.embedding_size = embedding_size
         self.hidden_size = hidden_size
@@ -160,20 +166,4 @@ class ElectraConfig(PreTrainedConfig):
         self.classifier_dropout = classifier_dropout
 
 
-class ElectraOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-                ("token_type_ids", dynamic_axis),
-            ]
-        )
-
-
-__all__ = ["ElectraConfig", "ElectraOnnxConfig"]
+__all__ = ["ElectraConfig"]

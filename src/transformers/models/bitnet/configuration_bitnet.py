@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The BitNet Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,10 +12,8 @@
 # See the License for the specific language governing permissions and
 """BitNet model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -78,7 +75,7 @@ class BitNetConfig(PreTrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
 
@@ -97,27 +94,28 @@ class BitNetConfig(PreTrainedConfig):
 
     model_type = "bitnet"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 128256,
-        hidden_size: Optional[int] = 2560,
-        intermediate_size: Optional[int] = 6912,
-        num_hidden_layers: Optional[int] = 30,
-        num_attention_heads: Optional[int] = 20,
-        num_key_value_heads: Optional[int] = 5,
-        hidden_act: Optional[str] = "relu2",
-        max_position_embeddings: Optional[int] = 2048,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 128000,
-        eos_token_id: Optional[int] = 128001,
-        tie_word_embeddings: Optional[bool] = False,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[str] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        vocab_size: int | None = 128256,
+        hidden_size: int | None = 2560,
+        intermediate_size: int | None = 6912,
+        num_hidden_layers: int | None = 30,
+        num_attention_heads: int | None = 20,
+        num_key_value_heads: int | None = 5,
+        hidden_act: str | None = "relu2",
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 128000,
+        eos_token_id: int | None = 128001,
+        tie_word_embeddings: bool | None = False,
+        attention_bias: bool | None = False,
+        attention_dropout: str | None = 0.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -138,22 +136,13 @@ class BitNetConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["BitNetConfig"]

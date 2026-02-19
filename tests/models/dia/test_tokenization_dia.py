@@ -29,6 +29,7 @@ S2 = 2
 class DiaTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = DiaTokenizer
     test_rust_tokenizer = False
+    from_pretrained_id = "AntonV/Dia-1.6B"
 
     @classmethod
     def setUpClass(cls):

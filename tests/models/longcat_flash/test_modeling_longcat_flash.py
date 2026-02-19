@@ -25,7 +25,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_large_cpu_ram,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -234,18 +234,6 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(past_key_values.layers[layer_idx].keys.shape, expected_key_shape)
             self.assertEqual(past_key_values.layers[layer_idx].values.shape, expected_value_shape)
 
-    @unittest.skip("MoE experts may not receive gradients with small test data")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip("MoE experts may not receive gradients with small test data")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip("MoE experts may not receive gradients with small test data")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @unittest.skip("LongcatFlash router uses weight.type() directly in forward which prevents offloading")
     def test_cpu_offload(self):
         pass
@@ -285,7 +273,7 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
         return config
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @mark.flash_attn_test
     @slow

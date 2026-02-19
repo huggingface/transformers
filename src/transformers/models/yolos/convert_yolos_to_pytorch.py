@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +15,10 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -149,8 +149,9 @@ def convert_state_dict(orig_state_dict: dict, model: YolosForObjectDetection) ->
 # We will verify our results on an image of cute cats
 def prepare_img() -> torch.Tensor:
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -237,8 +238,8 @@ def convert_yolos_checkpoint(
 
         print("Pushing to the hub...")
         model_name = model_mapping[yolos_name]
-        image_processor.push_to_hub(model_name, organization="hustvl")
-        model.push_to_hub(model_name, organization="hustvl")
+        image_processor.push_to_hub(repo_id=f"hustvl/{model_name}")
+        model.push_to_hub(repo_id=f"hustvl/{model_name}")
 
 
 if __name__ == "__main__":
@@ -260,7 +261,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

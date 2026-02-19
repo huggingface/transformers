@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Microsoft Research, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,9 @@
 # limitations under the License.
 """ResNet model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from packaging import version
-
+from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -112,25 +105,7 @@ class ResNetConfig(BackboneConfigMixin, PreTrainedConfig):
         self.downsample_in_first_stage = downsample_in_first_stage
         self.downsample_in_bottleneck = downsample_in_bottleneck
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
+        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
 
 
-class ResNetOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-3
-
-
-__all__ = ["ResNetConfig", "ResNetOnnxConfig"]
+__all__ = ["ResNetConfig"]

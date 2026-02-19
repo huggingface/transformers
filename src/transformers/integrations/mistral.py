@@ -1,8 +1,8 @@
 from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
-from transformers import LlamaTokenizerFast
 from transformers.convert_slow_tokenizer import bytes_to_unicode
+from transformers.tokenization_utils_tokenizers import PreTrainedTokenizerFast
 
 
 class MistralConverter:
@@ -77,6 +77,7 @@ def convert_tekken_tokenizer(tokenizer_file: str):
     """Convert a "tekken" tokenizer to a fast Tokenizer."""
     # Tekken format -- need to use the Converter
 
+    from mistral_common.tokens.tokenizers.base import SpecialTokens
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
 
     # Load directly using their lib
@@ -84,20 +85,37 @@ def convert_tekken_tokenizer(tokenizer_file: str):
 
     # Extract vocab and special tokens
     vocab = mistral_tokenizer.instruct_tokenizer.tokenizer._tekken_token2id_nospecial
-    all_special = [
-        token.value if hasattr(token, "value") else token
-        for token in mistral_tokenizer.instruct_tokenizer.tokenizer._all_special_tokens
-    ]
-    specials_tokens = {token: all_special.index(token) for token in all_special}
+    sorted_tokens = sorted(mistral_tokenizer.instruct_tokenizer.tokenizer._all_special_tokens, key=lambda x: x["rank"])
+    all_special = [token["token_str"] for token in sorted_tokens]
+
+    specials_tokens = {token: idx for idx, token in enumerate(all_special)}
+
     specials_tokens.update(vocab)
     vocab = specials_tokens
 
+    # TODO(juliendenize): expose this in mistral-common to avoid accessing private attributes
+    # and improve maintainability
+    pattern = mistral_tokenizer.instruct_tokenizer.tokenizer._model._pat_str
+
     # Convert
-    tokenizer = LlamaTokenizerFast(
-        tokenizer_object=MistralConverter(vocab=vocab, additional_special_tokens=all_special).converted(),
+    tokenizer = PreTrainedTokenizerFast(
+        tokenizer_object=MistralConverter(
+            vocab=vocab, additional_special_tokens=all_special, pattern=pattern
+        ).converted()
     )
 
     # Post-process
     tokenizer.add_special_tokens({"additional_special_tokens": all_special})
+
+    MAP_SPECAL = {
+        "bos_token": SpecialTokens.bos.value,
+        "eos_token": SpecialTokens.eos.value,
+        "pad_token": SpecialTokens.pad.value,
+        "unk_token": SpecialTokens.unk.value,
+    }
+
+    for special_key, special_token in MAP_SPECAL.items():
+        if special_token in all_special:
+            tokenizer.add_special_tokens({special_key: special_token})
 
     return tokenizer

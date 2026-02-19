@@ -18,12 +18,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import auto_docstring
 
 
 class DeepseekVLProcessorKwargs(ProcessingKwargs, total=False):
@@ -33,30 +33,8 @@ class DeepseekVLProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class DeepseekVLProcessor(ProcessorMixin):
-    r"""
-    Constructs a DeepseekVL processor which wraps a DeepseekVL Image Processor and a Llama tokenizer into a single processor.
-
-    [`DeepseekVLProcessor`] offers all the functionalities of [`DeepseekVLImageProcessor`] and [`LlamaTokenizerFast`]. See the
-    [`~DeepseekVLProcessor.__call__`] and [`~DeepseekVLProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`DeepseekVLImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`]):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*):
-            A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        num_image_tokens (`int`, *optional*, defaults to 576):
-            The number of special image tokens used as placeholders for visual content in text sequences.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "num_image_tokens"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor,
@@ -64,37 +42,23 @@ class DeepseekVLProcessor(ProcessorMixin):
         chat_template=None,
         num_image_tokens=576,
     ):
+        r"""
+        num_image_tokens (`int`, *optional*, defaults to 576):
+            The number of special image tokens used as placeholders for visual content in text sequences.
+        """
         self.image_token = tokenizer.image_token
         self.num_image_tokens = num_image_tokens
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: Optional[ImageInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        images: ImageInput | None = None,
         **kwargs: Unpack[DeepseekVLProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        DeepseekVLImageProcessor's [`~DeepseekVLImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
-        of the above two methods for more information.
-
-        Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

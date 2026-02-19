@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The RAG Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,17 +13,16 @@
 # limitations under the License.
 """RAG model implementation."""
 
-import copy
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationConfig, GenerationMixin, LogitsProcessorList, StoppingCriteriaList
+from ...generation import GenerationConfig, GenerationMixin, GenerationMode, LogitsProcessorList, StoppingCriteriaList
+from ...generation.utils import GENERATION_MODES_MAPPING
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -112,23 +110,23 @@ class RetrievAugLMMarginOutput(ModelOutput):
         weighted average in the cross-attention heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    doc_scores: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    retrieved_doc_embeds: Optional[torch.FloatTensor] = None
-    retrieved_doc_ids: Optional[torch.LongTensor] = None
-    context_input_ids: Optional[torch.LongTensor] = None
-    context_attention_mask: Optional[torch.LongTensor] = None
-    question_encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    question_enc_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    question_enc_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    generator_enc_last_hidden_state: Optional[torch.FloatTensor] = None
-    generator_enc_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    generator_enc_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    generator_dec_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    generator_dec_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    generator_cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    doc_scores: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    retrieved_doc_embeds: torch.FloatTensor | None = None
+    retrieved_doc_ids: torch.LongTensor | None = None
+    context_input_ids: torch.LongTensor | None = None
+    context_attention_mask: torch.LongTensor | None = None
+    question_encoder_last_hidden_state: torch.FloatTensor | None = None
+    question_enc_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    question_enc_attentions: tuple[torch.FloatTensor, ...] | None = None
+    generator_enc_last_hidden_state: torch.FloatTensor | None = None
+    generator_enc_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    generator_enc_attentions: tuple[torch.FloatTensor, ...] | None = None
+    generator_dec_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    generator_dec_attentions: tuple[torch.FloatTensor, ...] | None = None
+    generator_cross_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -202,22 +200,22 @@ class RetrievAugLMOutput(ModelOutput):
         weighted average in the cross-attention heads.
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    doc_scores: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    retrieved_doc_embeds: Optional[torch.FloatTensor] = None
-    retrieved_doc_ids: Optional[torch.LongTensor] = None
-    context_input_ids: Optional[torch.LongTensor] = None
-    context_attention_mask: Optional[torch.LongTensor] = None
-    question_encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    question_enc_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    question_enc_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    generator_enc_last_hidden_state: Optional[torch.FloatTensor] = None
-    generator_enc_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    generator_enc_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    generator_dec_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    generator_dec_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    generator_cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    logits: torch.FloatTensor | None = None
+    doc_scores: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    retrieved_doc_embeds: torch.FloatTensor | None = None
+    retrieved_doc_ids: torch.LongTensor | None = None
+    context_input_ids: torch.LongTensor | None = None
+    context_attention_mask: torch.LongTensor | None = None
+    question_encoder_last_hidden_state: torch.FloatTensor | None = None
+    question_enc_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    question_enc_attentions: tuple[torch.FloatTensor, ...] | None = None
+    generator_enc_last_hidden_state: torch.FloatTensor | None = None
+    generator_enc_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    generator_enc_attentions: tuple[torch.FloatTensor, ...] | None = None
+    generator_dec_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    generator_dec_attentions: tuple[torch.FloatTensor, ...] | None = None
+    generator_cross_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring(
@@ -239,9 +237,9 @@ class RagPreTrainedModel(PreTrainedModel):
     @classmethod
     def from_pretrained_question_encoder_generator(
         cls,
-        question_encoder_pretrained_model_name_or_path: Optional[str] = None,
-        generator_pretrained_model_name_or_path: Optional[str] = None,
-        retriever: Optional[RagRetriever] = None,
+        question_encoder_pretrained_model_name_or_path: str | None = None,
+        generator_pretrained_model_name_or_path: str | None = None,
+        retriever: RagRetriever | None = None,
         **kwargs,
     ) -> PreTrainedModel:
         r"""
@@ -374,10 +372,10 @@ class RagPreTrainedModel(PreTrainedModel):
 class RagModel(RagPreTrainedModel):
     def __init__(
         self,
-        config: Optional[PreTrainedConfig] = None,
-        question_encoder: Optional[PreTrainedModel] = None,
-        generator: Optional[PreTrainedModel] = None,
-        retriever: Optional[RagRetriever] = None,  # or maybe just use a `set_retriever(...)` method
+        config: PreTrainedConfig | None = None,
+        question_encoder: PreTrainedModel | None = None,
+        generator: PreTrainedModel | None = None,
+        retriever: RagRetriever | None = None,  # or maybe just use a `set_retriever(...)` method
         **kwargs,
     ):
         r"""
@@ -422,24 +420,27 @@ class RagModel(RagPreTrainedModel):
         self.ctx_encoder = None
         self.context_encoder_training = False
 
+        self.post_init()
+
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        doc_scores: Optional[torch.FloatTensor] = None,
-        context_input_ids: Optional[torch.LongTensor] = None,
-        context_attention_mask: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_retrieved: Optional[bool] = None,
-        n_docs: Optional[int] = None,
-    ) -> Union[tuple[torch.Tensor], RetrievAugLMOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        past_key_values: Cache | None = None,
+        doc_scores: torch.FloatTensor | None = None,
+        context_input_ids: torch.LongTensor | None = None,
+        context_attention_mask: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_retrieved: bool | None = None,
+        n_docs: int | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | RetrievAugLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. [`RagConfig`], used to initialize the model, specifies
@@ -520,7 +521,7 @@ class RagModel(RagPreTrainedModel):
                 retriever_outputs = self.retriever(
                     input_ids,
                     question_encoder_last_hidden_state.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                    prefix=self.generator.config.prefix,
+                    prefix=getattr(self.generator.config, "prefix", None),
                     n_docs=n_docs,
                     return_tensors="pt",
                 )
@@ -662,10 +663,10 @@ class RagModel(RagPreTrainedModel):
 class RagSequenceForGeneration(RagPreTrainedModel):
     def __init__(
         self,
-        config: Optional[PreTrainedConfig] = None,
-        question_encoder: Optional[PreTrainedModel] = None,
-        generator: Optional[PreTrainedModel] = None,
-        retriever: Optional[RagRetriever] = None,
+        config: PreTrainedConfig | None = None,
+        question_encoder: PreTrainedModel | None = None,
+        generator: PreTrainedModel | None = None,
+        retriever: RagRetriever | None = None,
         **kwargs,
     ):
         r"""
@@ -689,6 +690,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         # instantiate model
         self.rag = RagModel(config=config, question_encoder=question_encoder, generator=generator, retriever=retriever)
 
+        self.post_init()
+
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
 
@@ -699,23 +702,23 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        context_input_ids: Optional[torch.LongTensor] = None,
-        context_attention_mask: Optional[torch.LongTensor] = None,
-        doc_scores: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_retrieved: Optional[bool] = None,
-        exclude_bos_score: Optional[bool] = None,
-        reduce_loss: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
-        n_docs: Optional[int] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        past_key_values: Cache | None = None,
+        context_input_ids: torch.LongTensor | None = None,
+        context_attention_mask: torch.LongTensor | None = None,
+        doc_scores: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_retrieved: bool | None = None,
+        exclude_bos_score: bool | None = None,
+        reduce_loss: bool | None = None,
+        labels: torch.LongTensor | None = None,
+        n_docs: int | None = None,
         **kwargs,  # needs kwargs for generation
     ) -> RetrievAugLMMarginOutput:
         r"""
@@ -872,15 +875,15 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     @torch.no_grad()
     def generate(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        context_input_ids: Optional[torch.LongTensor] = None,
-        context_attention_mask: Optional[torch.LongTensor] = None,
-        doc_scores: Optional[torch.FloatTensor] = None,
-        do_deduplication: Optional[bool] = None,  # defaults to True
-        num_return_sequences: Optional[int] = None,  # defaults to 1
-        num_beams: Optional[int] = None,  # defaults to 1
-        n_docs: Optional[int] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        context_input_ids: torch.LongTensor | None = None,
+        context_attention_mask: torch.LongTensor | None = None,
+        doc_scores: torch.FloatTensor | None = None,
+        do_deduplication: bool | None = None,  # defaults to True
+        num_return_sequences: int | None = None,  # defaults to 1
+        num_beams: int | None = None,  # defaults to 1
+        n_docs: int | None = None,
         **model_kwargs,
     ) -> torch.LongTensor:
         """
@@ -950,7 +953,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             context_input_ids = self.retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=self.generator.config.prefix,
+                prefix=getattr(self.generator.config, "prefix", None),
                 n_docs=n_docs,
                 return_tensors="pt",
             )["context_input_ids"]
@@ -1097,10 +1100,10 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
     def __init__(
         self,
-        config: Optional[PreTrainedConfig] = None,
-        question_encoder: Optional[PreTrainedModel] = None,
-        generator: Optional[PreTrainedModel] = None,
-        retriever: Optional[RagRetriever] = None,
+        config: PreTrainedConfig | None = None,
+        question_encoder: PreTrainedModel | None = None,
+        generator: PreTrainedModel | None = None,
+        retriever: RagRetriever | None = None,
         **kwargs,
     ):
         r"""
@@ -1124,6 +1127,8 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
 
         # instantiate model
         self.rag = RagModel(config=config, question_encoder=question_encoder, generator=generator, retriever=retriever)
+
+        self.post_init()
 
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
@@ -1220,23 +1225,23 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        context_input_ids: Optional[torch.LongTensor] = None,
-        context_attention_mask: Optional[torch.LongTensor] = None,
-        doc_scores: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_retrieved: Optional[bool] = None,
-        do_marginalize: Optional[bool] = None,
-        reduce_loss: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
-        n_docs: Optional[int] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        past_key_values: Cache | None = None,
+        context_input_ids: torch.LongTensor | None = None,
+        context_attention_mask: torch.LongTensor | None = None,
+        doc_scores: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_retrieved: bool | None = None,
+        do_marginalize: bool | None = None,
+        reduce_loss: bool | None = None,
+        labels: torch.LongTensor | None = None,
+        n_docs: int | None = None,
         **kwargs,  # needs kwargs for generation
     ) -> RetrievAugLMMarginOutput:
         r"""
@@ -1393,16 +1398,16 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
     @torch.no_grad()
     def generate(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        context_input_ids: Optional[torch.LongTensor] = None,
-        context_attention_mask: Optional[torch.LongTensor] = None,
-        doc_scores: Optional[torch.FloatTensor] = None,
-        n_docs: Optional[int] = None,
-        generation_config: Optional[GenerationConfig] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
-        logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
-        stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        context_input_ids: torch.LongTensor | None = None,
+        context_attention_mask: torch.LongTensor | None = None,
+        doc_scores: torch.FloatTensor | None = None,
+        n_docs: int | None = None,
+        generation_config: GenerationConfig | None = None,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], list[int]] | None = None,
+        logits_processor: LogitsProcessorList | None = LogitsProcessorList(),
+        stopping_criteria: StoppingCriteriaList | None = StoppingCriteriaList(),
         **kwargs,
     ) -> torch.LongTensor:
         """
@@ -1471,10 +1476,22 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             finished early due to the `eos_token_id`.
         """
         # Handle `generation_config` and kwargs that might update it
-        if generation_config is None:
-            generation_config = self.generation_config
-        generation_config = copy.deepcopy(generation_config)
-        model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+        generation_mode_kwargs = self._extract_generation_mode_kwargs(None, kwargs, False, None, None)
+        generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
+        generation_mode = generation_config.get_generation_mode()
+        if generation_mode not in [
+            GenerationMode.SAMPLE,
+            GenerationMode.GREEDY_SEARCH,
+            GenerationMode.BEAM_SEARCH,
+            GenerationMode.BEAM_SAMPLE,
+        ]:
+            raise ValueError(
+                f"RAG model is not compatible with {generation_mode} generation. Please check your generation parameters."
+            )
+        # type() required to access the unbound class-level method
+        decoding_method = getattr(type(self), GENERATION_MODES_MAPPING[generation_mode])
+        self._validate_model_kwargs(model_kwargs.copy())
+        self._validate_generation_mode(generation_mode, generation_config, generation_mode_kwargs)
 
         kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
         self._prepare_special_tokens(generation_config, kwargs_has_attention_mask)
@@ -1488,7 +1505,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             out = self.retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=self.generator.config.prefix,
+                prefix=getattr(self.generator.config, "prefix", None),
                 n_docs=n_docs,
                 return_tensors="pt",
             )
@@ -1550,7 +1567,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         model_kwargs["attention_mask"] = context_attention_mask
         model_kwargs["n_docs"] = n_docs
 
-        pre_processor = self._get_logits_processor(
+        prepared_logits_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_seq_length,
             encoder_input_ids=context_input_ids,
@@ -1571,37 +1588,18 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             max_cache_length=generation_config.max_length - 1,
         )
 
-        if generation_config.num_beams == 1:
-            if generation_config.num_return_sequences > 1:
-                raise ValueError(
-                    f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
-                    " greedy search."
-                )
-            return self._sample(
-                input_ids,
-                logits_processor=pre_processor,
-                stopping_criteria=prepared_stopping_criteria,
-                generation_config=generation_config,
-                synced_gpus=False,
-                streamer=None,
-                **model_kwargs,
-            )
-        elif generation_config.num_beams > 1:
-            if generation_config.num_return_sequences > generation_config.num_beams:
-                raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
+        # Prefill pass
+        generation_mode_kwargs["prefill_outputs"] = self._prefill(input_ids, generation_config, model_kwargs)
 
-            return self._beam_search(
-                input_ids,
-                logits_processor=pre_processor,
-                stopping_criteria=prepared_stopping_criteria,
-                generation_config=generation_config,
-                synced_gpus=False,
-                **model_kwargs,
-            )
-        else:
-            raise ValueError(
-                f"`num_beams` has to be an integer strictly superior to 0 (≥ 1), but is {generation_config.num_beams}"
-            )
+        return decoding_method(
+            self,
+            input_ids,
+            logits_processor=prepared_logits_processor,
+            stopping_criteria=prepared_stopping_criteria,
+            generation_config=generation_config,
+            **generation_mode_kwargs,
+            **model_kwargs,
+        )
 
     # Auxiliary functions for beam search
     def _temporary_reorder_cache(self, past_key_values, beam_idx):

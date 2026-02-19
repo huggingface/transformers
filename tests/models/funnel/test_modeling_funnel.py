@@ -376,6 +376,8 @@ class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
+    test_torch_exportable = False
+
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -417,9 +419,9 @@ class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
 
         for param in ["r_w_bias", "r_r_bias", "r_kernel", "r_s_bias", "seg_embed"]:
             if hasattr(module, param) and getattr(module, param) is not None:
@@ -432,6 +434,8 @@ class FunnelBaseModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (FunnelBaseModel, FunnelForMultipleChoice, FunnelForSequenceClassification) if is_torch_available() else ()
     )
+
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = FunnelModelTester(self, base=True)
@@ -470,9 +474,9 @@ class FunnelBaseModelTest(ModelTesterMixin, unittest.TestCase):
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
 
         for param in ["r_w_bias", "r_r_bias", "r_kernel", "r_s_bias", "seg_embed"]:
             if hasattr(module, param) and getattr(module, param) is not None:

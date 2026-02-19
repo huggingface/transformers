@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Kyutai and HuggingFace Inc. teams. All rights reserved.
 #
 #
@@ -14,10 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class HeliumConfig(PreTrainedConfig):
@@ -67,7 +65,7 @@ class HeliumConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         pad_token_id (`int`, *optional*, defaults to 3):
@@ -93,6 +91,7 @@ class HeliumConfig(PreTrainedConfig):
 
     model_type = "helium"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 100000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -110,26 +109,26 @@ class HeliumConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 48000,
-        hidden_size: Optional[int] = 2560,
-        intermediate_size: Optional[int] = 7040,
-        num_hidden_layers: Optional[int] = 24,
-        num_attention_heads: Optional[int] = 20,
-        num_key_value_heads: Optional[int] = 20,
-        head_dim: Optional[int] = 128,
-        hidden_act: Optional[str] = "silu",
-        attention_dropout: Optional[float] = 0.0,
-        max_position_embeddings: Optional[int] = 4096,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-8,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        pad_token_id: Optional[int] = 3,
-        eos_token_id: Optional[int] = 2,
-        bos_token_id: Optional[int] = 1,
-        attention_bias: Optional[bool] = False,
-        mlp_bias: Optional[bool] = False,
+        vocab_size: int | None = 48000,
+        hidden_size: int | None = 2560,
+        intermediate_size: int | None = 7040,
+        num_hidden_layers: int | None = 24,
+        num_attention_heads: int | None = 20,
+        num_key_value_heads: int | None = 20,
+        head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        attention_dropout: float | None = 0.0,
+        max_position_embeddings: int | None = 4096,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-8,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        pad_token_id: int | None = 3,
+        eos_token_id: int | None = 2,
+        bos_token_id: int | None = 1,
+        attention_bias: bool | None = False,
+        mlp_bias: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -147,22 +146,13 @@ class HeliumConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 100000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["HeliumConfig"]

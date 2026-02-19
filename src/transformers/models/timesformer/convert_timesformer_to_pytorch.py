@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -244,7 +243,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--model_name", default="timesformer-base-finetuned-k400", type=str, help="Name of the model.")
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

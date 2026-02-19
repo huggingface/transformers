@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,13 +23,13 @@ from ...modeling_layers import (
     GenericForSequenceClassification,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...utils.generic import OutputRecorder
+from ...utils.generic import maybe_autocast
+from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import LlamaAttention
 from ..mixtral.modeling_mixtral import (
     MixtralDecoderLayer,
     MixtralExperts,
     MixtralForCausalLM,
-    MixtralMLP,
     MixtralModel,
     MixtralPreTrainedModel,
     MixtralRotaryEmbedding,
@@ -53,7 +52,7 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     def forward(self, x, position_ids=None, layer_type=None):
         if layer_type is not None:
@@ -65,9 +64,9 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
         seq_len = torch.max(position_ids) + 1
         if self.config.rope_parameters["rope_type"] != "default" and seq_len:
             mscale = (
-                self.long_mscale
+                self.config.rope_parameters["long_mscale"]
                 if seq_len > self.config.rope_parameters["original_max_position_embeddings"]
-                else self.short_mscale
+                else self.config.rope_parameters["short_mscale"]
             )
         inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
         mscale = attention_scaling if mscale is None else mscale
@@ -75,7 +74,7 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * mscale
@@ -84,10 +83,6 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
 
 
 class PhimoeAttention(LlamaAttention):
-    pass
-
-
-class PhimoeMLP(MixtralMLP):
     pass
 
 
@@ -276,30 +271,27 @@ def sparsemixer(scores, jitter_eps, training, top_k=2):
     )
 
 
-class PhimoeExperts(MixtralExperts, nn.ModuleList):
-    def __init__(self, config: PhimoeConfig):
-        nn.ModuleList.__init__(self)
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        for _ in range(self.num_experts):
-            self.append(PhimoeMLP(config))
+class PhimoeExperts(MixtralExperts):
+    pass
 
 
-class PhimoeRouter(nn.Linear):
+class PhimoeTopKRouter(nn.Linear):
     def __init__(self, config: PhimoeConfig):
         super().__init__(config.hidden_size, config.num_local_experts, bias=False)
-        self.top_k = config.num_experts_per_tok
-        self.hidden_dim = config.hidden_size
         self.router_jitter_noise = config.router_jitter_noise
-        self.input_jitter_noise = config.router_jitter_noise
+        self.input_jitter_noise = config.input_jitter_noise
+        self.top_k = config.num_experts_per_tok
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if self.training and self.input_jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(
                 1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
             )
         router_logits = super().forward(hidden_states)
-        return router_logits
+        routing_weights, selected_experts = sparsemixer(
+            router_logits, jitter_eps=self.router_jitter_noise, training=self.training, top_k=self.top_k
+        )
+        return router_logits, routing_weights, selected_experts
 
 
 class PhimoeSparseMoeBlock(nn.Module):
@@ -320,18 +312,9 @@ class PhimoeSparseMoeBlock(nn.Module):
         self.ffn_dim = config.intermediate_size
         self.num_experts = config.num_local_experts
         self.top_k = config.num_experts_per_tok
-        self.router_jitter_noise = config.router_jitter_noise
-        self.gate = PhimoeRouter(config)
+        self.router = PhimoeTopKRouter(config)
         self.experts = PhimoeExperts(config)
         self.input_jitter_noise = config.input_jitter_noise
-
-    def route_tokens_to_experts(self, router_logits):
-        routing_weights, selected_experts = sparsemixer(
-            router_logits,
-            jitter_eps=self.router_jitter_noise,
-            training=self.training,
-        )
-        return routing_weights, selected_experts
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -342,19 +325,25 @@ class PhimoeSparseMoeBlock(nn.Module):
 
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_dim)
-        router_logits = self.gate(hidden_states)
-        routing_weights, selected_experts = self.route_tokens_to_experts(router_logits)
+        _, routing_weights, selected_experts = self.router(hidden_states)
         final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
 class PhimoeDecoderLayer(MixtralDecoderLayer):
-    pass
+    def __init__(self, config: PhimoeConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        # Phimoe uses nn.LayerNorm
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
+        self.post_attention_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True
+        )
 
 
 class PhimoePreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(PhimoeTopKRouter, index=0),
         "hidden_states": PhimoeDecoderLayer,
         "attentions": PhimoeAttention,
     }

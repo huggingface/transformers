@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022, The LongT5 Authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,7 @@
 # limitations under the License.
 """LongT5 model configuration"""
 
-from collections.abc import Mapping
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxSeq2SeqConfigWithPast
 from ...utils import logging
 
 
@@ -108,8 +104,12 @@ class LongT5Config(PreTrainedConfig):
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
+        is_decoder=False,
+        bos_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -128,6 +128,10 @@ class LongT5Config(PreTrainedConfig):
         self.feed_forward_proj = feed_forward_proj
         self.encoder_attention_type = encoder_attention_type
         self.use_cache = use_cache
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
@@ -144,37 +148,7 @@ class LongT5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
-class LongT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = {
-            "input_ids": {0: "batch", 1: "encoder_sequence"},
-            "attention_mask": {0: "batch", 1: "encoder_sequence"},
-        }
-        if self.use_past:
-            common_inputs["attention_mask"][1] = "past_encoder_sequence + sequence"
-            common_inputs["decoder_input_ids"] = {0: "batch"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
-        else:
-            common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
-
-        if self.use_past:
-            self.fill_with_past_key_values_(common_inputs, direction="inputs")
-
-        return common_inputs
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 13
-
-
-__all__ = ["LongT5Config", "LongT5OnnxConfig"]
+__all__ = ["LongT5Config"]

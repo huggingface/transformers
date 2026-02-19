@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta and The HuggingFace Inc. team. All rights reserved.
 # Copyright (c) 2025, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -17,12 +16,12 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -35,7 +34,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_esm import EsmConfig
 
 
@@ -89,6 +89,7 @@ class RotaryEmbedding(torch.nn.Module):
 
     def __init__(self, dim: int):
         super().__init__()
+        self.dim = dim
         # Generate and save the inverse frequency buffer (non trainable)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
         self.register_buffer("inv_freq", inv_freq)
@@ -258,8 +259,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -270,7 +271,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -318,9 +318,9 @@ class EsmSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -343,9 +343,9 @@ class EsmSelfAttention(nn.Module):
         if self.position_embedding_type == "rotary":
             query_layer, key_layer = self.rotary_embeddings(query_layer, key_layer)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -551,22 +551,17 @@ class EsmPreTrainedModel(PreTrainedModel):
         ],
     }
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with BertLMPredictionHead->EsmLMHead
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, EsmLMHead):
-            module.bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, EsmLMHead):
+            init.zeros_(module.bias)
+        elif isinstance(module, EsmEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, RotaryEmbedding):
+            inv_freq = 1.0 / (10000 ** (torch.arange(0, module.dim, 2, dtype=torch.int64).float() / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
     def get_output_embeddings(self):
         # NOTE: get_output_embeddings() must return None to prevent accidental weight tying.
@@ -614,18 +609,19 @@ class EsmModel(EsmPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         input_ids (`torch.LongTensor` of shape `((batch_size, sequence_length))`):
             Indices of input sequence tokens in the vocabulary.
@@ -691,7 +687,7 @@ class EsmModel(EsmPreTrainedModel):
         if self.config.is_decoder:
             attention_mask = create_causal_mask(
                 config=self.config,
-                input_embeds=embedding_output,
+                inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
                 cache_position=cache_position,
                 past_key_values=past_key_values,
@@ -699,14 +695,14 @@ class EsmModel(EsmPreTrainedModel):
         else:
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=embedding_output,
+                inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
             )
 
         if encoder_attention_mask is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=embedding_output,
+                inputs_embeds=embedding_output,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )
@@ -727,7 +723,7 @@ class EsmModel(EsmPreTrainedModel):
 
 @auto_docstring
 class EsmForMaskedLM(EsmPreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder.weight"]
+    _tied_weights_keys = {"lm_head.decoder.weight": "esm.embeddings.word_embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -741,8 +737,6 @@ class EsmForMaskedLM(EsmPreTrainedModel):
         self.esm = EsmModel(config, add_pooling_layer=False)
         self.lm_head = EsmLMHead(config)
 
-        self.init_weights()
-
         self.post_init()
 
     def get_output_embeddings(self):
@@ -755,15 +749,15 @@ class EsmForMaskedLM(EsmPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, MaskedLMOutput]:
+    ) -> tuple | MaskedLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -837,21 +831,19 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
         self.esm = EsmModel(config, add_pooling_layer=False)
         self.classifier = EsmClassificationHead(config)
 
-        self.init_weights()
-
         self.post_init()
 
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, SequenceClassifierOutput]:
+    ) -> tuple | SequenceClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -912,21 +904,19 @@ class EsmForTokenClassification(EsmPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
-
         self.post_init()
 
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, TokenClassifierOutput]:
+    ) -> tuple | TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.

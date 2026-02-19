@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import Olmo2Config, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
@@ -190,6 +189,7 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 
 @require_torch
+@slow
 class Olmo2IntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -197,7 +197,6 @@ class Olmo2IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @slow
     def test_model_1b_logits_bfloat16(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = Olmo2ForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B").to(torch_device, torch.bfloat16)
@@ -220,7 +219,6 @@ class Olmo2IntegrationTest(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
-    @slow
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = Olmo2ForCausalLM.from_pretrained("shanearora/OLMo2-7B-1124-hf").to(torch_device, dtype=torch.bfloat16)
@@ -242,7 +240,6 @@ class Olmo2IntegrationTest(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
-    @slow
     def test_model_7b_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the fastest speed possible, and 3) the speed of light is the same for all observers, regardless of their relative motion. The theory of relativity is based on the idea that the speed of light is constant. This means that"""
         prompt = "Simply put, the theory of relativity states that "
@@ -285,11 +282,7 @@ class Olmo2IntegrationTest(unittest.TestCase):
         self.assertEqual(rust_tokenizer.encode(" Hello"), [22691])
 
     @pytest.mark.torch_export_test
-    @slow
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,

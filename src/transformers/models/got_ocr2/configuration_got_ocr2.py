@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_got_ocr2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -138,8 +134,9 @@ class GotOcr2Config(PreTrainedConfig):
             The image token index to encode the image prompt.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
-        pad_token_id (`int`, *optional*, defaults to -1):
-            Padding token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
+
 
     ```python
     >>> from transformers import GotOcr2ForConditionalGeneration, GotOcr2Config
@@ -162,16 +159,15 @@ class GotOcr2Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vision_config: Optional[dict] = None,
-        text_config: Optional[dict] = None,
-        image_token_index: Optional[int] = 151859,
-        image_seq_length: Optional[int] = 576,
-        pad_token_id: Optional[int] = -1,
+        vision_config: dict | None = None,
+        text_config: dict | None = None,
+        image_token_index: int | None = 151859,
+        image_seq_length: int | None = 576,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.image_token_index = image_token_index
         self.image_seq_length = image_seq_length
-        self.pad_token_id = pad_token_id
 
         if vision_config is None:
             self.vision_config = GotOcr2VisionConfig()
@@ -196,7 +192,7 @@ class GotOcr2Config(PreTrainedConfig):
                 initializer_range=0.02,
                 rms_norm_eps=1e-6,
                 use_cache=True,
-                tie_word_embeddings=True,
+                tie_word_embeddings=tie_word_embeddings,
                 rope_theta=1000000.0,
                 rope_parameters=None,
                 use_sliding_window=False,
@@ -206,6 +202,7 @@ class GotOcr2Config(PreTrainedConfig):
             )
 
         self.text_config = text_config
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

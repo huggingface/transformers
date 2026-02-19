@@ -37,7 +37,6 @@ from tests_fetcher import (  # noqa: E402
     diff_is_docstring_only,
     extract_imports,
     get_all_tests,
-    get_diff,
     get_module_dependencies,
     get_tree_starting_at,
     infer_tests_to_run,
@@ -262,31 +261,6 @@ class TestFetcherTester(unittest.TestCase):
 
             commit_changes(bert_file, BERT_MODEL_FILE_NEW_CODE, repo)
             assert not diff_is_docstring_only(repo, branching_point, bert_file)
-
-    def test_get_diff(self):
-        with tempfile.TemporaryDirectory() as tmp_folder:
-            tmp_folder = Path(tmp_folder)
-            repo = create_tmp_repo(tmp_folder)
-
-            initial_commit = repo.refs.main.commit
-            bert_file = BERT_MODELING_FILE
-            commit_changes(bert_file, BERT_MODEL_FILE_NEW_DOCSTRING, repo)
-            assert get_diff(repo, repo.head.commit, repo.head.commit.parents) == []
-
-            commit_changes(bert_file, BERT_MODEL_FILE_NEW_DOCSTRING + "\n# Adding a comment\n", repo)
-            assert get_diff(repo, repo.head.commit, repo.head.commit.parents) == []
-
-            commit_changes(bert_file, BERT_MODEL_FILE_NEW_CODE, repo)
-            assert get_diff(repo, repo.head.commit, repo.head.commit.parents) == [
-                "src/transformers/models/bert/modeling_bert.py"
-            ]
-
-            commit_changes("src/transformers/utils/hub.py", "import huggingface_hub\n\nnew code", repo)
-            assert get_diff(repo, repo.head.commit, repo.head.commit.parents) == ["src/transformers/utils/hub.py"]
-            assert get_diff(repo, repo.head.commit, [initial_commit]) == [
-                "src/transformers/models/bert/modeling_bert.py",
-                "src/transformers/utils/hub.py",
-            ]
 
     def test_extract_imports_relative(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
@@ -671,7 +645,7 @@ src/transformers/configuration_utils.py
             assert set(example_tests_to_run.split(" ")) == example_tests
 
             with patch_transformer_repo_path(tmp_folder):
-                infer_tests_to_run(tmp_folder / "test-output.txt", filter_models=False)
+                infer_tests_to_run(tmp_folder / "test-output.txt")
                 with open(tmp_folder / "test-output.txt") as f:
                     tests_to_run = f.read()
                 with open(tmp_folder / "examples_test_list.txt") as f:

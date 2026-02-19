@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 import numpy as np
 
@@ -22,19 +20,29 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_vision_available
+from ...utils import auto_docstring, is_vision_available
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
-    from .image_processing_emu3 import smart_resize
+    from .image_processing_emu3 import Emu3ImageProcessorKwargs, smart_resize
 
 
 class Emu3TextKwargs(TextKwargs, total=False):
+    """
+    return_for_image_generation (`bool`, *optional*, defaults to `False`):
+        Whether the processed text is intended for image generation tasks. When `True`, the processor prepares
+        inputs for image generation by appending image start tokens and size information to the prompt, and
+        images should not be provided. When `False`, the processor prepares inputs for text generation from
+        images and text, requiring both inputs to be provided.
+    """
+
     return_for_image_generation: bool
 
 
 class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: Emu3TextKwargs
+    images_kwargs: Emu3ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "return_for_image_generation": False,
@@ -47,27 +55,9 @@ class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
+@requires(backends=("vision",))
 class Emu3Processor(ProcessorMixin):
-    r"""
-    Constructs a Emu3 processor which wraps a Emu3 image processor and a GPT2 tokenizer into a single
-    processor.
-
-    [`Emu3Processor`] offers all the functionalities of [`Emu3ImageProcessor`] and [`GPT2TokenizerFast`].
-    See the [`~Emu3Processor.__call__`] and [`~Emu3Processor.decode`] for more information.
-
-    Args:
-        image_processor ([`Emu3ImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`Emu3TokenizerFast`]):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    tokenizer_class = ("GPT2Tokenizer", "GPT2TokenizerFast")
-    image_processor_class = "Emu3ImageProcessor"
-
     def __init__(
         self,
         image_processor,
@@ -85,33 +75,14 @@ class Emu3Processor(ProcessorMixin):
         self.downsample_ratio = 8
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[Emu3ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to Emu3TokenizerFast's [`~Emu3TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -233,6 +204,41 @@ class Emu3Processor(ProcessorMixin):
 
     def postprocess(self, images: ImageInput, **kwargs):
         return self.image_processor.postprocess(images, **kwargs)
+
+    def post_process_multimodal_output(
+        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
+    ):
+        """
+        Post-process the output of a multimodal model to return the requested modality output.
+        If the model cannot generated the requested modality, an error will be raised.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            generation_mode (`str`, *optional*):
+                Generation mode indicated which modality to output and can be one of `["text", "image", "audio"]`.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[Union[str, PIL.Image.Image]]`: The decoded text or generated image.
+        """
+        if generation_mode is None or generation_mode == "text":
+            return self.post_process_image_text_to_text(
+                generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
+            )
+
+        elif generation_mode == "image":
+            images = self.postprocess(generated_outputs, return_tensors="PIL.Image.Image")
+            return images["pixel_values"]
+
+        else:
+            raise ValueError(
+                f"{self.__class__.__name__} got an unexpected generation_mode={generation_mode}. Supported options are only `text` and `image"
+            )
 
 
 __all__ = ["Emu3Processor"]

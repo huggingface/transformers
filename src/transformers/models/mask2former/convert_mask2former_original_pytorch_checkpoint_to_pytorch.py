@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,11 +16,12 @@ import sys
 from argparse import ArgumentParser
 from collections.abc import Iterator
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from pprint import pformat
 from typing import Any
 
-import requests
+import httpx
 import torch
 import torchvision.transforms as T
 from detectron2.checkpoint import DetectionCheckpointer
@@ -87,9 +87,9 @@ class TrackedStateDict:
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    img_data = requests.get(url, stream=True).raw
-    im = Image.open(img_data)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @dataclass
@@ -826,7 +826,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
         checkpoints: list[Path] = checkpoints_dir.glob("**/*.pkl")
 
         for checkpoint in checkpoints:
-            logger.info(f"💪 Converting {checkpoint.stem}")
+            logger.info(f"Converting {checkpoint.stem}")
             # find associated config file
 
             # dataset_name e.g 'coco'
@@ -902,7 +902,7 @@ def test(
             "The predicted masks are not the same."
         )
 
-        logger.info("✅ Test passed!")
+        logger.info("Test passed!")
 
 
 def get_model_name(checkpoint_file: Path):
@@ -1012,9 +1012,9 @@ if __name__ == "__main__":
         if model_name in high_tolerance_models:
             tolerance = 3e-1
 
-        logger.info(f"🪄 Testing {model_name}...")
+        logger.info(f"Testing {model_name}...")
         test(original_model, mask2former_for_segmentation, image_processor, tolerance)
-        logger.info(f"🪄 Pushing {model_name} to hub...")
+        logger.info(f"Pushing {model_name} to hub...")
 
         image_processor.push_to_hub(model_name)
         mask2former_for_segmentation.push_to_hub(model_name)

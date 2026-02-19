@@ -64,8 +64,8 @@ limitations under the License.
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers_as_a_model_definition.png"/>
 </h3>
 
-Transformers acts as the model-definition framework for state-of-the-art machine learning models in text, computer
-vision, audio, video, and multimodal model, for both inference and training.
+Transformers acts as the model-definition framework for state-of-the-art machine learning with text, computer
+vision, audio, video, and multimodal models, for both inference and training.
 
 It centralizes the model definition so that this definition is agreed upon across the ecosystem. `transformers` is the
 pivot across frameworks: if a model definition is supported, it will be compatible with the majority of training
@@ -81,7 +81,7 @@ Explore the [Hub](https://huggingface.com/) today to find a model and use Transf
 
 ## Installation
 
-Transformers works with Python 3.9+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.1+.
+Transformers works with Python 3.10+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.4+.
 
 Create and activate a virtual environment with [venv](https://docs.python.org/3/library/venv.html) or [uv](https://docs.astral.sh/uv/), a fast Rust-based Python package and project manager.
 
@@ -134,7 +134,7 @@ pipeline("the secret to baking a really good cake is ")
 To chat with a model, the usage pattern is the same. The only difference is you need to construct a chat history (the input to `Pipeline`) between you and the system.
 
 > [!TIP]
-> You can also chat with a model directly from the command line.
+> You can also chat with a model directly from the command line, as long as [`transformers serve` is running](https://huggingface.co/docs/transformers/main/en/serving).
 > ```shell
 > transformers chat Qwen/Qwen2.5-0.5B-Instruct
 > ```
@@ -224,7 +224,7 @@ pipeline(
     - Reduce compute time and production costs.
     - Dozens of model architectures with 1M+ pretrained checkpoints across all modalities.
 
-1. Choose the right framework for every part of a models lifetime:
+1. Choose the right framework for every part of a model's lifetime:
     - Train state-of-the-art models in 3 lines of code.
     - Move a single model between PyTorch/JAX/TF2.0 frameworks at will.
     - Pick the right framework for training, evaluation, and production.
@@ -265,12 +265,12 @@ Expand each modality below to see a few example models for various use cases.
 <details>
 <summary>Audio</summary>
 
-- Audio classification with [Whisper](https://huggingface.co/openai/whisper-large-v3-turbo)
-- Automatic speech recognition with [Moonshine](https://huggingface.co/UsefulSensors/moonshine)
+- Audio classification with [CLAP](https://huggingface.co/laion/clap-htsat-fused)
+- Automatic speech recognition with [Parakeet](https://huggingface.co/nvidia/parakeet-ctc-1.1b#transcribing-using-transformers-%F0%9F%A4%97), [Whisper](https://huggingface.co/openai/whisper-large-v3-turbo), [GLM-ASR](https://huggingface.co/zai-org/GLM-ASR-Nano-2512) and [Moonshine-Streaming](https://huggingface.co/UsefulSensors/moonshine-streaming-medium)
 - Keyword spotting with [Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks)
 - Speech to speech generation with [Moshi](https://huggingface.co/kyutai/moshiko-pytorch-bf16)
 - Text to audio with [MusicGen](https://huggingface.co/facebook/musicgen-large)
-- Text to speech with [Bark](https://huggingface.co/suno/bark)
+- Text to speech with [CSM](https://huggingface.co/sesame/csm-1b)
 
 </details>
 
@@ -292,7 +292,7 @@ Expand each modality below to see a few example models for various use cases.
 <details>
 <summary>Multimodal</summary>
 
-- Audio or text to text with [Qwen2-Audio](https://huggingface.co/Qwen/Qwen2-Audio-7B)
+- Audio or text to text with [Voxtral](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507), [Audio Flamingo](https://huggingface.co/nvidia/audio-flamingo-3-hf)
 - Document question answering with [LayoutLMv3](https://huggingface.co/microsoft/layoutlmv3-base)
 - Image or text to text with [Qwen-VL](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct)
 - Image captioning [BLIP-2](https://huggingface.co/Salesforce/blip2-opt-2.7b)

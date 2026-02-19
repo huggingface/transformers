@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,7 @@ from pathlib import Path
 from check_config_docstrings import get_checkpoint_from_config_class
 from datasets import load_dataset
 from get_test_info import get_model_to_tester_mapping, get_tester_classes_for_model
-from huggingface_hub import Repository, create_repo, hf_api, upload_folder  # TODO: remove Repository
+from huggingface_hub import create_repo, hf_api, upload_folder
 
 from transformers import (
     CONFIG_MAPPING,
@@ -38,8 +37,8 @@ from transformers import (
     TOKENIZER_MAPPING,
     AutoTokenizer,
     LayoutLMv3TokenizerFast,
-    PreTrainedTokenizer,
     PreTrainedTokenizerFast,
+    PythonBackend,
     logging,
 )
 from transformers.feature_extraction_utils import FeatureExtractionMixin
@@ -174,7 +173,6 @@ def get_architectures_from_config_class(config_class, arch_mappings, models_to_s
     """
     # A model architecture could appear in several mappings. For example, `BartForConditionalGeneration` is in
     #   - MODEL_FOR_PRETRAINING_MAPPING_NAMES
-    #   - MODEL_WITH_LM_HEAD_MAPPING_NAMES
     #   - MODEL_FOR_MASKED_LM_MAPPING_NAMES
     #   - MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
     # We avoid the duplication.
@@ -300,7 +298,7 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
         # Try to build each component (tokenizer & feature extractor) of a `ProcessorMixin`.
         if issubclass(processor_class, ProcessorMixin):
             attrs = {}
-            for attr_name in processor_class.attributes:
+            for attr_name in processor_class.get_attributes():
                 attrs[attr_name] = []
                 # This could be a tuple (for tokenizers). For example, `CLIPProcessor` has
                 #   - feature_extractor_class = "CLIPFeatureExtractor"
@@ -805,30 +803,19 @@ def upload_model(model_dir, organization, token):
     if error is not None:
         raise error
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        repo = Repository(local_dir=tmpdir, clone_from=repo_id, token=token)
-        repo.git_pull()
-        shutil.copytree(model_dir, tmpdir, dirs_exist_ok=True)
+    create_pr = repo_exist  # Open a PR on existing repo, otherwise push directly
+    commit = upload_folder(
+        folder_path=model_dir,
+        repo_id=repo_id,
+        repo_type="model",
+        commit_message=f"Update tiny models for {arch_name}",
+        commit_description=f"Upload tiny models for {arch_name}",
+        create_pr=create_pr,
+        token=token,
+    )
 
-        if repo_exist:
-            # Open a PR on the existing Hub repo.
-            hub_pr_url = upload_folder(
-                folder_path=model_dir,
-                repo_id=repo_id,
-                repo_type="model",
-                commit_message=f"Update tiny models for {arch_name}",
-                commit_description=f"Upload tiny models for {arch_name}",
-                create_pr=True,
-                token=token,
-            )
-            logger.warning(f"PR open in {hub_pr_url}.")
-            # TODO: We need this information?
-        else:
-            # Push to Hub repo directly
-            repo.git_add(auto_lfs_track=True)
-            repo.git_commit(f"Upload tiny models for {arch_name}")
-            repo.git_push(blocking=True)  # this prints a progress bar with the upload
-            logger.warning(f"Tiny models {arch_name} pushed to {repo_id}.")
+    msg = f"PR open in {commit.pr_url}." if create_pr else f"Tiny models {arch_name} pushed to {repo_id}."
+    logger.warning(msg)
 
 
 def build_composite_models(config_class, output_dir):
@@ -991,7 +978,7 @@ def get_config_overrides(config_class, processors):
         if isinstance(processor, PreTrainedTokenizerFast):
             tokenizer = processor
             break
-        elif isinstance(processor, PreTrainedTokenizer):
+        elif isinstance(processor, PythonBackend):
             tokenizer = processor
 
     if tokenizer is None:

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,6 +42,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -211,13 +211,15 @@ class GraniteSpeechForConditionalGenerationModelTester:
 
 
 @require_torch
-class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class GraniteSpeechForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `GraniteSpeechForConditionalGeneration`.
     """
 
     all_model_classes = (GraniteSpeechForConditionalGeneration,) if is_torch_available() else ()
-
+    pipeline_model_mapping = {"any-to-any": GraniteSpeechForConditionalGeneration} if is_torch_available() else {}
     _is_composite = True
 
     def setUp(self):
@@ -290,6 +292,10 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
     @slow
     @unittest.skip(reason="Granite Speech doesn't support SDPA for all backbones")
     def test_eager_matches_sdpa_generate(self):
+        pass
+
+    @unittest.skip(reason="GraniteSpeech has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
 

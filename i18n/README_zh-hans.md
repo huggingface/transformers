@@ -50,6 +50,7 @@ checkpoint: 检查点
 </p>
 
 <p align="center">
+    <a href="https://huggingface.co/models"><img alt="Checkpoints on Hub" src="https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen"></a>
     <a href="https://circleci.com/gh/huggingface/transformers"><img alt="Build" src="https://img.shields.io/circleci/build/github/huggingface/transformers/main"></a>
     <a href="https://github.com/huggingface/transformers/blob/main/LICENSE"><img alt="GitHub" src="https://img.shields.io/github/license/huggingface/transformers.svg?color=blue"></a>
     <a href="https://huggingface.co/docs/transformers/index"><img alt="Documentation" src="https://img.shields.io/website/http/huggingface.co/docs/transformers/index.svg?down_color=red&down_message=offline&up_message=online"></a>
@@ -60,7 +61,7 @@ checkpoint: 检查点
 
 <h4 align="center">
     <p>
-        <a href="https://github.com/huggingface/transformers/">English</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README.md">English</a> |
         <b>简体中文</b> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hant.md">繁體中文</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ko.md">한국어</a> |
@@ -68,7 +69,7 @@ checkpoint: 检查点
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ja.md">日本語</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_hd.md">हिन्दी</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ru.md">Русский</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_pt-br.md">Рortuguês</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_pt-br.md">Português</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
@@ -81,182 +82,258 @@ checkpoint: 检查点
 </h4>
 
 <h3 align="center">
-    <p>为 Jax、PyTorch 和 TensorFlow 打造的先进的自然语言处理函数库</p>
+    <p>为文本、视觉、音频、视频与多模态提供推理与训练的先进预训练模型</p>
 </h3>
 
 <h3 align="center">
-    <a href="https://hf.co/course"><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/course_banner.png"></a>
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers_as_a_model_definition.png"/>
 </h3>
 
-🤗 Transformers 提供了数以千计的预训练模型，支持 100 多种语言的文本分类、信息抽取、问答、摘要、翻译、文本生成。它的宗旨是让最先进的 NLP 技术人人易用。
+Transformers 充当跨文本、计算机视觉、音频、视频与多模态的最先进机器学习模型的「模型定义框架」，同时覆盖推理与训练。
 
-🤗 Transformers 提供了便于快速下载和使用的API，让你可以把预训练模型用在给定文本、在你的数据集上微调然后通过 [model hub](https://huggingface.co/models) 与社区共享。同时，每个定义的 Python 模块都是完全独立的，便于修改和快速进行研究实验。
+它将模型的定义集中化，使整个生态系统对该定义达成一致。`transformers` 是跨框架的枢纽：一旦某模型定义被支持，它通常就能兼容多数训练框架（如 Axolotl、Unsloth、DeepSpeed、FSDP、PyTorch‑Lightning 等）、推理引擎（如 vLLM、SGLang、TGI 等），以及依赖 `transformers` 模型定义的相关库（如 llama.cpp、mlx 等）。
 
-🤗 Transformers 支持三个最热门的深度学习库： [Jax](https://jax.readthedocs.io/en/latest/), [PyTorch](https://pytorch.org/) 以及 [TensorFlow](https://www.tensorflow.org/) — 并与之无缝整合。你可以直接使用一个框架训练你的模型然后用另一个加载和推理。
+我们的目标是持续支持新的最先进模型，并通过让模型定义保持简单、可定制且高效来普及其使用。
 
-## 在线演示
-
-你可以直接在模型页面上测试大多数 [model hub](https://huggingface.co/models) 上的模型。 我们也提供了 [私有模型托管、模型版本管理以及推理API](https://huggingface.co/pricing)。
-
-这里是一些例子：
-- [用 BERT 做掩码填词](https://huggingface.co/google-bert/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
-- [用 Electra 做命名实体识别](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
-- [用 GPT-2 做文本生成](https://huggingface.co/openai-community/gpt2?text=A+long+time+ago%2C+)
-- [用 RoBERTa 做自然语言推理](https://huggingface.co/FacebookAI/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
-- [用 BART 做文本摘要](https://huggingface.co/facebook/bart-large-cnn?text=The+tower+is+324+metres+%281%2C063+ft%29+tall%2C+about+the+same+height+as+an+81-storey+building%2C+and+the+tallest+structure+in+Paris.+Its+base+is+square%2C+measuring+125+metres+%28410+ft%29+on+each+side.+During+its+construction%2C+the+Eiffel+Tower+surpassed+the+Washington+Monument+to+become+the+tallest+man-made+structure+in+the+world%2C+a+title+it+held+for+41+years+until+the+Chrysler+Building+in+New+York+City+was+finished+in+1930.+It+was+the+first+structure+to+reach+a+height+of+300+metres.+Due+to+the+addition+of+a+broadcasting+aerial+at+the+top+of+the+tower+in+1957%2C+it+is+now+taller+than+the+Chrysler+Building+by+5.2+metres+%2817+ft%29.+Excluding+transmitters%2C+the+Eiffel+Tower+is+the+second+tallest+free-standing+structure+in+France+after+the+Millau+Viaduct)
-- [用 DistilBERT 做问答](https://huggingface.co/distilbert/distilbert-base-uncased-distilled-squad?text=Which+name+is+also+used+to+describe+the+Amazon+rainforest+in+English%3F&context=The+Amazon+rainforest+%28Portuguese%3A+Floresta+Amaz%C3%B4nica+or+Amaz%C3%B4nia%3B+Spanish%3A+Selva+Amaz%C3%B3nica%2C+Amazon%C3%ADa+or+usually+Amazonia%3B+French%3A+For%C3%AAt+amazonienne%3B+Dutch%3A+Amazoneregenwoud%29%2C+also+known+in+English+as+Amazonia+or+the+Amazon+Jungle%2C+is+a+moist+broadleaf+forest+that+covers+most+of+the+Amazon+basin+of+South+America.+This+basin+encompasses+7%2C000%2C000+square+kilometres+%282%2C700%2C000+sq+mi%29%2C+of+which+5%2C500%2C000+square+kilometres+%282%2C100%2C000+sq+mi%29+are+covered+by+the+rainforest.+This+region+includes+territory+belonging+to+nine+nations.+The+majority+of+the+forest+is+contained+within+Brazil%2C+with+60%25+of+the+rainforest%2C+followed+by+Peru+with+13%25%2C+Colombia+with+10%25%2C+and+with+minor+amounts+in+Venezuela%2C+Ecuador%2C+Bolivia%2C+Guyana%2C+Suriname+and+French+Guiana.+States+or+departments+in+four+nations+contain+%22Amazonas%22+in+their+names.+The+Amazon+represents+over+half+of+the+planet%27s+remaining+rainforests%2C+and+comprises+the+largest+and+most+biodiverse+tract+of+tropical+rainforest+in+the+world%2C+with+an+estimated+390+billion+individual+trees+divided+into+16%2C000+species)
-- [用 T5 做翻译](https://huggingface.co/google-t5/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
-
-**[Write With Transformer](https://transformer.huggingface.co)**，由 Hugging Face 团队打造，是一个文本生成的官方 demo。
-
-## 如果你在寻找由 Hugging Face 团队提供的定制化支持服务
-
-<a target="_blank" href="https://huggingface.co/support">
-    <img alt="HuggingFace Expert Acceleration Program" src="https://huggingface.co/front/thumbnails/support.png" style="max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
-</a><br>
-
-## 快速上手
-
-我们为快速使用模型提供了 `pipeline` API。Pipeline 聚合了预训练模型和对应的文本预处理。下面是一个快速使用 pipeline 去判断正负面情绪的例子：
-
-```python
->>> from transformers import pipeline
-
-# 使用情绪分析 pipeline
->>> classifier = pipeline('sentiment-analysis')
->>> classifier('We are very happy to introduce pipeline to the transformers repository.')
-[{'label': 'POSITIVE', 'score': 0.9996980428695679}]
-```
-
-第二行代码下载并缓存了 pipeline 使用的预训练模型，而第三行代码则在给定的文本上进行了评估。这里的答案"正面" (positive) 具有 99 的置信度。
-
-许多的 NLP 任务都有开箱即用的预训练 `pipeline`。比如说，我们可以轻松的从给定文本中抽取问题答案：
-
-``` python
->>> from transformers import pipeline
-
-# 使用问答 pipeline
->>> question_answerer = pipeline('question-answering')
->>> question_answerer({
-...     'question': 'What is the name of the repository ?',
-...     'context': 'Pipeline has been included in the huggingface/transformers repository'
-... })
-{'score': 0.30970096588134766, 'start': 34, 'end': 58, 'answer': 'huggingface/transformers'}
-
-```
-
-除了给出答案，预训练模型还给出了对应的置信度分数、答案在词符化 (tokenized) 后的文本中开始和结束的位置。你可以从[这个教程](https://huggingface.co/docs/transformers/task_summary)了解更多 `pipeline` API 支持的任务。
-
-要在你的任务上下载和使用任意预训练模型也很简单，只需三行代码。这里是 PyTorch 版的示例：
-```python
->>> from transformers import AutoTokenizer, AutoModel
-
->>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
->>> model = AutoModel.from_pretrained("google-bert/bert-base-uncased")
-
->>> inputs = tokenizer("Hello world!", return_tensors="pt")
->>> outputs = model(**inputs)
-```
-这里是等效的 TensorFlow 代码：
-```python
->>> from transformers import AutoTokenizer, TFAutoModel
-
->>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
->>> model = TFAutoModel.from_pretrained("google-bert/bert-base-uncased")
-
->>> inputs = tokenizer("Hello world!", return_tensors="tf")
->>> outputs = model(**inputs)
-```
-
-词符化器 (tokenizer) 为所有的预训练模型提供了预处理，并可以直接对单个字符串进行调用（比如上面的例子）或对列表 (list) 调用。它会输出一个你可以在下游代码里使用或直接通过 `**` 解包表达式传给模型的词典 (dict)。
-
-模型本身是一个常规的 [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) 或 [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model)（取决于你的后端），可以常规方式使用。 [这个教程](https://huggingface.co/transformers/training.html)解释了如何将这样的模型整合到经典的 PyTorch 或 TensorFlow 训练循环中，或是如何使用我们的 `Trainer` （训练器）API 来在一个新的数据集上快速微调。
-
-## 为什么要用 transformers？
-
-1. 便于使用的先进模型：
-    - NLU 和 NLG 上表现优越
-    - 对教学和实践友好且低门槛
-    - 高级抽象，只需了解三个类
-    - 对所有模型统一的API
-
-1. 更低计算开销，更少的碳排放：
-    - 研究人员可以分享已训练的模型而非每次从头开始训练
-    - 工程师可以减少计算用时和生产环境开销
-    - 数十种模型架构、两千多个预训练模型、100多种语言支持
-
-1. 对于模型生命周期的每一个部分都面面俱到：
-    - 训练先进的模型，只需 3 行代码
-    - 模型在不同深度学习框架间任意转移，随你心意
-    - 为训练、评估和生产选择最适合的框架，衔接无缝
-
-1. 为你的需求轻松定制专属模型和用例：
-    - 我们为每种模型架构提供了多个用例来复现原论文结果
-    - 模型内部结构保持透明一致
-    - 模型文件可单独使用，方便修改和快速实验
-
-## 什么情况下我不该用 transformers？
-
-- 本库并不是模块化的神经网络工具箱。模型文件中的代码特意呈若璞玉，未经额外抽象封装，以便研究人员快速迭代修改而不致溺于抽象和文件跳转之中。
-- `Trainer` API 并非兼容任何模型，只为本库之模型优化。若是在寻找适用于通用机器学习的训练循环实现，请另觅他库。
-- 尽管我们已尽力而为，[examples 目录](https://github.com/huggingface/transformers/tree/main/examples)中的脚本也仅为用例而已。对于你的特定问题，它们并不一定开箱即用，可能需要改几行代码以适之。
+目前在 [Hugging Face Hub](https://huggingface.com/models) 上有超过 1M+ 使用 `transformers` 的[模型检查点](https://huggingface.co/models?library=transformers&sort=trending)，可随取随用。
+ 
+今天就去探索 Hub，找到一个模型，并用 Transformers 立刻开始吧。
 
 ## 安装
 
-### 使用 pip
+Transformers 支持 Python 3.10+，以及 [PyTorch](https://pytorch.org/get-started/locally/) 2.4+。
 
-这个仓库已在 Python 3.9+、Flax 0.4.1+、PyTorch 2.1+ 和 TensorFlow 2.6+ 下经过测试。
+使用 [venv](https://docs.python.org/3/library/venv.html) 或 [uv](https://docs.astral.sh/uv/)（一个基于 Rust 的快速 Python 包与项目管理器）创建并激活虚拟环境：
 
-你可以在[虚拟环境](https://docs.python.org/3/library/venv.html)中安装 🤗 Transformers。如果你还不熟悉 Python 的虚拟环境，请阅此[用户说明](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/)。
-
-首先，用你打算使用的版本的 Python 创建一个虚拟环境并激活。
-
-然后，你需要安装 Flax、PyTorch 或 TensorFlow 其中之一。关于在你使用的平台上安装这些框架，请参阅 [TensorFlow 安装页](https://www.tensorflow.org/install/), [PyTorch 安装页](https://pytorch.org/get-started/locally/#start-locally) 或 [Flax 安装页](https://github.com/google/flax#quick-install)。
-
-当这些后端之一安装成功后， 🤗 Transformers 可依此安装：
-
-```bash
-pip install transformers
+```py
+# venv
+python -m venv .my-env
+source .my-env/bin/activate
+# uv
+uv venv .my-env
+source .my-env/bin/activate
 ```
 
-如果你想要试试用例或者想在正式发布前使用最新的开发中代码，你得[从源代码安装](https://huggingface.co/docs/transformers/installation#installing-from-source)。
+在虚拟环境中安装 Transformers：
 
-### 使用 conda
+```py
+# pip
+pip install "transformers[torch]"
 
-🤗 Transformers 可以通过 conda 依此安装：
-
-```shell script
-conda install conda-forge::transformers
+# uv
+uv pip install "transformers[torch]"
 ```
 
-> **_笔记:_** 从 `huggingface` 渠道安装 `transformers` 已被废弃。
+如果你需要库中的最新改动或计划参与贡献，可从源码安装（注意：最新版可能不稳定；如遇错误，欢迎在 [issues](https://github.com/huggingface/transformers/issues) 中反馈）：
 
-要通过 conda 安装 Flax、PyTorch 或 TensorFlow 其中之一，请参阅它们各自安装页的说明。
+```shell
+git clone https://github.com/huggingface/transformers.git
+cd transformers
 
-## 模型架构
+# pip
+pip install '.[torch]'
 
-🤗 Transformers 支持的[**所有的模型检查点**](https://huggingface.co/models)由[用户](https://huggingface.co/users)和[组织](https://huggingface.co/organizations)上传，均与 huggingface.co [model hub](https://huggingface.co) 无缝整合。
+# uv
+uv pip install '.[torch]'
+```
 
-目前的检查点数量： ![](https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen)
+## 快速上手
 
-🤗 Transformers 目前支持如下的架构: 模型概述请阅[这里](https://huggingface.co/docs/transformers/model_summary).
+使用 [Pipeline](https://huggingface.co/docs/transformers/pipeline_tutorial) API 一步上手。`Pipeline` 是一个高级推理类，支持文本、音频、视觉与多模态任务，负责输入预处理并返回适配的输出。
 
-要检查某个模型是否已有 Flax、PyTorch 或 TensorFlow 的实现，或其是否在 🤗 Tokenizers 库中有对应词符化器（tokenizer），敬请参阅[此表](https://huggingface.co/docs/transformers/index#supported-frameworks)。
+实例化一个用于文本生成的 pipeline，指定使用的模型。模型会被下载并缓存，方便复用。最后传入文本作为提示：
 
-这些实现均已于多个数据集测试（请参看用例脚本）并应于原版实现表现相当。你可以在用例文档的[此节](https://huggingface.co/docs/transformers/examples)中了解表现的细节。
+```py
+from transformers import pipeline
+
+pipeline = pipeline(task="text-generation", model="Qwen/Qwen2.5-1.5B")
+pipeline("the secret to baking a really good cake is ")
+[{'generated_text': 'the secret to baking a really good cake is 1) to use the right ingredients and 2) to follow the recipe exactly. the recipe for the cake is as follows: 1 cup of sugar, 1 cup of flour, 1 cup of milk, 1 cup of butter, 1 cup of eggs, 1 cup of chocolate chips. if you want to make 2 cakes, how much sugar do you need? To make 2 cakes, you will need 2 cups of sugar.'}]
+```
+
+要与模型进行「聊天」，用法也一致。唯一不同是需要构造一段「聊天历史」（即 `Pipeline` 的输入）：
+
+> [!TIP]
+> 你也可以直接在命令行与模型聊天：
+> ```shell
+> transformers chat Qwen/Qwen2.5-0.5B-Instruct
+> ```
+
+```py
+import torch
+from transformers import pipeline
+
+chat = [
+    {"role": "system", "content": "You are a sassy, wise-cracking robot as imagined by Hollywood circa 1986."},
+    {"role": "user", "content": "Hey, can you tell me any fun things to do in New York?"}
+]
+
+pipeline = pipeline(task="text-generation", model="meta-llama/Meta-Llama-3-8B-Instruct", dtype=torch.bfloat16, device_map="auto")
+response = pipeline(chat, max_new_tokens=512)
+print(response[0]["generated_text"][-1]["content"])
+```
+
+展开下方示例，查看 `Pipeline` 在不同模态与任务中的用法。
+
+<details>
+<summary>自动语音识别</summary>
+
+```py
+from transformers import pipeline
+
+pipeline = pipeline(task="automatic-speech-recognition", model="openai/whisper-large-v3")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
+{'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.'}
+```
+
+</details>
+
+<details>
+<summary>图像分类</summary>
+
+<h3 align="center">
+    <a><img src="https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png"></a>
+</h3>
+
+```py
+from transformers import pipeline
+
+pipeline = pipeline(task="image-classification", model="facebook/dinov2-small-imagenet1k-1-layer")
+pipeline("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
+[{"label": "macaw", "score": 0.997848391532898},
+ {"label": "sulphur-crested cockatoo, Kakatoe galerita, Cacatua galerita",
+  "score": 0.0016551691805943847},
+ {"label": "lorikeet", "score": 0.00018523589824326336},
+ {"label": "African grey, African gray, Psittacus erithacus",
+  "score": 7.85409429227002e-05},
+ {"label": "quail", "score": 5.502637941390276e-05}]
+```
+
+</details>
+
+<details>
+<summary>视觉问答</summary>
+
+<h3 align="center">
+    <a><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-few-shot.jpg"></a>
+</h3>
+
+```py
+from transformers import pipeline
+
+pipeline = pipeline(task="visual-question-answering", model="Salesforce/blip-vqa-base")
+pipeline(
+    image="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-few-shot.jpg",
+    question="What is in the image?",
+)
+[{"answer": "statue of liberty"}]
+```
+
+</details>
+
+## 为什么要用 Transformers？
+
+1. 易于使用的最先进模型：
+    - 在自然语言理解与生成、计算机视觉、音频、视频与多模态任务上表现优越。
+    - 对研究者、工程师与开发者友好且低门槛。
+    - 少量用户侧抽象，仅需学习三个类。
+    - 统一的 API，使用所有预训练模型体验一致。
+
+1. 更低计算开销与更小碳足迹：
+    - 共享已训练的模型，而非每次从零开始训练。
+    - 减少计算时间与生产环境成本。
+    - 覆盖数十种模型架构，跨所有模态提供 1M+ 预训练检查点。
+
+1. 在模型生命周期的每个阶段都可以选用合适的框架：
+    - 3 行代码即可训练最先进模型。
+    - 在 PyTorch/JAX/TF2.0 间自由迁移同一个模型。
+    - 为训练、评估与生产挑选最合适的框架。
+
+1. 轻松定制模型或用例：
+    - 为每个架构提供示例以复现原论文结果。
+    - 尽可能一致地暴露模型内部。
+    - 模型文件可独立于库使用，便于快速实验。
+
+<a target="_blank" href="https://huggingface.co/enterprise">
+    <img alt="Hugging Face Enterprise Hub" src="https://github.com/user-attachments/assets/247fb16d-d251-4583-96c4-d3d76dda4925">
+</a><br>
+
+## 为什么我不该用 Transformers？
+
+- 该库不是一个可自由拼搭的神经网络模块化工具箱。模型文件中的代码刻意减少额外抽象，以便研究者能快速在各个模型上迭代，而无需深入更多抽象或文件跳转。
+- 训练 API 优化用于 Transformers 提供的 PyTorch 模型。若需要通用的机器学习训练循环，请使用其它库，如 [Accelerate](https://huggingface.co/docs/accelerate)。
+- [示例脚本](https://github.com/huggingface/transformers/tree/main/examples)只是「示例」。它们不一定能直接适配你的具体用例，需要你进行必要的改动。
 
 
-## 了解更多
+## 100 个使用 Transformers 的项目
 
-| 章节 | 描述 |
-|-|-|
-| [文档](https://huggingface.co/docs/transformers/) | 完整的 API 文档和教程 |
-| [任务总结](https://huggingface.co/docs/transformers/task_summary) | 🤗 Transformers 支持的任务 |
-| [预处理教程](https://huggingface.co/docs/transformers/preprocessing) | 使用 `Tokenizer` 来为模型准备数据 |
-| [训练和微调](https://huggingface.co/docs/transformers/training) | 在 PyTorch/TensorFlow 的训练循环或 `Trainer` API 中使用 🤗 Transformers 提供的模型 |
-| [快速上手：微调和用例脚本](https://github.com/huggingface/transformers/tree/main/examples) | 为各种任务提供的用例脚本 |
-| [模型分享和上传](https://huggingface.co/docs/transformers/model_sharing) | 和社区上传和分享你微调的模型 |
-| [迁移](https://huggingface.co/docs/transformers/migration) | 从 `pytorch-transformers` 或 `pytorch-pretrained-bert` 迁移到 🤗 Transformers |
+Transformers 不止是一个使用预训练模型的工具包，它还是围绕 Hugging Face Hub 构建的项目社区。我们希望 Transformers 能助力开发者、研究人员、学生、老师、工程师与任何人构建理想项目。
+
+为庆祝 Transformers 获得 100,000 颗星，我们制作了 [awesome-transformers](./awesome-transformers.md) 页面，展示了 100 个由社区构建的优秀项目。
+
+如果你拥有或使用某个项目，认为它应该在列表中出现，欢迎提交 PR 添加它！
+
+## 示例模型
+
+你可以直接在它们的 [Hub 模型页](https://huggingface.co/models) 上测试我们的多数模型。
+
+展开每个模态以查看不同用例中的部分示例模型。
+
+<details>
+<summary>音频</summary>
+
+- 使用 [Whisper](https://huggingface.co/openai/whisper-large-v3-turbo) 进行音频分类
+- 使用 [Moonshine](https://huggingface.co/UsefulSensors/moonshine) 进行自动语音识别
+- 使用 [Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks) 进行关键词检索
+- 使用 [Moshi](https://huggingface.co/kyutai/moshiko-pytorch-bf16) 进行语音到语音生成
+- 使用 [MusicGen](https://huggingface.co/facebook/musicgen-large) 文本到音频生成
+- 使用 [Bark](https://huggingface.co/suno/bark) 文本到语音生成
+
+</details>
+
+<details>
+<summary>计算机视觉</summary>
+
+- 使用 [SAM](https://huggingface.co/facebook/sam-vit-base) 自动生成掩码
+- 使用 [DepthPro](https://huggingface.co/apple/DepthPro-hf) 进行深度估计
+- 使用 [DINO v2](https://huggingface.co/facebook/dinov2-base) 进行图像分类
+- 使用 [SuperPoint](https://huggingface.co/magic-leap-community/superpoint) 进行关键点检测
+- 使用 [SuperGlue](https://huggingface.co/magic-leap-community/superglue_outdoor) 进行关键点匹配
+- 使用 [RT-DETRv2](https://huggingface.co/PekingU/rtdetr_v2_r50vd) 进行目标检测
+- 使用 [VitPose](https://huggingface.co/usyd-community/vitpose-base-simple) 进行姿态估计
+- 使用 [OneFormer](https://huggingface.co/shi-labs/oneformer_ade20k_swin_large) 进行通用分割
+- 使用 [VideoMAE](https://huggingface.co/MCG-NJU/videomae-large) 进行视频分类
+
+</details>
+
+<details>
+<summary>多模态</summary>
+
+- 使用 [Qwen2-Audio](https://huggingface.co/Qwen/Qwen2-Audio-7B) 实现音频或文本到文本
+- 使用 [LayoutLMv3](https://huggingface.co/microsoft/layoutlmv3-base) 进行文档问答
+- 使用 [Qwen-VL](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) 实现图像或文本到文本
+- 使用 [BLIP-2](https://huggingface.co/Salesforce/blip2-opt-2.7b) 进行图文描述
+- 使用 [GOT-OCR2](https://huggingface.co/stepfun-ai/GOT-OCR-2.0-hf) 进行基于 OCR 的文档理解
+- 使用 [TAPAS](https://huggingface.co/google/tapas-base) 进行表格问答
+- 使用 [Emu3](https://huggingface.co/BAAI/Emu3-Gen) 进行统一的多模态理解与生成
+- 使用 [Llava-OneVision](https://huggingface.co/llava-hf/llava-onevision-qwen2-0.5b-ov-hf) 视觉到文本
+- 使用 [Llava](https://huggingface.co/llava-hf/llava-1.5-7b-hf) 进行视觉问答
+- 使用 [Kosmos-2](https://huggingface.co/microsoft/kosmos-2-patch14-224) 进行视觉指代表达分割
+
+</details>
+
+<details>
+<summary>NLP</summary>
+
+- 使用 [ModernBERT](https://huggingface.co/answerdotai/ModernBERT-base) 进行掩码词填充
+- 使用 [Gemma](https://huggingface.co/google/gemma-2-2b) 进行命名实体识别（NER）
+- 使用 [Mixtral](https://huggingface.co/mistralai/Mixtral-8x7B-v0.1) 进行问答
+- 使用 [BART](https://huggingface.co/facebook/bart-large-cnn) 进行摘要
+- 使用 [T5](https://huggingface.co/google-t5/t5-base) 进行翻译
+- 使用 [Llama](https://huggingface.co/meta-llama/Llama-3.2-1B) 进行文本生成
+- 使用 [Qwen](https://huggingface.co/Qwen/Qwen2.5-0.5B) 进行文本分类
+
+</details>
 
 ## 引用
 

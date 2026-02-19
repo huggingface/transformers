@@ -17,7 +17,7 @@ import unittest
 
 from transformers import OlmoeConfig, is_torch_available
 from transformers.models.auto.tokenization_auto import AutoTokenizer
-from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
+from transformers.models.gpt_neox.tokenization_gpt_neox import GPTNeoXTokenizer as GPTNeoXTokenizerFast
 from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
@@ -70,7 +70,7 @@ class OlmoeModelTester:
         norm_topk_prob=False,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
-        intermediate_size=12,
+        intermediate_size=16,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -205,21 +205,21 @@ class OlmoeIntegrationTest(unittest.TestCase):
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = OlmoeForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", device_map="auto")
-        out = model(torch.tensor(input_ids)).logits.float()
+        out = model(torch.tensor(input_ids, device=model.device)).logits.float()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-1.3814, -3.4450, -2.2990, -1.9542, -2.4387, -2.7941, -2.9312, -2.8309]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(out.mean(-1).cpu(), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:30]
         EXPECTED_SLICE = torch.tensor([-2.3874, -2.4076, -2.4995, 4.2278, 1.4004, -0.0252, 0.4189, -2.7560, 0.3531, 1.6678, -0.7941, -1.1818, -0.2920, 0.7131, -1.4173, 1.6723, 0.5406, 0.1345, -0.1800, 0.2304, 1.2791, 0.7489, 0.6341, -0.0151, -1.3693, -1.2532, -2.3921, 0.7376, 1.6876, 0.5483])  # fmt: skip
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(out[0, 0, :30].cpu(), EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
     @slow
     def test_model_7b_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that \nthe speed of light is the same for all observers, no matter \nhow fast they are moving.  This is a very counter-intuitive \nconcept, and it took Einstein a long time to come up with \nthe theory.  The theory of relativity is based on two \npostulates"""
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924", device_map="auto")
-        input_ids = tokenizer.encode(prompt, return_tensors="pt")
         model = OlmoeForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", device_map="auto")
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
@@ -258,10 +258,10 @@ class OlmoeIntegrationTest(unittest.TestCase):
 
         # Inner spaces showcase
         self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [12764, 50276, 12092])
-        self.assertEqual(rust_tokenizer.decode([12764, 50276, 12092], skip_special_tokens=True), "Hi  Hello")
+        self.assertEqual(rust_tokenizer.decode([12764, 50276, 12092], skip_special_tokens=False), "Hi  Hello")
 
         self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [12764, 50275, 12092])
-        self.assertEqual(rust_tokenizer.decode([12764, 50275, 12092], skip_special_tokens=True), "Hi   Hello")
+        self.assertEqual(rust_tokenizer.decode([12764, 50275, 12092], skip_special_tokens=False), "Hi   Hello")
 
         self.assertEqual(rust_tokenizer.encode(""), [])
 

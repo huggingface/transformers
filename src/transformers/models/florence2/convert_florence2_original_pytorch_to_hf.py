@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Microsoft and the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -349,7 +348,6 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder, output_hub_pa
     tokenizer.image_token = "<image>"
     tokenizer.add_tokens(AddedToken(tokenizer.image_token, special=True, normalized=False), special_tokens=True)
     tokenizer.image_token_id = tokenizer.encode(tokenizer.image_token, add_special_tokens=False)[0]
-    tokenizer.extra_special_tokens = {"image_token": "<image>"}
 
     post_processor_config = {
         "ocr": {
@@ -473,6 +471,9 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder, output_hub_pa
 
     vision_config = convert_config(hf_config.vision_config.__dict__)
     text_config = hf_config.text_config.__dict__
+    if text_config.get("model_type") == "florence2_language":
+        text_config["model_type"] = "bart"
+
     config = Florence2Config(
         text_config=text_config,
         vision_config=vision_config,

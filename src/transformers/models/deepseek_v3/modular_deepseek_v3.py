@@ -1,17 +1,18 @@
 import math
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
+from ...utils.generic import is_flash_attention_requested
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
@@ -102,12 +103,11 @@ class DeepseekV3TopkRouter(nn.Module):
         return router_logits
 
 
-class DeepseekV3NaiveMoe(MixtralExperts, nn.ModuleList):
+class DeepseekV3NaiveMoe(MixtralExperts):
     def __init__(self, config):
-        nn.ModuleList.__init__(self)
+        super().__init__(config)
         self.num_experts = config.num_local_experts
-        for _ in range(self.num_experts):
-            self.append(DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size))
+        self.intermediate_dim = config.moe_intermediate_size
 
 
 class DeepseekV3MoE(nn.Module):
@@ -222,11 +222,11 @@ class DeepseekV3Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
         key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
@@ -261,12 +261,12 @@ class DeepseekV3Attention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
+        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -279,7 +279,7 @@ class DeepseekV3Attention(nn.Module):
             **kwargs,
         )
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
+        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             attn_output = attn_output[:, :, :, : self.v_head_dim]
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
@@ -304,16 +304,22 @@ class DeepseekV3DecoderLayer(LlamaDecoderLayer):
 
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
-    _can_compile_fullgraph = False
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV3TopkRouter):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, DeepseekV3NaiveMoe):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekV3Model(LlamaModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
+    pass
 
 
 class DeepseekV3ForCausalLM(LlamaForCausalLM):

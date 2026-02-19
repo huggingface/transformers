@@ -1,6 +1,6 @@
 # Contributing a new model to Transformers
 
-Modular Transformers lowers the bar for contributing models and significantly reduces the code required to add a model by allowing imports and inheritance.
+Modular Transformers lowers the bar for contributing models and significantly reduces the code required to add a model by allowing imports and inheritance. We recommend to go through [general contribution guidelines for new models](./contributing#do-you-want-to-implement-a-new-model) before diving into the details here.
 
 One of Transformers' core design feature is the [single model, single file](https://huggingface.co/blog/transformers-design-philosophy) policy. Model components - such as attention layers - are repeated across many files and any independent implementations tend to diverge as fixes and changes are applied to specific parts of the code.
 

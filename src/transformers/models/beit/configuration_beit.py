@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,8 @@
 # limitations under the License.
 """BEiT model configuration"""
 
-import warnings
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from packaging import version
-
+from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
@@ -159,6 +151,8 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
         reshape_hidden_states=True,
         **kwargs,
     ):
+        if "segmentation_indices" in kwargs and out_indices is None:
+            out_indices = kwargs.pop("segmentation_indices")
         super().__init__(**kwargs)
 
         self.vocab_size = vocab_size
@@ -192,38 +186,11 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
         self.auxiliary_concat_input = auxiliary_concat_input
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
-        # handle backwards compatibility
-        if "segmentation_indices" in kwargs:
-            warnings.warn(
-                "The `segmentation_indices` argument is deprecated and will be removed in a future version, use `out_indices` instead.",
-                FutureWarning,
-            )
-            out_indices = kwargs.pop("segmentation_indices")
-
         # backbone attributes
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
+        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
         self.add_fpn = add_fpn
         self.reshape_hidden_states = reshape_hidden_states
 
 
-# Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
-class BeitOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-
-__all__ = ["BeitConfig", "BeitOnnxConfig"]
+__all__ = ["BeitConfig"]

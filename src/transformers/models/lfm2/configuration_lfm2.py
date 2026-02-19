@@ -11,10 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class Lfm2Config(PreTrainedConfig):
@@ -67,7 +66,7 @@ class Lfm2Config(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         conv_bias (`bool`, *optional*, defaults to `False`):
@@ -100,31 +99,32 @@ class Lfm2Config(PreTrainedConfig):
 
     model_type = "lfm2"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 65536,
-        hidden_size: Optional[int] = 2560,
-        intermediate_size: Optional[int] = 12288,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 8,
-        max_position_embeddings: Optional[int] = 128_000,
-        initializer_range: Optional[float] = 0.02,
-        norm_eps: Optional[float] = 0.00001,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        conv_bias: Optional[bool] = False,
-        conv_L_cache: Optional[int] = 3,
-        block_multiple_of: Optional[int] = 256,
-        block_ffn_dim_multiplier: Optional[float] = 1.0,
-        block_auto_adjust_ff_dim: Optional[bool] = True,
-        full_attn_idxs: Optional[list[int]] = None,
-        layer_types: Optional[list[str]] = None,
+        vocab_size: int | None = 65536,
+        hidden_size: int | None = 2560,
+        intermediate_size: int | None = 12288,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 8,
+        max_position_embeddings: int | None = 128_000,
+        initializer_range: float | None = 0.02,
+        norm_eps: float | None = 0.00001,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        conv_bias: bool | None = False,
+        conv_L_cache: int | None = 3,
+        block_multiple_of: int | None = 256,
+        block_ffn_dim_multiplier: float | None = 1.0,
+        block_auto_adjust_ff_dim: bool | None = True,
+        full_attn_idxs: list[int] | None = None,
+        layer_types: list[str] | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -148,28 +148,19 @@ class Lfm2Config(PreTrainedConfig):
         self.block_multiple_of = block_multiple_of
         self.block_ffn_dim_multiplier = block_ffn_dim_multiplier
         self.block_auto_adjust_ff_dim = block_auto_adjust_ff_dim
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:
             full_attn_idxs = full_attn_idxs if full_attn_idxs is not None else list(range(num_hidden_layers))
             self.layer_types = ["full_attention" if i in full_attn_idxs else "conv" for i in range(num_hidden_layers)]
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("theta", kwargs.get("rope_theta", 1000000.0))
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
+        self.rope_parameters = rope_parameters
         tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["Lfm2Config"]

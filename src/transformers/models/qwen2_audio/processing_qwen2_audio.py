@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,13 +15,12 @@
 Processor class for Qwen2Audio.
 """
 
-from typing import Union
-
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import auto_docstring
 
 
 class Qwen2AudioProcessorKwargs(ProcessingKwargs, total=False):
@@ -34,33 +32,8 @@ class Qwen2AudioProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Qwen2AudioProcessor(ProcessorMixin):
-    r"""
-    Constructs a Qwen2Audio processor which wraps a Qwen2Audio feature extractor and a Qwen2Audio tokenizer into a single processor.
-
-    [`Qwen2AudioProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`] and [`Qwen2TokenizerFast`]. See the
-    [`~Qwen2AudioProcessor.__call__`] and [`~Qwen2AudioProcessor.decode`] for more information.
-
-    Args:
-        feature_extractor ([`WhisperFeatureExtractor`], *optional*):
-            The feature extractor is a required input.
-        tokenizer ([`Qwen2TokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        chat_template (`Optional[str]`, *optional*):
-                The Jinja template to use for formatting the conversation. If not provided, the default chat template
-                is used.
-        audio_token (`str`, *optional*, defaults to `"<|AUDIO|>"`):
-            The token to use for audio tokens.
-        audio_bos_token (`str`, *optional*, defaults to `"<|audio_bos|>"`):
-            The token to use for audio bos tokens.
-        audio_eos_token (`str`, *optional*, defaults to `"<|audio_eos|>"`):
-            The token to use for audio eos tokens.
-    """
-
-    attributes = ["feature_extractor", "tokenizer"]
-    feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         feature_extractor=None,
@@ -70,6 +43,14 @@ class Qwen2AudioProcessor(ProcessorMixin):
         audio_bos_token="<|audio_bos|>",
         audio_eos_token="<|audio_eos|>",
     ):
+        r"""
+        audio_token (`str`, *optional*, defaults to `"<|AUDIO|>"`):
+            The token to use for audio tokens.
+        audio_bos_token (`str`, *optional*, defaults to `"<|audio_bos|>"`):
+            The token to use for audio bos tokens.
+        audio_eos_token (`str`, *optional*, defaults to `"<|audio_eos|>"`):
+            The token to use for audio eos tokens.
+        """
         if chat_template is None:
             chat_template = self.default_chat_template
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
@@ -78,27 +59,13 @@ class Qwen2AudioProcessor(ProcessorMixin):
         self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio: Union[np.ndarray, list[np.ndarray]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        audio: np.ndarray | list[np.ndarray] = None,
         **kwargs: Unpack[Qwen2AudioProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
-        and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the audio(s), this method forwards the `audios` and `kwargs` arguments to
-        WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audio (`np.ndarray`, `list[np.ndarray]`):
-                The audio or batch of audios to be prepared. Each audio can be a NumPy array.
-        """
         if text is None:
             raise ValueError("You need to specify `text` input to process.")
         elif isinstance(text, str):

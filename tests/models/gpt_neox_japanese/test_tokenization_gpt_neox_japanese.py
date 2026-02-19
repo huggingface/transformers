@@ -138,3 +138,7 @@ class GPTNeoXJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip(reason="tokenizer has no padding token")
     def test_padding_different_model_input_name(self):
         pass
+
+    @unittest.skip(reason="sequence_ids() is not available for Python backend tokenizers")
+    def test_sequence_ids(self):
+        pass

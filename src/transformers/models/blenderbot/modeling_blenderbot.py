@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Facebook, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,15 +14,13 @@
 """PyTorch Blenderbot model."""
 
 import math
-import os
-import warnings
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -45,7 +42,6 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ..blenderbot_small import BlenderbotSmallForConditionalGeneration, BlenderbotSmallModel
 from .configuration_blenderbot import BlenderbotConfig
 
 
@@ -78,7 +74,7 @@ class BlenderbotLearnedPositionalEmbedding(nn.Embedding):
         super().__init__(num_embeddings, embedding_dim)
 
     def forward(
-        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: torch.Tensor | None = None
     ):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         if position_ids is None:
@@ -95,7 +91,7 @@ class BlenderbotScaledWordEmbedding(nn.Embedding):
     This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float | None = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.embed_scale = embed_scale
 
@@ -109,8 +105,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -121,7 +117,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -145,8 +140,8 @@ class BlenderbotAttention(nn.Module):
         is_decoder: bool = False,
         bias: bool = True,
         is_causal: bool = False,
-        config: Optional[BlenderbotConfig] = None,
-        layer_idx: Optional[int] = None,
+        config: BlenderbotConfig | None = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -179,15 +174,15 @@ class BlenderbotAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: Optional[torch.Tensor] = None,
+        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -237,9 +232,9 @@ class BlenderbotAttention(nn.Module):
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -321,7 +316,7 @@ class BlenderbotEncoderLayer(GradientCheckpointingLayer):
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Blenderbot, MBART->BLENDERBOT
 class BlenderbotDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: BlenderbotConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: BlenderbotConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -355,13 +350,13 @@ class BlenderbotDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = True,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = True,
+        cache_position: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -435,22 +430,12 @@ class BlenderbotPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-
     _can_compile_fullgraph = True
 
     def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, BlenderbotForConditionalGeneration):
+            init.zeros_(module.final_logits_bias)
 
     @property
     def dummy_inputs(self):
@@ -474,7 +459,7 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: BlenderbotConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -485,12 +470,9 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = BlenderbotScaledWordEmbedding(
-                config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
-            )
+        self.embed_tokens = BlenderbotScaledWordEmbedding(
+            config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_positions = BlenderbotLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -511,6 +493,7 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -570,7 +553,7 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
 
@@ -623,7 +606,7 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: BlenderbotConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -631,12 +614,9 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = BlenderbotScaledWordEmbedding(
-                config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
-            )
+        self.embed_tokens = BlenderbotScaledWordEmbedding(
+            config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_positions = BlenderbotLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -663,7 +643,8 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        cache_position: Optional[torch.Tensor] = None,
+        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -776,14 +757,14 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=self_attn_cache,
         )
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
         )
@@ -852,7 +833,10 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
 
 @auto_docstring
 class BlenderbotModel(BlenderbotPreTrainedModel):
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
@@ -860,24 +844,11 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.shared = BlenderbotScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
-        self.encoder = BlenderbotEncoder(config, self.shared)
-        self.decoder = BlenderbotDecoder(config, self.shared)
+        self.encoder = BlenderbotEncoder(config)
+        self.decoder = BlenderbotDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
-        if pretrained_model_name_or_path == "facebook/blenderbot-90M":
-            warnings.warn(
-                "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical"
-                " checkpoint `facebook/small_blenderbot-90M` with"
-                " `BlenderbotSmallModel.from_pretrained('facebook/small_blenderbot-90M')` instead.",
-                FutureWarning,
-            )
-            return BlenderbotSmallModel.from_pretrained(pretrained_model_name_or_path)
-
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     def get_input_embeddings(self):
         return self.shared
@@ -887,26 +858,24 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[Union[tuple, BaseModelOutput]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[tuple[torch.FloatTensor], Seq2SeqModelOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: tuple | BaseModelOutput | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | Seq2SeqModelOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1001,7 +970,9 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
 class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
@@ -1012,27 +983,8 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel, GenerationMi
         # Initialize weights and apply final processing
         self.post_init()
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
-        if pretrained_model_name_or_path == "facebook/blenderbot-90M":
-            warnings.warn(
-                "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical"
-                " checkpoint `facebook/small_blenderbot-90M` with"
-                " `BlenderbotSmallForConditionalGeneration.from_pretrained('facebook/small_blenderbot-90M')` instead.",
-                FutureWarning,
-            )
-            return BlenderbotSmallForConditionalGeneration.from_pretrained(pretrained_model_name_or_path)
-
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def resize_token_embeddings(
-        self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
+        self, new_num_tokens: int, pad_to_multiple_of: int | None = None, mean_resizing: bool = True
     ) -> nn.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
         self._resize_final_logits_bias(new_embeddings.weight.shape[0])
@@ -1050,21 +1002,22 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel, GenerationMi
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[Union[tuple, BaseModelOutput]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: tuple | BaseModelOutput | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1177,6 +1130,7 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.decoder = BlenderbotDecoder(config)
+        self.post_init()
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
@@ -1184,7 +1138,9 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Blenderbot, facebook/bart-base->facebook/blenderbot-400M-distill
 class BlenderbotForCausalLM(BlenderbotPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.decoder.embed_tokens.weight",
+    }
 
     def __init__(self, config):
         config.is_decoder = True
@@ -1203,29 +1159,24 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
-    def get_decoder(self):
-        return self.model.decoder
-
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-    ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs,
+    ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1238,7 +1189,7 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel, GenerationMixin):
         >>> from transformers import AutoTokenizer, BlenderbotForCausalLM
 
         >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
-        >>> model = BlenderbotForCausalLM.from_pretrained("facebook/blenderbot-400M-distill", add_cross_attention=False)
+        >>> model = BlenderbotForCausalLM.from_pretrained("facebook/blenderbot-400M-distill")
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

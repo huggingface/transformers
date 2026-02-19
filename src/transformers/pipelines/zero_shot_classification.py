@@ -2,7 +2,7 @@ import inspect
 
 import numpy as np
 
-from ..tokenization_utils import TruncationStrategy
+from ..tokenization_python import TruncationStrategy
 from ..utils import add_end_docstrings, logging
 from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
 
@@ -145,12 +145,6 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         return inputs
 
     def _sanitize_parameters(self, **kwargs):
-        if kwargs.get("multi_class") is not None:
-            kwargs["multi_label"] = kwargs["multi_class"]
-            logger.warning(
-                "The `multi_class` argument has been deprecated and renamed to `multi_label`. "
-                "`multi_class` will be removed in a future version of Transformers."
-            )
         preprocess_params = {}
         if "candidate_labels" in kwargs:
             preprocess_params["candidate_labels"] = self._args_parser._parse_labels(kwargs["candidate_labels"])

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Meta AI Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -15,11 +14,7 @@
 # limitations under the License.
 """X-MOD configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -131,10 +126,19 @@ class XmodConfig(PreTrainedConfig):
         ln_before_adapter=True,
         languages=("en_XX",),
         default_language=None,
+        is_decoder=False,
+        add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -158,20 +162,4 @@ class XmodConfig(PreTrainedConfig):
         self.default_language = default_language
 
 
-# Copied from transformers.models.roberta.configuration_roberta.RobertaOnnxConfig with Roberta->Xmod
-class XmodOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-            ]
-        )
-
-
-__all__ = ["XmodConfig", "XmodOnnxConfig"]
+__all__ = ["XmodConfig"]

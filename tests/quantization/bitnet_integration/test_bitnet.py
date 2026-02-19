@@ -25,21 +25,54 @@ from transformers import (
 from transformers.testing_utils import (
     backend_empty_cache,
     require_accelerate,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_torch_available
+from transformers.utils import is_torch_available
 
 
 if is_torch_available():
     import torch
 
-if is_accelerate_available():
-    from accelerate import init_empty_weights
+
+class BitNetPackedWeightsTest(unittest.TestCase):
+    def test_offline_autobitlinear_weight_conversion(self):
+        """get_weight_conversions() must return a WeightConverter for autobitlinear+offline"""
+        from transformers.quantizers.quantizer_bitnet import BitNetHfQuantizer
+
+        config = BitNetQuantConfig(linear_class="autobitlinear", quantization_mode="offline")
+        quantizer = BitNetHfQuantizer(config)
+        conversions = quantizer.get_weight_conversions()
+        self.assertEqual(len(conversions), 1)
+        self.assertEqual(conversions[0].source_patterns, ["weight"])
+        self.assertEqual(conversions[0].target_patterns, ["weight"])
+
+    def test_unpack_packed_weights(self):
+        """BitNetDeserialize.convert() must unpack packed weights to the original ternary values"""
+        from transformers.integrations.bitnet import AutoBitLinear, BitNetDeserialize, pack_weights
+
+        out_features = 128
+        in_features = 64
+
+        class SimpleModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = AutoBitLinear(in_features=in_features, out_features=out_features, bias=False)
+
+        model = SimpleModel()
+        # same as the ckpt loading with safetensors: ternary weights {-1, 0, 1} packed into uint8, then cast to bfloat16
+        original = torch.randint(-1, 2, (out_features, in_features)).to(torch.bfloat16)
+        packed = pack_weights(original.clone().float()).to(torch.bfloat16)
+        # packed shape is [out_features // 4, in_features]
+        self.assertEqual(packed.shape[0], out_features // 4)
+        deserializer = BitNetDeserialize(hf_quantizer=None)
+        result = deserializer.convert({"weight": packed}, model=model, full_layer_name="linear.weight")
+        self.assertEqual(result["weight"].shape, (out_features, in_features))
+        self.assertTrue(torch.equal(result["weight"], original))
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class BitNetQuantConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """
@@ -53,7 +86,7 @@ class BitNetQuantConfigTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_accelerate
 class BitNetTest(unittest.TestCase):
     model_name = "HF1BitLLM/Llama3-8B-1.58-100B-tokens"
@@ -65,7 +98,9 @@ class BitNetTest(unittest.TestCase):
         Load the model
         """
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.quantized_model = AutoModelForCausalLM.from_pretrained(cls.model_name, device_map=torch_device)
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
+            cls.model_name, dtype=torch.bfloat16, device_map=torch_device
+        )
 
     def tearDown(self):
         gc.collect()
@@ -78,7 +113,7 @@ class BitNetTest(unittest.TestCase):
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id)
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         nb_linears = 0
@@ -92,16 +127,15 @@ class BitNetTest(unittest.TestCase):
             if isinstance(module, BitLinear):
                 nb_bitnet_linear += 1
 
-        self.assertEqual(nb_linears - 1, nb_bitnet_linear)
+        self.assertEqual(nb_linears, nb_bitnet_linear)
 
     def test_quantized_model(self):
         """
         Simple test that checks if the quantized model is working properly
         """
         input_text = "What are we having for dinner?"
-        expected_output = "What are we having for dinner? What are we going to do for fun this weekend?"
+        expected_output = "What are we having for dinner? What are we going to do for fun? What are"
         input_ids = self.tokenizer(input_text, return_tensors="pt").to(torch_device)
-
         output = self.quantized_model.generate(**input_ids, max_new_tokens=11, do_sample=False)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), expected_output)
 
@@ -197,7 +231,7 @@ class BitNetTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_accelerate
 class BitNetSerializationTest(unittest.TestCase):
     def test_model_serialization(self):

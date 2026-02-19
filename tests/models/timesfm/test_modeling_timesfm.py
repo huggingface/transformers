@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google LLC and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -127,6 +126,7 @@ class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     is_encoder_decoder = False
     test_inputs_embeds = False
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = TimesFmModelTester(self)

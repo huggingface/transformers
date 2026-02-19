@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, AyaVisionProcessor
+from transformers import AyaVisionProcessor
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
@@ -27,19 +25,24 @@ if is_torch_available():
     import torch
 
 
-if is_vision_available():
-    from transformers import GotOcr2ImageProcessor
-
-
 @require_vision
 class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AyaVisionProcessor
+    model_id = "hf-internal-testing/namespace-CohereForAI-repo_name_aya-vision-8b"
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
+    def _setup_test_attributes(cls, processor):
+        cls.image_token = processor.image_token
 
-        image_processor = GotOcr2ImageProcessor(
+    @classmethod
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        return tokenizer_class.from_pretrained(cls.model_id, padding_side="left")
+
+    @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class(
             do_resize=True,
             size={"height": 20, "width": 20},
             max_patches=2,
@@ -50,37 +53,15 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_std=[0.229, 0.224, 0.225],
             do_convert_rgb=True,
         )
-        tokenizer = AutoTokenizer.from_pretrained(
-            "hf-internal-testing/namespace-CohereForAI-repo_name_aya-vision-8b", padding_side="left"
-        )
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = AyaVisionProcessor.from_pretrained(
-            "hf-internal-testing/namespace-CohereForAI-repo_name_aya-vision-8b",
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            **processor_kwargs,
-        )
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.image_token
 
     @staticmethod
     def prepare_processor_dict():
         return {"patch_size": 10, "img_size": 20}
 
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
+    @unittest.skip(reason="Text needs image tokens, tested in other tests")
+    def test_processor_with_multiple_inputs(self):
+        pass
 
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 

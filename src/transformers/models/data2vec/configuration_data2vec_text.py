@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,11 +13,7 @@
 # limitations under the License.
 """Data2VecText configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -108,10 +103,19 @@ class Data2VecTextConfig(PreTrainedConfig):
         eos_token_id=2,
         use_cache=True,
         classifier_dropout=None,
+        is_decoder=False,
+        add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -128,19 +132,4 @@ class Data2VecTextConfig(PreTrainedConfig):
         self.classifier_dropout = classifier_dropout
 
 
-class Data2VecTextOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-            ]
-        )
-
-
-__all__ = ["Data2VecTextConfig", "Data2VecTextOnnxConfig"]
+__all__ = ["Data2VecTextConfig"]

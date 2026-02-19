@@ -22,11 +22,11 @@ import argparse
 import gc
 import glob
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import hf_hub_download, snapshot_download
 from PIL import Image
 from safetensors import safe_open
@@ -91,7 +91,8 @@ def convert_state_dict_to_hf(state_dict):
 
 def load_image():
     url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     return image
 
 
@@ -153,7 +154,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         use_image_newline_parameter=True,
     )
 
-    with init_empty_weights():
+    with torch.device("meta"):
         model = LlavaOnevisionForConditionalGeneration(config)
 
     # load original state dict
@@ -322,7 +323,8 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     # verify batched generation
     print("Batched generation...")
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    cats_image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        cats_image = Image.open(BytesIO(response.read()))
 
     inputs = processor(
         images=[image, cats_image],
@@ -379,7 +381,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", type=str, required=True, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     args = parser.parse_args()
 

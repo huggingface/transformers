@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 T5 Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +14,8 @@
 """Tokenization class for model ByT5."""
 
 import warnings
-from typing import Optional
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -108,7 +106,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         return vocab
 
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -147,7 +145,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
             return token_ids + [self.eos_token_id]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. ByT5 does not
@@ -169,7 +167,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         return len(token_ids_0 + eos + token_ids_1 + eos) * [0]
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -229,7 +227,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         return string
 
     # ByT5Tokenizer has no vocab file
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         return ()
 
 

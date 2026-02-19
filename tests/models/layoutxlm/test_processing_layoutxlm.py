@@ -12,23 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
-import shutil
-import tempfile
 import unittest
 from functools import cached_property
 
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutxlm import LayoutXLMProcessor, LayoutXLMTokenizer, LayoutXLMTokenizerFast
 from transformers.testing_utils import (
     require_pytesseract,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torchvision,
     slow,
 )
-from transformers.utils import FEATURE_EXTRACTOR_NAME, is_pytesseract_available
+from transformers.utils import is_pytesseract_available, is_torchvision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -36,89 +32,55 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_pytesseract_available():
     from transformers import LayoutLMv2ImageProcessor
 
+if is_torchvision_available():
+    from transformers import LayoutLMv2ImageProcessorFast
+
 
 @require_pytesseract
 @require_sentencepiece
 @require_tokenizers
 class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    tokenizer_class = LayoutXLMTokenizer
-    rust_tokenizer_class = LayoutXLMTokenizerFast
     processor_class = LayoutXLMProcessor
 
     @classmethod
-    def setUpClass(cls):
-        image_processor_map = {
-            "do_resize": True,
-            "size": 224,
-            "apply_ocr": True,
-        }
-
-        cls.tmpdirname = tempfile.mkdtemp()
-        cls.feature_extraction_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(cls.feature_extraction_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(image_processor_map) + "\n")
-
-        # taken from `test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_save_pretrained`
-        cls.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
-
-        tokenizer = cls.get_tokenizer()
-        image_processor = cls.get_image_processor()
-        processor = LayoutXLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
-        processor.save_pretrained(cls.tmpdirname)
+    def _setup_image_processor(cls):
+        # hardcode as we can't use IMAGE_PROCESSOR_MAPPING to get the class from the config (layoutxlm is not in the mapping)
+        image_processor_class = LayoutLMv2ImageProcessor
+        return image_processor_class(
+            do_resize=True,
+            size=224,
+            apply_ocr=True,
+        )
 
     @classmethod
-    def get_tokenizer(cls, **kwargs) -> PreTrainedTokenizer:
-        return cls.tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
+    def _setup_tokenizer(cls):
+        # hardcode as we can't use TOKENIZER_MAPPING to get the class from the config (layoutxlm is not in the mapping)
+        tokenizer_class = LayoutXLMTokenizer
+        return tokenizer_class.from_pretrained("hf-internal-testing/tiny-random-layoutxlm")
 
-    @classmethod
-    def get_rust_tokenizer(cls, **kwargs) -> PreTrainedTokenizerFast:
-        return cls.rust_tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
+    @unittest.skip("LayoutXLM Image Processor doesn't return image tensors")
+    def test_image_processor_defaults(self):
+        pass
 
-    @classmethod
-    def get_tokenizers(cls, **kwargs) -> list[PreTrainedTokenizerBase]:
-        return [cls.get_tokenizer(**kwargs), cls.get_rust_tokenizer(**kwargs)]
+    @unittest.skip("LayoutLMv2Processor doesn't use pixel_values")
+    def test_processor_with_multiple_inputs(self):
+        pass
 
-    @classmethod
-    def get_image_processor(cls, **kwargs):
-        return LayoutLMv2ImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    def test_save_load_pretrained_default(self):
-        image_processor = self.get_image_processor()
-        tokenizers = self.get_tokenizers()
-        for tokenizer in tokenizers:
-            processor = LayoutXLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
-
-            with tempfile.TemporaryDirectory() as tmpdir:
-                processor.save_pretrained(tmpdir)
-                processor = LayoutXLMProcessor.from_pretrained(tmpdir)
-
-            self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-            self.assertIsInstance(processor.tokenizer, (LayoutXLMTokenizer, LayoutXLMTokenizerFast))
-
-            self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
-            self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
-
+    @require_torchvision
     def test_save_load_pretrained_additional_features(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            processor = LayoutXLMProcessor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
-            processor.save_pretrained(tmpdir)
+        processor = self.get_processor()
+        # slow tokenizer and image processor
+        tokenizer_add_kwargs = self.get_component("tokenizer", bos_token="(BOS)", eos_token="(EOS)")
+        image_processor_add_kwargs = self.get_component("image_processor", do_resize=False, size=30, use_fast=False)
 
-            # slow tokenizer
-            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-            image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
-
-            processor = LayoutXLMProcessor.from_pretrained(
-                tmpdir,
-                use_fast=False,
-                bos_token="(BOS)",
-                eos_token="(EOS)",
-                do_resize=False,
-                size=30,
-            )
+        processor = LayoutXLMProcessor.from_pretrained(
+            self.tmpdirname,
+            use_fast=False,
+            bos_token="(BOS)",
+            eos_token="(EOS)",
+            do_resize=False,
+            size=30,
+        )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, LayoutXLMTokenizer)
@@ -126,9 +88,9 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
 
-        # fast tokenizer
-        tokenizer_add_kwargs = self.get_rust_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
+        # fast tokenizer and image processor
+        tokenizer_add_kwargs = self.get_component("tokenizer", bos_token="(BOS)", eos_token="(EOS)")
+        image_processor_add_kwargs = self.get_component("image_processor", do_resize=False, size=30)
 
         processor = LayoutXLMProcessor.from_pretrained(
             self.tmpdirname, use_xlm=True, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
@@ -138,7 +100,7 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, LayoutXLMTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
+        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessorFast)
 
     @slow
     def test_overflowing_tokens(self):
@@ -152,9 +114,9 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         def preprocess_data(examples):
             images = [image.convert("RGB") for image in examples["image"]]
-            words = examples["words"]
-            boxes = examples["bboxes"]
-            word_labels = examples["ner_tags"]
+            words = list(examples["words"])
+            boxes = list(examples["bboxes"])
+            word_labels = list(examples["ner_tags"])
             encoded_inputs = processor(
                 images,
                 words,

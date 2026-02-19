@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +15,10 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -180,8 +180,9 @@ def read_in_q_k_v(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -239,18 +240,8 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
 
     if push_to_hub:
         print("Pushing model to hub...")
-        model.push_to_hub(
-            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-            organization="nielsr",
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
-        image_processor.push_to_hub(
-            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-            organization="nielsr",
-            commit_message="Add image processor",
-            use_temp_dir=True,
-        )
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
+        image_processor.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

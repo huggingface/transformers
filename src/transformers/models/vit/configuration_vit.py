@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Google AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +13,7 @@
 # limitations under the License.
 """ViT model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from packaging import version
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -110,8 +103,6 @@ class ViTConfig(PreTrainedConfig):
         pooler_act="tanh",
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -129,21 +120,7 @@ class ViTConfig(PreTrainedConfig):
         self.pooler_output_size = pooler_output_size if pooler_output_size else hidden_size
         self.pooler_act = pooler_act
 
-
-class ViTOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
+        super().__init__(**kwargs)
 
 
-__all__ = ["ViTConfig", "ViTOnnxConfig"]
+__all__ = ["ViTConfig"]

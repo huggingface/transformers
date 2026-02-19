@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_gemma2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2024 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -19,10 +18,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class Gemma2Config(PreTrainedConfig):
@@ -77,7 +74,7 @@ class Gemma2Config(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -126,40 +123,37 @@ class Gemma2Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 256000,
-        hidden_size: Optional[int] = 2304,
-        intermediate_size: Optional[int] = 9216,
-        num_hidden_layers: Optional[int] = 26,
-        num_attention_heads: Optional[int] = 8,
-        num_key_value_heads: Optional[int] = 4,
-        head_dim: Optional[int] = 256,
-        hidden_activation: Optional[str] = "gelu_pytorch_tanh",
-        max_position_embeddings: Optional[int] = 8192,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 1,
-        bos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        query_pre_attn_scalar: Optional[int] = 256,
-        sliding_window: Optional[int] = 4096,
-        layer_types: Optional[list[str]] = None,
-        final_logit_softcapping: Optional[float] = 30.0,
-        attn_logit_softcapping: Optional[float] = 50.0,
-        use_bidirectional_attention: Optional[bool] = None,
+        vocab_size: int | None = 256000,
+        hidden_size: int | None = 2304,
+        intermediate_size: int | None = 9216,
+        num_hidden_layers: int | None = 26,
+        num_attention_heads: int | None = 8,
+        num_key_value_heads: int | None = 4,
+        head_dim: int | None = 256,
+        hidden_activation: str | None = "gelu_pytorch_tanh",
+        max_position_embeddings: int | None = 8192,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        eos_token_id: int | None = 1,
+        bos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        query_pre_attn_scalar: int | None = 256,
+        sliding_window: int | None = 4096,
+        layer_types: list[str] | None = None,
+        final_logit_softcapping: float | None = 30.0,
+        attn_logit_softcapping: float | None = 50.0,
+        use_bidirectional_attention: bool | None = None,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -180,9 +174,6 @@ class Gemma2Config(PreTrainedConfig):
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
         self.use_bidirectional_attention = use_bidirectional_attention
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         if self.layer_types is None:
             self.layer_types = [
@@ -190,10 +181,9 @@ class Gemma2Config(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["Gemma2Config"]

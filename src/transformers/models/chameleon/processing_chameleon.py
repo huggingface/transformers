@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Meta Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +15,6 @@
 Processor class for Chameleon.
 """
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
@@ -30,9 +27,17 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import auto_docstring
 
 
 class ChameleonTextKwargs(TextKwargs, total=False):
+    """
+    return_for_text_completion (`bool`, *optional*, defaults to `False`):
+        Whether the processed text is intended for text completion tasks. When `True`, the processor does not
+        append the separator token (`sep_token`) to the end of the prompt, which is typically used for chat
+        mode. When `False`, the separator token is appended for proper chat formatting.
+    """
+
     return_for_text_completion: bool
 
 
@@ -50,30 +55,15 @@ class ChameleonProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class ChameleonProcessor(ProcessorMixin):
-    r"""
-    Constructs a Chameleon processor which wraps a Chameleon image processor and a Chameleon tokenizer into a single
-    processor.
-
-    [`ChameleonProcessor`] offers all the functionalities of [`ChameleonImageProcessor`] and [`LlamaTokenizerFast`].
-    See the [`~ChameleonProcessor.__call__`] and [`~ChameleonProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`ChameleonImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`]):
-            The tokenizer is a required input.
+    def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
+        r"""
         image_seq_length (`int`, *optional*, defaults to 1024):
             Sequence length of one image embedding.
         image_token (`str`, *optional*, defaults to `"<image>"`):
             The special token used to indicate image in the text.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
-    image_processor_class = "ChameleonImageProcessor"
-
-    def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
+        """
         self.image_seq_length = image_seq_length
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
@@ -88,33 +78,14 @@ class ChameleonProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[ChameleonProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

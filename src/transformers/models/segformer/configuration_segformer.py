@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 NVIDIA and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +13,7 @@
 # limitations under the License.
 """SegFormer model configuration"""
 
-import warnings
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from packaging import version
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -120,13 +112,6 @@ class SegformerConfig(PreTrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        if "reshape_last_stage" in kwargs and kwargs["reshape_last_stage"] is False:
-            warnings.warn(
-                "Reshape_last_stage is set to False in this config. This argument is deprecated and will soon be"
-                " removed, as the behaviour will default to that of reshape_last_stage = True.",
-                FutureWarning,
-            )
-
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
         self.depths = depths
@@ -148,24 +133,4 @@ class SegformerConfig(PreTrainedConfig):
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
 
-class SegformerOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 12
-
-
-__all__ = ["SegformerConfig", "SegformerOnnxConfig"]
+__all__ = ["SegformerConfig"]

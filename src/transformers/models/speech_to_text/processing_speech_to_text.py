@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,46 +15,18 @@
 Speech processor class for Speech2Text
 """
 
-import warnings
-
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 
 
+@auto_docstring
 class Speech2TextProcessor(ProcessorMixin):
-    r"""
-    Constructs a Speech2Text processor which wraps a Speech2Text feature extractor and a Speech2Text tokenizer into a
-    single processor.
-
-    [`Speech2TextProcessor`] offers all the functionalities of [`Speech2TextFeatureExtractor`] and
-    [`Speech2TextTokenizer`]. See the [`~Speech2TextProcessor.__call__`] and [`~Speech2TextProcessor.decode`] for more
-    information.
-
-    Args:
-        feature_extractor (`Speech2TextFeatureExtractor`):
-            An instance of [`Speech2TextFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`Speech2TextTokenizer`):
-            An instance of [`Speech2TextTokenizer`]. The tokenizer is a required input.
-    """
-
-    feature_extractor_class = "Speech2TextFeatureExtractor"
-    tokenizer_class = "Speech2TextTokenizer"
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
+    @auto_docstring
     def __call__(self, *args, **kwargs):
-        """
-        When used in normal mode, this method forwards all its arguments to Speech2TextFeatureExtractor's
-        [`~Speech2TextFeatureExtractor.__call__`] and returns its output. If used in the context
-        [`~Speech2TextProcessor.as_target_processor`] this method forwards all its arguments to Speech2TextTokenizer's
-        [`~Speech2TextTokenizer.__call__`]. Please refer to the docstring of the above two methods for more
-        information.
-        """
-        if "raw_speech" in kwargs:
-            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
-            audio = kwargs.pop("raw_speech")
-        else:
-            audio = kwargs.pop("audio", None)
+        audio = kwargs.pop("audio", None)
         sampling_rate = kwargs.pop("sampling_rate", None)
         text = kwargs.pop("text", None)
         if len(args) > 0:

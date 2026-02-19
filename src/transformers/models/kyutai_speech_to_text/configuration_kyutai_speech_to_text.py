@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.s
 
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -60,7 +58,7 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -92,6 +90,8 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 48000):
             Beginning of stream token id for text tokens.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         codec_config (`PreTrainedConfig`, *optional*):
             Configuration for the codec.
         kwargs (*optional*):
@@ -122,29 +122,30 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        codebook_vocab_size: Optional[int] = 2049,
-        vocab_size: Optional[int] = 4001,
-        hidden_size: Optional[int] = 2048,
-        num_hidden_layers: Optional[int] = 48,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = None,
-        max_position_embeddings: Optional[int] = 750,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        hidden_act: Optional[str] = "silu",
-        head_dim: Optional[int] = None,
-        initializer_range: Optional[float] = 0.02,
-        use_cache: Optional[bool] = True,
-        sliding_window: Optional[int] = 375,
-        attention_dropout: Optional[float] = 0.0,
-        ffn_dim: Optional[int] = 11264,
-        rms_norm_eps: Optional[int] = 1e-8,
-        num_codebooks: Optional[int] = 32,
-        audio_bos_token_id: Optional[int] = 2048,
-        audio_pad_token_id: Optional[int] = 69569,
-        tie_word_embeddings: Optional[bool] = False,
-        pad_token_id: Optional[int] = 3,
-        bos_token_id: Optional[int] = 48000,
-        codec_config: Optional[dict] = None,
+        codebook_vocab_size: int | None = 2049,
+        vocab_size: int | None = 4001,
+        hidden_size: int | None = 2048,
+        num_hidden_layers: int | None = 48,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = None,
+        max_position_embeddings: int | None = 750,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        hidden_act: str | None = "silu",
+        head_dim: int | None = None,
+        initializer_range: float | None = 0.02,
+        use_cache: bool | None = True,
+        sliding_window: int | None = 375,
+        attention_dropout: float | None = 0.0,
+        ffn_dim: int | None = 11264,
+        rms_norm_eps: int | None = 1e-8,
+        num_codebooks: int | None = 32,
+        audio_bos_token_id: int | None = 2048,
+        audio_pad_token_id: int | None = 69569,
+        tie_word_embeddings: bool | None = False,
+        pad_token_id: int | None = 3,
+        bos_token_id: int | None = 48000,
+        eos_token_id: int | None = None,
+        codec_config: dict | None = None,
         **kwargs,
     ):
         if codec_config is None:
@@ -183,18 +184,13 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.sliding_window = sliding_window
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        super().__init__(
-            pad_token_id=pad_token_id, bos_token_id=bos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["KyutaiSpeechToTextConfig"]
