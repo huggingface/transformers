@@ -12,11 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import transformers
 from transformers import (
@@ -145,6 +147,12 @@ class AutoVideoProcessorTest(unittest.TestCase):
             "Can't load video processor for 'hf-internal-testing/config-no-model'.",
         ):
             _ = AutoVideoProcessor.from_pretrained("hf-internal-testing/config-no-model")
+
+    def test_video_processor_class_from_name_with_none_mapping_entry(self):
+        video_processing_auto = importlib.import_module("transformers.models.auto.video_processing_auto")
+
+        with patch.dict(video_processing_auto.VIDEO_PROCESSOR_MAPPING_NAMES, {"videomae": None}, clear=True):
+            self.assertIsNone(video_processing_auto.video_processor_class_from_name("DefinitelyMissingVideoProcessor"))
 
     def test_from_pretrained_dynamic_video_processor(self):
         # If remote code is not set, we will time out when asking whether to load the model.
