@@ -3864,9 +3864,7 @@ class Trainer:
         if self.args.include_num_input_tokens_seen != "no":
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
             if start_time is not None:
-                current_session_num_tokens = (
-                    self.state.num_input_tokens_seen - self._initial_num_input_tokens_seen
-                )
+                current_session_num_tokens = self.state.num_input_tokens_seen - self._initial_num_input_tokens_seen
                 logs.update(speed_metrics("train", start_time, num_tokens=current_session_num_tokens))
 
         output = {**logs, "step": self.state.global_step}
