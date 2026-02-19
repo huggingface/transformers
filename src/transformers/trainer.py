@@ -716,7 +716,7 @@ class Trainer:
         if self.args.ddp_broadcast_buffers is not None:
             ddp_kwargs["broadcast_buffers"] = self.args.ddp_broadcast_buffers
 
-        args["ddp_handler"] = DistributedDataParallelKwargs(**ddp_kwargs)
+        args["kwargs_handlers"] = [DistributedDataParallelKwargs(**ddp_kwargs)]
 
         # We defer compatibility checks to accelerator
         if self.args.parallelism_config is not None:
