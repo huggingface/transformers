@@ -32,14 +32,12 @@ from transformers import (
     AutoModel,
     PretrainedConfig,
     PreTrainedModel,
-    Qwen2AudioEncoder,
     SiglipImageProcessor,
     WhisperFeatureExtractor,
 )
 from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import CausalLMOutputWithPast
-from transformers.models.qwen2 import Qwen2ForCausalLM
-from transformers.models.siglip import SiglipVisionModel
+from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING, MODEL_MAPPING
 
 from .configuration_omnivinci import IGNORE_INDEX, OmniVinciConfig
 from .media_encoder import BasicImageEncoder, BasicSoundEncoder, CacheFeatures, TSPVideoEncoder
@@ -76,26 +74,6 @@ def soft_cross_entropy(
     )
 
 
-def _resolve_component_path(config: OmniVinciConfig, key: str) -> Optional[Union[str, dict, PretrainedConfig]]:
-    value = getattr(config, key, None)
-    if value in (None, "", {}):
-        return None
-
-    if isinstance(value, (str, dict, PretrainedConfig)):
-        return value
-
-    raise TypeError(f"Unsupported config type for '{key}': {type(value)}")
-
-
-def _resolve_model_dtype(config: PretrainedConfig, default: torch.dtype = torch.float16) -> torch.dtype:
-    model_dtype = getattr(config, "model_dtype", None)
-    if model_dtype is None:
-        model_dtype = getattr(config, "torch_dtype", None)
-    if model_dtype is None:
-        return default
-    if isinstance(model_dtype, str):
-        return eval(model_dtype)
-    return model_dtype
 
 
 def _coerce_config_from_spec(spec: Union[dict, PretrainedConfig], fallback_model_type: Optional[str] = None) -> PretrainedConfig:
@@ -120,27 +98,21 @@ def _get_attn_implementation(config: PretrainedConfig, default: str = "sdpa") ->
     return attn_impl or default
 
 
-def build_llm(
-    llm_config: Union[dict, PretrainedConfig],
-    config: PretrainedConfig,
-    attn_implementation=None,
-    model_max_length=None,
+def _build_model_from_config_mapping(
+    model_config: PretrainedConfig,
+    mapping,
+    component_name: str,
 ) -> PreTrainedModel:
-    """Build language model from config only (no filesystem access)."""
-    if attn_implementation is None:
-        attn_implementation = _get_attn_implementation(config)
+    try:
+        model_cls = mapping[type(model_config)]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unsupported {component_name} config class '{type(model_config).__name__}' "
+            f"(model_type='{getattr(model_config, 'model_type', None)}')."
+        ) from exc
+    return model_cls(model_config)
 
-    llm_cfg = _coerce_config_from_spec(llm_config, fallback_model_type="qwen2")
-    llm_cfg._attn_implementation = attn_implementation
-    if model_max_length is not None:
-        llm_cfg.model_max_length = model_max_length
-        context_length_extension(llm_cfg)
 
-    model_dtype = _resolve_model_dtype(config)
-    llm = Qwen2ForCausalLM(llm_cfg).to(model_dtype)
-
-    config.hidden_size = llm.config.hidden_size
-    return llm
 
 
 class DownSampleBlock(nn.Module):
@@ -301,7 +273,7 @@ class Qwen2AudioTower(AudioTower):
         super().__init__()
         audio_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="qwen2_audio_encoder")
         audio_cfg._attn_implementation = _get_attn_implementation(config)
-        self.audio_tower = Qwen2AudioEncoder(audio_cfg).to(_resolve_model_dtype(config))
+        self.audio_tower = _build_model_from_config_mapping(audio_cfg, MODEL_MAPPING, component_name="audio_tower")
 
         self.audio_chunk_unit_duration = 30
         self.audio_chunk_unit_length = 3000
@@ -437,81 +409,16 @@ class VisionTowerDynamicS2(VisionTower):
 class SiglipVisionTowerDynamicS2(VisionTowerDynamicS2):
     def __init__(self, model_name_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig) -> None:
         super().__init__(config)
-        model_dtype = _resolve_model_dtype(config)
 
         vision_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="siglip_vision_model")
         vision_cfg._attn_implementation = _get_attn_implementation(config)
-        self.vision_tower = SiglipVisionModel(vision_cfg).to(model_dtype)
+        self.vision_tower = _build_model_from_config_mapping(vision_cfg, MODEL_MAPPING, component_name="vision_tower")
 
         self.image_processor = SiglipImageProcessor()
         # Make sure it crops/resizes the image to the largest scale in self.scales to maintain high-res information
         self.image_processor.size["height"] = self.image_processor.size["width"] = self.scales[0]
 
 
-def build_mm_projector(model_type_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig) -> PreTrainedModel:
-    """Build multimodal projector from config object only."""
-    if model_type_or_path is None:
-        return None
-
-    if isinstance(model_type_or_path, MultimodalProjectorConfig):
-        mm_projector_cfg = model_type_or_path
-    elif isinstance(model_type_or_path, PretrainedConfig):
-        mm_projector_cfg = model_type_or_path
-    elif isinstance(model_type_or_path, dict):
-        mm_projector_cfg = MultimodalProjectorConfig(**model_type_or_path)
-    elif isinstance(model_type_or_path, str):
-        mm_projector_cfg = MultimodalProjectorConfig(mm_projector_type=model_type_or_path)
-    else:
-        raise TypeError(f"Unsupported mm_projector config type: {type(model_type_or_path)}")
-
-    return MultimodalProjector(mm_projector_cfg, config)
-
-
-def build_sound_mm_projector(
-    model_type_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig
-) -> PreTrainedModel:
-    """Build sound multimodal projector from config object only."""
-    if model_type_or_path is None:
-        return None
-
-    model_dtype = _resolve_model_dtype(config)
-    if isinstance(model_type_or_path, SoundMultimodalProjectorConfig):
-        sound_mm_projector_cfg = model_type_or_path
-    elif isinstance(model_type_or_path, PretrainedConfig):
-        sound_mm_projector_cfg = model_type_or_path
-    elif isinstance(model_type_or_path, dict):
-        sound_mm_projector_cfg = SoundMultimodalProjectorConfig(**model_type_or_path)
-    elif isinstance(model_type_or_path, str):
-        sound_mm_projector_cfg = SoundMultimodalProjectorConfig(sound_mm_projector_type=model_type_or_path)
-    else:
-        raise TypeError(f"Unsupported sound_mm_projector config type: {type(model_type_or_path)}")
-
-    return SoundMultimodalProjector(sound_mm_projector_cfg, config).to(model_dtype)
-
-
-def build_vision_tower(
-    model_name_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig
-) -> PreTrainedModel:
-    """Build vision tower from local path or config object."""
-    if model_name_or_path is None:
-        return None
-
-    if not getattr(config, "dynamic_s2", False):
-        raise NotImplementedError("Current OmniVinci checkpoint requires `dynamic_s2=True`.")
-
-    vision_tower = SiglipVisionTowerDynamicS2(model_name_or_path, config)
-    config.mm_hidden_size = vision_tower.hidden_size
-    return vision_tower
-
-
-def build_audio_tower(model_name_or_path: Union[str, dict, PretrainedConfig], config: PretrainedConfig) -> PreTrainedModel:
-    """Build the audio tower used for sound."""
-    if model_name_or_path is None:
-        return None
-
-    model = Qwen2AudioTower(model_name_or_path, config)
-    config.sound_hidden_size = 1280
-    return model
 
 
 class VILAPretrainedModel(PreTrainedModel):
@@ -523,43 +430,79 @@ class VILAPretrainedModel(PreTrainedModel):
     _no_split_modules = ["Qwen2DecoderLayer", "SiglipEncoderLayer"]
 
     def __init__(self, config: OmniVinciConfig, *args, **kwargs):
+        _ = (args, kwargs)
         super().__init__(config)
         self.config = config
-        llm_cfg = _resolve_component_path(config, "llm_cfg")
-        vision_tower_cfg = _resolve_component_path(config, "vision_tower_cfg")
-        mm_projector_cfg = _resolve_component_path(config, "mm_projector_cfg")
-        sound_tower_cfg = _resolve_component_path(config, "sound_tower_cfg")
-        sound_mm_projector_cfg = _resolve_component_path(config, "sound_mm_projector_cfg")
+
+    def _init_omnivinci_components(self, *args, **kwargs):
+        _ = args
+        config = self.config
+
+        def _is_missing_component(spec):
+            return spec in (None, "", {})
+
+        llm_spec = getattr(config, "llm_cfg", None)
+        vision_tower_spec = getattr(config, "vision_tower_cfg", None)
+        mm_projector_spec = getattr(config, "mm_projector_cfg", None)
+        sound_tower_spec = getattr(config, "sound_tower_cfg", None)
+        sound_mm_projector_spec = getattr(config, "sound_mm_projector_cfg", None)
+
         missing = [
             name
-            for name, path in [
-                ("llm_cfg", llm_cfg),
-                ("vision_tower_cfg", vision_tower_cfg),
-                ("mm_projector_cfg", mm_projector_cfg),
+            for name, spec in [
+                ("llm_cfg", llm_spec),
+                ("vision_tower_cfg", vision_tower_spec),
+                ("mm_projector_cfg", mm_projector_spec),
             ]
-            if not path
+            if _is_missing_component(spec)
         ]
         if missing:
             raise ValueError(f"Missing required OmniVinci components in config: {', '.join(missing)}")
 
-        if bool(sound_tower_cfg) != bool(sound_mm_projector_cfg):
+        has_sound_tower = not _is_missing_component(sound_tower_spec)
+        has_sound_projector = not _is_missing_component(sound_mm_projector_spec)
+        if has_sound_tower != has_sound_projector:
             raise ValueError("`sound_tower_cfg` and `sound_mm_projector_cfg` must be both set or both empty.")
 
-        device_map = kwargs.get("device_map", None)
-        self.mm_projector = build_mm_projector(mm_projector_cfg, config)
-        self.vision_tower = build_vision_tower(vision_tower_cfg, config)
+        if isinstance(mm_projector_spec, (MultimodalProjectorConfig, PretrainedConfig)):
+            mm_projector_cfg = mm_projector_spec
+        elif isinstance(mm_projector_spec, dict):
+            mm_projector_cfg = MultimodalProjectorConfig(**mm_projector_spec)
+        elif isinstance(mm_projector_spec, str):
+            mm_projector_cfg = MultimodalProjectorConfig(mm_projector_type=mm_projector_spec)
+        else:
+            raise TypeError(f"Unsupported mm_projector config type: {type(mm_projector_spec)}")
+        self.mm_projector = MultimodalProjector(mm_projector_cfg, config)
 
-        if sound_tower_cfg:
-            self.sound_tower = build_audio_tower(sound_tower_cfg, config)
-            self.sound_mm_projector = build_sound_mm_projector(sound_mm_projector_cfg, config)
+        if not getattr(config, "dynamic_s2", False):
+            raise NotImplementedError("Current OmniVinci checkpoint requires `dynamic_s2=True`.")
+        self.vision_tower = SiglipVisionTowerDynamicS2(vision_tower_spec, config)
+        config.mm_hidden_size = self.vision_tower.hidden_size
 
-        if device_map == "cuda":
-            self.mm_projector = self.mm_projector.cuda()
-            self.vision_tower = self.vision_tower.cuda()
-            self.sound_tower = self.sound_tower.cuda() if hasattr(self, "sound_tower") else None
-            self.sound_mm_projector = self.sound_mm_projector.cuda() if hasattr(self, "sound_mm_projector") else None
+        if has_sound_tower:
+            self.sound_tower = Qwen2AudioTower(sound_tower_spec, config)
+            config.sound_hidden_size = 1280
 
-        self.llm = self.init_llm(llm_cfg, config)
+            if isinstance(sound_mm_projector_spec, (SoundMultimodalProjectorConfig, PretrainedConfig)):
+                sound_mm_projector_cfg = sound_mm_projector_spec
+            elif isinstance(sound_mm_projector_spec, dict):
+                sound_mm_projector_cfg = SoundMultimodalProjectorConfig(**sound_mm_projector_spec)
+            elif isinstance(sound_mm_projector_spec, str):
+                sound_mm_projector_cfg = SoundMultimodalProjectorConfig(sound_mm_projector_type=sound_mm_projector_spec)
+            else:
+                raise TypeError(f"Unsupported sound_mm_projector config type: {type(sound_mm_projector_spec)}")
+            self.sound_mm_projector = SoundMultimodalProjector(sound_mm_projector_cfg, config)
+
+        llm_cfg = _coerce_config_from_spec(llm_spec, fallback_model_type="qwen2")
+        llm_cfg._attn_implementation = _get_attn_implementation(config)
+        model_max_length = getattr(config, "model_max_length", None)
+        if model_max_length is not None:
+            llm_cfg.model_max_length = model_max_length
+            context_length_extension(llm_cfg)
+
+        self.llm = _build_model_from_config_mapping(llm_cfg, MODEL_FOR_CAUSAL_LM_MAPPING, component_name="llm")
+        config.hidden_size = self.llm.config.hidden_size
+
         self.vocab_size = self.llm.config.vocab_size
         self.update_vocab_size = lambda: setattr(self, "vocab_size", self.llm.config.vocab_size)
 
@@ -600,21 +543,12 @@ class VILAPretrainedModel(PreTrainedModel):
         ), "At least one of the components must be instantiated."
 
 
-
     @property
     def llm_model_embed_tokens(self):
         if self.llm is None:
             raise RuntimeError("LLM module is not initialized.")
         return self.llm.model.embed_tokens
 
-    def init_llm(self, llm_config, config, *args, **kwargs):
-        _ = (args, kwargs)
-        return build_llm(
-            llm_config,
-            config,
-            attn_implementation=_get_attn_implementation(config),
-            model_max_length=getattr(config, "model_max_length", None),
-        )
 
     def _require_media_token_ids(self) -> Dict[str, int]:
         media_token_ids = getattr(self.config, "media_token_ids", None)
@@ -680,7 +614,8 @@ class VILAPretrainedModel(PreTrainedModel):
 
 class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
     def __init__(self, config: OmniVinciConfig, *args, **kwargs):
-        super().__init__(config, *args, **kwargs)
+        super().__init__(config)
+        self._init_omnivinci_components(*args, **kwargs)
         self.post_init()
 
     def merge_features_for_dynamic_s2(self, image_features, block_sizes):
