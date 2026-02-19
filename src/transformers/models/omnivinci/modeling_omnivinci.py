@@ -69,15 +69,6 @@ def _coerce_config_from_spec(
     raise TypeError(f"Unsupported config spec type: {type(spec)}")
 
 
-def _get_attn_implementation(config: PretrainedConfig, default: str = "sdpa") -> str:
-    attn_impl = getattr(config, "_attn_implementation", None)
-    if not attn_impl:
-        attn_impl = getattr(config, "_attn_implementation_internal", None)
-    if attn_impl == "flash_attention_2":
-        return default
-    return attn_impl or default
-
-
 class MultimodalProjector(nn.Module):
     """Multimodal projector for mapping vision features to LLM space."""
 
@@ -126,7 +117,7 @@ class Qwen2AudioTower(nn.Module):
     def __init__(self, model_name_or_path: str | dict | PretrainedConfig, config: PretrainedConfig):
         super().__init__()
         audio_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="qwen2_audio_encoder")
-        audio_cfg._attn_implementation = _get_attn_implementation(config)
+        audio_cfg._attn_implementation = config._attn_implementation
         self.audio_tower = Qwen2AudioEncoder(audio_cfg)
 
         self.audio_chunk_unit_duration = 30
@@ -222,7 +213,7 @@ class SiglipVisionTowerDynamicS2(nn.Module):
         self.resize_output_to_scale_idx = getattr(config, "s2_resize_output_to_scale_idx", 0)
 
         vision_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="siglip_vision_model")
-        vision_cfg._attn_implementation = _get_attn_implementation(config)
+        vision_cfg._attn_implementation = config._attn_implementation
         self.vision_tower = SiglipVisionModel(vision_cfg)
 
         self.image_processor = SiglipImageProcessor()
@@ -320,7 +311,7 @@ class VILAPretrainedModel(PreTrainedModel):
             self.sound_mm_projector = SoundMultimodalProjector(config)
 
         llm_cfg = _coerce_config_from_spec(llm_spec, fallback_model_type="qwen2")
-        llm_cfg._attn_implementation = _get_attn_implementation(config)
+        llm_cfg._attn_implementation = config._attn_implementation
         model_max_length = getattr(config, "model_max_length", None)
         if model_max_length is not None:
             llm_cfg.model_max_length = model_max_length
