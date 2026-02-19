@@ -54,7 +54,9 @@ def convert_key(key, mapping):
 
 
 def convert_model(input_path_or_repo, revision=None):
-    original_directory = snapshot_download(repo_id=input_path_or_repo, revision=revision, allow_patterns=["*.safetensors"])
+    original_directory = snapshot_download(
+        repo_id=input_path_or_repo, revision=revision, allow_patterns=["*.safetensors"]
+    )
 
     # Load and merge original state dict
     original_state_dict = {}
@@ -129,7 +131,9 @@ def convert_model(input_path_or_repo, revision=None):
     return model
 
 
-def create_processor(input_path_or_repo, audio_tokenizer_path_or_repo, input_revision=None, audio_tokenizer_revision=None):
+def create_processor(
+    input_path_or_repo, audio_tokenizer_path_or_repo, input_revision=None, audio_tokenizer_revision=None
+):
     tokenizer = AutoTokenizer.from_pretrained(input_path_or_repo, revision=input_revision)
     tokenizer.pad_token = tokenizer.eos_token
     feature_extractor = DacFeatureExtractor(
@@ -140,7 +144,9 @@ def create_processor(input_path_or_repo, audio_tokenizer_path_or_repo, input_rev
         sampling_rate=24000,
         return_attention_mask=True,
     )
-    audio_tokenizer = HiggsAudioV2TokenizerModel.from_pretrained(audio_tokenizer_path_or_repo, revision=audio_tokenizer_revision)
+    audio_tokenizer = HiggsAudioV2TokenizerModel.from_pretrained(
+        audio_tokenizer_path_or_repo, revision=audio_tokenizer_revision
+    )
 
     processor = HiggsAudioV2Processor(
         feature_extractor=feature_extractor,
