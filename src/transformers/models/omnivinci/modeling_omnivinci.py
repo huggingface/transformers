@@ -27,7 +27,6 @@ import torch.nn.functional as F
 from einops import rearrange
 
 from transformers import (
-    AutoConfig,
     PretrainedConfig,
     PreTrainedModel,
     SiglipImageProcessor,
@@ -35,8 +34,11 @@ from transformers import (
 from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.models.perceiver.modeling_perceiver import space_to_depth
+from transformers.models.qwen2.configuration_qwen2 import Qwen2Config
 from transformers.models.qwen2.modeling_qwen2 import Qwen2ForCausalLM
+from transformers.models.qwen2_audio.configuration_qwen2_audio import Qwen2AudioEncoderConfig
 from transformers.models.qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoder
+from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import SiglipVisionModel
 
 from .configuration_omnivinci import IGNORE_INDEX, OmniVinciConfig
@@ -52,21 +54,6 @@ def context_length_extension(config):
         scaling_factor = float(math.ceil(model_max_length / orig_ctx_len))
         config.rope_scaling = {"type": "linear", "factor": scaling_factor}
     return config
-
-
-def _coerce_config_from_spec(
-    spec: dict | PretrainedConfig, fallback_model_type: str | None = None
-) -> PretrainedConfig:
-    if isinstance(spec, PretrainedConfig):
-        return spec
-    if isinstance(spec, dict):
-        model_type = spec.get("model_type", fallback_model_type)
-        if model_type is None:
-            raise ValueError("Cannot infer model_type from config dictionary.")
-        kwargs = dict(spec)
-        kwargs.pop("model_type", None)
-        return AutoConfig.for_model(model_type, **kwargs)
-    raise TypeError(f"Unsupported config spec type: {type(spec)}")
 
 
 class MultimodalProjector(nn.Module):
@@ -114,9 +101,9 @@ class SoundMultimodalProjector(nn.Module):
 
 
 class Qwen2AudioTower(nn.Module):
-    def __init__(self, model_name_or_path: str | dict | PretrainedConfig, config: PretrainedConfig):
+    def __init__(self, sound_tower_cfg: dict[str, Any], config: PretrainedConfig):
         super().__init__()
-        audio_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="qwen2_audio_encoder")
+        audio_cfg = Qwen2AudioEncoderConfig(**{k: v for k, v in sound_tower_cfg.items() if k != "model_type"})
         audio_cfg._attn_implementation = config._attn_implementation
         self.audio_tower = Qwen2AudioEncoder(audio_cfg)
 
@@ -203,7 +190,7 @@ class Qwen2AudioTower(nn.Module):
 
 
 class SiglipVisionTowerDynamicS2(nn.Module):
-    def __init__(self, model_name_or_path: str | dict | PretrainedConfig, config: PretrainedConfig) -> None:
+    def __init__(self, vision_tower_cfg: dict[str, Any], config: PretrainedConfig) -> None:
         super().__init__()
 
         self.select_layer = getattr(config, "mm_vision_select_layer", -2)
@@ -212,7 +199,7 @@ class SiglipVisionTowerDynamicS2(nn.Module):
         self.max_split_size = config.s2_max_split_size
         self.resize_output_to_scale_idx = getattr(config, "s2_resize_output_to_scale_idx", 0)
 
-        vision_cfg = _coerce_config_from_spec(model_name_or_path, fallback_model_type="siglip_vision_model")
+        vision_cfg = SiglipVisionConfig(**{k: v for k, v in vision_tower_cfg.items() if k != "model_type"})
         vision_cfg._attn_implementation = config._attn_implementation
         self.vision_tower = SiglipVisionModel(vision_cfg)
 
@@ -310,7 +297,7 @@ class VILAPretrainedModel(PreTrainedModel):
             config.sound_hidden_size = 1280
             self.sound_mm_projector = SoundMultimodalProjector(config)
 
-        llm_cfg = _coerce_config_from_spec(llm_spec, fallback_model_type="qwen2")
+        llm_cfg = Qwen2Config(**{k: v for k, v in llm_spec.items() if k != "model_type"})
         llm_cfg._attn_implementation = config._attn_implementation
         model_max_length = getattr(config, "model_max_length", None)
         if model_max_length is not None:
