@@ -28,6 +28,8 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import capture_outputs
 from .configuration_ctrl import CTRLConfig
 
 
@@ -184,6 +186,10 @@ class EncoderLayer(nn.Module):
 class CTRLPreTrainedModel(PreTrainedModel):
     config: CTRLConfig
     base_model_prefix = "transformer"
+    _can_record_outputs = {
+        "hidden_states": EncoderLayer,
+        "attentions": MultiHeadAttention,
+    }
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -225,6 +231,7 @@ class CTRLModel(CTRLPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.w = new_embeddings
 
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -261,13 +268,6 @@ class CTRLModel(CTRLPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 5, 1280]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -296,18 +296,7 @@ class CTRLModel(CTRLPreTrainedModel):
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
             attention_mask = attention_mask.view(batch_size, -1)
-            # We create a 3D attention mask from a 2D tensor mask.
-            # Sizes are [batch_size, 1, 1, to_seq_length]
-            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-            # this attention mask is more simple than the triangular masking of causal attention
-            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
             attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-
-            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-            # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and the dtype's smallest value for masked positions.
-            # Since we are adding it to the raw scores before the softmax, this is
-            # effectively the same as removing these entirely.
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
@@ -320,7 +309,6 @@ class CTRLModel(CTRLPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.w(input_ids)
-        # inputs_embeds = embedded.unsqueeze(0) if len(input_ids.shape)<2 else embedded
         seq_len = input_shape[-1]
         mask = torch.triu(torch.ones(seq_len + past_length, seq_len + past_length), 1).to(device)
 
@@ -334,11 +322,7 @@ class CTRLModel(CTRLPreTrainedModel):
 
         hidden_states = self.dropout(hidden_states)
 
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
         for i, h in enumerate(self.h):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
             outputs = h(
                 hidden_states,
                 mask,
@@ -349,23 +333,12 @@ class CTRLModel(CTRLPreTrainedModel):
                 cache_position=cache_position,
             )
             hidden_states = outputs[0]
-            if output_attentions:
-                all_attentions += (outputs[1],)
 
         hidden_states = self.layernorm(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v for v in [hidden_states, past_key_values, all_hidden_states, all_attentions] if v is not None
-            )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
         )
 
 
@@ -386,6 +359,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -435,8 +409,6 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         >>> list(outputs.logits.shape)
         [1, 5, 246534]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
@@ -447,7 +419,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
         )
 
@@ -464,10 +436,6 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
-
-        if not return_dict:
-            output = (logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -517,6 +485,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -610,8 +579,6 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> loss.backward()  # doctest: +IGNORE_RESULT
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
@@ -622,7 +589,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         hidden_states = transformer_outputs[0]
@@ -673,9 +640,6 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
-        if not return_dict:
-            output = (pooled_logits,) + transformer_outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
