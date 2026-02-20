@@ -1741,18 +1741,15 @@ class Trainer:
                     with sync_context():
                         tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
 
-                    if (
-                        args.logging_nan_inf_filter
-                        and not is_torch_xla_available()
-                        and not torch.isfinite(tr_loss_step)
-                    ):
+                    if tr_loss.device != tr_loss_step.device:
+                        raise ValueError(
+                            f"Calculated loss must be on the original device: {tr_loss.device} but device in use is {tr_loss_step.device}"
+                        )
+                    if args.logging_nan_inf_filter:
                         # if loss is nan or inf simply add the average of previous logged losses
-                        tr_loss = tr_loss + tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                        tr_loss_avg = tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                        tr_loss = tr_loss + torch.where(torch.isfinite(tr_loss_step), tr_loss_step, tr_loss_avg)
                     else:
-                        if tr_loss.device != tr_loss_step.device:
-                            raise ValueError(
-                                f"Calculated loss must be on the original device: {tr_loss.device} but device in use is {tr_loss_step.device}"
-                            )
                         tr_loss = tr_loss + tr_loss_step
 
                     self.current_flos += float(self.floating_point_ops(inputs))
@@ -1763,8 +1760,13 @@ class Trainer:
 
                         # Gradient clipping
                         if args.max_grad_norm is not None and args.max_grad_norm > 0:
-                            if is_sagemaker_mp_enabled() and args.fp16:
-                                _grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
+                            if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+                                # In some cases the grad norm may not return a float
+                                grad_norm = model.get_global_grad_norm()
+                                if isinstance(grad_norm, torch.Tensor):
+                                    grad_norm = grad_norm.clone()
+                            elif is_sagemaker_mp_enabled() and args.fp16:
+                                grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
                             else:
                                 grad_norm_context = contextlib.nullcontext
                                 if self.is_tp_enabled:
@@ -1772,18 +1774,10 @@ class Trainer:
 
                                     grad_norm_context = implicit_replication
                                 with grad_norm_context():
-                                    _grad_norm = self.accelerator.clip_grad_norm_(
+                                    grad_norm = self.accelerator.clip_grad_norm_(
                                         model.parameters(),
                                         args.max_grad_norm,
                                     )
-
-                            if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
-                                grad_norm = model.get_global_grad_norm()
-                                # In some cases the grad norm may not return a float
-                                if hasattr(grad_norm, "item"):
-                                    grad_norm = grad_norm.item()
-                            else:
-                                grad_norm = _grad_norm
 
                         self.control = self.callback_handler.on_pre_optimizer_step(args, self.state, self.control)
 
