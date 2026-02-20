@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import random
 import unittest
 import warnings
 
@@ -28,7 +29,7 @@ from transformers.utils import is_torch_available
 if is_torch_available():
     import torch
     from torch import nn
-    from torch.utils.data import IterableDataset
+    from torch.utils.data import BatchSampler, Dataset, IterableDataset
 
     from transformers.modeling_outputs import SequenceClassifierOutput
     from transformers.tokenization_utils_base import BatchEncoding
@@ -74,6 +75,19 @@ if is_torch_available():
                 count += 1
                 number = torch.rand(1, generator=self.generator).item()
                 stop = number < self.p_stop
+
+    class TensorListDataset(Dataset[torch.Tensor]):
+        tensors: list[torch.Tensor]
+
+        def __init__(self, tensors: list[torch.Tensor]) -> None:
+            assert all(tensors[0].size(0) == tensor.size(0) for tensor in tensors), "Size mismatch between tensors"
+            self.tensors = tensors
+
+        def __getitem__(self, index):
+            return self.tensors[index]
+
+        def __len__(self):
+            return len(self.tensors)
 
 
 @require_torch
@@ -160,6 +174,70 @@ class TrainerUtilsTest(unittest.TestCase):
         self.assertEqual(lengths[indices_process_0[0]], 50)
         # The indices should be a permutation of range(100)
         self.assertEqual(sorted(indices_process_0 + indices_process_1), list(range(100)))
+
+    def test_distributed_length_grouped_sampler(self):
+        # Simulate a dataset with dict items containing input_ids
+        data = []
+        for length in range(10, 110, 10):  # 10, 20, 30, ..., 100
+            for _ in range(10):
+                data.append({"input_ids": torch.randn(length)})
+        random.shuffle(data)
+
+        sampler = DistributedLengthGroupedSampler(
+            batch_size=10,
+            dataset=data,
+            num_replicas=1,
+            rank=0,
+            mega_batch_mult=100,
+        )
+
+        batch_sampler = BatchSampler(sampler, batch_size=10, drop_last=False)
+        batches = list(batch_sampler)
+
+        next_batch = batches[0]
+        assert len(next_batch) == 10
+        assert all(len(data[i]["input_ids"]) == len(data[next_batch[0]]["input_ids"]) for i in next_batch)
+
+        other_batch = batches[1]
+        assert len(other_batch) == 10
+        assert all(len(data[i]["input_ids"]) == len(data[other_batch[0]]["input_ids"]) for i in other_batch)
+
+        assert len(data[next_batch[0]]["input_ids"]) != len(data[other_batch[0]]["input_ids"])
+
+    def test_distributed_length_grouped_sampler_custom_lengths(self):
+        # Simulate a dataset where each sample has shape (1, seq_len) with random lengths
+        data = []
+        for length in range(10, 110, 10):  # 10, 20, 30, ..., 100
+            for _ in range(10):
+                data.append(torch.randn(1, length))
+        random.shuffle(data)
+
+        def length_func(sample):
+            return sample.shape[1]
+
+        sampler = DistributedLengthGroupedSampler(
+            batch_size=10,
+            dataset=TensorListDataset(data),
+            num_replicas=1,
+            rank=0,
+            length_func=length_func,
+            mega_batch_mult=100,  # Ensure entire dataset is considered for grouping
+        )
+
+        batch_sampler = BatchSampler(sampler, batch_size=10, drop_last=False)
+        batches = list(batch_sampler)
+
+        next_batch = batches[0]
+
+        assert len(next_batch) == 10
+        assert all(data[i].shape[1] == data[next_batch[0]].shape[1] for i in next_batch)
+
+        other_batch = batches[1]
+        assert len(other_batch) == 10
+        assert all(data[i].shape[1] == data[other_batch[0]].shape[1] for i in other_batch)
+
+        # Other batch should have different sequence length
+        assert data[next_batch[0]].shape[1] != data[other_batch[0]].shape[1]
 
     def test_get_parameter_names(self):
         model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
