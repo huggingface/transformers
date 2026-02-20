@@ -52,7 +52,8 @@ class FourOverSixQuantize(ConversionOps):
             missing_keys.discard(key)
 
         return {
-            f"{module_name}.{quantized_key}": quantized_parameters[quantized_key] for quantized_key in quantized_parameters
+            f"{module_name}.{quantized_key}": quantized_parameters[quantized_key]
+            for quantized_key in quantized_parameters
         }
 
 
