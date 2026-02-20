@@ -1787,8 +1787,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             base_implementation = attn_implementation.removeprefix("paged|")
 
             compatible_flash_implementations = getattr(self, "_compatible_flash_implementations", None)
-            if compatible_flash_implementations and is_flash_attention_requested(requested_attention_implementation=base_implementation) and base_implementation not in compatible_flash_implementations:
-                default_flash_implementation = f"paged|{compatible_flash_implementations[0]}" if is_paged else compatible_flash_implementations[0]
+            if (
+                compatible_flash_implementations
+                and is_flash_attention_requested(requested_attention_implementation=base_implementation)
+                and base_implementation not in compatible_flash_implementations
+            ):
+                default_flash_implementation = (
+                    f"paged|{compatible_flash_implementations[0]}" if is_paged else compatible_flash_implementations[0]
+                )
 
                 logger.warning_once(
                     f"This model is compatible with the following flash attention implementations: `{compatible_flash_implementations}`. "

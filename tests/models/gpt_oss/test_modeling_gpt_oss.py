@@ -94,7 +94,9 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         # Option 2: Auto correction on load time
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             tmp_model.save_pretrained(tmp_dir_name)
-            model = GptOssModel.from_pretrained(tmp_dir_name, attn_implementation="flash_attention_2").to(device=torch_device)
+            model = GptOssModel.from_pretrained(tmp_dir_name, attn_implementation="flash_attention_2").to(
+                device=torch_device
+            )
             self.assertEqual(model.config._attn_implementation, expected_kernel)
 
         # Option 3: Auto correction on `set_attn_implementation`
