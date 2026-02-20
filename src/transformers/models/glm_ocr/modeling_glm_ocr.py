@@ -1436,8 +1436,9 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
                 past_length = past_key_values.get_seq_length()
 
             if past_length != 0 and self.model.rope_deltas is not None:
+                rope_deltas = self.model.rope_deltas.view(-1, 1)
                 text_positions = model_position_ids[None, ...]
-                vision_positions = (text_positions + self.model.rope_deltas).expand(3, -1, -1)
+                vision_positions = (text_positions + rope_deltas).expand(3, -1, -1)
                 model_inputs["position_ids"] = torch.cat([text_positions, vision_positions], dim=0)
             else:
                 can_compute_mrope = image_grid_thw is not None or video_grid_thw is not None
@@ -1448,7 +1449,7 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
                         video_grid_thw=video_grid_thw,
                         attention_mask=model_inputs.get("attention_mask"),
                     )
-                    self.model.rope_deltas = rope_deltas
+                    self.model.rope_deltas = rope_deltas.view(-1, 1)
                 else:
                     vision_positions = model_position_ids.unsqueeze(0).expand(3, -1, -1)
                     self.model.rope_deltas = torch.zeros(
