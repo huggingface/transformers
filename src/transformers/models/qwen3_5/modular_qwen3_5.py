@@ -697,7 +697,7 @@ class Qwen3_5Model(Qwen3VLModel):
     def get_video_features(
         self,
         **super_kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         # Same implementation as for images
         return super().get_video_features(**super_kwargs)
 
@@ -706,7 +706,7 @@ class Qwen3_5Model(Qwen3VLModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_output: BaseModelOutputWithPooling = self.visual(
             pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
