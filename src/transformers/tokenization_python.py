@@ -433,7 +433,7 @@ class PythonBackend(PreTrainedTokenizerBase):
 
         # 5. Special tokens mask configuration
         # Patterns: "none", "cls_sep", "eos", "bos", "bos_eos", "cls_double_sep", "prefix_suffix"
-        self.special_tokens_pattern = kwargs.pop("special_tokens_pattern", "cls_sep")
+        self.special_tokens_pattern = kwargs.pop("special_tokens_pattern", None)
 
         # 6. Set backend to "custom" if not already set (for direct PreTrainedTokenizer subclasses)
         if "backend" not in kwargs:
@@ -883,30 +883,62 @@ class PythonBackend(PreTrainedTokenizerBase):
         """
         if self.special_tokens_pattern == "cls_sep":
             # [CLS] seq0 [SEP] or [CLS] seq0 [SEP] seq1 [SEP]
+            if self.cls_token_id is None and self.sep_token_id is None:
+                raise ValueError(
+                    "Cannot add special tokens following 'cls_sep' pattern because one or several special tokens "
+                    f"are not defined (cls_token_id={self.cls_token_id}; sep_token_id={self.sep_token_id})"
+                    "Set the required special tokens in tokenizer or update `tokenizer.special_tokens_pattern`"
+                )
             if token_ids_1 is None:
                 return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id] + token_ids_1 + [self.sep_token_id]
 
         elif self.special_tokens_pattern == "eos":
             # seq0 [EOS] or seq0 [EOS] seq1 [EOS]
+            if self.eos_token_id is None:
+                raise ValueError(
+                    "Cannot add special tokens following 'eos' pattern because eos token is not defined "
+                    f"(eos_token_id={self.eos_token_id})."
+                    "Set the required special tokens in tokenizer or update `tokenizer.special_tokens_pattern`"
+                )
             if token_ids_1 is None:
                 return token_ids_0 + [self.eos_token_id]
             return token_ids_0 + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
 
         elif self.special_tokens_pattern == "bos":
             # [BOS] seq0 or [BOS] seq0 [BOS] seq1
+            if self.bos_token_id is None:
+                raise ValueError(
+                    "Cannot add special tokens following 'bos' pattern because bos token is not defined "
+                    f"(bos_token_id={self.bos_token_id})."
+                    "Set the required special tokens in tokenizer or update `tokenizer.special_tokens_pattern`"
+                )
             if token_ids_1 is None:
                 return [self.bos_token_id] + token_ids_0
             return [self.bos_token_id] + token_ids_0 + [self.bos_token_id] + token_ids_1
 
         elif self.special_tokens_pattern == "bos_eos":
             # [BOS] seq0 [EOS] or [BOS] seq0 [EOS] seq1 [EOS]
+            if self.bos_token_id is None and self.eos_token_id is None:
+                raise ValueError(
+                    "Cannot add special tokens following 'bos_eos' pattern because one or several special tokens "
+                    f"are not defined (bos_token_id={self.bos_token_id}; eos_token_id={self.eos_token_id})"
+                    "Set the required special tokens in tokenizer or update `tokenizer.special_tokens_pattern`"
+                )
+                return token_ids_0 if token_ids_1 is None else token_ids_0 + token_ids_1
+
             if token_ids_1 is None:
                 return [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
             return [self.bos_token_id] + token_ids_0 + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
 
         elif self.special_tokens_pattern == "cls_double_sep":
             # [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
+            if self.cls_token_id is None and self.sep_token_id is None:
+                raise ValueError(
+                    "Cannot add special tokens following 'cls_double_sep' pattern because one or several special tokens "
+                    f"are not defined (cls_token_id={self.cls_token_id}; sep_token_id={self.sep_token_id})"
+                    "Set the required special tokens in tokenizer or update `tokenizer.special_tokens_pattern`"
+                )
             if token_ids_1 is None:
                 return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
             return (

@@ -1242,7 +1242,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_tiny_logits_librispeech(self):
         torch_device = "cpu"
-        set_seed(0)
+        set_seed(42)
         model = WhisperModel.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
         input_speech = self._load_datasamples(1)
@@ -1287,7 +1287,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_small_en_logits_librispeech(self):
-        set_seed(0)
+        set_seed(42)
         torch_device = "cpu"
         model = WhisperModel.from_pretrained("openai/whisper-small.en")
         model.to(torch_device)
@@ -1322,7 +1322,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_logits_librispeech(self):
-        set_seed(0)
+        set_seed(42)
 
         torch_device = "cpu"
         model = WhisperModel.from_pretrained("openai/whisper-large")
@@ -1444,7 +1444,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_batched_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
         model.to(torch_device)
@@ -1515,7 +1515,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_en_batched_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model.to(torch_device)
@@ -1553,7 +1553,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_timestamp_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
@@ -1639,7 +1639,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_longform_timestamps_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
@@ -1891,7 +1891,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_timestamp_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
         model.to(torch_device)
@@ -1964,7 +1964,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_token_timestamp_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
@@ -1993,7 +1993,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_small_token_timestamp_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-small")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-small")
         model.to(torch_device)
@@ -2023,7 +2023,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_token_timestamp_batch_generation(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
@@ -2050,7 +2050,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_token_timestamp_generation_longform(self):
-        set_seed(0)
+        set_seed(42)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
@@ -2103,7 +2103,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_tiny_specaugment_librispeech(self):
         torch_device = "cpu"
-        set_seed(0)
+        set_seed(42)
         # Apply SpecAugment
         model = WhisperModel.from_pretrained("openai/whisper-tiny", apply_spec_augment=True)
         # Set model to training mode to enable SpecAugment
@@ -2833,7 +2833,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "renormalize_logits": True,  # necessary to match OAI beam search implementation
         }
 
-        set_seed(0)
+        set_seed(42)
         result = model.generate(**inputs, **gen_kwargs)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
@@ -2843,7 +2843,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def test_whisper_shortform_multi_batch_hard_prev_cond(self):
         # Without this set here, this test may fail if it is run with other tests (say, `test_tiny_*`). It's unclear
         # why other tests may affect this tests: it seems some random operations are beyond the scene.
-        set_seed(0)
+        set_seed(42)
         # fmt: off
         EXPECTED_TEXT = [
             " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",

@@ -44,6 +44,11 @@ on:
       pr_number:
         required: false
         type: string
+    outputs:
+      is_infrastructure_ok:
+        description: "Whether the CI infrastructure (slack reporting and failure checking) succeeded"
+        value: ${{ jobs.send_results.outputs.is_slack_reporting_job_ok == 'true' && jobs.check_new_failures.outputs.is_check_failures_ok == 'true' }}
+
 
 env:
   HF_HOME: /mnt/cache

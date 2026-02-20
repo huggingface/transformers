@@ -31,7 +31,8 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, eager_attention_forward
 from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM
@@ -219,8 +220,6 @@ class JambaMambaMixer(nn.Module):
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
 
-        self.use_fast_kernels = config.use_mamba_kernels
-
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=self.use_bias)
         # selective projection used to make dt, B and C input dependent
@@ -260,8 +259,7 @@ class JambaMambaMixer(nn.Module):
         if not is_fast_path_available:
             logger.warning_once(
                 "The fast path is not available because on of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                " is None. To install follow https://github.com/state-spaces/mamba/#installation and"
-                " https://github.com/Dao-AILab/causal-conv1d. If you want to use the naive implementation, set `use_mamba_kernels=False` in the model config"
+                " is None. To install follow https://github.com/state-spaces/mamba/#installation and https://github.com/Dao-AILab/causal-conv1d."
             )
 
     def cuda_kernels_forward(
@@ -462,11 +460,17 @@ class JambaMambaMixer(nn.Module):
         cache_params: HybridMambaAttentionDynamicCache | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
-        if self.use_fast_kernels:
-            if not is_fast_path_available or "cuda" not in self.x_proj.weight.device.type:
-                raise ValueError(
-                    "Fast Mamba kernels are not available. Make sure to they are installed and that the mamba module is on a CUDA device"
-                )
+        if self.config.use_mamba_kernels and (
+            not is_fast_path_available or "cuda" not in self.x_proj.weight.device.type
+        ):
+            logger.warning_once(
+                "Fast Mamba kernels are not available. Make sure that they are installed "
+                "and that the mamba module is on a CUDA device. Turning off the fast path "
+                "`config.use_mamba_kernels=False` and falling back to the slow path."
+            )
+            self.config.use_mamba_kernels = False
+
+        if self.config.use_mamba_kernels:
             return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
         return self.slow_forward(hidden_states, cache_params, attention_mask)
 
@@ -640,7 +644,8 @@ class JambaModel(JambaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -678,7 +683,7 @@ class JambaModel(JambaPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

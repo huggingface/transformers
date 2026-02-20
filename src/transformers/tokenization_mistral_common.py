@@ -1589,6 +1589,18 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             raise ValueError(_invalid_mode_msg)
         return mode
 
+    def __repr__(self) -> str:
+        # MistralCommonBackend does not implement added_tokens_decoder, so we need a custom repr
+        return (
+            f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
+            f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length},"
+            f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
+            f" special_tokens={self.special_tokens_map}"
+        )
+
+    def added_tokens_decoder(self):
+        raise NotImplementedError("`MistralCommonBackend` does not implement `added_tokens_decoder`.")
+
     def add_special_tokens(
         self,
         special_tokens_dict: dict[str, str | AddedToken | Sequence[str | AddedToken]],
