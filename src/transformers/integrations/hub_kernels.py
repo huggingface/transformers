@@ -360,6 +360,10 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
             revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
             version = _HUB_KERNEL_MAPPING[kernel_name].get("version", None)
+            # Only pass version if it's a valid string specifier (e.g., ">=0.0.4,<0.1.0")
+            # Integer versions in the mapping are not valid specifiers, so pass None
+            if isinstance(version, int):
+                version = None
             kernel = get_kernel(repo_id, revision=revision, version=version)
             mapping[kernel_name] = kernel
         except FileNotFoundError:

@@ -25,7 +25,8 @@ from ...generation import GenerationMixin
 from ...integrations import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, is_torchdynamo_compiling, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils.output_capturing import capture_outputs
 from .configuration_mamba2 import Mamba2Config
 
 
@@ -711,6 +712,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Mamba2Block"]
     supports_gradient_checkpointing = True
     _is_stateful = True
+    _can_record_outputs = {"hidden_states": Mamba2Block}
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -835,6 +837,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings = new_embeddings
 
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -842,12 +845,10 @@ class Mamba2Model(Mamba2PreTrainedModel):
         inputs_embeds: torch.LongTensor | None = None,
         cache_params: Mamba2Cache | None = None,
         use_cache: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple | Mamba2Output:
+    ) -> Mamba2Output:
         r"""
         cache_params (`Mamba2Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
@@ -858,17 +859,14 @@ class Mamba2Model(Mamba2PreTrainedModel):
             The position of the current input in the cache. This is used to ensure that the cache is correctly updated.
             If `cache_params` is passed, `cache_position` should also be passed.
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if (input_ids is None) ^ (inputs_embeds is not None):  # ^ is python for xor
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
+
+        if use_cache is None:
+            use_cache = self.config.use_cache if not self.training else False
 
         if self.gradient_checkpointing and self.training and use_cache:
             use_cache = False
@@ -892,7 +890,6 @@ class Mamba2Model(Mamba2PreTrainedModel):
             cache_params = None
 
         hidden_states = inputs_embeds
-        all_hidden_states = () if output_hidden_states else None
         for mixer_block in self.layers:
             hidden_states = mixer_block(
                 hidden_states,
@@ -901,21 +898,11 @@ class Mamba2Model(Mamba2PreTrainedModel):
                 attention_mask=attention_mask,
             )
 
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
         hidden_states = self.norm_f(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, cache_params, all_hidden_states] if v is not None)
 
         return Mamba2Output(
             last_hidden_state=hidden_states,
             cache_params=cache_params if use_cache else None,
-            hidden_states=all_hidden_states,
         )
 
 
@@ -983,6 +970,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
 
         return model_inputs
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -990,14 +978,12 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         cache_params: Mamba2Cache | None = None,
         labels: torch.LongTensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         use_cache: bool | None = None,
         cache_position: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,  # for now we need this for generation and loss_function
-    ) -> tuple | Mamba2CausalLMOutput:
+    ) -> Mamba2CausalLMOutput:
         r"""
         cache_params (`Mamba2Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
@@ -1012,20 +998,17 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
             The position of the current input in the cache. This is used to ensure that the cache is correctly updated.
             If `cache_params` is passed, `cache_position` should also be passed.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         mamba2_outputs = self.backbone(
             input_ids,
             cache_params=cache_params,
             inputs_embeds=inputs_embeds,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             use_cache=use_cache,
             cache_position=cache_position,
             attention_mask=attention_mask,
+            **kwargs,
         )
 
-        hidden_states = mamba2_outputs[0]
+        hidden_states = mamba2_outputs.last_hidden_state
         # Only compute necessary logits
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :].to(self.lm_head.weight.dtype)).float()
@@ -1033,10 +1016,6 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        if not return_dict:
-            output = (logits,) + mamba2_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return Mamba2CausalLMOutput(
             loss=loss,
