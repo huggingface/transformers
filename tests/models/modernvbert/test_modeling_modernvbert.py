@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch ModernVBERT model."""
 
 import copy
-import tempfile
 import unittest
 from typing import ClassVar
 
