@@ -96,6 +96,50 @@ class FooModel(FooPreTrainedModel):
         self.assertEqual(violation.rule_id, cms.TRF002)
         self.assertEqual(violation.line_number, 1)
 
+    def test_trf010_catches_singular_past_key_value_without_usage(self):
+        source = """
+class FooPreTrainedModel:
+    pass
+
+class FooModel(FooPreTrainedModel):
+    def forward(self, hidden_states, past_key_value=None, use_cache=False):
+        return hidden_states
+"""
+        file_path = Path("src/transformers/models/foo/modeling_foo.py")
+        violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF010})
+        trf010 = [violation for violation in violations if violation.rule_id == cms.TRF010]
+        self.assertEqual(len(trf010), 1)
+        self.assertIn("past_key_values/use_cache", trf010[0].message)
+
+    def test_trf013_flags_cross_model_import_in_modeling_file(self):
+        source = """
+from transformers.models.llama.modeling_llama import LlamaAttention
+"""
+        file_path = Path("src/transformers/models/foo/modeling_foo.py")
+        violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF013})
+        trf013 = [violation for violation in violations if violation.rule_id == cms.TRF013]
+        self.assertEqual(len(trf013), 1)
+        self.assertIn("imports implementation code from `llama`", trf013[0].message)
+
+    def test_trf013_allows_same_model_import_in_modeling_file(self):
+        source = """
+from .configuration_foo import FooConfig
+from transformers.models.foo.configuration_foo import FooConfig as FooConfigAlias
+"""
+        file_path = Path("src/transformers/models/foo/modeling_foo.py")
+        violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF013})
+        trf013 = [violation for violation in violations if violation.rule_id == cms.TRF013]
+        self.assertEqual(trf013, [])
+
+    def test_trf013_ignores_modular_files(self):
+        source = """
+from transformers.models.llama.modeling_llama import LlamaAttention
+"""
+        file_path = Path("src/transformers/models/foo/modular_foo.py")
+        violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF013})
+        trf013 = [violation for violation in violations if violation.rule_id == cms.TRF013]
+        self.assertEqual(trf013, [])
+
     @patch("check_modeling_structure.subprocess.run")
     def test_get_changed_modeling_files_filters_non_model_files(self, mock_run):
         mock_run.return_value = subprocess.CompletedProcess(

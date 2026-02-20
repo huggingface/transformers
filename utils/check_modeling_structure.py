@@ -48,6 +48,7 @@ TRF009 = "TRF009"
 TRF010 = "TRF010"
 TRF011 = "TRF011"
 TRF012 = "TRF012"
+TRF013 = "TRF013"
 RULE_SPECS_PATH = Path(__file__).with_name("check_modeling_structure_rules.toml")
 
 
@@ -114,9 +115,7 @@ class Violation:
 def _validate_rule_ids(rule_ids: set[str]) -> set[str]:
     unknown = sorted(rule_id for rule_id in rule_ids if rule_id not in TRF_RULES)
     if unknown:
-        raise ValueError(
-            f"Unknown rule id(s): {', '.join(unknown)}. Valid rules: {', '.join(sorted(TRF_RULES))}"
-        )
+        raise ValueError(f"Unknown rule id(s): {', '.join(unknown)}. Valid rules: {', '.join(sorted(TRF_RULES))}")
     return rule_ids
 
 
@@ -169,6 +168,10 @@ def _is_rule_allowlisted_for_file(rule_id: str, file_path: Path) -> bool:
     if model_name is None:
         return False
     return model_name in TRF_MODEL_DIR_ALLOWLISTS.get(rule_id, set())
+
+
+def _known_model_dirs() -> set[str]:
+    return {path.name for path in MODELS_ROOT.iterdir() if path.is_dir()}
 
 
 def _has_rule_suppression(lines: list[str], rule_id: str, line_number: int) -> bool:
@@ -404,9 +407,7 @@ def check_config_class_consistency(
                     file_path=file_path,
                     line_number=getattr(config_value, "lineno", node.lineno),
                     rule_id=TRF003,
-                    message=(
-                        f"{TRF003}: {node.name}.config_class is {config_name}, expected {expected}."
-                    ),
+                    message=(f"{TRF003}: {node.name}.config_class is {config_name}, expected {expected}."),
                 )
             )
 
@@ -463,7 +464,10 @@ def _function_argument_names(function_node: ast.FunctionDef) -> set[str]:
 
 
 def _function_uses_name(function_node: ast.FunctionDef, name: str) -> bool:
-    return any(isinstance(node, ast.Name) and node.id == name and isinstance(node.ctx, ast.Load) for node in ast.walk(function_node))
+    return any(
+        isinstance(node, ast.Name) and node.id == name and isinstance(node.ctx, ast.Load)
+        for node in ast.walk(function_node)
+    )
 
 
 def check_return_dict_usage(
@@ -600,7 +604,10 @@ def check_no_split_modules_shape(
             )
             continue
 
-        if any(not isinstance(element, ast.Constant) or not isinstance(element.value, str) or not element.value for element in value.elts):
+        if any(
+            not isinstance(element, ast.Constant) or not isinstance(element.value, str) or not element.value
+            for element in value.elts
+        ):
             violations.append(
                 Violation(
                     file_path=file_path,
@@ -721,11 +728,14 @@ def check_cache_argument_usage(
             continue
 
         arg_names = _function_argument_names(forward_method)
-        if "past_key_values" not in arg_names:
+        cache_state_args = {"past_key_values", "past_key_value"}
+        has_cache_state_arg = bool(arg_names.intersection(cache_state_args))
+        if not has_cache_state_arg:
             continue
+
         if "use_cache" in arg_names and _function_uses_name(forward_method, "use_cache"):
             continue
-        if _function_uses_name(forward_method, "past_key_values"):
+        if any(_function_uses_name(forward_method, arg_name) for arg_name in cache_state_args):
             continue
 
         violations.append(
@@ -738,6 +748,76 @@ def check_cache_argument_usage(
                 ),
             )
         )
+
+    return violations
+
+
+def check_single_file_policy_imports(
+    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
+) -> list[Violation]:
+    if not file_path.name.startswith("modeling_"):
+        return violations
+
+    current_model = _model_dir_name(file_path)
+    if current_model is None:
+        return violations
+
+    known_models = _known_model_dirs()
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module is None:
+                continue
+            if _has_rule_suppression(source_lines, TRF013, node.lineno):
+                continue
+
+            imported_model = None
+            if node.level == 0 and node.module.startswith("transformers.models."):
+                remaining = node.module.split("transformers.models.", 1)[1]
+                imported_model = remaining.split(".", 1)[0]
+            elif node.level >= 2:
+                root_name = node.module.split(".", 1)[0]
+                if root_name in known_models:
+                    imported_model = root_name
+
+            if imported_model is None or imported_model in {current_model, "auto"}:
+                continue
+
+            violations.append(
+                Violation(
+                    file_path=file_path,
+                    line_number=node.lineno,
+                    rule_id=TRF013,
+                    message=(
+                        f"{TRF013}: {file_path.name} imports implementation code from "
+                        f"`{imported_model}`. Keep model logic local to a single modeling file."
+                    ),
+                )
+            )
+            continue
+
+        if isinstance(node, ast.Import):
+            if _has_rule_suppression(source_lines, TRF013, node.lineno):
+                continue
+
+            for alias in node.names:
+                if not alias.name.startswith("transformers.models."):
+                    continue
+                remaining = alias.name.split("transformers.models.", 1)[1]
+                imported_model = remaining.split(".", 1)[0]
+                if imported_model in {current_model, "auto"}:
+                    continue
+                violations.append(
+                    Violation(
+                        file_path=file_path,
+                        line_number=node.lineno,
+                        rule_id=TRF013,
+                        message=(
+                            f"{TRF013}: {file_path.name} imports implementation code from "
+                            f"`{imported_model}`. Keep model logic local to a single modeling file."
+                        ),
+                    )
+                )
 
     return violations
 
@@ -770,9 +850,7 @@ def check_post_init_order(
         has_trailing_self_assignments = any(
             isinstance(statement, (ast.Assign, ast.AnnAssign))
             and any(
-                isinstance(target, ast.Attribute)
-                and isinstance(target.value, ast.Name)
-                and target.value.id == "self"
+                isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "self"
                 for target in (statement.targets if isinstance(statement, ast.Assign) else [statement.target])
             )
             for statement in trailing_statements
@@ -961,11 +1039,15 @@ def analyze_file(file_path: Path, text: str, enabled_rules: set[str] | None = No
         violations = check_post_init_order(tree, file_path, source_lines, violations)
     if TRF012 in enabled_rules:
         violations = check_doc_decorator_usage(tree, file_path, source_lines, violations)
+    if TRF013 in enabled_rules:
+        violations = check_single_file_policy_imports(tree, file_path, source_lines, violations)
 
     return [
         violation
         for violation in violations
-        if not (violation.rule_id is not None and _is_rule_allowlisted_for_file(violation.rule_id, violation.file_path))
+        if not (
+            violation.rule_id is not None and _is_rule_allowlisted_for_file(violation.rule_id, violation.file_path)
+        )
     ]
 
 

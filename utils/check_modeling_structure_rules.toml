@@ -213,3 +213,19 @@ good_example = '''
 class FooModel(FooPreTrainedModel):
     ...
 '''
+
+[rules.TRF013]
+description = "modeling_<name>.py should avoid importing implementation code from another model package."
+default_enabled = false
+allowlist_models = []
+
+[rules.TRF013.explanation]
+what_it_does = "Checks modeling files for cross-model imports such as transformers.models.other_model.* or from ..other_model.* imports."
+why_bad = "Cross-model implementation imports violate the single-file policy and make model behavior harder to inspect and maintain."
+bad_example = '''
+from transformers.models.llama.modeling_llama import LlamaAttention
+'''
+good_example = '''
+# Keep implementation local in this modeling file.
+# If code is reused, copy it with an appropriate # Copied from ... statement.
+'''
