@@ -605,7 +605,7 @@ class OmDetTurboEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -1368,7 +1368,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         )
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=torch.ones_like(key_padding_mask, dtype=decoder_embeddings.dtype)[..., None],
+            inputs_embeds=torch.ones_like(key_padding_mask, dtype=decoder_embeddings.dtype)[..., None],
             attention_mask=~key_padding_mask,
         )
 

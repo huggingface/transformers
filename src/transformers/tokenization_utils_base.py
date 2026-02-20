@@ -1404,12 +1404,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     def __repr__(self) -> str:
         added_tokens_decoder_rep = "\n\t".join([f"{k}: {v.__repr__()}," for k, v in self.added_tokens_decoder.items()])
+        if added_tokens_decoder_rep:
+            added_tokens_decoder_rep = f"\n\t{added_tokens_decoder_rep}\n"
         return (
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
             f" special_tokens={self.special_tokens_map},"
-            " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}\n)"
+            f" added_tokens_decoder={{{added_tokens_decoder_rep}}})"
         )
 
     def __len__(self) -> int:
