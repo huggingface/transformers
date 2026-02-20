@@ -34,6 +34,11 @@ Parakeet models, [introduced by NVIDIA NeMo](https://developer.nvidia.com/blog/p
     - 1D convolution projection from encoder hidden size to vocabulary size (for optimal NeMo compatibility).
     - CTC loss computation for training.
     - Greedy CTC decoding for inference.
+- [**ParakeetForTDT**](#parakeetfortdt): a Fast Conformer Encoder + a TDT (Token Duration Transducer) decoder
+  - **TDT Decoder**: Jointly predicts tokens and their durations, enabling efficient decoding:
+    - LSTM prediction network maintains language context across token predictions.
+    - Joint network combines encoder and decoder outputs.
+    - Duration head predicts how many frames to skip, enabling fast inference.
 
 The original implementation can be found in [NVIDIA NeMo](https://github.com/NVIDIA/NeMo).
 Model checkpoints are to be found under [the NVIDIA organization](https://huggingface.co/nvidia/models?search=parakeet).
@@ -76,6 +81,45 @@ inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sam
 inputs.to(model.device, dtype=model.dtype)
 outputs = model.generate(**inputs)
 print(processor.batch_decode(outputs))
+```
+
+</hfoption>
+</hfoptions>
+
+### TDT usage
+
+<hfoptions id="tdt-usage">
+<hfoption id="Pipeline">
+
+```py
+from transformers import pipeline
+
+pipe = pipeline("automatic-speech-recognition", model="nvidia/parakeet-tdt-0.6b-v3")
+out = pipe("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
+print(out)
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+from transformers import AutoModelForTDT, AutoProcessor
+from datasets import load_dataset, Audio
+import torch
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+processor = AutoProcessor.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
+model = AutoModelForTDT.from_pretrained("nvidia/parakeet-tdt-0.6b-v3", dtype="auto", device_map=device)
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+speech_samples = [el['array'] for el in ds["audio"][:5]]
+
+inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs.to(model.device, dtype=model.dtype)
+output = model.generate(**inputs, return_dict_in_generate=True)
+print(processor.batch_decode(output.sequences, skip_special_tokens=True))
 ```
 
 </hfoption>
@@ -212,6 +256,10 @@ outputs.loss.backward()
 
 [[autodoc]] ParakeetCTCConfig
 
+## ParakeetTDTConfig
+
+[[autodoc]] ParakeetTDTConfig
+
 ## ParakeetEncoder
 
 [[autodoc]] ParakeetEncoder
@@ -219,3 +267,7 @@ outputs.loss.backward()
 ## ParakeetForCTC
 
 [[autodoc]] ParakeetForCTC
+
+## ParakeetForTDT
+
+[[autodoc]] ParakeetForTDT

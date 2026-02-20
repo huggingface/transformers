@@ -319,10 +319,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("owlvit", "OwlViTModel"),
         ("paligemma", "PaliGemmaModel"),
         ("parakeet_ctc", "ParakeetForCTC"),
-        ("parakeet_tdt", "ParakeetForTDT"),
         ("parakeet_encoder", "ParakeetEncoder"),
-        ("parakeet_tdt_decoder", "ParakeetTDTDecoder"),
-        ("parakeet_tdt_joint", "ParakeetTDTJoint"),
+        ("parakeet_tdt", "ParakeetForTDT"),
         ("patchtsmixer", "PatchTSMixerModel"),
         ("patchtst", "PatchTSTModel"),
         ("pe_audio", "PeAudioModel"),
@@ -2136,11 +2134,13 @@ class AutoModelForCTC(_BaseAutoModelClass):
 
 AutoModelForCTC = auto_class_update(AutoModelForCTC, head_doc="connectionist temporal classification")
 
+
 class AutoModelForTDT(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_TDT_MAPPING
 
 
 AutoModelForTDT = auto_class_update(AutoModelForTDT, head_doc="token-and-duration transducer")
+
 
 class AutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING

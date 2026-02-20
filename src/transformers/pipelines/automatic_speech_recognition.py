@@ -579,12 +579,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     out["stride"] = rescale_stride([stride], ratio)[0]
                 else:
                     out["stride"] = rescale_stride(stride, ratio)
-        elif self.type == 'tdt':
+        elif self.type == "tdt":
             inputs = {
                 self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
             }
+            if "attention_mask" in model_inputs:
+                inputs["attention_mask"] = model_inputs.pop("attention_mask")
             outputs = self.model.generate(**inputs)
-            out = {"tokens": torch.LongTensor(outputs).view([1, -1])}
+            out = {"tokens": outputs}
         else:
             raise ValueError("Unsupported model type {self.type}.")
 
