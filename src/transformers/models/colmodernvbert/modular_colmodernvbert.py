@@ -77,7 +77,7 @@ class ColModernVBertConfig(ColQwen2Config):
         if vlm_config is None:
             vlm_config = CONFIG_MAPPING["modernvbert"]()
             logger.info(
-                "`vlm_config` is `None`. Initializing `vlm_config` with the `Qwen2VLConfig` with default values."
+                "`vlm_config` is `None`. Initializing `vlm_config` with the `ModernVBertConfig` with default values."
             )
         elif isinstance(vlm_config, dict):
             vlm_config = deepcopy(vlm_config)

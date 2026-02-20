@@ -19,7 +19,6 @@ from typing import Any
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
-from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig  # noqa: F401
 
 
 logger = logging.get_logger(__name__)
