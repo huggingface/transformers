@@ -229,7 +229,7 @@ class Timesfm2P5ResidualBlock(nn.Module):
     TimesFM 2.5 residual block with configurable activation and bias.
 
     This implements the ResidualBlock from TimesFM 2.5 which supports:
-    - Configurable activation functions (relu, swish/silu, none)
+    - Configurable activation functions via `ACT2FN` (e.g. relu, silu, gelu)
     - Optional bias in linear layers
     - Residual connection from input to output
     """
