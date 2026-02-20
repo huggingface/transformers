@@ -163,6 +163,7 @@ class GlmOcrVisionText2TextModelTester:
         input_ids[input_ids == self.image_start_token_id] = self.pad_token_id
         input_ids[input_ids == self.video_end_token_id] = self.pad_token_id
         input_ids[input_ids == self.image_end_token_id] = self.pad_token_id
+        input_ids[input_ids == self.pad_token_id] = 1
 
         input_ids[:, 0] = self.image_start_token_id
         input_ids[:, 1 : 1 + self.num_image_tokens] = self.image_token_id

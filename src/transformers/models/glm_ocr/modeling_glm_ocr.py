@@ -1428,6 +1428,35 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 
+        # Keep behavior consistent between inferred and user-provided 2D `position_ids` in multimodal generation.
+        model_position_ids = model_inputs.get("position_ids")
+        if model_position_ids is not None and model_position_ids.ndim == 2:
+            past_length = 0
+            if past_key_values is not None and hasattr(past_key_values, "get_seq_length"):
+                past_length = past_key_values.get_seq_length()
+
+            if past_length != 0 and self.model.rope_deltas is not None:
+                text_positions = model_position_ids[None, ...]
+                vision_positions = (text_positions + self.model.rope_deltas).expand(3, -1, -1)
+                model_inputs["position_ids"] = torch.cat([text_positions, vision_positions], dim=0)
+            else:
+                can_compute_mrope = image_grid_thw is not None or video_grid_thw is not None
+                if can_compute_mrope:
+                    vision_positions, rope_deltas = self.model.get_rope_index(
+                        input_ids=model_inputs.get("input_ids"),
+                        image_grid_thw=image_grid_thw,
+                        video_grid_thw=video_grid_thw,
+                        attention_mask=model_inputs.get("attention_mask"),
+                    )
+                    self.model.rope_deltas = rope_deltas
+                else:
+                    vision_positions = model_position_ids.unsqueeze(0).expand(3, -1, -1)
+                    self.model.rope_deltas = torch.zeros(
+                        model_position_ids.shape[0], 1, dtype=torch.long, device=model_position_ids.device
+                    )
+
+                model_inputs["position_ids"] = torch.cat([model_position_ids[None, ...], vision_positions], dim=0)
+
         return model_inputs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
