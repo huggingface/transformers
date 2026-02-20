@@ -15,10 +15,13 @@
 Tests for auto_docstring decorator and check_auto_docstrings function.
 """
 
+import importlib
 import os
+import statistics
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 
@@ -633,3 +636,136 @@ Args:
 """
 
         self.assertEqual(actual_class_docstring, expected_class_docstring)
+
+
+# ---------------------------------------------------------------------------
+# Pytest-benchmark tests
+# These are plain pytest classes (not unittest.TestCase) so that the
+# `benchmark` fixture injected by pytest-benchmark works correctly.
+# Run with:
+#   pytest tests/utils/test_auto_docstring.py -k benchmark --benchmark-only
+# ---------------------------------------------------------------------------
+
+
+class TestAutoDocstringBenchmarks:
+    """
+    Performance benchmarks for auto_docstring.
+
+    The decorator runs at *class-definition / import time*, so with hundreds of
+    models in the library the cumulative cost matters even though each individual
+    call looks cheap.  These benchmarks provide a regression signal.
+    """
+
+    # ------------------------------------------------------------------
+    # Benchmark: real import cost via monkey-patching (in-process)
+    # ------------------------------------------------------------------
+
+    def test_benchmark_real_import_cost(self, benchmark):
+        """
+        Measures the *real* auto_docstring cost during a transformers import.
+
+        Method
+        ------
+        1. Collect ``modeling_*.py``, ``image_processing_*.py``, ``processing_*.py``
+           under ``transformers/models``, then sample every 10th for speed.
+        2. Warmup: import the sampled modules once so Python's bytecode cache is hot.
+        3. Benchmark: clear ``transformers.models.*`` from the module cache and
+           re-import all (with real auto_docstring).
+        4. Baseline: run noop-patched import in a manual loop for comparison.
+        5. Store cost (real − noop) and percentage in benchmark.extra_info.
+        6. Assert cost ≥ 0 (noop must not be slower than real).
+
+        Note: extra_info appears in JSON output (--benchmark-json); use -s to see
+        the comparison breakdown printed in the terminal.
+        """
+
+        # Model files do ``from ...utils import auto_docstring`` so the live
+        # reference lives on the ``transformers.utils`` module object.
+        if "transformers.utils" not in sys.modules:
+            importlib.import_module("transformers.utils")
+        _utils_module = sys.modules["transformers.utils"]
+
+        # ── Collect module names ──────────────────────────────────────────────
+        src_root = Path(__file__).resolve().parent.parent.parent / "src"
+        models_dir = src_root / "transformers" / "models"
+        all_modules: list[str] = []
+        for pattern in ("modeling_*.py", "image_processing_*.py", "processing_*.py"):
+            for f in sorted(models_dir.rglob(pattern)):
+                rel = f.with_suffix("").relative_to(src_root)
+                all_modules.append(".".join(rel.parts))
+        # Sample every 10th module to keep benchmark fast
+        model_modules = all_modules[::10]
+
+        def _clear():
+            """Remove all transformers.models.* entries from the module cache."""
+            for key in [k for k in sys.modules if k.startswith("transformers.models")]:
+                del sys.modules[key]
+
+        def _import_all():
+            for mod in model_modules:
+                try:
+                    importlib.import_module(mod)
+                except Exception:
+                    continue
+
+        # ── Warmup ────────────────────────────────────────────────────────────
+        _import_all()
+
+        # ── Benchmark: WITH auto_docstring (real) ───────────────────────────────
+        def run_real_import():
+            _clear()
+            _import_all()
+
+        benchmark(run_real_import)
+
+        # ── Baseline: WITHOUT auto_docstring (noop patch) ──────────────────────
+        # Manual loop for comparison; real median from benchmark.stats or fallback when disabled
+        _orig = _utils_module.auto_docstring
+        _noop = lambda x=None, **kw: (lambda f: f) if x is None else x  # noqa: E731
+        times_noop: list[float] = []
+        for _ in range(5):
+            _utils_module.auto_docstring = _noop
+            try:
+                _clear()
+                t0 = time.perf_counter()
+                _import_all()
+                times_noop.append(time.perf_counter() - t0)
+            finally:
+                _utils_module.auto_docstring = _orig
+
+        stats = benchmark.stats
+        median_real_ms = stats["median"] * 1e3 if stats is not None else 0.0
+        if stats is None:
+            times_real_manual: list[float] = []
+            for _ in range(5):
+                _clear()
+                t0 = time.perf_counter()
+                _import_all()
+                times_real_manual.append(time.perf_counter() - t0)
+            median_real_ms = statistics.median(times_real_manual) * 1e3
+        median_noop_ms = statistics.median(times_noop) * 1e3
+        cost_ms = median_real_ms - median_noop_ms
+        pct = cost_ms / median_real_ms * 100 if median_real_ms > 0 else 0.0
+
+        benchmark.extra_info.update(
+            {
+                "n_files_total": len(all_modules),
+                "n_files_sampled": len(model_modules),
+                "with_auto_docstring_ms": round(median_real_ms, 1),
+                "without_auto_docstring_ms": round(median_noop_ms, 1),
+                "auto_docstring_cost_ms": round(cost_ms, 1),
+                "cost_pct_of_total": round(pct, 1),
+            }
+        )
+
+        # extra_info is saved to JSON via --benchmark-save/--benchmark-json; print for terminal (-s)
+        print(
+            f"\n{'─' * 60}\n"
+            f"  @auto_docstring real import cost  ({len(model_modules)} of {len(all_modules)} modules)\n"
+            f"  With    auto_docstring : {median_real_ms:7.1f} ms\n"
+            f"  Without auto_docstring : {median_noop_ms:7.1f} ms\n"
+            f"  auto_docstring cost    : {cost_ms:7.1f} ms  ({pct:.1f}% of total)\n"
+            f"{'─' * 60}"
+        )
+
+        assert cost_ms >= 0, "Noop was slower than real — measurement noise too high"

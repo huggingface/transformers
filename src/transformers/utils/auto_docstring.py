@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import inspect
 import os
-import textwrap
 from collections.abc import Mapping
+from functools import lru_cache
 from pathlib import Path
 from types import UnionType
 from typing import Union, get_args, get_origin
@@ -76,6 +76,23 @@ HARDCODED_CONFIG_FOR_MODELS = {
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
+
+# Pre-compiled patterns used repeatedly at runtime.  Compiling once here avoids
+# repeated compilation overhead (and cache lookups) on every decorator call.
+_re_example_or_return = re.compile(r"(?m)^([ \t]*)(?=Example|Return)")
+_re_return = re.compile(r"(?m)^([ \t]*)(?=Return)")
+_re_example = re.compile(r"(?m)^([ \t]*)(?=Example)")
+_re_args_section = re.compile(r"(?:Args:)(\n.*)?(\n)?$", re.DOTALL)
+_re_shape = re.compile(r"(of shape\s*(?:`.*?`|\(.*?\)))")
+_re_default = re.compile(r"(defaults to \s*[^)]*)")
+_re_param = re.compile(
+    r"^\s{0,0}(\w+)\s*\(\s*([^, \)]*)(\s*.*?)\s*\)\s*:\s*((?:(?!\n^\s{0,0}\w+\s*\().)*)",
+    re.DOTALL | re.MULTILINE,
+)
+_re_forward_ref = re.compile(r"ForwardRef\('([\w.]+)'\)")
+_re_optional = re.compile(r"Optional\[(.*?)\]")
+_re_placeholders = re.compile(r"{(.*?)}")
+_re_model_task = None  # built lazily because PT_SAMPLE_DOCSTRINGS isn't available yet
 
 
 class ImageProcessorArgs:
@@ -1271,33 +1288,40 @@ def get_indent_level(func):
     return (len(func.__qualname__.split(".")) - 1) * 4
 
 
-def equalize_indent(docstring, indent_level):
+def equalize_indent(docstring: str, indent_level: int) -> str:
     """
     Adjust the indentation of a docstring to match the specified indent level.
     """
-    # fully dedent the docstring
-    docstring = "\n".join([line.lstrip() for line in docstring.splitlines()])
-    return textwrap.indent(docstring, " " * indent_level)
+    prefix = " " * indent_level
+    # Uses splitlines() (no keepends) to match previous behaviour that dropped
+    # any trailing newline via the old splitlines() + "\n".join() + textwrap.indent path.
+    return "\n".join(prefix + line.lstrip() if line.strip() else "" for line in docstring.splitlines())
 
 
-def set_min_indent(docstring, indent_level):
+def set_min_indent(docstring: str, indent_level: int) -> str:
     """
     Adjust the indentation of a docstring to match the specified indent level.
     """
-    return textwrap.indent(textwrap.dedent(docstring), " " * indent_level)
+    # Equivalent to textwrap.dedent + textwrap.indent but avoids the two regex
+    # passes that textwrap uses internally (one per call in dedent, one in indent).
+    lines = docstring.split("\n")
+    min_indent = min(
+        (len(line) - len(line.lstrip()) for line in lines if line.strip()),
+        default=0,
+    )
+    prefix = " " * indent_level
+    return "\n".join(prefix + line[min_indent:] if line.strip() else "" for line in lines)
 
 
 def parse_shape(docstring):
-    shape_pattern = re.compile(r"(of shape\s*(?:`.*?`|\(.*?\)))")
-    match = shape_pattern.search(docstring)
+    match = _re_shape.search(docstring)
     if match:
         return " " + match.group(1)
     return None
 
 
 def parse_default(docstring):
-    default_pattern = re.compile(r"(defaults to \s*[^)]*)")
-    match = default_pattern.search(docstring)
+    match = _re_default.search(docstring)
     if match:
         return " " + match.group(1)
     return None
@@ -1317,15 +1341,14 @@ def parse_docstring(docstring, max_indent_level=0, return_intro=False):
     Returns:/Example:
     ...
     """
-    match = re.search(r"(?m)^([ \t]*)(?=Example|Return)", docstring)
+    match = _re_example_or_return.search(docstring)
     if match:
         remainder_docstring = docstring[match.start() :]
         docstring = docstring[: match.start()]
     else:
         remainder_docstring = ""
-    args_pattern = re.compile(r"(?:Args:)(\n.*)?(\n)?$", re.DOTALL)
 
-    args_match = args_pattern.search(docstring)
+    args_match = _re_args_section.search(docstring)
     # still try to find args description in the docstring, if args are not preceded by "Args:"
     docstring_intro = None
     if args_match:
@@ -1344,22 +1367,26 @@ def parse_docstring(docstring, max_indent_level=0, return_intro=False):
     args_section = set_min_indent(args_section, 0)
     params = {}
     if args_section:
-        param_pattern = re.compile(
-            # |--- Group 1 ---|| Group 2 ||- Group 3 -||---------- Group 4 ----------|
-            rf"^\s{{0,{max_indent_level}}}(\w+)\s*\(\s*([^, \)]*)(\s*.*?)\s*\)\s*:\s*((?:(?!\n^\s{{0,{max_indent_level}}}\w+\s*\().)*)",
-            re.DOTALL | re.MULTILINE,
-        )
+        # Use the pre-compiled pattern (max_indent_level is always 0 at all call
+        # sites; if a non-zero value is ever needed, compile a fresh pattern).
+        if max_indent_level == 0:
+            param_pattern = _re_param
+        else:
+            param_pattern = re.compile(
+                # |--- Group 1 ---|| Group 2 ||- Group 3 -||---------- Group 4 ----------|
+                rf"^\s{{0,{max_indent_level}}}(\w+)\s*\(\s*([^, \)]*)(\s*.*?)\s*\)\s*:\s*((?:(?!\n^\s{{0,{max_indent_level}}}\w+\s*\().)*)",
+                re.DOTALL | re.MULTILINE,
+            )
         for match in param_pattern.finditer(args_section):
             param_name = match.group(1)
             param_type = match.group(2)
-            # param_type = match.group(2).replace("`", "")
             additional_info = match.group(3)
             optional = "optional" in additional_info
             shape = parse_shape(additional_info)
             default = parse_default(additional_info)
             param_description = match.group(4).strip()
-            # set first line of param_description to 4 spaces:
-            param_description = re.sub(r"^", " " * 4, param_description, 1)
+            # indent the first line of param_description to 4 spaces:
+            param_description = " " * 4 + param_description
             param_description = f"\n{param_description}"
             params[param_name] = {
                 "type": param_type,
@@ -1402,12 +1429,31 @@ def get_model_name(obj):
     """
     Get the model name from the file path of the object.
     """
+
     path = inspect.getsourcefile(obj)
     if path is None:
         return None
     if path.split(os.path.sep)[-3] != "models":
         return None
-    return path.split(os.path.sep)[-2]
+    file_name = path.split(os.path.sep)[-1]
+    model_name_lowercase_from_folder = path.split(os.path.sep)[-2]
+    model_name_lowercase_from_file = None
+    for file_type in AUTODOC_FILES:
+        start = file_type.split("*")[0]
+        end = file_type.split("*")[-1] if "*" in file_type else ""
+        if file_name.startswith(start) and file_name.endswith(end):
+            model_name_lowercase_from_file = file_name[len(start) : -len(end)]
+            break
+    if model_name_lowercase_from_file and model_name_lowercase_from_folder != model_name_lowercase_from_file:
+        from transformers.models.auto.configuration_auto import SPECIAL_MODEL_TYPE_TO_MODULE_NAME
+
+        if (
+            model_name_lowercase_from_file in SPECIAL_MODEL_TYPE_TO_MODULE_NAME
+            or model_name_lowercase_from_file.replace("_", "-") in SPECIAL_MODEL_TYPE_TO_MODULE_NAME
+        ):
+            return model_name_lowercase_from_file
+        return model_name_lowercase_from_folder
+    return model_name_lowercase_from_folder
 
 
 def generate_processor_intro(cls) -> str:
@@ -1504,7 +1550,7 @@ def format_args_docstring(docstring: str, model_name: str) -> str:
     deducted from the model name and the auto modules.
     """
     # first check if there are any placeholders in the docstring, if not return it as is
-    placeholders = set(re.findall(r"{(.*?)}", docstring))
+    placeholders = set(_re_placeholders.findall(docstring))
     if not placeholders:
         return docstring
 
@@ -1519,11 +1565,17 @@ def format_args_docstring(docstring: str, model_name: str) -> str:
 
 def get_args_doc_from_source(args_classes: object | list[object]) -> dict:
     if isinstance(args_classes, (list, tuple)):
-        args_classes_dict = {}
-        for args_class in args_classes:
-            args_classes_dict.update(args_class.__dict__)
-        return args_classes_dict
+        return _merge_args_dicts(tuple(args_classes))
     return args_classes.__dict__
+
+
+@lru_cache(maxsize=16)
+def _merge_args_dicts(args_classes_tuple: tuple) -> dict:
+    """Cached merger of args-doc dicts. The input classes are static so caching is safe."""
+    result = {}
+    for cls in args_classes_tuple:
+        result.update(cls.__dict__)
+    return result
 
 
 def get_checkpoint_from_config_class(config_class):
@@ -1722,7 +1774,7 @@ def _format_type_annotation_recursive(type_hint):
         type_str = str(type_hint)
         # Clean up ForwardRef
         if "ForwardRef" in type_str:
-            type_str = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", type_str)
+            type_str = _re_forward_ref.sub(r"\1", type_str)
         # Clean up module prefixes
         type_str = type_str.replace("typing.", "").replace("types.", "")
         return type_str
@@ -1820,11 +1872,11 @@ def process_type_annotation(type_input, param_name: str | None = None) -> tuple[
 
     # Clean up ForwardRef
     if "ForwardRef" in param_type:
-        param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
+        param_type = _re_forward_ref.sub(r"\1", param_type)
 
     # Handle Optional wrapper
     if "Optional" in param_type:
-        param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
+        param_type = _re_optional.sub(r"\1", param_type)
         optional = True
 
     return param_type, optional
@@ -2127,17 +2179,6 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
     """
     docstring = ""
     kwargs_summary = ""
-
-    # Check if this is a processor by inspecting class hierarchy
-    is_processor = _is_processor_class(func, parent_class)
-    is_image_processor = _is_image_processor_class(func, parent_class)
-
-    # Use appropriate args source based on whether it's a processor or not
-    if is_processor:
-        source_args_dict = get_args_doc_from_source([ImageProcessorArgs, ProcessorArgs])
-    else:
-        source_args_dict = get_args_doc_from_source(ImageProcessorArgs)
-
     # Check if we need to add typed kwargs description to the docstring
     unroll_kwargs = func.__name__ in UNROLL_KWARGS_METHODS
     if not unroll_kwargs and parent_class is not None:
@@ -2146,171 +2187,187 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
             any(unroll_kwargs_class in base.__name__ for base in parent_class.__mro__)
             for unroll_kwargs_class in UNROLL_KWARGS_CLASSES
         )
-    if unroll_kwargs:
-        # get all unpackable "kwargs" parameters
-        kwargs_parameters = [
-            kwargs_param
-            for _, kwargs_param in sig.parameters.items()
-            if kwargs_param.kind == inspect.Parameter.VAR_KEYWORD
-        ]
-        for kwarg_param in kwargs_parameters:
-            # If kwargs not typed, skip
-            if kwarg_param.annotation == inspect.Parameter.empty:
-                continue
+    if not unroll_kwargs:
+        return docstring, kwargs_summary
 
-            # Extract documentation for kwargs
-            kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
-            if kwargs_documentation is not None:
-                documented_kwargs = parse_docstring(kwargs_documentation)[0]
-            # Process each kwarg parameter
-            for param_name, param_type_annotation in kwarg_param.annotation.__args__[0].__annotations__.items():
-                # Handle nested kwargs structures for processors
+    # Check if this is a processor by inspecting class hierarchy
+    is_processor = _is_processor_class(func, parent_class)
+    is_image_processor = _is_image_processor_class(func, parent_class)
 
-                if is_processor and param_name.endswith("_kwargs"):
-                    # Check if this is a basic kwargs type that should be skipped
-                    # Basic kwargs types are generic containers that shouldn't be documented as individual params
-                    basic_kwargs_types = ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs"]
+    # Use appropriate args source based on whether it's a processor or not
+    if is_processor:
+        source_args_dict = get_args_doc_from_source([ImageProcessorArgs, ProcessorArgs])
+    elif is_image_processor:
+        source_args_dict = get_args_doc_from_source(ImageProcessorArgs)
+    else:
+        raise ValueError(
+            f"Unrolling kwargs is not supported for {func.__name__} of {parent_class.__name__ if parent_class else 'None'} class"
+        )
 
-                    # Get the actual type (unwrap Optional if needed)
-                    actual_type = param_type_annotation
-                    type_name = getattr(param_type_annotation, "__name__", None)
-                    if type_name is None and hasattr(param_type_annotation, "__origin__"):
-                        # Handle Optional[Type] or Union cases
-                        args = getattr(param_type_annotation, "__args__", ())
-                        for arg in args:
-                            if arg is not type(None):
-                                actual_type = arg
-                                type_name = getattr(arg, "__name__", None)
-                                break
+    # get all unpackable "kwargs" parameters
+    kwargs_parameters = [
+        kwargs_param
+        for _, kwargs_param in sig.parameters.items()
+        if kwargs_param.kind == inspect.Parameter.VAR_KEYWORD
+    ]
+    for kwarg_param in kwargs_parameters:
+        # If kwargs not typed, skip
+        if kwarg_param.annotation == inspect.Parameter.empty:
+            continue
 
-                    # Skip only if it's one of the basic kwargs types
-                    if type_name in basic_kwargs_types:
-                        continue
+        # Extract documentation for kwargs
+        kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
+        if kwargs_documentation is not None:
+            documented_kwargs = parse_docstring(kwargs_documentation)[0]
+        # Process each kwarg parameter
+        for param_name, param_type_annotation in kwarg_param.annotation.__args__[0].__annotations__.items():
+            # Handle nested kwargs structures for processors
 
-                    # Otherwise, unroll the custom typed kwargs
-                    # Get the nested TypedDict's annotations
-                    if hasattr(actual_type, "__annotations__"):
-                        nested_kwargs_doc = getattr(actual_type, "__doc__", None)
-                        documented_nested_kwargs = {}
-                        if nested_kwargs_doc:
-                            documented_nested_kwargs = parse_docstring(nested_kwargs_doc)[0]
+            if is_processor and param_name.endswith("_kwargs"):
+                # Check if this is a basic kwargs type that should be skipped
+                # Basic kwargs types are generic containers that shouldn't be documented as individual params
+                basic_kwargs_types = ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs"]
 
-                        # Only process fields that are documented in the custom kwargs class's own docstring
-                        # This prevents showing too many inherited parameters
-                        if not documented_nested_kwargs:
-                            # No documentation in the custom kwargs class, skip unrolling
-                            continue
+                # Get the actual type (unwrap Optional if needed)
+                actual_type = param_type_annotation
+                type_name = getattr(param_type_annotation, "__name__", None)
+                if type_name is None and hasattr(param_type_annotation, "__origin__"):
+                    # Handle Optional[Type] or Union cases
+                    args = getattr(param_type_annotation, "__args__", ())
+                    for arg in args:
+                        if arg is not type(None):
+                            actual_type = arg
+                            type_name = getattr(arg, "__name__", None)
+                            break
 
-                        # Process each field in the custom typed kwargs
-                        for nested_param_name, nested_param_type in actual_type.__annotations__.items():
-                            # Only document parameters that are explicitly documented in the TypedDict's docstring
-                            if nested_param_name not in documented_nested_kwargs:
-                                continue
-                            nested_param_type_str, nested_optional = process_type_annotation(
-                                nested_param_type, nested_param_name
-                            )
-
-                            # Check for default value
-                            nested_param_default = ""
-                            if parent_class is not None:
-                                nested_param_default = str(getattr(parent_class, nested_param_name, ""))
-                                nested_param_default = (
-                                    f", defaults to `{nested_param_default}`" if nested_param_default != "" else ""
-                                )
-
-                            # Only use the TypedDict's own docstring, not source_args_dict
-                            # This prevents pulling in too many inherited parameters
-                            (
-                                nested_param_type_str,
-                                nested_optional_string,
-                                nested_shape_string,
-                                nested_additional_info,
-                                nested_description,
-                                nested_is_documented,
-                            ) = _get_parameter_info(
-                                nested_param_name,
-                                documented_nested_kwargs,
-                                {},  # Empty dict - only use TypedDict's own docstring
-                                nested_param_type_str,
-                                nested_optional,
-                            )
-
-                            # nested_is_documented should always be True here since we filter for it above
-                            # Check if type is missing
-                            if nested_param_type_str == "":
-                                print(
-                                    f"🚨 {nested_param_name} for {type_name} in file {func.__code__.co_filename} has no type"
-                                )
-                            nested_param_type_str = (
-                                nested_param_type_str if "`" in nested_param_type_str else f"`{nested_param_type_str}`"
-                            )
-                            # Format the parameter docstring
-                            if nested_additional_info:
-                                docstring += set_min_indent(
-                                    f"{nested_param_name} ({nested_param_type_str}{nested_additional_info}):{nested_description}",
-                                    indent_level + 8,
-                                )
-                            else:
-                                docstring += set_min_indent(
-                                    f"{nested_param_name} ({nested_param_type_str}{nested_shape_string}{nested_optional_string}{nested_param_default}):{nested_description}",
-                                    indent_level + 8,
-                                )
-
-                        # Skip processing the _kwargs parameter itself since we've processed its contents
-                        continue
-                    else:
-                        # If we can't get annotations, skip this parameter
-                        continue
-
-                if documented_kwargs and param_name not in documented_kwargs:
+                # Skip only if it's one of the basic kwargs types
+                if type_name in basic_kwargs_types:
                     continue
-                param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
-                # Check for default value
-                param_default = ""
-                if parent_class is not None:
-                    param_default = str(getattr(parent_class, param_name, ""))
-                    param_default = f", defaults to `{param_default}`" if param_default != "" else ""
+                # Otherwise, unroll the custom typed kwargs
+                # Get the nested TypedDict's annotations
+                if hasattr(actual_type, "__annotations__"):
+                    nested_kwargs_doc = getattr(actual_type, "__doc__", None)
+                    documented_nested_kwargs = {}
+                    if nested_kwargs_doc:
+                        documented_nested_kwargs = parse_docstring(nested_kwargs_doc)[0]
 
-                param_type, optional_string, shape_string, additional_info, description, is_documented = (
-                    _get_parameter_info(param_name, documented_kwargs, source_args_dict, param_type, optional)
+                    # Only process fields that are documented in the custom kwargs class's own docstring
+                    # This prevents showing too many inherited parameters
+                    if not documented_nested_kwargs:
+                        # No documentation in the custom kwargs class, skip unrolling
+                        continue
+
+                    # Process each field in the custom typed kwargs
+                    for nested_param_name, nested_param_type in actual_type.__annotations__.items():
+                        # Only document parameters that are explicitly documented in the TypedDict's docstring
+                        if nested_param_name not in documented_nested_kwargs:
+                            continue
+                        nested_param_type_str, nested_optional = process_type_annotation(
+                            nested_param_type, nested_param_name
+                        )
+
+                        # Check for default value
+                        nested_param_default = ""
+                        if parent_class is not None:
+                            nested_param_default = str(getattr(parent_class, nested_param_name, ""))
+                            nested_param_default = (
+                                f", defaults to `{nested_param_default}`" if nested_param_default != "" else ""
+                            )
+
+                        # Only use the TypedDict's own docstring, not source_args_dict
+                        # This prevents pulling in too many inherited parameters
+                        (
+                            nested_param_type_str,
+                            nested_optional_string,
+                            nested_shape_string,
+                            nested_additional_info,
+                            nested_description,
+                            nested_is_documented,
+                        ) = _get_parameter_info(
+                            nested_param_name,
+                            documented_nested_kwargs,
+                            {},  # Empty dict - only use TypedDict's own docstring
+                            nested_param_type_str,
+                            nested_optional,
+                        )
+
+                        # nested_is_documented should always be True here since we filter for it above
+                        # Check if type is missing
+                        if nested_param_type_str == "":
+                            print(
+                                f"🚨 {nested_param_name} for {type_name} in file {func.__code__.co_filename} has no type"
+                            )
+                        nested_param_type_str = (
+                            nested_param_type_str if "`" in nested_param_type_str else f"`{nested_param_type_str}`"
+                        )
+                        # Format the parameter docstring
+                        if nested_additional_info:
+                            docstring += set_min_indent(
+                                f"{nested_param_name} ({nested_param_type_str}{nested_additional_info}):{nested_description}",
+                                indent_level + 8,
+                            )
+                        else:
+                            docstring += set_min_indent(
+                                f"{nested_param_name} ({nested_param_type_str}{nested_shape_string}{nested_optional_string}{nested_param_default}):{nested_description}",
+                                indent_level + 8,
+                            )
+
+                    # Skip processing the _kwargs parameter itself since we've processed its contents
+                    continue
+                else:
+                    # If we can't get annotations, skip this parameter
+                    continue
+
+            if documented_kwargs and param_name not in documented_kwargs:
+                continue
+            param_type, optional = process_type_annotation(param_type_annotation, param_name)
+
+            # Check for default value
+            param_default = ""
+            if parent_class is not None:
+                param_default = str(getattr(parent_class, param_name, ""))
+                param_default = f", defaults to `{param_default}`" if param_default != "" else ""
+
+            param_type, optional_string, shape_string, additional_info, description, is_documented = (
+                _get_parameter_info(param_name, documented_kwargs, source_args_dict, param_type, optional)
+            )
+
+            if is_documented:
+                # Check if type is missing
+                if param_type == "":
+                    print(
+                        f"[ERROR] {param_name} for {kwarg_param.annotation.__args__[0].__qualname__} in file {func.__code__.co_filename} has no type"
+                    )
+                param_type = param_type if "`" in param_type else f"`{param_type}`"
+                # Format the parameter docstring
+                if additional_info:
+                    docstring += set_min_indent(
+                        f"{param_name} ({param_type}{additional_info}):{description}",
+                        indent_level + 8,
+                    )
+                else:
+                    docstring += set_min_indent(
+                        f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
+                        indent_level + 8,
+                    )
+            else:
+                undocumented_parameters.append(
+                    f"[ERROR] `{param_name}` is part of {kwarg_param.annotation.__args__[0].__qualname__}, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
                 )
 
-                if is_documented:
-                    # Check if type is missing
-                    if param_type == "":
-                        print(
-                            f"[ERROR] {param_name} for {kwarg_param.annotation.__args__[0].__qualname__} in file {func.__code__.co_filename} has no type"
-                        )
-                    param_type = param_type if "`" in param_type else f"`{param_type}`"
-                    # Format the parameter docstring
-                    if additional_info:
-                        docstring += set_min_indent(
-                            f"{param_name} ({param_type}{additional_info}):{description}",
-                            indent_level + 8,
-                        )
-                    else:
-                        docstring += set_min_indent(
-                            f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
-                            indent_level + 8,
-                        )
-                else:
-                    undocumented_parameters.append(
-                        f"[ERROR] `{param_name}` is part of {kwarg_param.annotation.__args__[0].__qualname__}, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
-                    )
-
-            # Build **kwargs summary line (added after return_tensors in _process_parameters_section)
-            kwargs_annot_cls = kwarg_param.annotation.__args__[0]
-            kwargs_type_name = _get_base_kwargs_class(kwargs_annot_cls).__name__
-            kwargs_info = source_args_dict.get("__kwargs__", {})
-            kwargs_description = kwargs_info.get(
-                "description",
-                "Additional keyword arguments. Model-specific parameters are listed above.",
-            )
-            kwargs_summary = set_min_indent(
-                f"**kwargs ([`{kwargs_type_name}`], *optional*):{kwargs_description}",
-                indent_level + 8,
-            )
+        # Build **kwargs summary line (added after return_tensors in _process_parameters_section)
+        kwargs_annot_cls = kwarg_param.annotation.__args__[0]
+        kwargs_type_name = _get_base_kwargs_class(kwargs_annot_cls).__name__
+        kwargs_info = source_args_dict.get("__kwargs__", {})
+        kwargs_description = kwargs_info.get(
+            "description",
+            "Additional keyword arguments. Model-specific parameters are listed above.",
+        )
+        kwargs_summary = set_min_indent(
+            f"**kwargs ([`{kwargs_type_name}`], *optional*):{kwargs_description}",
+            indent_level + 8,
+        )
 
     return docstring, kwargs_summary
 
@@ -2375,8 +2432,8 @@ def _process_parameters_section(
         parent_class (`class`): Parent class of the function (if any)
         indent_level (`int`): Indentation level
     """
-    # Start Args section
-    docstring = set_min_indent("Args:\n", indent_level + 4)
+    # Start Args section — constant string, min_indent is always 0, so skip set_min_indent
+    docstring = " " * (indent_level + 4) + "Args:\n"
     undocumented_parameters = []
     documented_params = {}
     documented_kwargs = {}
@@ -2538,11 +2595,8 @@ def _process_returns_section(func_documentation, sig, config_class, indent_level
     return_docstring = ""
 
     # Extract returns section from existing docstring if available
-    if (
-        func_documentation is not None
-        and (match_start := re.search(r"(?m)^([ \t]*)(?=Return)", func_documentation)) is not None
-    ):
-        match_end = re.search(r"(?m)^([ \t]*)(?=Example)", func_documentation)
+    if func_documentation is not None and (match_start := _re_return.search(func_documentation)) is not None:
+        match_end = _re_example.search(func_documentation)
         if match_end:
             return_docstring = func_documentation[match_start.start() : match_end.start()]
             func_documentation = func_documentation[match_end.start() :]
@@ -2584,7 +2638,7 @@ def _process_example_section(
     example_docstring = ""
 
     # Use existing example section if available
-    if func_documentation is not None and (match := re.search(r"(?m)^([ \t]*)(?=Example)", func_documentation)):
+    if func_documentation is not None and (match := _re_example.search(func_documentation)):
         example_docstring = func_documentation[match.start() :]
         example_docstring = "\n" + set_min_indent(example_docstring, indent_level + 4)
     # Skip examples for processors
@@ -2593,8 +2647,10 @@ def _process_example_section(
         return example_docstring
     # No examples for __init__ methods or if the class is not a model
     elif parent_class is None and model_name_lowercase is not None:
-        task = rf"({'|'.join(PT_SAMPLE_DOCSTRINGS.keys())})"
-        model_task = re.search(task, class_name)
+        global _re_model_task
+        if _re_model_task is None:
+            _re_model_task = re.compile(rf"({'|'.join(PT_SAMPLE_DOCSTRINGS.keys())})")
+        model_task = _re_model_task.search(class_name)
         CONFIG_MAPPING = auto_module.configuration_auto.CONFIG_MAPPING
 
         # Get checkpoint example
