@@ -336,6 +336,19 @@ class TrainerCallbackTest(unittest.TestCase):
                     expected_events.append("on_log")
                 if trainer.args.eval_strategy == IntervalStrategy.STEPS and step % trainer.args.eval_steps == 0:
                     expected_events += evaluation_events.copy()
+                # End-of-training evaluation: triggers if step-based eval strategy and final step
+                # isn't already an eval step, and best model tracking is not enabled
+                eval_steps = trainer.args.eval_steps or trainer.args.logging_steps
+                if (
+                    step == trainer.state.max_steps
+                    and trainer.args.eval_strategy == IntervalStrategy.STEPS
+                    and trainer.args.do_eval
+                    and eval_steps is not None
+                    and step % eval_steps != 0
+                    and not trainer.args.load_best_model_at_end
+                    and trainer.args.metric_for_best_model is None
+                ):
+                    expected_events += evaluation_events.copy()
                 if step % trainer.args.save_steps == 0 or step == trainer.state.max_steps:
                     expected_events.append("on_save")
             expected_events.append("on_epoch_end")
