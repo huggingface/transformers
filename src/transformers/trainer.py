@@ -1760,8 +1760,13 @@ class Trainer:
 
                         # Gradient clipping
                         if args.max_grad_norm is not None and args.max_grad_norm > 0:
-                            if is_sagemaker_mp_enabled() and args.fp16:
-                                _grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
+                            if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+                                # In some cases the grad norm may not return a float
+                                grad_norm = model.get_global_grad_norm()
+                                if isinstance(grad_norm, torch.Tensor):
+                                    grad_norm = grad_norm.clone()
+                            elif is_sagemaker_mp_enabled() and args.fp16:
+                                grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
                             else:
                                 grad_norm_context = contextlib.nullcontext
                                 if self.is_tp_enabled:
@@ -1769,18 +1774,10 @@ class Trainer:
 
                                     grad_norm_context = implicit_replication
                                 with grad_norm_context():
-                                    _grad_norm = self.accelerator.clip_grad_norm_(
+                                    grad_norm = self.accelerator.clip_grad_norm_(
                                         model.parameters(),
                                         args.max_grad_norm,
                                     )
-
-                            if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
-                                grad_norm = model.get_global_grad_norm()
-                                # In some cases the grad norm may not return a float
-                                if hasattr(grad_norm, "item"):
-                                    grad_norm = grad_norm.item()
-                            else:
-                                grad_norm = _grad_norm
 
                         self.control = self.callback_handler.on_pre_optimizer_step(args, self.state, self.control)
 
