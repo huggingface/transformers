@@ -727,9 +727,7 @@ class Trainer:
                 )
             args["parallelism_config"] = self.args.parallelism_config
 
-        self.is_tp_enabled = False
         if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
-            self.is_tp_enabled = True
             if self.args.parallelism_config is None:
                 if is_accelerate_available("1.12.0"):
                     if self.args.parallelism_config is None:
