@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import types as types_module
 from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -2146,10 +2147,17 @@ def _get_base_kwargs_class(cls):
     Get the root/base TypedDict class by walking __orig_bases__.
     For model-specific kwargs like ComplexProcessingKwargs(ProcessingKwargs), returns ProcessingKwargs.
     For model-specific kwargs like DummyImageProcessorKwargs(ImagesKwargs), returns ImagesKwargs.
+
+    Uses types.get_original_bases() when available. Falls back to name-based heuristics for Python <3.12
+    where non-generic TypedDict subclasses don't have __orig_bases__ set.
     """
     current = cls
     while True:
-        bases = getattr(current, "__orig_bases__", ())
+        bases = (
+            types_module.get_original_bases(current)
+            if hasattr(types_module, "get_original_bases")
+            else getattr(current, "__orig_bases__", ())
+        )
         parent = None
         for base in bases:
             if isinstance(base, type) and base not in (dict, object):
@@ -2366,7 +2374,7 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
             "Additional keyword arguments. Model-specific parameters are listed above.",
         )
         kwargs_summary = set_min_indent(
-            f"**kwargs ([`{kwargs_type_name}`], *optional*):{kwargs_description}",
+            f"**kwargs ([`~{kwargs_type_name}`], *optional*):{kwargs_description}",
             indent_level + 8,
         )
 
@@ -2510,15 +2518,13 @@ def _prepare_return_docstring(output_type, config_class, add_intro=True):
         )
 
     # Build the return section
+    full_output_type, _ = process_type_annotation(output_type)
     if add_intro:
-        # Generate the intro with proper imports module path
-        full_output_type = f"{output_type.__module__}.{output_type.__name__}"
         # Import here to avoid circular import
         from .doc import PT_RETURN_INTRODUCTION
 
         intro = PT_RETURN_INTRODUCTION.format(full_output_type=full_output_type, config_class=config_class)
     else:
-        full_output_type = str(output_type)
         intro = f"Returns:\n    `{full_output_type}`"
         if documented_params:
             intro += ":\n"
