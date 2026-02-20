@@ -159,6 +159,12 @@ class QuantizationConfigMixin:
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
+    def to_diff_dict(self) -> dict[str, Any]:
+        """
+        Default behavior: no diffing implemented for this config.
+        """
+        return self.to_dict()
+
     def to_json_string(self, use_diff: bool = True) -> str:
         """
         Serializes this instance to a JSON string.
@@ -171,10 +177,7 @@ class QuantizationConfigMixin:
         Returns:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
         """
-        if use_diff is True:
-            config_dict = self.to_diff_dict()
-        else:
-            config_dict = self.to_dict()
+        config_dict = self.to_diff_dict() if use_diff else self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
     def update(self, **kwargs):
@@ -1255,7 +1258,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
     def is_quantization_compressed(self):
         from compressed_tensors.quantization import QuantizationStatus
 
-        return self.is_quantized and self.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
+        qc = self.quantization_config
+        return self.is_quantized and (qc is not None and qc.quantization_status == QuantizationStatus.COMPRESSED)
 
     @property
     def is_sparsification_compressed(self):
