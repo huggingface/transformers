@@ -33,7 +33,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
+from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling, resolve_internal_import
 from .configuration_mamba import MambaConfig
 
 
@@ -204,7 +204,9 @@ class MambaMixer(nn.Module):
 
         global mamba_ssm, selective_state_update, selective_scan_fn, mamba_inner_fn
         mamba_ssm = lazy_load_kernel("mamba-ssm")
-        selective_state_update = getattr(mamba_ssm, "selective_state_update", None)
+        selective_state_update = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
+        )
         selective_scan_fn = getattr(mamba_ssm, "selective_scan_fn", None)
         mamba_inner_fn = getattr(mamba_ssm, "mamba_inner_fn", None)
 
