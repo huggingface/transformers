@@ -22,11 +22,11 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_focalnet import FocalNetConfig
 
 
@@ -855,12 +855,11 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
     FocalNet backbone, to be used with frameworks like X-Decoder.
     """
 )
-class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
+class FocalNetBackbone(BackboneMixin, FocalNetPreTrainedModel):
     has_attentions = False
 
     def __init__(self, config: FocalNetConfig):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.embed_dim] + config.hidden_sizes
         self.focalnet = FocalNetModel(config)

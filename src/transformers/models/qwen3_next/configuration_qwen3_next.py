@@ -14,14 +14,14 @@
 """Qwen3-Next model configuration"""
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Qwen3NextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen3NextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3NextModel`]. It is used to instantiate a
     Qwen3-Next model according to the specified arguments, defining the model architecture.
@@ -136,9 +136,8 @@ class Qwen3NextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
-        "layers.*.mlp.experts.down_proj": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
         "layers.*.mlp.shared_expert.down_proj": "rowwise",

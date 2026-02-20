@@ -19,14 +19,14 @@
 """GraniteMoeShared model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class GraniteMoeSharedConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class GraniteMoeSharedConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteMoeSharedModel`]. It is used to instantiate an GraniteMoeShared
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

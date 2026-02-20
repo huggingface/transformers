@@ -2717,8 +2717,9 @@ Hey how are you doing"""  # noqa: W293
                         tokenizer_cached.all_special_tokens_extended,
                         tokenizer_local.all_special_tokens_extended,
                     )
-                except Exception as _:
-                    pass  # if the pretrained model is not loadable how could it pass locally :)
+                except Exception as e:
+                    # if the pretrained model is not loadable how could it pass locally :)
+                    print(f"Could not load pretrained tokenizer {pretrained_name}: {e}")
 
 
 @require_tokenizers
@@ -2823,5 +2824,6 @@ class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTest
                         tokenizer_cached.all_special_tokens_extended,
                         tokenizer_local.all_special_tokens_extended,
                     )
-                except Exception as _:
-                    pass  # if the pretrained model is not loadable how could it pass locally :)
+                except Exception as e:
+                    # if the pretrained model is not loadable how could it pass locally :)
+                    print(f"Could not load pretrained tokenizer: {e}")

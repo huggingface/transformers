@@ -14,7 +14,7 @@
 """AST-based checks for decorators that modify return types.
 
 This script ensures that functions decorated with `can_return_tuple` or
-`check_model_inputs`:
+`capture_outputs`:
 
 1. Have an explicit, non-`None` return annotation.
 2. Are not annotated with a union that already includes `tuple`.
@@ -42,7 +42,7 @@ from dataclasses import dataclass
 PATH_TO_TRANSFORMERS = "src/transformers/models"
 
 
-TARGET_DECORATORS = {"can_return_tuple", "check_model_inputs"}
+TARGET_DECORATORS = {"can_return_tuple", "capture_outputs"}
 
 
 @dataclass
@@ -74,7 +74,6 @@ def _decorator_name(node: ast.expr) -> str | None:
     - @can_return_tuple
     - @utils.can_return_tuple
     - @can_return_tuple(...)
-    - @utils.check_model_inputs(...)
     """
 
     target = node.func if isinstance(node, ast.Call) else node

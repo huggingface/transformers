@@ -12,10 +12,10 @@
 """OLMoE model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class OlmoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class OlmoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OlmoeModel`]. It is used to instantiate an OLMoE
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

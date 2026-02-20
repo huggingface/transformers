@@ -26,11 +26,11 @@ from ....transformers.models.dinov2.modeling_dinov2 import (
     Dinov2PreTrainedModel,
 )
 from ... import initialization as init
+from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging, torch_int
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -161,9 +161,7 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):
         self.use_swiglu_ffn = use_swiglu_ffn
         self.num_register_tokens = num_register_tokens
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
+        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
 
@@ -338,7 +336,6 @@ class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
 class Dinov2WithRegistersBackbone(Dinov2Backbone):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_register_tokens = config.num_register_tokens
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]

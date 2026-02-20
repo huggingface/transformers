@@ -19,10 +19,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class Exaone4Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Exaone4Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Exaone4Model`]. It is used to
     instantiate a EXAONE 4.0 model according to the specified arguments, defining the model architecture. Instantiating a
@@ -179,8 +179,6 @@ class Exaone4Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        if "sliding_window" in self.layer_types:
-            self.cache_implementation = "hybrid"
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters

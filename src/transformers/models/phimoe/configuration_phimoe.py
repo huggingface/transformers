@@ -15,14 +15,14 @@
 """PyTorch Phi-MoE model."""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PhimoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class PhimoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PhimoeModel`]. It is used to instantiate a Phi-moe
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

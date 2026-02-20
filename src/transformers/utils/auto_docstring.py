@@ -11,10 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
 
 import inspect
 import os
 import textwrap
+from collections.abc import Mapping
 from pathlib import Path
 from types import UnionType
 from typing import Union, get_args, get_origin
@@ -1456,7 +1458,7 @@ def generate_processor_intro(cls) -> str:
     return intro
 
 
-def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
+def get_placeholders_dict(placeholders: set[str], model_name: str) -> Mapping[str, str | None]:
     """
     Get the dictionary of placeholders for the given model name.
     """
@@ -1487,7 +1489,7 @@ def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
     return placeholders_dict
 
 
-def format_args_docstring(docstring, model_name):
+def format_args_docstring(docstring: str, model_name: str) -> str:
     """
     Replaces placeholders such as {image_processor_class} in the docstring with the actual values,
     deducted from the model name and the auto modules.
@@ -1502,10 +1504,7 @@ def format_args_docstring(docstring, model_name):
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
         if placeholder is not None:
-            try:
-                docstring = docstring.replace(f"{{{placeholder}}}", value)
-            except Exception:
-                pass
+            docstring = docstring.replace(f"{{{placeholder}}}", value)
     return docstring
 
 
@@ -1825,18 +1824,16 @@ def _is_processor_class(func, parent_class):
     # Single-modality processors are in "image_processing_*.py", "video_processing_*.py", etc.
     try:
         source_file = inspect.getsourcefile(func)
-        if source_file:
-            filename = os.path.basename(source_file)
-            # Check if it's a processing file (processing_*.py) but NOT a single-modality processor
-            # Single-modality processors: image_processing_*.py, video_processing_*.py, feature_extraction_*.py
-            if filename.startswith("processing_") and filename.endswith(".py"):
-                # This is a multimodal processor file
-                return True
-    except Exception:
-        pass
+    except TypeError:
+        return False
+    if not source_file:
+        return False
 
-    # Default to False (conservative approach)
-    return False
+    filename = os.path.basename(source_file)
+
+    # Multimodal processors are implemented in processing_*.py modules
+    # (single-modality processors use image_processing_*, video_processing_*, etc.)self.
+    return filename.startswith("processing_") and filename.endswith(".py")
 
 
 def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters):

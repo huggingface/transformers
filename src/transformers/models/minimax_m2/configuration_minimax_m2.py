@@ -20,10 +20,10 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class MiniMaxM2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class MiniMaxM2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MiniMaxM2Model`]. It is used to instantiate an
     MiniMaxM2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -116,9 +116,9 @@ class MiniMaxM2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers.*.self_attn.v_proj": "colwise_rep",
         "layers.*.self_attn.o_proj": "rowwise_rep",
         "layers.*.mlp.gate": "colwise_rep",  # we need to replicate here to correctly route experts
-        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
-        "layers.*.mlp.experts.down_proj": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

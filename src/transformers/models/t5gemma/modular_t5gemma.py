@@ -41,7 +41,8 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -291,30 +292,12 @@ class T5GemmaConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
         self.is_encoder_decoder = is_encoder_decoder
-        self.use_cache = kwargs.get("use_cache", decoder.use_cache)
         self.initializer_range = kwargs.get("initializer_range", decoder.initializer_range)
-        self.dropout_rate = dropout_rate
-        self.attention_dropout = attention_dropout
         self.classifier_dropout_rate = classifier_dropout_rate
         self.tie_word_embeddings = tie_word_embeddings
 
         # Used in pipeline generation.
         self.vocab_size = vocab_size
-
-    def __setattr__(self, key, value):
-        shared_attr_with_submodules = [
-            "output_hidden_states",
-            "output_attentions",
-            "_attn_implementation",
-            "dropout_rate",
-            "attention_dropout",
-            "vocab_size",
-        ]
-
-        if key in shared_attr_with_submodules:
-            setattr(self.encoder, key, value)
-            setattr(self.decoder, key, value)
-        super().__setattr__(key, value)
 
 
 class T5GemmaRMSNorm(Gemma2RMSNorm):
@@ -393,9 +376,9 @@ class T5GemmaCrossAttention(Gemma2Attention):
             key_states = curr_past_key_values.layers[self.layer_idx].keys
             value_states = curr_past_key_values.layers[self.layer_idx].values
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -693,7 +676,8 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -722,7 +706,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": None,
@@ -787,7 +771,8 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -828,7 +813,7 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
@@ -842,7 +827,7 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
         if not isinstance(cross_attn_mask_mapping := encoder_attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": encoder_hidden_states,
+                "inputs_embeds": encoder_hidden_states,
                 "attention_mask": encoder_attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": None,
@@ -1002,7 +987,7 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
 
 class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.out_proj.weight": "model.decoder.embed_tokens.weight"}
-    _tp_plan = {"lm_head.out_proj": "colwise_rep"}
+    _tp_plan = {"lm_head.out_proj": "colwise_gather_output"}
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: T5GemmaConfig):

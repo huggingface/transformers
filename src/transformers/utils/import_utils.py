@@ -104,7 +104,7 @@ VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.9.0"
+KERNELS_MIN_VERSION = "0.10.2"
 
 
 @lru_cache
@@ -112,9 +112,9 @@ def is_torch_available() -> bool:
     try:
         is_available, torch_version = _is_package_available("torch", return_version=True)
         parsed_version = version.parse(torch_version)
-        if is_available and parsed_version < version.parse("2.2.0"):
-            logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.2 is required but found {torch_version}")
-        return is_available and version.parse(torch_version) >= version.parse("2.2.0")
+        if is_available and parsed_version < version.parse("2.4.0"):
+            logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.4 is required but found {torch_version}")
+        return is_available and version.parse(torch_version) >= version.parse("2.4.0")
     except packaging.version.InvalidVersion:
         return False
 
@@ -210,12 +210,11 @@ def is_torch_mps_available(min_version: str | None = None) -> bool:
     if is_torch_available():
         import torch
 
-        if hasattr(torch.backends, "mps"):
-            backend_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
-            if min_version is not None:
-                flag = version.parse(get_torch_version()) >= version.parse(min_version)
-                backend_available = backend_available and flag
-            return backend_available
+        backend_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
+        if min_version is not None:
+            flag = version.parse(get_torch_version()) >= version.parse(min_version)
+            backend_available = backend_available and flag
+        return backend_available
     return False
 
 
@@ -241,25 +240,21 @@ def is_torch_npu_available(check_device=False) -> bool:
 @lru_cache
 def is_torch_xpu_available(check_device: bool = False) -> bool:
     """
-    Checks if XPU acceleration is available either via native PyTorch (>=2.6),
-    `intel_extension_for_pytorch` or via stock PyTorch (>=2.4) and potentially
-    if a XPU is in the environment.
+    Checks if XPU acceleration is available via stock PyTorch (>=2.6) and
+    potentially if a XPU is in the environment.
     """
     if not is_torch_available():
         return False
 
     torch_version = version.parse(get_torch_version())
     if torch_version.major == 2 and torch_version.minor < 6:
-        if is_ipex_available():
-            import intel_extension_for_pytorch  # noqa: F401
-        elif torch_version.major == 2 and torch_version.minor < 4:
-            return False
+        return False
 
     import torch
 
     if check_device:
         try:
-            # Will raise a RuntimeError if no XPU  is found
+            # Will raise a RuntimeError if no XPU is found
             _ = torch.xpu.device_count()
             return torch.xpu.is_available()
         except RuntimeError:
@@ -849,29 +844,6 @@ def is_ninja_available() -> bool:
 
 
 @lru_cache
-def is_ipex_available(min_version: str = "") -> bool:
-    def get_major_and_minor_from_version(full_version):
-        return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
-
-    ipex_available, ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
-
-    if not is_torch_available() or not ipex_available:
-        return False
-
-    torch_major_and_minor = get_major_and_minor_from_version(get_torch_version())
-    ipex_major_and_minor = get_major_and_minor_from_version(ipex_version)
-    if torch_major_and_minor != ipex_major_and_minor:
-        logger.warning_once(
-            f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
-            f" but PyTorch {get_torch_version()} is found. Please switch to the matching version and run again."
-        )
-        return False
-    if min_version:
-        return version.parse(ipex_version) >= version.parse(min_version)
-    return True
-
-
-@lru_cache
 def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bool:
     is_available, bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
     return is_available and version.parse(bitsandbytes_version) >= version.parse(min_version)
@@ -1040,6 +1012,11 @@ def is_compressed_tensors_available() -> bool:
 
 
 @lru_cache
+def is_sinq_available() -> bool:
+    return _is_package_available("sinq")
+
+
+@lru_cache
 def is_gptqmodel_available() -> bool:
     return _is_package_available("gptqmodel")
 
@@ -1159,11 +1136,6 @@ def is_phonemizer_available() -> bool:
 @lru_cache
 def is_uroman_available() -> bool:
     return _is_package_available("uroman")
-
-
-@lru_cache
-def is_ccl_available() -> bool:
-    return _is_package_available("torch_ccl") or _is_package_available("oneccl_bindings_for_pytorch")
 
 
 @lru_cache
@@ -1295,12 +1267,7 @@ def is_torchdynamo_compiling() -> bool:
 
         return torch.compiler.is_compiling()
     except Exception:
-        try:
-            import torch._dynamo as dynamo
-
-            return dynamo.is_compiling()
-        except Exception:
-            return False
+        return False
 
 
 def is_torchdynamo_exporting() -> bool:
@@ -1775,13 +1742,6 @@ runtime after installation.
 """
 
 # docstyle-ignore
-CCL_IMPORT_ERROR = """
-{0} requires the torch ccl library but it was not found in your environment. You can install it with pip:
-`pip install oneccl_bind_pt -f https://developer.intel.com/ipex-whl-stable`
-Please note that you may need to restart your runtime after installation.
-"""
-
-# docstyle-ignore
 ESSENTIA_IMPORT_ERROR = """
 {0} requires essentia library. But that was not found in your environment. You can install them with pip:
 `pip install essentia==2.1b6.dev1034`
@@ -1869,7 +1829,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
-        ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("rjieba", (is_rjieba_available, RJIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
@@ -2136,18 +2095,22 @@ class _LazyModule(ModuleType):
                                                 module = importlib.import_module(module_path)
                                                 base_tokenizer_class = getattr(module, candidate_name)
                                             except Exception:
-                                                pass
+                                                logger.debug(f"{module_path} does not have {candidate_name} defined.")
 
                                         # Fallback: try via _class_to_module
                                         if base_tokenizer_class is None and candidate_name in self._class_to_module:
                                             try:
-                                                alias_module = self._get_module(self._class_to_module[candidate_name])
+                                                alias_module_name = self._class_to_module[candidate_name]
+                                                alias_module = self._get_module(alias_module_name)
                                                 base_tokenizer_class = getattr(alias_module, candidate_name)
                                             except Exception:
-                                                continue
+                                                logger.debug(
+                                                    f"{alias_module_name} does not have {candidate_name} defined"
+                                                )
 
                                         # If we still don't have base_tokenizer_class, skip this candidate
                                         if base_tokenizer_class is None:
+                                            logger.debug(f"skipping candidate {candidate_name}")
                                             continue
 
                                         # If we got here, we have base_tokenizer_class
@@ -2158,8 +2121,8 @@ class _LazyModule(ModuleType):
                                             setattr(self, lookup_name, value)
                                         setattr(self, name, value)
                                         break
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.debug(f"Could not create tokenizer alias: {e}")
 
                         if value is None:
                             raise ModuleNotFoundError(
@@ -2189,8 +2152,8 @@ class _LazyModule(ModuleType):
                         setattr(self, fallback_name, value)
                         setattr(self, name, value)
                         return value
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Could not load fallback {fallback_name}: {e}")
             # V5: If a tokenizer class doesn't exist, check if it should alias to another tokenizer
             # via the converter mapping (e.g., FNetTokenizer -> AlbertTokenizer via AlbertConverter)
             value = None

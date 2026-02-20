@@ -19,7 +19,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
 class GlmOcrVisionConfig(PreTrainedConfig):
@@ -107,7 +107,7 @@ class GlmOcrVisionConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class GlmOcrTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class GlmOcrTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GlmOcrTextConfig`]. It is used to instantiate a
     GLM-OCR model according to the specified arguments, defining the model architecture. Instantiating a
@@ -178,8 +178,8 @@ class GlmOcrTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_up_proj": "colwise_rep",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "rowwise_rep",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.gate_up_proj": "colwise_gather_output",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.down_proj": "rowwise_split_input",  # input is replicated due to the `chunk` operation
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

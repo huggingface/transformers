@@ -22,7 +22,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     auto_docstring,
 )
-from ...utils.generic import TransformersKwargs, check_model_inputs
+from ...utils.generic import TransformersKwargs, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..sam2.configuration_sam2 import Sam2Config, Sam2MaskDecoderConfig, Sam2PromptEncoderConfig
 from ..sam2.modeling_sam2 import (
@@ -140,6 +141,62 @@ class EdgeTamMaskDecoderConfig(Sam2MaskDecoderConfig):
 
 
 class EdgeTamConfig(Sam2Config):
+    r"""
+    [`EdgeTamConfig`] is the configuration class to store the configuration of a [`EdgeTamModel`]. It is used to instantiate a
+    EDGETAM model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
+    configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
+    [facebook/edgetam.1-hiera-tiny](https://huggingface.co/facebook/edgetam.1-hiera-tiny) architecture.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    <Tip>
+
+    EdgeTAM checkpoints with `model_type="edgetam_video"` are compatible with `EdgeTamModel` since the video variant
+    weights are a superset of the image-only model weights. You may see a warning about model type mismatch when
+    loading such checkpoints, which can be safely ignored in this case.
+
+    </Tip>
+
+    Args:
+        vision_config (Union[`dict`, `EdgeTamVisionConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`EdgeTamVisionConfig`].
+        prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`EdgeTamPromptEncoderConfig`].
+        mask_decoder_config (Union[`dict`, `EdgeTamMaskDecoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`EdgeTamMaskDecoderConfig`].
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            Standard deviation for parameter initialization.
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     EdgeTamVisionConfig,
+    ...     EdgeTamPromptEncoderConfig,
+    ...     EdgeTamMaskDecoderConfig,
+    ...     EdgeTamModel,
+    ... )
+
+    >>> # Initializing a EdgeTamConfig with `"facebook/edgetam.1_hiera_tiny"` style configuration
+    >>> configuration = EdgeTamConfig()
+
+    >>> # Initializing a EdgeTamModel (with random weights) from the `"facebook/edgetam.1_hiera_tiny"` style configuration
+    >>> model = EdgeTamModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+
+    >>> # We can also initialize a EdgeTamConfig from a EdgeTamVisionConfig, EdgeTamPromptEncoderConfig, and EdgeTamMaskDecoderConfig
+    >>> # Initializing EDGETAM vision encoder, memory attention, and memory encoder configurations
+    >>> vision_config = EdgeTamVisionConfig()
+    >>> prompt_encoder_config = EdgeTamPromptEncoderConfig()
+    >>> mask_decoder_config = EdgeTamMaskDecoderConfig()
+
+    >>> config = EdgeTamConfig(vision_config, prompt_encoder_config, mask_decoder_config)
+    ```
+    """
+
     pass
 
 
@@ -165,6 +222,8 @@ class EdgeTamFeedForward(Sam2FeedForward):
 
 @auto_docstring
 class EdgeTamPreTrainedModel(Sam2PreTrainedModel):
+    _keys_to_ignore_on_load_unexpected = None
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -190,7 +249,8 @@ class EdgeTamVisionModel(Sam2VisionModel):
     def get_input_embeddings(self):
         raise NotImplementedError("Can't get input embeddings from timm wrapper model")
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,

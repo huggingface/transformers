@@ -28,7 +28,7 @@ from ...generation.logits_process import (
     BarkEosPrioritizerLogitsProcessor,
     SuppressTokensLogitsProcessor,
 )
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
@@ -39,7 +39,7 @@ from ...utils import (
     is_torch_accelerator_available,
     logging,
 )
-from ...utils.generic import is_flash_attention_requested
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -393,32 +393,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, new_embeddings):
         self.input_embeds_layer = new_embeddings
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        attention_mask=None,
-        input_embeds=None,
-        past_key_values=None,
-        position_ids=None,
-        use_cache=None,
-        cache_position=None,
-        **kwargs,
-    ):
-        # Overwritten -- bark uses `input_embeds` not `inputS_embeds`
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            attention_mask=attention_mask,
-            inputs_embeds=input_embeds,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            **kwargs,
-        )
-        model_inputs["input_embeds"] = model_inputs.pop("inputs_embeds", None)
-        return model_inputs
-
+    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     @auto_docstring
     def forward(
         self,
@@ -427,7 +402,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
-        input_embeds: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -435,13 +410,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | CausalLMOutputWithPast:
-        r"""
-        input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            Here, due to `Bark` particularities, if `past_key_values` is used, `input_embeds` will be ignored and you
-            have to use `input_ids`. If `past_key_values` is not used and `use_cache` is set to `True`, `input_embeds`
-            is used in priority instead of `input_ids`.
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -455,23 +423,22 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
                 "Training is not implemented yet for Bark - ensure you do not pass `labels` to the model."
             )
 
-        # Verify if input_embeds already exists
+        # Verify if inputs_embeds already exists
         # then compute embeddings.
-        if input_ids is not None and input_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
-        elif input_embeds is not None and past_key_values is None:
-            # we want to return the input_embeds in priority so that it is in line with a weird hack
-            # of Bark which concatenate two bits of the input_embeds on the first forward pass of the semantic model
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif inputs_embeds is not None and past_key_values is None:
+            # we want to return the inputs_embeds in priority so that it is in line with a weird hack
+            # of Bark which concatenate two bits of the inputs_embeds on the first forward pass of the semantic model
             pass
         elif input_ids is not None:
-            input_embeds = self.input_embeds_layer(input_ids)  # token embeddings of shape (b, t, n_embd)
-        elif input_embeds is not None:
+            inputs_embeds = self.input_embeds_layer(input_ids)  # token embeddings of shape (b, t, n_embd)
+        elif inputs_embeds is not None:
             pass
         else:
-            raise ValueError("You have to specify either input_ids or input_embeds")
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        input_shape = input_embeds.size()[:-1]
-        batch_size = input_embeds.shape[0]
+        input_shape = inputs_embeds.size()[:-1]
         seq_length = input_shape[-1]
 
         if self.gradient_checkpointing and self.training:
@@ -485,7 +452,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             past_key_values = DynamicCache(config=self.config)
 
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        input_embeds = input_embeds.to(self.position_embeds_layer.weight.device)
+        inputs_embeds = inputs_embeds.to(self.position_embeds_layer.weight.device)
 
         if position_ids is None:
             position_ids = torch.arange(
@@ -499,20 +466,13 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         position_ids = position_ids.to(self.position_embeds_layer.weight.device)
         position_embeds = self.position_embeds_layer(position_ids)  # position embeddings of shape (1, t, n_embd)
 
-        # Attention mask.
-        if attention_mask is not None:
-            if batch_size <= 0:
-                raise ValueError("batch_size has to be defined and > 0")
-            if is_flash_attention_requested(self.config):
-                attention_mask = attention_mask if 0 in attention_mask else None
-            else:
-                attention_mask = attention_mask.view(batch_size, -1)
-                # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
-                # from_seq_length is 1 to easily broadcast
-                attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
-                attention_mask = attention_mask.to(input_embeds.device)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+        )
 
-        hidden_states = self.drop(input_embeds + position_embeds)
+        hidden_states = self.drop(inputs_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)
 
         all_self_attentions = () if output_attentions else None
@@ -621,9 +581,12 @@ class BarkSemanticModel(BarkCausalModel):
                 mode="constant",
             )
         else:
-            semantic_history = torch.tensor(
-                [semantic_generation_config.semantic_pad_token] * max_input_semantic_length, dtype=torch.int
-            ).to(self.device)
+            semantic_history = torch.full(
+                (max_input_semantic_length,),
+                semantic_generation_config.semantic_pad_token,
+                device=self.device,
+                dtype=torch.int,
+            )
 
         semantic_history = torch.repeat_interleave(semantic_history[None], batch_size, dim=0)
 
@@ -631,7 +594,7 @@ class BarkSemanticModel(BarkCausalModel):
             [[semantic_generation_config.semantic_infer_token]] * batch_size, dtype=torch.int
         ).to(self.device)
 
-        input_embeds = torch.cat(
+        inputs_embeds = torch.cat(
             [
                 self.input_embeds_layer(input_ids[:, :max_input_semantic_length])
                 + self.input_embeds_layer(semantic_history[:, : max_input_semantic_length + 1]),
@@ -658,7 +621,7 @@ class BarkSemanticModel(BarkCausalModel):
         # (except to get the input seq_len - that's why we keep the first 257 tokens)
         semantic_output = super().generate(
             torch.ones((batch_size, max_input_semantic_length + 1), dtype=torch.int, device=self.device),
-            input_embeds=input_embeds,
+            inputs_embeds=inputs_embeds,
             logits_processor=[suppress_tokens_logits_processor, early_stopping_logits_processor],
             generation_config=semantic_generation_config,
             **kwargs,
@@ -1030,6 +993,7 @@ class BarkFineModel(BarkPreTrainedModel):
 
         return model_embeds
 
+    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     @auto_docstring
     def forward(
         self,
@@ -1038,7 +1002,7 @@ class BarkFineModel(BarkPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
-        input_embeds: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -1049,11 +1013,6 @@ class BarkFineModel(BarkPreTrainedModel):
             Index of the codebook that will be predicted.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             NOT IMPLEMENTED YET.
-        input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. If
-            `past_key_values` is used, optionally only the last `input_embeds` have to be input (see
-            `past_key_values`). This is useful if you want more control over how to convert `input_ids` indices into
-            associated vectors than the model's internal embedding lookup matrix.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1068,29 +1027,28 @@ class BarkFineModel(BarkPreTrainedModel):
         if codebook_idx == 0:
             raise ValueError("Cannot predict 0th codebook - 0th codebook should be predicted by the coarse model")
 
-        if input_ids is not None and input_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and input_embeds at the same time")
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
 
-        if input_ids is None and input_embeds is None:
-            raise ValueError("You have to specify either input_ids or input_embeds")
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if input_ids is not None:
             # the input_embeddings are the sum of the j previous codebooks embeddings before
             # the current codebook_idx codebook
 
             # forward the GPT model itself
-            input_embeds = [
+            inputs_embeds = [
                 input_embeds_layer(input_ids[:, :, i]).unsqueeze(-1)
                 for i, input_embeds_layer in enumerate(self.input_embeds_layers)
             ]  # token embeddings of shape (b, t, n_embd)
-            input_embeds = torch.cat(input_embeds, dim=-1)
-            input_embeds = input_embeds[:, :, :, : codebook_idx + 1].sum(dim=-1)
+            inputs_embeds = torch.cat(inputs_embeds, dim=-1)
+            inputs_embeds = inputs_embeds[:, :, :, : codebook_idx + 1].sum(dim=-1)
 
-        input_shape = input_embeds.size()[:-1]
-        batch_size = input_embeds.shape[0]
+        input_shape = inputs_embeds.size()[:-1]
         seq_length = input_shape[1]
 
-        input_embeds = input_embeds.to(self.position_embeds_layer.weight.device)
+        inputs_embeds = inputs_embeds.to(self.position_embeds_layer.weight.device)
 
         if position_ids is None:
             position_ids = torch.arange(
@@ -1101,19 +1059,13 @@ class BarkFineModel(BarkPreTrainedModel):
         position_ids = position_ids.to(self.position_embeds_layer.weight.device)
         position_embeds = self.position_embeds_layer(position_ids)  # position embeddings of shape (1, t, n_embd)
 
-        # Attention mask.
-        if attention_mask is not None:
-            if batch_size <= 0:
-                raise ValueError("batch_size has to be defined and > 0")
-            if is_flash_attention_requested(self.config):
-                attention_mask = attention_mask if 0 in attention_mask else None
-            else:
-                # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
-                # from_seq_length is 1 to easily broadcast
-                attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
-                attention_mask = attention_mask.to(input_embeds.device)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+        )
 
-        hidden_states = self.drop(input_embeds + position_embeds)
+        hidden_states = self.drop(inputs_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)
 
         all_self_attentions = () if output_attentions else None

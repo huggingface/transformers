@@ -11,7 +11,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import is_grouped_mm_available, logging
+from ...utils import logging
 from ...utils.generic import is_flash_attention_requested
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -264,9 +264,9 @@ class DeepseekV3Attention(nn.Module):
         if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -304,10 +304,8 @@ class DeepseekV3DecoderLayer(LlamaDecoderLayer):
 
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
-    _can_compile_fullgraph = (
-        is_grouped_mm_available()
-    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -321,7 +319,7 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
 
 
 class DeepseekV3Model(LlamaModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
+    pass
 
 
 class DeepseekV3ForCausalLM(LlamaForCausalLM):

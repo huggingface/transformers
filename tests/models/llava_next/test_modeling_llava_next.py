@@ -203,6 +203,7 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     # Llava-NeXT merges batch_size and num_patches in the first output dimension
     skip_test_image_features_output_shape = True
     _is_composite = True
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = LlavaNextVisionText2TextModelTester(self)

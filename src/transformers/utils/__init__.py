@@ -31,7 +31,6 @@ from .auto_docstring import (
     parse_docstring,
     set_min_indent,
 )
-from .backbone_utils import BackboneConfigMixin, BackboneMixin
 from .chat_template_utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from .doc import (
@@ -118,7 +117,6 @@ from .import_utils import (
     is_av_available,
     is_bitsandbytes_available,
     is_bs4_available,
-    is_ccl_available,
     is_coloredlogs_available,
     is_compressed_tensors_available,
     is_cuda_platform,
@@ -150,7 +148,6 @@ from .import_utils import (
     is_hqq_available,
     is_huggingface_hub_greater_or_equal,
     is_in_notebook,
-    is_ipex_available,
     is_jinja_available,
     is_jmespath_available,
     is_jumanpp_available,
@@ -199,6 +196,7 @@ from .import_utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
+    is_sinq_available,
     is_sklearn_available,
     is_soundfile_available,
     is_spacy_available,

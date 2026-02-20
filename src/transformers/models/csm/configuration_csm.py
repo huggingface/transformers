@@ -14,7 +14,7 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -22,7 +22,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class CsmDepthDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class CsmDepthDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CsmDepthDecoderModel`]. It is used to instantiate an CSM depth decoder
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
@@ -101,6 +101,9 @@ class CsmDepthDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     model_type = "csm_depth_decoder_model"
     base_config_key = "depth_decoder_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "codebook_size": "vocab_size",
+    }
     default_theta = 500000.0
 
     def __init__(
@@ -160,7 +163,7 @@ class CsmDepthDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         super().__init__(**kwargs)
 
 
-class CsmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class CsmConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CsmForConditionalGeneration`]. It is used to instantiate an CSM
     model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -257,6 +260,9 @@ class CsmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     sub_configs = {
         "codec_config": AutoConfig,
         "depth_decoder_config": CsmDepthDecoderConfig,
+    }
+    attribute_map = {
+        "codebook_size": "vocab_size",
     }
 
     def __init__(

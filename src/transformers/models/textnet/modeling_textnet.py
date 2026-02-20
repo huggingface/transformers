@@ -19,19 +19,17 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from transformers import PreTrainedModel
-from transformers.activations import ACT2CLS
-from transformers.modeling_outputs import (
+from ...activations import ACT2CLS
+from ...backbone_utils import BackboneMixin
+from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from transformers.models.textnet.configuration_textnet import TextNetConfig
-from transformers.utils import logging
-from transformers.utils.backbone_utils import BackboneMixin
-
-from ...utils import auto_docstring
+from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring, logging
+from .configuration_textnet import TextNetConfig
 
 
 logger = logging.get_logger(__name__)
@@ -344,12 +342,11 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
     TextNet backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
+class TextNetBackbone(BackboneMixin, TextNetPreTrainedModel):
     has_attentions = False
 
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.textnet = TextNetModel(config)
         self.num_features = config.hidden_sizes

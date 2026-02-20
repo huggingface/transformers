@@ -6,7 +6,6 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
 from ..clip.configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from ..clip.modeling_clip import (
     CLIPMLP,
@@ -277,7 +276,6 @@ class MetaClip2PreTrainedModel(CLIPPreTrainedModel):
 
 
 class MetaClip2TextTransformer(CLIPTextTransformer):
-    @auto_docstring
     def forward(
         self,
         input_ids,
@@ -292,7 +290,7 @@ class MetaClip2TextTransformer(CLIPTextTransformer):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             cache_position=torch.arange(hidden_states.shape[1], device=hidden_states.device),
             past_key_values=None,
@@ -354,8 +352,6 @@ class MetaClip2TextModel(CLIPTextModel):
     >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
     ```"""
 
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -417,8 +413,6 @@ class MetaClip2TextModelWithProjection(CLIPTextModelWithProjection):
     >>> text_embeds = outputs.text_embeds
     ```"""
 
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -510,8 +504,6 @@ class MetaClip2Model(CLIPModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -663,8 +655,6 @@ class MetaClip2VisionModel(CLIPVisionModel):
     >>> pooled_output = outputs.pooler_output  # pooled CLS states
     ```"""
 
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -738,8 +728,6 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
     >>> image_embeds = outputs.image_embeds
     ```"""
 
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,

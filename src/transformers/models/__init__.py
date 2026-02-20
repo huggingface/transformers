@@ -122,6 +122,7 @@ if TYPE_CHECKING:
     from .encodec import *
     from .encoder_decoder import *
     from .eomt import *
+    from .eomt_dinov3 import *
     from .ernie import *
     from .ernie4_5 import *
     from .ernie4_5_moe import *
@@ -129,6 +130,7 @@ if TYPE_CHECKING:
     from .esm import *
     from .evolla import *
     from .exaone4 import *
+    from .exaone_moe import *
     from .falcon import *
     from .falcon_h1 import *
     from .falcon_mamba import *
@@ -156,6 +158,7 @@ if TYPE_CHECKING:
     from .glm4v_moe import *
     from .glm46v import *
     from .glm_image import *
+    from .glm_moe_dsa import *
     from .glm_ocr import *
     from .glmasr import *
     from .glpn import *
@@ -179,6 +182,8 @@ if TYPE_CHECKING:
     from .herbert import *
     from .hgnet_v2 import *
     from .hiera import *
+    from .higgs_audio_v2 import *
+    from .higgs_audio_v2_tokenizer import *
     from .hubert import *
     from .hunyuan_v1_dense import *
     from .hunyuan_v1_moe import *
@@ -256,6 +261,7 @@ if TYPE_CHECKING:
     from .modernbert import *
     from .modernbert_decoder import *
     from .moonshine import *
+    from .moonshine_streaming import *
     from .moshi import *
     from .mpnet import *
     from .mpt import *
@@ -318,6 +324,8 @@ if TYPE_CHECKING:
     from .qwen2_moe import *
     from .qwen2_vl import *
     from .qwen3 import *
+    from .qwen3_5 import *
+    from .qwen3_5_moe import *
     from .qwen3_moe import *
     from .qwen3_next import *
     from .qwen3_omni_moe import *
@@ -410,6 +418,7 @@ if TYPE_CHECKING:
     from .vivit import *
     from .vjepa2 import *
     from .voxtral import *
+    from .voxtral_realtime import *
     from .wav2vec2 import *
     from .wav2vec2_bert import *
     from .wav2vec2_conformer import *

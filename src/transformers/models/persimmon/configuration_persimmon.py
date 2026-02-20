@@ -14,14 +14,14 @@
 """Persimmon model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PersimmonConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class PersimmonConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PersimmonModel`]. It is used to instantiate an
     Persimmon model according to the specified arguments, defining the model architecture. Instantiating a

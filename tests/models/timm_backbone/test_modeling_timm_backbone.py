@@ -43,7 +43,6 @@ class TimmBackboneModelTester:
         image_size=32,
         num_channels=3,
         is_training=True,
-        use_pretrained_backbone=True,
     ):
         self.parent = parent
         self.out_indices = out_indices if out_indices is not None else [4]
@@ -53,7 +52,6 @@ class TimmBackboneModelTester:
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
-        self.use_pretrained_backbone = use_pretrained_backbone
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -69,7 +67,6 @@ class TimmBackboneModelTester:
             out_features=self.out_features,
             out_indices=self.out_indices,
             stage_names=self.stage_names,
-            use_pretrained_backbone=self.use_pretrained_backbone,
             backbone=self.backbone,
         )
 
@@ -252,7 +249,9 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
 
             # Check output of last stage is taken if out_features=None, out_indices=None
             modified_config = copy.deepcopy(config)
+            modified_config.stage_names = None
             modified_config.out_indices = None
+            modified_config.out_features = None
             model = model_class(modified_config)
             model.to(torch_device)
             model.eval()
@@ -260,11 +259,3 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
 
             self.assertEqual(len(result.feature_maps), 1)
             self.assertEqual(len(model.channels), 1)
-
-            # Check backbone can be initialized with fresh weights
-            modified_config = copy.deepcopy(config)
-            modified_config.use_pretrained_backbone = False
-            model = model_class(modified_config)
-            model.to(torch_device)
-            model.eval()
-            result = model(**inputs_dict)

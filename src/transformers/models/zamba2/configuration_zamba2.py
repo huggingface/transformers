@@ -15,10 +15,10 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class Zamba2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Zamba2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Zamba2Model`]. It is used to instantiate a
     Zamba2 model according to the specified arguments, defining the model architecture. Instantiating a configuration

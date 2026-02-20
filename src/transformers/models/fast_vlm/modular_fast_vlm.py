@@ -21,7 +21,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ..auto import CONFIG_MAPPING
 from ..llava.configuration_llava import LlavaConfig
 from ..llava.modeling_llava import (
@@ -180,7 +180,8 @@ class FastVlmModel(LlavaModel):
     def __init__(self, config: FastVlmConfig):
         super().__init__(config)
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
+    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -211,7 +212,7 @@ class FastVlmModel(LlavaModel):
 
         return image_outputs
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -282,7 +283,7 @@ class FastVlmCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

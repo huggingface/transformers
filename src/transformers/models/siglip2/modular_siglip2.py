@@ -35,10 +35,16 @@ from transformers.models.siglip.modeling_siglip import (
     SiglipVisionTransformer,
 )
 
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs, is_flash_attention_requested
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+)
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 
 
 class Siglip2Tokenizer(GemmaTokenizer):
@@ -225,7 +231,10 @@ class Siglip2VisionEmbeddings(nn.Module):
 
         for i in range(batch_size):
             # (1, dim, height, width) -> (1, dim, target_height, target_width)
-            height, width = spatial_shapes[i]
+            height, width = spatial_shapes[i].tolist()  # will be itemized in F.interpolate either way
+            torch_compilable_check((width > 0), "Width of resized positional embeddings must be positive.")
+            torch_compilable_check((height > 0), "Height of resized positional embeddings must be positive.")
+            torch_compilable_check((height * width) <= max_length, "Resized positional embeddings exceed max_length.")
             resized_embeddings = F.interpolate(
                 positional_embeddings,
                 size=(height, width),
@@ -272,7 +281,9 @@ class Siglip2VisionEmbeddings(nn.Module):
 
 
 class Siglip2PreTrainedModel(SiglipPreTrainedModel):
-    pass
+    # nn.MultiHeadAttention mask doesn't allow for non 4d mask
+    _supports_flex_attn = False
+    _supports_flash_attn = False
 
 
 class Siglip2VisionTransformer(SiglipVisionTransformer):
@@ -300,11 +311,11 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
 
         hidden_states = self.embeddings(pixel_values, spatial_shapes)
 
-        if attention_mask is not None and not is_flash_attention_requested(self.config):
-            # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
-        else:
-            encoder_attention_mask = attention_mask
+        encoder_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
@@ -333,6 +344,8 @@ class Siglip2TextModel(SiglipTextModel):
 class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
+
+        self.config = config
         self.num_heads = config.num_attention_heads
 
     def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
@@ -341,9 +354,23 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
 
         if attention_mask is not None:
             target_len, source_len = probe.shape[1], hidden_state.shape[1]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_state.dtype, target_len)
-            attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
-            attention_mask = attention_mask.reshape(-1, target_len, source_len)
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=probe,
+                attention_mask=attention_mask,
+                encoder_hidden_states=hidden_state,
+            )
+            if attention_mask is not None:
+                attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
+                attention_mask = attention_mask.reshape(-1, target_len, source_len)
+
+                # `nn.MultiheadAttention` cannot handle boolean masks (which SDPA can)
+                if attention_mask.dtype == torch.bool:
+                    attention_mask = torch.where(
+                        attention_mask,
+                        torch.tensor(0.0, device=attention_mask.device, dtype=probe.dtype),
+                        torch.finfo(probe.dtype).min,
+                    )
 
         hidden_state = self.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[0]
 
@@ -356,7 +383,8 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
 
 class Siglip2VisionModel(SiglipVisionModel):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,

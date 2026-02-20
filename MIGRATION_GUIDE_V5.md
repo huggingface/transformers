@@ -285,6 +285,7 @@ tokenizer.extra_special_tokens  # Additional tokens
 
 - `special_tokens_map_extended` and `all_special_tokens_extended`: Removed. Access `AddedToken` objects directly from `_special_tokens_map` or `_extra_special_tokens` if needed.
 - `additional_special_tokens`: Automatically converted to `extra_special_tokens` during initialization.
+- `additional_special_tokens_ids`: Removed. Use `extra_special_tokens_ids` instead.
 - `extra_special_tokens`: Only accepts list/tuple format and is intended for use during tokenizer initialization. For model-specific named tokens (e.g., `image_token`), pass directly as keyword arguments instead.
 
 **Deprecated Methods:**

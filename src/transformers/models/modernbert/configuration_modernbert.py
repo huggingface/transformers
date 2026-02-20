@@ -22,14 +22,14 @@
 from typing import Literal
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class ModernBertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertModel`]. It is used to instantiate an ModernBert
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -155,7 +155,7 @@ class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         max_position_embeddings: int | None = 8192,
         initializer_range: float | None = 0.02,
         initializer_cutoff_factor: float | None = 2.0,
-        norm_eps: int | None = 1e-5,
+        norm_eps: float | None = 1e-5,
         norm_bias: bool | None = False,
         pad_token_id: int | None = 50283,
         eos_token_id: int | None = 50282,

@@ -298,7 +298,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-4B", device_map="auto", dtype=torch.bfloat16)
         inputs = tokenizer(["Here's everything I know about cats. Cats"], return_tensors="pt").to(model.device)
 
-        set_seed(0)
+        set_seed(42)
         gen_out = model.generate(
             **inputs, do_sample=True, top_k=5, max_new_tokens=256, return_dict_in_generate=True, output_scores=True
         )
@@ -348,21 +348,21 @@ class CacheHardIntegrationTest(unittest.TestCase):
         ).to(model.device)
         generation_kwargs = {"do_sample": False, "max_new_tokens": 10, "return_dict_in_generate": True}
 
-        set_seed(0)
+        set_seed(42)
         gen_out = model.generate(**inputs, **generation_kwargs)
         decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, dynamic"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
 
-        set_seed(0)
+        set_seed(42)
         gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static", disable_compile=True)
         decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, eager"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
 
-        set_seed(0)
+        set_seed(42)
         gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static")
         decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, compiled"):
@@ -686,10 +686,8 @@ class CacheExportIntegrationTest(unittest.TestCase):
         """
         Tests that static cache works with `torch.export()`
         """
-        if not is_torch_greater_or_equal("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
-        set_seed(0)
+        set_seed(42)
         device = torch_device
         dtype = "bfloat16"
         cache_implementation = "static"
@@ -770,7 +768,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
 
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
-        set_seed(0)
+        set_seed(42)
         model_id = "hf-internal-testing/tiny-random-Gemma3ForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id)
         model.eval()

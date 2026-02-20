@@ -22,7 +22,7 @@ from collections.abc import Sequence
 from typing import Any, Literal
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import is_timm_available, logging, requires_backends
 
 
@@ -33,7 +33,7 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 
-class Gemma3nTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Gemma3nTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3nTextModel`]. It is used to instantiate an
     Gemma3nTextModel model according to the specified arguments, defining the model architecture. Instantiating a
@@ -642,8 +642,6 @@ class Gemma3nConfig(PreTrainedConfig):
         tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if isinstance(text_config, dict):
             text_config = Gemma3nTextConfig(**text_config)
         elif text_config is None:
@@ -676,6 +674,7 @@ class Gemma3nConfig(PreTrainedConfig):
         self.audio_token_id = audio_token_id
         self.initializer_range = initializer_range
         self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Gemma3nAudioConfig", "Gemma3nConfig", "Gemma3nTextConfig", "Gemma3nVisionConfig"]

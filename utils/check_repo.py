@@ -72,6 +72,8 @@ PRIVATE_MODELS = [
     "Qwen2_5_VisionTransformerPretrainedModel",
     "Qwen3VLVisionModel",
     "Qwen3VLMoeVisionModel",
+    "Qwen3_5VisionModel",
+    "Qwen3_5MoeVisionModel",
     "SwitchTransformersStack",
     "SiglipTextTransformer",
     "Siglip2TextTransformer",
@@ -110,6 +112,24 @@ PRIVATE_MODELS = [
     "PeAudioPreTrainedModel",
     "PeAudioVideoPreTrainedModel",
     "PeVideoPreTrainedModel",
+    # the following models should have been PreTrainedModels
+    "Owlv2TextTransformer",
+    "Owlv2VisionTransformer",
+    "OwlViTTextTransformer",
+    "OwlViTVisionTransformer",
+    "XCLIPTextTransformer",
+    "CLIPSegTextTransformer",
+    "DetrDecoder",
+    "GroupViTTextTransformer",
+    "CLIPTextTransformer",
+    "CLIPVisionTransformer",
+    "MetaClip2TextTransformer",
+    "MetaClip2VisionTransformer",
+    "MLCDVisionTransformer",
+    # end of should have beens
+    "VoxtralRealtimeTextModel",
+    "VoxtralRealtimeTextForCausalLM",
+    "VoxtralRealtimeTextPreTrainedModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -171,6 +191,8 @@ IGNORE_NON_TESTED = (
         "Qwen3VLMoeModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLMoeForConditionalGeneration.
         "Qwen3VLTextModel",  # Building part of bigger (tested) model.
         "Qwen3VLMoeTextModel",  # Building part of bigger (tested) model.
+        "Qwen3_5TextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3_5ForConditionalGeneration.
+        "Qwen3_5MoeTextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3_5MoeForConditionalGeneration.
         "Qwen2_5OmniForConditionalGeneration",  # Not a regular model. Testted in Qwen2_5OmniModelIntergrationTest
         "Qwen2_5OmniTalkerForConditionalGeneration",  #  Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
         "Qwen2_5OmniTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
@@ -212,6 +234,7 @@ IGNORE_NON_TESTED = (
         "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
+        "HiggsAudioV2Model",  # Building part of bigger (tested) model. Tested implicitly through HiggsAudioV2ForConditionalGenerationIntegrationTest.
         "Ernie4_5_VL_MoeTextModel",  # Building part of bigger (tested) model
         "PeAudioFrameLevelModel",
         "PeAudioVideoModel",
@@ -418,6 +441,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CsmForConditionalGeneration",  # Building part of a bigger model
     "BltPatcher",  # Building part of a bigger model, tested implicitly through BltForCausalLM
     "Florence2VisionBackbone",  # Building part of a bigger model
+    "HiggsAudioV2Model",  # Building part of a bigger model
     "Qwen3OmniMoeCode2Wav",  # Building part of a bigger model
     "Qwen3OmniMoeCode2WavTransformerModel",  # Building part of a bigger model
     "Qwen3OmniMoeTalkerCodePredictorModel",  # Building part of a bigger model

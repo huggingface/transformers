@@ -32,6 +32,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    require_deterministic_for_xpu,
     require_flash_attn,
     require_kernels,
     require_torch,
@@ -51,7 +52,12 @@ if is_torch_available():
         GptOssModel,
     )
 
-    NUM_GPUS = torch.cuda.device_count()
+    if torch.cuda.is_available():
+        NUM_GPUS = torch.cuda.device_count()
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+        NUM_GPUS = torch.xpu.device_count()
+    else:
+        NUM_GPUS = 0
 
 
 class GptOssModelTester(CausalLMModelTester):
@@ -96,6 +102,33 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
             config._attn_implementation = "flash_attention_2"
 
+    @require_kernels
+    @pytest.mark.flash_attn_test
+    @require_torch_gpu
+    def test_default_flash_implementation_auto_correction(self):
+        """
+        Tests that setting attn_implementation="flash_attention_2" during model initialization
+        automatically corrects to the model's _default_flash_implementation.
+        """
+        from kernels import get_kernel
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        expected_kernel = "kernels-community/vllm-flash-attn3"
+        flash = get_kernel(expected_kernel)
+        if flash is None:
+            self.skipTest(f"{expected_kernel} is not available, skipping auto-correction test.")
+        # Set flash_attention_2 in config before model init - should get auto-corrected
+        config._attn_implementation_internal = "flash_attention_2"
+        model = GptOssModel(config).to(device=torch_device, dtype=torch.bfloat16)
+
+        # Verify it was auto-corrected to the model's default flash implementation
+        self.assertEqual(model.config._attn_implementation, expected_kernel)
+
+        # Verify model still works
+        with torch.no_grad():
+            output = model(**inputs_dict)
+        self.assertIsNotNone(output)
+
     @unittest.skip("GptOss's forcefully disables sdpa due to Sink")
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
@@ -139,7 +172,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
 
     def generate_config_key(quantized, model, kernels, attn_impl, mode):
         """Generate a key for the restructured integration test results."""
-        return f"quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
+        return f"device={torch_device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
     input_text = [
         "Roses are red, violets",
@@ -227,7 +260,7 @@ class GptOssIntegrationTest(unittest.TestCase):
     @staticmethod
     def generate_config_key(quantized, model, kernels, attn_impl, mode):
         """Generate a key for the restructured integration test results."""
-        return f"quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
+        return f"device={torch_device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -345,7 +378,11 @@ if __name__ == "__main__":
     # Non-distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
+    @require_deterministic_for_xpu
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
+        if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
+            self.skipTest("flash attention 3 is not supported on XPU yet.")
+
         model_id = f"openai/gpt-oss-{model}"
         output_texts = self.load_and_forward(
             model_id,
@@ -408,6 +445,9 @@ if __name__ == "__main__":
     # ------------------------
     @parameterized.expand(PARAMETERS)
     def test_model_outputs_distributed(self, quantized, model, kernels, attn_impl, mode):
+        if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
+            self.skipTest("flash attention 3 is not supported on XPU yet.")
+
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
 
     # ------------------------

@@ -32,6 +32,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
@@ -81,6 +82,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "ModernBertDecoderConfig": ["global_attn_every_n_layers", "local_attention", "local_rope_theta"],
     "SmolLM3Config": ["no_rope_layer_interval"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],
+    "HiggsAudioV2Config": ["audio_bos_token", "audio_stream_bos_id", "audio_stream_eos_id"],
+    "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
     "SeamlessM4TConfig": True,
@@ -165,7 +168,7 @@ ATTRIBUTES_TO_ALLOW = (
     "pretraining_tp",
     "use_sliding_window",
     "max_window_layers",
-    # vision attributes that may be used indirectly via check_model_inputs
+    # vision attributes that may be used indirectly via merge_with_config_defaults
     "vision_feature_layer",
     "vision_feature_select_strategy",
     "vision_aspect_ratio",

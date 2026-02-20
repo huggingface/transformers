@@ -275,7 +275,7 @@ def _compute_yarn_parameters(
             *   rope_parameters (`dict[str, float | int]`): The standard RoPE scaling parameters, from which the following
                 keys will be accessed:
                 *   `attention_factor` (`float`, *optional*): The scaling factor to be applied to the computed cos/sin.
-                    If None, the value is inferred from `factor`, `mscale`, and `mscale_all_dim` as avaialble.
+                    If None, the value is inferred from `factor`, `mscale`, and `mscale_all_dim` as available.
                 *   `beta_fast` (`float`, *optional*, defaults to 32): Parameter to set the boundary for extrapolation
                     (only) in the linear ramp function.
                 *   `beta_slow` (`float`, *optional*, defaults to 1): Parameter to set the boundary for interpolation
@@ -634,12 +634,21 @@ class RotaryEmbeddingConfigMixin:
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
 
-        # Standardize and validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
+        # Standardize and validate the correctness of rotary position embeddings parameters. Priority for these parameters is:
+        # 1. Values in `rope_parameters` dict (where they should be after standardization)
+        # 2. Values in `kwargs` (i.e. it's in config.json but not MyConfig.__init__'s args)
+        # 3. Values in the config's attributes (i.e. it's in MyConfig.__init__'s args)
+        # 4. Default values (i.e. not present at all but other RoPE parameters are present)
+        rope_theta = kwargs.pop("rope_theta", getattr(self, "rope_theta", self.default_theta))
+        self.rope_parameters.setdefault("rope_theta", rope_theta)
 
-        if "partial_rotary_factor" in kwargs:
-            self.rope_parameters.setdefault("partial_rotary_factor", kwargs["partial_rotary_factor"])
-            ignore_keys_at_rope_validation = {"partial_rotary_factor"}
+        partial_rotary_factor = kwargs.get("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
+        if partial_rotary_factor is not None:
+            self.rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
+            ignore_keys_at_rope_validation = (
+                set() if ignore_keys_at_rope_validation is None else ignore_keys_at_rope_validation
+            )
+            ignore_keys_at_rope_validation = ignore_keys_at_rope_validation | {"partial_rotary_factor"}
 
         self.standardize_rope_params()
         self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)

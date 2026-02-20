@@ -14,10 +14,10 @@
 """openai model configuration"""
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class GptOssConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class GptOssConfig(PreTrainedConfig):
     r"""
     This will yield a configuration to that of the BERT
     [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.
@@ -36,13 +36,13 @@ class GptOssConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.self_attn.sinks": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.self_attn.sinks": "colwise",
         "layers.*.mlp.router": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
 
     def __init__(

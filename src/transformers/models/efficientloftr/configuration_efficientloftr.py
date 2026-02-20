@@ -13,10 +13,9 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 
 
-class EfficientLoFTRConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class EfficientLoFTRConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EfficientLoFTRFromKeypointMatching`].
     It is used to instantiate a EfficientLoFTR model according to the specified arguments, defining the model

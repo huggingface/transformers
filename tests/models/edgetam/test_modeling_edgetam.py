@@ -148,7 +148,7 @@ class EdgeTamModelTester:
         fpn_hidden_size=32,
         memory_encoder_hidden_size=32,
         batch_size=2,
-        is_training=False,
+        is_training=True,
     ):
         self.parent = parent
         self.image_size = image_size
@@ -354,6 +354,10 @@ class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @unittest.skip("Cannot set `output_attentions` for timm models.")
     def test_generate_compilation_all_outputs(self):
+        pass
+
+    @unittest.skip("Cannot set `output_attentions` for timm models.")
+    def test_capture_outputs_decorator(self):
         pass
 
     @slow

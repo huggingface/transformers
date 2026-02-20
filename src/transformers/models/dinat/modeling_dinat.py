@@ -20,6 +20,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -30,7 +31,6 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_dinat import DinatConfig
 
 
@@ -710,10 +710,9 @@ class DinatForImageClassification(DinatPreTrainedModel):
     NAT backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
+class DinatBackbone(BackboneMixin, DinatPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         requires_backends(self, ["natten"])
 
@@ -723,7 +722,7 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
-        for stage, num_channels in zip(self._out_features, self.channels):
+        for stage, num_channels in zip(self.out_features, self.channels):
             hidden_states_norms[stage] = nn.LayerNorm(num_channels)
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
 
