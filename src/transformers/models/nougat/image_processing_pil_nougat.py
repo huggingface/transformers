@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,21 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for Nougat."""
+"""Image processor class for Nougat."""
 
-from typing import Optional
+import numpy as np
 
-import torch
-import torchvision.transforms.v2.functional as tvF
-
+from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    group_images_by_shape,
-    reorder_images,
-)
 from ...image_transforms import (
     get_resize_output_image_size,
+    pad,
+    to_channel_dimension_format,
+    to_pil_image,
 )
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -34,29 +30,36 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
+    get_image_size,
 )
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
+    is_torchvision_available,
 )
+
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
+
 from .image_processing_nougat import NougatImageProcessorKwargs
 
 
 @auto_docstring
-class NougatImageProcessorFast(BaseImageProcessorFast):
+class NougatImageProcessorPil(PilBackend):
+    valid_kwargs = NougatImageProcessorKwargs
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
     size = {"height": 896, "width": 672}
-    do_resize: bool = (True,)
-    do_normalize: bool = True
-    do_thumbnail: bool = True
-    do_align_long_axis: bool = False
-    do_pad: bool = True
+    do_resize = True
+    do_normalize = True
+    do_thumbnail = True
+    do_align_long_axis = False
+    do_pad = True
     do_rescale = True
-    do_crop_margin: bool = True
-    valid_kwargs = NougatImageProcessorKwargs
+    do_crop_margin = True
 
     def __init__(self, **kwargs: Unpack[NougatImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -65,23 +68,17 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
     def preprocess(self, images: ImageInput, **kwargs: Unpack[NougatImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
-    def python_find_non_zero(
-        self,
-        image: "torch.Tensor",
-    ):
+    def python_find_non_zero(self, image: np.ndarray):
         """This is a reimplementation of a findNonZero function equivalent to cv2."""
-
-        non_zero_indices = torch.nonzero(image, as_tuple=False)
-        idxvec = non_zero_indices[:, [2, 1]]
+        non_zero_indices = np.column_stack(np.nonzero(image))
+        idxvec = non_zero_indices[:, [1, 0]]
         idxvec = idxvec.reshape(-1, 1, 2)
         return idxvec
 
     def python_bounding_rect(self, coordinates):
         """This is a reimplementation of a BoundingRect function equivalent to cv2."""
-
-        min_values = torch.amin(coordinates, axis=(0, 1)).to(torch.int)
-        max_values = torch.amax(coordinates, axis=(0, 1)).to(torch.int)
-
+        min_values = np.min(coordinates, axis=(0, 1)).astype(int)
+        max_values = np.max(coordinates, axis=(0, 1)).astype(int)
         x_min, y_min = min_values[0], min_values[1]
         width = max_values[0] - x_min + 1
         height = max_values[1] - y_min + 1
@@ -89,77 +86,77 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
 
     def crop_margin(
         self,
-        image: "torch.Tensor",
+        image: np.ndarray,
         gray_threshold: int = 200,
-    ) -> "torch.Tensor":
+    ) -> np.ndarray:
         """
         Crops the margin of the image. Gray pixels are considered margin (i.e., pixels with a value below the
         threshold).
 
         Args:
-            image (`torch.Tensor`):
+            image (`np.ndarray`):
                 The image to be cropped.
             gray_threshold (`int`, *optional*, defaults to `200`)
                 Value below which pixels are considered to be gray.
         """
-        data = tvF.rgb_to_grayscale(image, num_output_channels=1)
-
-        max_val = torch.max(data)
-        min_val = torch.min(data)
-
+        image_pil = to_pil_image(image, input_data_format=ChannelDimension.FIRST)
+        data = np.array(image_pil.convert("L")).astype(np.uint8)
+        max_val = data.max()
+        min_val = data.min()
         if max_val == min_val:
             return image
         data = (data - min_val) / (max_val - min_val) * 255
         gray = data < gray_threshold
         coords = self.python_find_non_zero(gray)
         x_min, y_min, width, height = self.python_bounding_rect(coords)
-        image = image[:, y_min : y_min + height, x_min : x_min + width]
-
+        image_pil = image_pil.crop((x_min, y_min, x_min + width, y_min + height))
+        image = np.array(image_pil).astype(np.uint8)
+        image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_channel_dim=ChannelDimension.LAST)
         return image
 
     def align_long_axis(
         self,
-        image: "torch.Tensor",
+        image: np.ndarray,
         size: SizeDict,
-    ) -> "torch.Tensor":
+    ) -> np.ndarray:
         """
         Align the long axis of the image to the longest axis of the specified size.
 
         Args:
-            image (`torch.Tensor`):
+            image (`np.ndarray`):
                 The image to be aligned.
-            size (`Dict[str, int]`):
-                The size `{"height": h, "width": w}` to align the long axis to.
+            size (`SizeDict`):
+                The size to align the long axis to.
         Returns:
-            `torch.Tensor`: The aligned image.
+            `np.ndarray`: The aligned image.
         """
-        input_height, input_width = image.shape[-2:]
+        input_height, input_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
         output_height, output_width = size.height, size.width
 
         if (output_width < output_height and input_width > input_height) or (
             output_width > output_height and input_width < input_height
         ):
-            image = torch.rot90(image, 3, dims=[1, 2])
+            image = np.rot90(image, 3, axes=(1, 2))
 
         return image
 
     def thumbnail(
         self,
-        image: "torch.Tensor",
+        image: np.ndarray,
         size: SizeDict,
-    ) -> "torch.Tensor":
+    ) -> np.ndarray:
         """
         Resize the image to make a thumbnail. The image is resized so that no dimension is larger than any
         corresponding dimension of the specified size.
 
         Args:
-            image (`torch.tensor`):
+            image (`np.ndarray`):
                 The image to be resized.
-            size (`Dict[str, int]`):
-                The size `{"height": h, "width": w}` to resize the image to.
+            size (`SizeDict`):
+                The size to resize the image to.
         """
 
-        input_height, input_width = image.shape[-2:]
+        input_height, input_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
         output_height, output_width = size.height, size.width
 
         # We always resize to the smallest of either the input or output size.
@@ -174,25 +171,28 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
         elif input_width > input_height:
             height = int(input_height * width / input_width)
 
-        new_size = (height, width)
-
-        return tvF.resize(image, new_size, interpolation=tvF.InterpolationMode.BICUBIC)
+        # Use np_resize for exact dimensions; self.resize uses shortest-edge logic and would produce
+        # different output due to rounding in get_resize_output_image_size.
+        return super().resize(
+            image, SizeDict(height=height, width=width), resample=PILImageResampling.BICUBIC, reducing_gap=2.0
+        )
 
     def pad_images(
         self,
-        image: "torch.Tensor",
+        image: np.ndarray,
         size: SizeDict,
-    ) -> "torch.Tensor":
+    ) -> np.ndarray:
         """
         Pads a batch of images to the specified size at the top, bottom, left and right.
 
         Args:
-            image (`torch.tensor`):
+            image (`np.ndarray`):
                 The image to be padded.
-            size (`Dict[str, int]`):
-                The size `{"height": h, "width": w}` to pad the image to.
+            size (`SizeDict`):
+                The size to pad the image to.
         """
-        input_height, input_width = image.shape[-2:]
+
+        input_height, input_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
         output_height, output_width = size.height, size.width
 
         delta_width = output_width - input_width
@@ -204,93 +204,81 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
         pad_bottom = delta_height - pad_top
         pad_right = delta_width - pad_left
 
-        padding = (pad_left, pad_top, pad_right, pad_bottom)
-        return tvF.pad(image, padding)
+        padding = ((pad_top, pad_bottom), (pad_left, pad_right))
+        return pad(image, padding, input_data_format=ChannelDimension.FIRST, data_format=ChannelDimension.FIRST)
 
     def resize(
         self,
-        image: "torch.Tensor",
+        image: np.ndarray,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"] = None,
-        antialias: bool = True,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        reducing_gap: int | None = None,
         **kwargs,
-    ) -> "torch.Tensor":
+    ) -> np.ndarray:
         """
-        Resize an image to `(size["height"], size["width"])`.
+        Resize an image to `(size.height, size.width)`.
 
         Args:
-            image (`torch.Tensor`):
+            image (`np.ndarray`):
                 Image to resize.
             size (`SizeDict`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BICUBIC`):
-                `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
-
+                Size of the output image.
+            resample (`PILImageResampling | tvF.InterpolationMode | int`, *optional*):
+                Resampling filter to use when resizing the image.
         Returns:
-            `torch.Tensor`: The resized image.
+            `np.ndarray`: The resized image.
         """
-        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BICUBIC
 
-        shortest_edge = min(size["height"], size["width"])
+        shortest_edge = min(size.height, size.width)
 
         new_size = get_resize_output_image_size(
             image, size=shortest_edge, default_to_square=False, input_data_format=ChannelDimension.FIRST
         )
-        return tvF.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+        return super().resize(
+            image,
+            SizeDict(height=new_size[0], width=new_size[1]),
+            resample=resample,
+            reducing_gap=reducing_gap,
+            **kwargs,
+        )
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        do_align_long_axis: bool,
-        do_thumbnail: bool,
-        do_pad: bool,
-        interpolation: Optional["tvF.InterpolationMode"],
-        do_center_crop: bool,
-        crop_size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        do_crop_margin: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
-        disable_grouping: bool,
         return_tensors: str | TensorType | None,
+        do_align_long_axis: bool = False,
+        do_thumbnail: bool = True,
+        do_crop_margin: bool = True,
+        do_pad: bool | None = None,
         **kwargs,
     ) -> BatchFeature:
-        # Crop images
-        images = [self.crop_margin(image) for image in images]
-
-        # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        processed_images = []
+        for image in images:
+            if do_crop_margin:
+                image = self.crop_margin(image)
             if do_align_long_axis:
-                stacked_images = self.align_long_axis(image=stacked_images, size=size)
+                image = self.align_long_axis(image, size)
             if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size)
+                image = self.resize(image, size, resample)
             if do_thumbnail:
-                stacked_images = self.thumbnail(image=stacked_images, size=size)
+                image = self.thumbnail(image, size)
             if do_pad:
-                stacked_images = self.pad_images(image=stacked_images, size=size)
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-
-        # Group images by size for further processing
-        # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            processed_images_grouped[shape] = stacked_images
-
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+                image = self.pad_images(image, size)
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+            processed_images.append(image)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
-__all__ = ["NougatImageProcessorFast"]
+__all__ = ["NougatImageProcessorPil"]

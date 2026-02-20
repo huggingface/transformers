@@ -508,6 +508,7 @@ class PilBackend(BaseImageProcessor):
         image: np.ndarray,
         size: SizeDict,
         resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None = None,
+        reducing_gap: int | None = None,
         **kwargs,
     ) -> np.ndarray:
         """Resize an image using PIL/NumPy."""
@@ -548,6 +549,7 @@ class PilBackend(BaseImageProcessor):
             image,
             size=new_size,
             resample=resample,
+            reducing_gap=reducing_gap,
             data_format=ChannelDimension.FIRST,
             input_data_format=ChannelDimension.FIRST,
         )

@@ -11,21 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for OneFormer."""
+"""Image processor class for OneFormer."""
 
-from typing import Optional, Union
+import numpy as np
 
-import torch
-import torchvision.transforms.v2.functional as tvF
-from torch import nn
-
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    BatchFeature,
-    get_max_height_width,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_backends import PilBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import PaddingMode
+from ...image_transforms import pad as np_pad
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -33,273 +26,59 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
+    get_image_size,
+    get_max_height_width,
 )
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
+    is_torch_available,
+    is_torchvision_available,
     logging,
 )
-from .image_processing_oneformer import OneFormerImageProcessorKwargs, load_metadata, prepare_metadata
+
+
+if is_torch_available():
+    import torch
+    from torch import nn
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
+
+from .image_processing_oneformer import (
+    OneFormerImageProcessorKwargs,
+    compute_segments,
+    convert_segmentation_to_rle,
+    load_metadata,
+    prepare_metadata,
+    remove_low_and_no_objects,
+)
 
 
 logger = logging.get_logger(__name__)
 
 
-def make_pixel_mask(image: "torch.Tensor", output_size: tuple[int, int]) -> "torch.Tensor":
+def make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
 
     Args:
-        image (`torch.Tensor`):
+        image (`np.ndarray`):
             Image to make the pixel mask for.
         output_size (`Tuple[int, int]`):
             Output size of the mask.
     """
+    from ...image_utils import ChannelDimension
 
-    input_height, input_width = image.shape[-2], image.shape[-1]
-    mask = torch.zeros(output_size, dtype=torch.int64)
+    input_height, input_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+    mask = np.zeros(output_size, dtype=np.int64)
     mask[:input_height, :input_width] = 1
     return mask
 
 
-def binary_mask_to_rle(mask):
-    """
-    Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
-
-    Args:
-        mask (`torch.Tensor` or `numpy.array`):
-            A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
-            segment_id or class_id.
-    Returns:
-        `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
-        format.
-    """
-    pixels = mask.flatten()
-    pixels = torch.concat([[0], pixels, [0]])
-    runs = torch.where(pixels[1:] != pixels[:-1])[0] + 1
-    runs[1::2] -= runs[::2]
-    return list(runs)
-
-
-def convert_segmentation_to_rle(segmentation):
-    """
-    Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
-
-    Args:
-        segmentation (`torch.Tensor` or `numpy.array`):
-            A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
-    Returns:
-        `List[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
-    """
-    segment_ids = torch.unique(segmentation)
-
-    run_length_encodings = []
-    for idx in segment_ids:
-        mask = torch.where(segmentation == idx, 1, 0)
-        rle = binary_mask_to_rle(mask)
-        run_length_encodings.append(rle)
-
-    return run_length_encodings
-
-
-def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
-    """
-    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
-    `labels`.
-
-    Args:
-        masks (`torch.Tensor`):
-            A tensor of shape `(num_queries, height, width)`.
-        scores (`torch.Tensor`):
-            A tensor of shape `(num_queries)`.
-        labels (`torch.Tensor`):
-            A tensor of shape `(num_queries)`.
-        object_mask_threshold (`float`):
-            A number between 0 and 1 used to binarize the masks.
-    Raises:
-        `ValueError`: Raised when the first dimension doesn't match in all input tensors.
-    Returns:
-        `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
-        < `object_mask_threshold`.
-    """
-    if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
-        raise ValueError("mask, scores and labels must have the same shape!")
-
-    to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
-
-    return masks[to_keep], scores[to_keep], labels[to_keep]
-
-
-def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
-    # Get the mask associated with the k class
-    mask_k = mask_labels == k
-    mask_k_area = mask_k.sum()
-
-    # Compute the area of all the stuff in query k
-    original_area = (mask_probs[k] >= mask_threshold).sum()
-    mask_exists = mask_k_area > 0 and original_area > 0
-
-    # Eliminate disconnected tiny segments
-    if mask_exists:
-        area_ratio = mask_k_area / original_area
-        if not area_ratio.item() > overlap_mask_area_threshold:
-            mask_exists = False
-
-    return mask_exists, mask_k
-
-
-def compute_segments(
-    mask_probs,
-    pred_scores,
-    pred_labels,
-    mask_threshold: float = 0.5,
-    overlap_mask_area_threshold: float = 0.8,
-    label_ids_to_fuse: set[int] | None = None,
-    target_size: tuple[int, int] | None = None,
-):
-    height = mask_probs.shape[1] if target_size is None else target_size[0]
-    width = mask_probs.shape[2] if target_size is None else target_size[1]
-
-    segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
-    segments: list[dict] = []
-
-    if target_size is not None:
-        mask_probs = tvF.resize(
-            mask_probs.unsqueeze(0),
-            size=target_size,
-            interpolation=tvF.InterpolationMode.BILINEAR,
-        )[0]
-
-    current_segment_id = 0
-
-    mask_probs *= pred_scores.view(-1, 1, 1)
-    mask_labels = mask_probs.argmax(0)  # [height, width]
-
-    stuff_memory_list: dict[str, int] = {}
-    for k in range(pred_labels.shape[0]):
-        pred_class = pred_labels[k].item()
-        should_fuse = pred_class in label_ids_to_fuse
-
-        mask_exists, mask_k = check_segment_validity(
-            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
-        )
-
-        if mask_exists:
-            if pred_class in stuff_memory_list:
-                current_segment_id = stuff_memory_list[pred_class]
-            else:
-                current_segment_id += 1
-
-            segmentation[mask_k] = current_segment_id
-            segment_score = round(pred_scores[k].item(), 6)
-            segments.append(
-                {
-                    "id": current_segment_id,
-                    "label_id": pred_class,
-                    "was_fused": should_fuse,
-                    "score": segment_score,
-                }
-            )
-            if should_fuse:
-                stuff_memory_list[pred_class] = current_segment_id
-
-    return segmentation, segments
-
-
-def convert_segmentation_map_to_binary_masks_fast(
-    segmentation_map: "torch.Tensor",
-    instance_id_to_semantic_id: dict[int, int] | None = None,
-    ignore_index: int | None = None,
-    do_reduce_labels: bool = False,
-):
-    if do_reduce_labels and ignore_index is None:
-        raise ValueError("If `do_reduce_labels` is True, `ignore_index` must be provided.")
-
-    if do_reduce_labels:
-        segmentation_map = torch.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
-
-    all_labels = torch.unique(segmentation_map)
-
-    if ignore_index is not None:
-        all_labels = all_labels[all_labels != ignore_index]
-
-    binary_masks = [(segmentation_map == i) for i in all_labels]
-
-    if binary_masks:
-        binary_masks = torch.stack(binary_masks, dim=0)
-    else:
-        binary_masks = torch.zeros((0, *segmentation_map.shape), device=segmentation_map.device)
-
-    # Convert instance ids to class ids
-    if instance_id_to_semantic_id is not None:
-        labels = torch.zeros(all_labels.shape[0], device=segmentation_map.device)
-
-        for i, label in enumerate(all_labels):
-            class_id = instance_id_to_semantic_id[(label.item() + 1 if do_reduce_labels else label.item())]
-            labels[i] = class_id - 1 if do_reduce_labels else class_id
-    else:
-        labels = all_labels
-
-    return (
-        binary_masks.float(),
-        labels.long(),
-    )
-
-
-def get_oneformer_resize_output_image_size(
-    image: "torch.Tensor",
-    size: int | tuple[int, int] | list[int] | tuple[int],
-    max_size: int | None = None,
-    default_to_square: bool = True,
-) -> tuple:
-    """
-    Computes the output size given the desired size.
-
-    Args:
-        image (`torch.Tensor`):
-            The input image.
-        size (`int` or `Tuple[int, int]` or `List[int]` or `Tuple[int]`):
-            The size of the output image.
-        max_size (`int`, *optional*):
-            The maximum size of the output image.
-        default_to_square (`bool`, *optional*, defaults to `True`):
-            Whether to default to square if no size is provided.
-    Returns:
-        `Tuple[int, int]`: The output size.
-    """
-    if isinstance(size, (tuple, list)):
-        if len(size) == 2:
-            return tuple(size)
-        elif len(size) == 1:
-            # Perform same logic as if size was an int
-            size = size[0]
-        else:
-            raise ValueError("size must have 1 or 2 elements if it is a list or tuple")
-
-    if default_to_square:
-        return (size, size)
-
-    height, width = image.shape[-2], image.shape[-1]
-    short, long = (width, height) if width <= height else (height, width)
-    requested_new_short = size
-
-    new_short, new_long = requested_new_short, int(requested_new_short * long / short)
-
-    if max_size is not None:
-        if max_size <= requested_new_short:
-            raise ValueError(
-                f"max_size = {max_size} must be strictly greater than the requested "
-                f"size for the smaller edge size = {size}"
-            )
-        if new_long > max_size:
-            new_short, new_long = int(max_size * new_short / new_long), max_size
-
-    return (new_long, new_short) if width <= height else (new_short, new_long)
-
-
 @auto_docstring
-class OneFormerImageProcessorFast(BaseImageProcessorFast):
+class OneFormerImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -343,13 +122,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         instance_id_to_semantic_id (`Union[list[dict[int, int]], dict[int, int]]`, *optional*):
             A mapping from instance IDs to semantic IDs.
         """
-        return super().preprocess(
-            images,
-            task_inputs,
-            segmentation_maps,
-            instance_id_to_semantic_id,
-            **kwargs,
-        )
+        return super().preprocess(images, task_inputs, segmentation_maps, instance_id_to_semantic_id, **kwargs)
 
     def _preprocess_image_like_inputs(
         self,
@@ -359,7 +132,6 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[OneFormerImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -369,7 +141,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         """
         # Prepare input images
         images = self._prepare_image_like_inputs(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format
         )
         if segmentation_maps is not None:
             segmentation_maps = self._prepare_image_like_inputs(
@@ -382,13 +154,13 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         task_inputs: list[str] | None,
-        segmentation_maps: list["torch.Tensor"],
+        segmentation_maps: list[np.ndarray],
         instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -396,40 +168,31 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         image_std: float | list[float] | None,
         ignore_index: int | None,
         do_reduce_labels: bool | None,
-        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-
-        processed_images_grouped = {}
-
-        for shape, stacked_images in grouped_images.items():
-            if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
-            stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            processed_images_grouped[shape] = stacked_images
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-
+        # Process images one by one (no batching in PIL backend)
+        processed_images = []
         processed_segmentation_maps = None
         if segmentation_maps is not None:
-            grouped_segmentation_maps, grouped_segmentation_maps_index = group_images_by_shape(
-                segmentation_maps, disable_grouping=disable_grouping
-            )
-            processed_segmentation_maps_grouped = {}
-            for shape, stacked_segmentation_maps in grouped_segmentation_maps.items():
-                if do_resize:
-                    stacked_segmentation_maps = self.resize(
-                        stacked_segmentation_maps, size=size, interpolation=tvF.InterpolationMode.NEAREST_EXACT
-                    )
-                processed_segmentation_maps_grouped[shape] = stacked_segmentation_maps
-            processed_segmentation_maps = reorder_images(
-                processed_segmentation_maps_grouped, grouped_segmentation_maps_index
-            )
+            processed_segmentation_maps = []
 
-        encoded_inputs = self._encode_inputs_fast(
+        for idx, image in enumerate(images):
+            if do_resize:
+                image = self.resize(image=image, size=size, resample=resample)
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+            processed_images.append(image)
+
+            if segmentation_maps is not None:
+                seg_map = segmentation_maps[idx]
+                if do_resize:
+                    seg_map = self.resize(image=seg_map, size=size, resample=PILImageResampling.NEAREST)
+                processed_segmentation_maps.append(seg_map)
+
+        encoded_inputs = self.encode_inputs(
             processed_images,
             task_inputs,
             segmentation_maps=processed_segmentation_maps,
@@ -441,48 +204,62 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
 
         return encoded_inputs
 
-    def _pad_image_fast(
+    def _pad_image(
         self,
-        image: "torch.Tensor",
+        image: np.ndarray,
         output_size: tuple[int, int],
         constant_values: float = 0,
-    ) -> "torch.Tensor":
+    ) -> np.ndarray:
         """
-        Pad an image with zeros to the given size using torch operations.
+        Pad an image with zeros to the given size using numpy operations.
 
         Args:
-            image (`torch.Tensor`):
-                Image tensor in channel-first format (C, H, W).
+            image (`np.ndarray`):
+                Image array in channel-first format (C, H, W) or (H, W).
             output_size (`tuple[int, int]`):
                 Target output size (height, width).
             constant_values (`float`, *optional*, defaults to 0):
                 The value to use for padding.
 
         Returns:
-            `torch.Tensor`: The padded image.
+            `np.ndarray`: The padded image.
         """
-        input_height, input_width = image.shape[1], image.shape[2]
+        input_height, input_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
         output_height, output_width = output_size
 
         pad_bottom = output_height - input_height
         pad_right = output_width - input_width
 
-        padded_image = tvF.pad(image, padding=[0, 0, pad_right, pad_bottom], fill=constant_values)
+        # For 2D arrays (masks), use np.pad directly
+        # For 3D arrays (images), use np_pad which handles channel dimension
+        if image.ndim == 2:
+            padding = ((0, pad_bottom), (0, pad_right))
+            padded_image = np.pad(image, padding, mode="constant", constant_values=constant_values)
+        else:
+            padding = ((0, pad_bottom), (0, pad_right))
+            padded_image = np_pad(
+                image,
+                padding,
+                mode=PaddingMode.CONSTANT,
+                constant_values=constant_values,
+                data_format=ChannelDimension.FIRST,
+                input_data_format=ChannelDimension.FIRST,
+            )
 
         return padded_image
 
     def pad(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         return_pixel_mask: bool = True,
         return_tensors: str | TensorType | None = None,
     ) -> BatchFeature:
         """
-        Pad a batch of images to the same size using torch operations.
+        Pad a batch of images to the same size using numpy operations.
 
         Args:
-            images (`List[torch.Tensor]`):
-                List of image tensors in channel-first format.
+            images (`List[np.ndarray]`):
+                List of image arrays in channel-first format.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return pixel masks.
             return_tensors (`str` or `TensorType`, *optional*):
@@ -491,13 +268,22 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `BatchFeature`: Padded images and optional pixel masks.
         """
-        outputs = super().pad(images, return_mask=return_pixel_mask)
-        padded_images = outputs[0] if return_pixel_mask else outputs
-        pixel_masks = outputs[1] if return_pixel_mask else None
+        pad_size = get_max_height_width(images, input_data_format=ChannelDimension.FIRST)
 
-        if return_tensors:
+        padded_images = []
+        pixel_masks = []
+        for image in images:
+            padded_image = self._pad_image(image, pad_size, constant_values=0)
+            padded_images.append(padded_image)
+            if return_pixel_mask:
+                pixel_mask = make_pixel_mask(image, pad_size)
+                pixel_masks.append(pixel_mask)
+
+        if return_tensors == "pt":
+            padded_images = [torch.from_numpy(img) for img in padded_images]
             padded_images = torch.stack(padded_images, dim=0)
             if return_pixel_mask:
+                pixel_masks = [torch.from_numpy(mask) for mask in pixel_masks]
                 pixel_masks = torch.stack(pixel_masks, dim=0)
 
         data = {"pixel_values": padded_images}
@@ -508,17 +294,39 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
 
     def convert_segmentation_map_to_binary_masks(
         self,
-        segmentation_map: "torch.Tensor",
+        segmentation_map: np.ndarray,
         instance_id_to_semantic_id: dict[int, int] | None = None,
         ignore_index: int | None = None,
         do_reduce_labels: bool = False,
     ):
-        return convert_segmentation_map_to_binary_masks_fast(
-            segmentation_map=segmentation_map,
-            instance_id_to_semantic_id=instance_id_to_semantic_id,
-            ignore_index=ignore_index,
-            do_reduce_labels=do_reduce_labels,
-        )
+        """Convert segmentation map to binary masks using NumPy operations."""
+        if do_reduce_labels and ignore_index is None:
+            raise ValueError("If `do_reduce_labels` is True, `ignore_index` must be provided.")
+
+        if do_reduce_labels:
+            segmentation_map = np.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
+
+        all_labels = np.unique(segmentation_map)
+
+        if ignore_index is not None:
+            all_labels = all_labels[all_labels != ignore_index]
+
+        binary_masks = [(segmentation_map == i) for i in all_labels]
+        if binary_masks:
+            binary_masks = np.stack(binary_masks, axis=0)
+        else:
+            binary_masks = np.zeros((0, *segmentation_map.shape), dtype=np.float32)
+
+        # Convert instance ids to class ids
+        if instance_id_to_semantic_id is not None:
+            labels = np.zeros(all_labels.shape[0], dtype=np.int64)
+
+            for i, label in enumerate(all_labels):
+                class_id = instance_id_to_semantic_id[(int(label) + 1 if do_reduce_labels else int(label))]
+                labels[i] = class_id - 1 if do_reduce_labels else class_id
+        else:
+            labels = all_labels.astype(np.int64)
+        return binary_masks.astype(np.float32), labels
 
     def get_semantic_annotations(self, label, num_class_obj):
         annotation_classes = label["classes"]
@@ -531,16 +339,16 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         for idx in range(len(annotation_classes)):
             class_id = annotation_classes[idx]
             mask = annotation_masks[idx]
-            if not torch.all(mask == 0):
+            if not np.all(mask == 0):
                 if class_id not in classes:
-                    cls_name = self.metadata[str(class_id.cpu().item())]
+                    cls_name = self.metadata[str(class_id)]
                     classes.append(class_id)
                     masks.append(mask)
                     num_class_obj[cls_name] += 1
                 else:
                     idx = classes.index(class_id)
                     masks[idx] += mask
-                    masks[idx] = torch.clamp(masks[idx], 0, 1)
+                    masks[idx] = np.clip(masks[idx], 0, 1)
 
         num = 0
         for i, cls_name in enumerate(self.metadata["class_names"]):
@@ -551,8 +359,17 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
                     texts[num] = f"a photo with a {cls_name}"
                     num += 1
 
-        classes = torch.stack(classes)
-        masks = torch.stack(masks)
+        classes = np.array(classes) if classes else np.array([], dtype=np.int64)
+        # Stack masks into a 3D array (num_masks, H, W) to match torchvision version
+        if masks:
+            masks = np.stack(masks, axis=0)
+        else:
+            # Empty masks - use shape from first annotation mask if available
+            if annotation_masks and len(annotation_masks) > 0:
+                mask_shape = annotation_masks[0].shape[-2:] if hasattr(annotation_masks[0], "shape") else (0, 0)
+            else:
+                mask_shape = (0, 0)
+            masks = np.zeros((0, *mask_shape), dtype=np.float32)
         return classes, masks, texts
 
     def get_instance_annotations(self, label, num_class_obj):
@@ -568,8 +385,8 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
             mask = annotation_masks[idx]
 
             if class_id in self.metadata["thing_ids"]:
-                if not torch.all(mask == 0):
-                    cls_name = self.metadata[str(class_id.cpu().item())]
+                if not np.all(mask == 0):
+                    cls_name = self.metadata[str(class_id)]
                     classes.append(class_id)
                     masks.append(mask)
                     num_class_obj[cls_name] += 1
@@ -583,8 +400,17 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
                     texts[num] = f"a photo with a {cls_name}"
                     num += 1
 
-        classes = torch.stack(classes)
-        masks = torch.stack(masks)
+        classes = np.array(classes) if classes else np.array([], dtype=np.int64)
+        # Stack masks into a 3D array (num_masks, H, W) to match torchvision version
+        if masks:
+            masks = np.stack(masks, axis=0)
+        else:
+            # Empty masks - use shape from first annotation mask if available
+            if annotation_masks and len(annotation_masks) > 0:
+                mask_shape = annotation_masks[0].shape[-2:] if hasattr(annotation_masks[0], "shape") else (0, 0)
+            else:
+                mask_shape = (0, 0)
+            masks = np.zeros((0, *mask_shape), dtype=np.float32)
         return classes, masks, texts
 
     def get_panoptic_annotations(self, label, num_class_obj):
@@ -597,8 +423,8 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         for idx in range(len(annotation_classes)):
             class_id = annotation_classes[idx]
             mask = annotation_masks[idx] if hasattr(annotation_masks[idx], "data") else annotation_masks[idx]
-            if not torch.all(mask == 0):
-                cls_name = self.metadata[str(class_id.cpu().item())]
+            if not np.all(mask == 0):
+                cls_name = self.metadata[str(class_id)]
                 classes.append(class_id)
                 masks.append(mask)
                 num_class_obj[cls_name] += 1
@@ -612,24 +438,42 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
                     texts[num] = f"a photo with a {cls_name}"
                     num += 1
 
-        classes = torch.stack(classes)
-        masks = torch.stack(masks)
+        classes = np.array(classes) if classes else np.array([], dtype=np.int64)
+        # Stack masks into a 3D array (num_masks, H, W) to match torchvision version
+        if masks:
+            masks = np.stack(masks, axis=0)
+        else:
+            # Empty masks - use shape from first annotation mask if available
+            if annotation_masks and len(annotation_masks) > 0:
+                mask_shape = annotation_masks[0].shape[-2:] if hasattr(annotation_masks[0], "shape") else (0, 0)
+            else:
+                mask_shape = (0, 0)
+            masks = np.zeros((0, *mask_shape), dtype=np.float32)
         return classes, masks, texts
 
-    def _encode_inputs_fast(
+    def encode_inputs(
         self,
-        pixel_values_list: list["torch.Tensor"],
+        pixel_values_list: list[np.ndarray],
         task_inputs: list[str] | None = None,
-        segmentation_maps: list["torch.Tensor"] | None = None,
+        segmentation_maps: list[np.ndarray] | None = None,
         instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None = None,
         ignore_index: int | None = None,
         do_reduce_labels: bool = False,
         return_tensors: str | TensorType | None = None,
     ) -> BatchFeature:
+        ignore_index = self.ignore_index if ignore_index is None else ignore_index
+        do_reduce_labels = self.do_reduce_labels if do_reduce_labels is None else do_reduce_labels
         if task_inputs is None:
             task_inputs = ["panoptic"]
-
-        pad_size = get_max_height_width(pixel_values_list)
+        pixel_values_list = self._prepare_image_like_inputs(pixel_values_list)
+        if segmentation_maps is not None:
+            segmentation_maps = self._prepare_image_like_inputs(
+                images=segmentation_maps,
+                expected_ndims=2,
+                do_convert_rgb=False,
+                input_data_format=ChannelDimension.FIRST,
+            )
+        pad_size = get_max_height_width(pixel_values_list, input_data_format=ChannelDimension.FIRST)
         encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
 
         annotations = None
@@ -642,7 +486,11 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
                 else:
                     instance_id = instance_id_to_semantic_id
 
-                # Convert segmentation map to binary masks using torch operations
+                # Squeeze channel dimension if present
+                if segmentation_map.ndim == 3 and segmentation_map.shape[0] == 1:
+                    segmentation_map = segmentation_map.squeeze(0)
+
+                # Convert segmentation map to binary masks using numpy operations
                 masks, classes = self.convert_segmentation_map_to_binary_masks(
                     segmentation_map,
                     instance_id,
@@ -669,18 +517,26 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
                     classes, masks, texts = self.get_panoptic_annotations(label, num_class_obj)
                 else:
                     raise ValueError(f"{task} was not expected, expected `semantic`, `instance` or `panoptic`")
-                # Pad masks to max size using torch operations
+                # Pad masks to max size using numpy operations
+                # masks is a 3D array (num_masks, H, W), iterate to get 2D slices
                 padded_masks = [
-                    self._pad_image_fast(image=mask, output_size=pad_size, constant_values=ignore_index)
-                    for mask in masks
+                    self._pad_image(image=mask, output_size=pad_size, constant_values=ignore_index) for mask in masks
                 ]
-                padded_masks = torch.cat(padded_masks, dim=0)
+                # Stack padded masks back into 3D array (num_masks, padded_H, padded_W)
+                padded_masks = (
+                    np.stack(padded_masks, axis=0) if padded_masks else np.zeros((0, *pad_size), dtype=np.float32)
+                )
                 mask_labels.append(padded_masks)
                 class_labels.append(classes)
                 text_inputs.append(texts)
 
-            encoded_inputs["mask_labels"] = mask_labels
-            encoded_inputs["class_labels"] = class_labels
+            encoded_inputs["mask_labels"] = [
+                torch.from_numpy(mask_label) if return_tensors == "pt" else mask_label for mask_label in mask_labels
+            ]
+            encoded_inputs["class_labels"] = [
+                torch.from_numpy(class_label) if return_tensors == "pt" else class_label
+                for class_label in class_labels
+            ]
             encoded_inputs["text_inputs"] = text_inputs
 
         encoded_inputs["task_inputs"] = [f"the task is {task_input}" for task_input in task_inputs]
@@ -725,10 +581,8 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
 
             semantic_segmentation = []
             for idx in range(batch_size):
-                resized_logits = tvF.resize(
-                    segmentation[idx].unsqueeze(dim=0),
-                    size=target_sizes[idx],
-                    interpolation=tvF.InterpolationMode.BILINEAR,
+                resized_logits = torch.nn.functional.interpolate(
+                    segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
                 semantic_segmentation.append(semantic_map)
@@ -949,4 +803,4 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         return results
 
 
-__all__ = ["OneFormerImageProcessorFast"]
+__all__ = ["OneFormerImageProcessorPil"]

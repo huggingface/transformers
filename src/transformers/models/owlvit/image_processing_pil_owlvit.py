@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,17 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for OwlViT"""
+"""Image processor class for OwlViT"""
 
 from typing import TYPE_CHECKING
 
 import torch
 
-from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_processing_backends import PilBackend
 from ...image_transforms import center_to_corners_format
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, logging
-from .image_processing_owlvit import _scale_boxes, box_iou
+from ..owlvit.image_processing_owlvit import _scale_boxes, box_iou
 
 
 if TYPE_CHECKING:
@@ -32,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-class OwlViTImageProcessorFast(BaseImageProcessorFast):
+class OwlViTImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -42,11 +43,20 @@ class OwlViTImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     do_center_crop = False
     do_rescale = True
-    do_normalize = None
-    do_convert_rgb = None
+    do_normalize = True
+    do_convert_rgb = True
     model_input_names = ["pixel_values"]
 
-    # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process_object_detection
+    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+        # Early versions of the OWL-ViT config on the hub had "rescale" as a flag. This clashes with the
+        # vision image processor method `rescale` as it would be set as an attribute during the super().__init__
+        # call. This is for backwards compatibility.
+        if "rescale" in kwargs:
+            rescale_val = kwargs.pop("rescale")
+            kwargs["do_rescale"] = rescale_val
+
+        super().__init__(**kwargs)
+
     def post_process_object_detection(
         self,
         outputs: "OwlViTObjectDetectionOutput",
@@ -100,7 +110,6 @@ class OwlViTImageProcessorFast(BaseImageProcessorFast):
 
         return results
 
-    # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process_image_guided_detection
     def post_process_image_guided_detection(self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None):
         """
         Converts the output of [`OwlViTForObjectDetection.image_guided_detection`] into the format expected by the COCO
@@ -179,4 +188,4 @@ class OwlViTImageProcessorFast(BaseImageProcessorFast):
         return results
 
 
-__all__ = ["OwlViTImageProcessorFast"]
+__all__ = ["OwlViTImageProcessorPil"]
