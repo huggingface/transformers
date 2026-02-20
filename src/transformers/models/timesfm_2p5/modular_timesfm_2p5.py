@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -54,7 +55,7 @@ def timesfm_2p5_eager_attention_forward(
 ):
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        attn_weights = torch.where(attention_mask, attn_weights, -torch.finfo(attn_weights.dtype).max / 2)
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -432,6 +433,8 @@ class Timesfm2P5PreTrainedModel(TimesFmPreTrainedModel):
     config_class = Timesfm2P5Config
     base_model_prefix = "timesfm_2p5"
     _no_split_modules = ["Timesfm2P5DecoderLayer"]
+    _supports_flash_attn = True
+    _supports_flex_attn = True
 
 
 class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
@@ -579,7 +582,6 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         input_embeddings = self.input_ff_layer(tokenizer_inputs)
 
         patch_padding = patched_masks_bool[..., -1]
-        attention_mask = self._make_attention_mask(patch_padding)
 
         # Compute position IDs accounting for padding (matches original TimesFM implementation)
         # position = arange(n_patches) - num_masked
@@ -587,6 +589,14 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         sequence_length = input_embeddings.shape[1]
         num_masked = patch_padding.to(torch.int32).sum(dim=-1, keepdim=True)
         position_ids = torch.arange(sequence_length, device=input_embeddings.device).unsqueeze(0) - num_masked
+
+        # 2D padding mask (batch, seq): 1=valid, 0=padded — used by create_causal_mask
+        # to produce the right format for each backend (eager/sdpa/flash/flex)
+        padding_mask = (~patch_padding).to(torch.int64)
+        cache_position = torch.arange(sequence_length, device=input_embeddings.device)
+        attention_mask = create_causal_mask(
+            self.config, input_embeddings, padding_mask, cache_position, past_key_values=None
+        )
         position_embeddings = self.rotary_emb(input_embeddings, position_ids)
 
         hidden_states = input_embeddings
