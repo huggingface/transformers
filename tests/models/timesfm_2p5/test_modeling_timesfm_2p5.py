@@ -220,6 +220,49 @@ class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
             f"hidden_states max diff: {(hs_eager - hs_sdpa).abs().max().item():.2e}",
         )
 
+    def _test_flash_or_flex_attn_inference_equivalence(self, attn_implementation):
+        """
+        TimesFM 2.5 computes its own attention mask internally, so the generic
+        flash/flex equivalence test (which injects external attention masks) does not apply.
+        This override directly verifies eager vs flash/flex equivalence.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        dtype = torch.bfloat16
+        tolerance = 1e-2
+
+        model_eager = Timesfm2P5ModelForPrediction._from_config(config, attn_implementation="eager")
+        model_eager.to(dtype=dtype, device=torch_device)
+        model_eager.eval()
+
+        model_fa = Timesfm2P5ModelForPrediction._from_config(config, attn_implementation=attn_implementation)
+        model_fa.load_state_dict(model_eager.state_dict())
+        model_fa.to(dtype=dtype, device=torch_device)
+        model_fa.eval()
+
+        past_values = inputs_dict["past_values"].to(dtype=dtype, device=torch_device)
+
+        with torch.no_grad():
+            out_eager = model_eager(past_values=past_values)
+            out_fa = model_fa(past_values=past_values)
+
+        self.assertTrue(
+            torch.allclose(out_eager.mean_predictions, out_fa.mean_predictions, atol=tolerance),
+            f"mean_predictions max diff: {(out_eager.mean_predictions - out_fa.mean_predictions).abs().max().item():.2e}",
+        )
+        hs_eager = out_eager.hidden_states[-1]
+        hs_fa = out_fa.hidden_states[-1]
+        self.assertTrue(
+            torch.allclose(hs_eager, hs_fa, atol=tolerance),
+            f"hidden_states max diff: {(hs_eager - hs_fa).abs().max().item():.2e}",
+        )
+
+    def test_flash_attn_2_inference_equivalence(self):
+        self._test_flash_or_flex_attn_inference_equivalence("flash_attention_2")
+
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        self._test_flash_or_flex_attn_inference_equivalence("flash_attention_2")
+
     def test_retain_grad_hidden_states_attentions(self):
         """
         TimesFM 2.5 specific test for retain_grad since the model returns mean_predictions
@@ -267,7 +310,7 @@ class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class Timesfm2P5ModelIntegrationTests(unittest.TestCase):
     def test_inference(self):
-        model = Timesfm2P5ModelForPrediction.from_pretrained("google/timesfm-2.0-500m-pytorch").to(torch_device)
+        model = Timesfm2P5ModelForPrediction.from_pretrained("google/timesfm-2.5-200m-transformers").to(torch_device)
         forecast_input = [
             np.sin(np.linspace(0, 20, 100)),
             np.sin(np.linspace(0, 20, 200)),
@@ -282,14 +325,14 @@ class Timesfm2P5ModelIntegrationTests(unittest.TestCase):
         self.assertEqual(mean_predictions.shape, torch.Size([3, model.config.horizon_length]))
         # fmt: off
         expected_slice = torch.tensor(
-            [ 0.9813,  1.0086,  0.9985,  0.9432,  0.8505,  0.7203,  0.5596,  0.3788,
-              0.1796, -0.0264, -0.2307, -0.4255, -0.5978, -0.7642, -0.8772, -0.9670,
-             -1.0110, -1.0162, -0.9848, -0.9151, -0.8016, -0.6511, -0.4707, -0.2842,
-             -0.0787,  0.1260,  0.3293,  0.5104,  0.6818,  0.8155,  0.9172,  0.9843,
-              1.0101,  1.0025,  0.9529,  0.8588,  0.7384,  0.5885,  0.4022,  0.2099,
-             -0.0035, -0.2104, -0.4146, -0.6033, -0.7661, -0.8818, -0.9725, -1.0191,
-             -1.0190, -0.9874, -0.9137, -0.8069, -0.6683, -0.4939, -0.3086, -0.1106,
-              0.0846,  0.2927,  0.4832,  0.6612,  0.8031,  0.9051,  0.9772,  1.0064
+            [ 0.9745,  1.0047,  0.9707,  0.9161,  0.8041,  0.6829,  0.5378,  0.3563,
+              0.1698, -0.0396, -0.2508, -0.4358, -0.6150, -0.7491, -0.8659, -0.9535,
+             -1.0024, -0.9977, -0.9557, -0.8840, -0.7716, -0.6092, -0.4526, -0.2582,
+             -0.0554,  0.1263,  0.3258,  0.5207,  0.6667,  0.7989,  0.9002,  0.9782,
+              0.9848,  0.9877,  0.9339,  0.8473,  0.7109,  0.5525,  0.3799,  0.1756,
+             -0.0285, -0.2325, -0.4137, -0.5926, -0.7425, -0.8532, -0.9444, -0.9878,
+             -0.9985, -0.9828, -0.8972, -0.7833, -0.6414, -0.4881, -0.2838, -0.0878,
+              0.1169,  0.3137,  0.4918,  0.6508,  0.7762,  0.8961,  0.9666,  0.9910
             ],
             device=torch_device)
         # fmt: on
