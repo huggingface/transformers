@@ -85,6 +85,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("granite_speech", "GraniteSpeechProcessor"),
         ("grounding-dino", "GroundingDinoProcessor"),
         ("groupvit", "CLIPProcessor"),
+        ("higgs_audio_v2", "HiggsAudioV2Processor"),
         ("hubert", "Wav2Vec2Processor"),
         ("idefics", "IdeficsProcessor"),
         ("idefics2", "Idefics2Processor"),

@@ -520,6 +520,8 @@ OBJECTS_TO_IGNORE = {
     "Llama4TextConfig",
     "BltConfig",
     "BltPatcherConfig",
+    "HiggsAudioV2Config",
+    "HiggsAudioV2TokenizerConfig",
     "MoonshineStreamingConfig",
     "MoonshineStreamingEncoderConfig",
     "VoxtralRealtimeFeatureExtractor",
