@@ -13,29 +13,28 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-10-14 and added to Hugging Face Transformers on 2026-02-18.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # TimesFM 2.5
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
-
 ## Overview
 
-TimesFM 2.5 is available in Transformers format as:
-[`google/timesfm-2.5-200m-transformers`](https://huggingface.co/google/timesfm-2.5-200m-transformers).
-This Transformers implementation ports the official 2.5 architecture with rotary attention, QK normalization,
-per-dimension attention scaling, and continuous quantile prediction.
-
-The upstream model card reports an architecture update on October 2, 2025 (fused QKV for speed, unchanged results),
-and points to the TimesFM paper [2310.10688](https://huggingface.co/papers/2310.10688).
+TimesFM 2.5 (Time Series Foundation Model) is a pretrained time-series foundation model proposed in [A decoder-only foundation model for time-series forecasting](https://huggingface.co/papers/2310.10688) by Abhimanyu Das, Weihao Kong, Rajat Sen, and Yichen Zhou. It builds on the original TimesFM architecture with rotary attention, QK normalization, per-dimension attention scaling, and continuous quantile prediction.
 
 The abstract from the paper is the following:
 
 *Motivated by recent advances in large language models for Natural Language Processing (NLP), we design a time-series foundation model for forecasting whose out-of-the-box zero-shot performance on a variety of public datasets comes close to the accuracy of state-of-the-art supervised forecasting models for each individual dataset. Our model is based on pretraining a decoder style attention model with input patching, using a large time-series corpus comprising both real-world and synthetic datasets. Experiments on a diverse set of previously unseen forecasting datasets suggests that the model can yield accurate zero-shot forecasts across different domains, forecasting horizons and temporal granularities.*
 
-The model was contributed by [kashif](https://huggingface.co/kashif).
+This model was contributed by [kashif](https://huggingface.co/kashif). The original code can be found [here](https://github.com/google-research/timesfm).
+
+You can find the checkpoint at [`google/timesfm-2.5-200m-transformers`](https://huggingface.co/google/timesfm-2.5-200m-transformers).
 
 ## Usage example
 
