@@ -728,13 +728,6 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
             patch_padding=patch_padding,
         )
 
-    def _make_attention_mask(self, patch_padding: torch.Tensor) -> torch.Tensor:
-        _, seq_len = patch_padding.shape
-        num_masked = patch_padding.to(torch.int32).sum(dim=-1)
-        q_index = torch.arange(seq_len, device=patch_padding.device)[None, None, :, None]
-        kv_index = torch.arange(seq_len, device=patch_padding.device)[None, None, None, :]
-        return torch.logical_and(q_index >= kv_index, kv_index >= num_masked[:, None, None, None])
-
 
 class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
     """
