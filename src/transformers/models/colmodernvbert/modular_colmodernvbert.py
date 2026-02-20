@@ -12,17 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
+from ..auto import CONFIG_MAPPING
 from ..auto.modeling_auto import AutoModel
 from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
 from ..colqwen2.configuration_colqwen2 import ColQwen2Config
@@ -62,7 +65,39 @@ class ColModernVBertConfig(ColQwen2Config):
     """
 
     model_type = "colmodernvbert"
-    default_vlm_type = "modernvbert"
+    sub_configs: dict[str, Any] = {"vlm_config": PreTrainedConfig}
+
+    def __init__(
+        self,
+        vlm_config=None,
+        embedding_dim: int = 128,
+        initializer_range: float = 0.02,
+        **kwargs,
+    ):
+        if vlm_config is None:
+            vlm_config = CONFIG_MAPPING["modernvbert"]()
+            logger.info(
+                "`vlm_config` is `None`. Initializing `vlm_config` with the `Qwen2VLConfig` with default values."
+            )
+        elif isinstance(vlm_config, dict):
+            vlm_config = deepcopy(vlm_config)
+            if "model_type" not in vlm_config:
+                raise KeyError(
+                    "The `model_type` key is missing in the `vlm_config` dictionary. Please provide the model type."
+                )
+            vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
+        elif not isinstance(vlm_config, PreTrainedConfig):
+            raise TypeError(
+                f"Invalid type for `vlm_config`. Expected `PreTrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
+            )
+
+        if not hasattr(vlm_config, "vocab_size"):
+            vlm_config.vocab_size = vlm_config.get_text_config().vocab_size
+
+        self.vlm_config = vlm_config
+        self.embedding_dim = embedding_dim
+        self.initializer_range = initializer_range
+        PreTrainedConfig.__init__(**kwargs)
 
 
 class ColModernVBertProcessorKwargs(Idefics3ProcessorKwargs, total=False):
@@ -381,9 +416,6 @@ class ColModernVBertForRetrieval(ColPaliForRetrieval):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ColModernVBertForRetrievalOutput:
-        if pixel_values is not None:
-            pixel_values = pixel_values.to(dtype=self.dtype)
-
         vlm_output = self.vlm(
             input_ids=input_ids,
             attention_mask=attention_mask,

@@ -129,9 +129,6 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ColModernVBertForRetrievalOutput:
-        if pixel_values is not None:
-            pixel_values = pixel_values.to(dtype=self.dtype)
-
         vlm_output = self.vlm(
             input_ids=input_ids,
             attention_mask=attention_mask,

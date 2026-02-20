@@ -223,14 +223,7 @@ class ModernVBertConnector(nn.Module):
 @auto_docstring
 class ModernVBertPreTrainedModel(SmolVLMPreTrainedModel):
     config_class = ModernVBertConfig
-    _no_split_modules = [
-        "ModernBertEmbeddings",
-        "ModernBertEncoderLayer",
-        "SiglipEncoderLayer",
-        "SiglipMultiheadAttentionPoolingHead",
-    ]
-    _supports_flex_attn = False
-    _can_record_outputs = {"image_hidden_states": ModernVBertConnector}
+    _no_split_modules = []
 
     @torch.no_grad()
     def _init_weights(self, module):

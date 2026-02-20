@@ -60,7 +60,6 @@ class ColModernVBertConfig(PreTrainedConfig):
 
     model_type = "colmodernvbert"
     sub_configs: dict[str, Any] = {"vlm_config": PreTrainedConfig}
-    default_vlm_type = "modernvbert"
 
     def __init__(
         self,
@@ -70,7 +69,7 @@ class ColModernVBertConfig(PreTrainedConfig):
         **kwargs,
     ):
         if vlm_config is None:
-            vlm_config = CONFIG_MAPPING[self.default_vlm_type]()
+            vlm_config = CONFIG_MAPPING["modernvbert"]()
             logger.info(
                 "`vlm_config` is `None`. Initializing `vlm_config` with the `Qwen2VLConfig` with default values."
             )
