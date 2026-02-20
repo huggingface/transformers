@@ -36,23 +36,23 @@ class Timesfm2P5ModelTester:
     def __init__(
         self,
         parent,
-        patch_length: int = 32,  # Same as original TimesFM 2.5
-        context_length: int = 256,  # Smaller for tests
-        horizon_length: int = 16,  # 1/8 of original (128/8)
-        num_hidden_layers: int = 1,  # Minimal for testing
-        hidden_size: int = 128,  # Much smaller: 128 = 16 * 8 quantiles per step
-        intermediate_size: int = 256,  # 2x hidden_size
-        head_dim: int = 16,  # hidden_size // num_heads = 128 // 8
-        num_heads: int = 8,  # Smaller for tests
+        patch_length: int = 32,
+        context_length: int = 128,
+        horizon_length: int = 8,
+        num_hidden_layers: int = 1,
+        hidden_size: int = 32,  # 2 heads * 16 head_dim
+        intermediate_size: int = 64,
+        head_dim: int = 16,
+        num_heads: int = 2,
         tolerance: float = 1e-6,
         rms_norm_eps: float = 1e-6,
-        quantiles: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        output_quantile_len: int = 64,  # Scaled down from 1024 (1024/16 = 64)
+        quantiles: list[float] = [0.1, 0.5, 0.9],
+        output_quantile_len: int = 16,
         pad_val: float = 1123581321.0,
         use_positional_embedding: bool = True,
         initializer_factor: float = 0.0,
         is_training: bool = False,
-        batch_size: int = 3,
+        batch_size: int = 2,
     ):
         self.parent = parent
         self.patch_length = patch_length
@@ -101,22 +101,17 @@ class Timesfm2P5ModelTester:
         return self.get_config()
 
     def prepare_config_and_inputs(self):
-        forecast_input = [
-            torch.tensor(np.sin(np.linspace(0, 20, 100)), dtype=torch.float32, device=torch_device),
-            torch.tensor(np.cos(np.linspace(0, 20, 100)), dtype=torch.float32, device=torch_device),
-            torch.tensor(np.tan(np.linspace(0, 20, 100)), dtype=torch.float32, device=torch_device),
-        ]
-        frequency_input = torch.tensor([0, 1, 2], dtype=torch.long, device=torch_device)
-
-        return (self.get_config(), torch.stack(forecast_input, dim=0), frequency_input)
+        forecast_input = torch.stack(
+            [
+                torch.tensor(np.sin(np.linspace(0, 20, 100)), dtype=torch.float32, device=torch_device),
+                torch.tensor(np.cos(np.linspace(0, 20, 100)), dtype=torch.float32, device=torch_device),
+            ]
+        )
+        return self.get_config(), forecast_input
 
     def prepare_config_and_inputs_for_common(self):
-        (config, forecast_input, frequency_input) = self.prepare_config_and_inputs()
-
-        inputs_dict = {
-            "past_values": forecast_input,
-            # Note: TimesFM 2.5 doesn't use freq parameter (simplified API)
-        }
+        config, forecast_input = self.prepare_config_and_inputs()
+        inputs_dict = {"past_values": forecast_input}
         return config, inputs_dict
 
 

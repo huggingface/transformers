@@ -1012,10 +1012,13 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
             mean_predictions = mean_predictions[0::2, ...] + mean_predictions[1::2, ...]
             full_predictions = full_predictions[0::2, ...] + full_predictions[1::2, ...]
 
-        if inp_min >= 0 and truncate_negative:
+        if truncate_negative:
             zero = torch.zeros(1, device=mean_predictions.device, dtype=mean_predictions.dtype)
-            mean_predictions = torch.maximum(mean_predictions, zero)
-            full_predictions = torch.maximum(full_predictions, zero)
+            clamped_mean = torch.maximum(mean_predictions, zero)
+            clamped_full = torch.maximum(full_predictions, zero)
+            should_clamp = inp_min >= 0
+            mean_predictions = torch.where(should_clamp, clamped_mean, mean_predictions)
+            full_predictions = torch.where(should_clamp, clamped_full, full_predictions)
 
         loss = None
         if future_values is not None:
