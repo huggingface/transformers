@@ -59,7 +59,7 @@ UNROLL_KWARGS_METHODS = {
 }
 
 UNROLL_KWARGS_CLASSES = {
-    "ImageProcessorFast",
+    "BaseImageProcessor",
     "ProcessorMixin",
 }
 
@@ -207,7 +207,7 @@ class ImageProcessorArgs:
 
     return_tensors = {
         "description": """
-    Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
+    Returns stacked tensors if set to `'pt'`, otherwise returns a list of tensors.
     """,
         "shape": None,
     }
@@ -250,6 +250,15 @@ class ImageProcessorArgs:
         "description": """
     The number of image tokens to be used for each image in the input.
     Added for backward compatibility but this should be set as a processor attribute in future models.
+    """,
+        "shape": None,
+    }
+
+    # Used for the **kwargs summary line when unrolling typed kwargs (key: "__kwargs__")
+    __kwargs__ = {
+        "description": """
+    Additional image preprocessing options. Model-specific parameters are listed above; see the TypedDict class
+    for the complete list of supported arguments.
     """,
         "shape": None,
     }
@@ -516,6 +525,15 @@ class ProcessorArgs:
     Word-level integer labels (for token classification tasks such as FUNSD, CORD).
     """,
         "type": "list[int] or list[list[int]]",
+    }
+
+    # Used for the **kwargs summary line when unrolling typed kwargs (key: "__kwargs__")
+    __kwargs__ = {
+        "description": """
+    Additional processing options for each modality (text, images, videos, audio). Model-specific parameters
+    are listed above; see the TypedDict class for the complete list of supported arguments.
+    """,
+        "shape": None,
     }
 
 
@@ -1389,15 +1407,7 @@ def get_model_name(obj):
         return None
     if path.split(os.path.sep)[-3] != "models":
         return None
-    file_name = path.split(os.path.sep)[-1]
-    for file_type in AUTODOC_FILES:
-        start = file_type.split("*")[0]
-        end = file_type.split("*")[-1] if "*" in file_type else ""
-        if file_name.startswith(start) and file_name.endswith(end):
-            model_name_lowercase = file_name[len(start) : -len(end)]
-            return model_name_lowercase
-    print(f"[ERROR] Something went wrong trying to find the model name in the path: {path}")
-    return "model"
+    return path.split(os.path.sep)[-2]
 
 
 def generate_processor_intro(cls) -> str:
@@ -1992,6 +2002,49 @@ def find_sig_line(lines, line_end):
     return sig_line_end
 
 
+def _is_image_processor_class(func, parent_class):
+    """
+    Check if a function belongs to a ProcessorMixin class.
+
+    Uses two methods:
+    1. Check parent_class inheritance (if provided)
+    2. Check if the source file is named processing_*.py (multimodal processors)
+       vs image_processing_*.py, video_processing_*.py, etc. (single-modality processors)
+
+    Args:
+        func: The function to check
+        parent_class: Optional parent class (if available)
+
+    Returns:
+        bool: True if this is a multimodal processor (inherits from ProcessorMixin), False otherwise
+    """
+    # First, check if parent_class is provided and use it
+    if parent_class is not None:
+        return "BaseImageProcessor" in parent_class.__name__ or any(
+            "BaseImageProcessor" in base.__name__ for base in parent_class.__mro__
+        )
+
+    # If parent_class is None, check the filename
+    # Multimodal processors are in files named "processing_*.py"
+    # Single-modality processors are in "image_processing_*.py", "video_processing_*.py", etc.
+    try:
+        source_file = inspect.getsourcefile(func)
+    except TypeError:
+        return False
+    if not source_file:
+        return False
+
+    # Exception for DummyProcessorForTest
+    if func.__qualname__.split(".")[0] == "DummyForTestImageProcessorFast":
+        return True
+
+    filename = os.path.basename(source_file)
+
+    # Multimodal processors are implemented in processing_*.py modules
+    # (single-modality processors use image_processing_*, video_processing_*, etc.)self.
+    return filename.startswith("image_processing_") and filename.endswith(".py")
+
+
 def _is_processor_class(func, parent_class):
     """
     Check if a function belongs to a ProcessorMixin class.
@@ -2035,6 +2088,28 @@ def _is_processor_class(func, parent_class):
     return filename.startswith("processing_") and filename.endswith(".py")
 
 
+def _get_base_kwargs_class(cls):
+    """
+    Get the root/base TypedDict class by walking __orig_bases__.
+    For model-specific kwargs like ComplexProcessingKwargs(ProcessingKwargs), returns ProcessingKwargs.
+    For model-specific kwargs like DummyImageProcessorKwargs(ImagesKwargs), returns ImagesKwargs.
+    """
+    current = cls
+    while True:
+        bases = getattr(current, "__orig_bases__", ())
+        parent = None
+        for base in bases:
+            if isinstance(base, type) and base not in (dict, object):
+                # Skip TypedDict from typing module
+                if getattr(base, "__name__", "") == "TypedDict" and getattr(base, "__module__", "") == "typing":
+                    continue
+                parent = base
+                break
+        if parent is None or parent == current:
+            return current
+        current = parent
+
+
 def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters):
     """
     Process **kwargs parameters if needed.
@@ -2046,11 +2121,16 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
         documented_kwargs (`dict`): Dictionary of kwargs that are already documented
         indent_level (`int`): Indentation level
         undocumented_parameters (`list`): List to append undocumented parameters to
+
+    Returns:
+        tuple[str, str]: (kwargs docstring, kwargs summary line to add after return_tensors)
     """
     docstring = ""
+    kwargs_summary = ""
 
     # Check if this is a processor by inspecting class hierarchy
     is_processor = _is_processor_class(func, parent_class)
+    is_image_processor = _is_image_processor_class(func, parent_class)
 
     # Use appropriate args source based on whether it's a processor or not
     if is_processor:
@@ -2063,7 +2143,8 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
     if not unroll_kwargs and parent_class is not None:
         # Check if the function has a parent class with unroll kwargs
         unroll_kwargs = any(
-            unroll_kwargs_class in parent_class.__name__ for unroll_kwargs_class in UNROLL_KWARGS_CLASSES
+            any(unroll_kwargs_class in base.__name__ for base in parent_class.__mro__)
+            for unroll_kwargs_class in UNROLL_KWARGS_CLASSES
         )
     if unroll_kwargs:
         # get all unpackable "kwargs" parameters
@@ -2081,10 +2162,10 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
             if kwargs_documentation is not None:
                 documented_kwargs = parse_docstring(kwargs_documentation)[0]
-
             # Process each kwarg parameter
             for param_name, param_type_annotation in kwarg_param.annotation.__args__[0].__annotations__.items():
                 # Handle nested kwargs structures for processors
+
                 if is_processor and param_name.endswith("_kwargs"):
                     # Check if this is a basic kwargs type that should be skipped
                     # Basic kwargs types are generic containers that shouldn't be documented as individual params
@@ -2181,6 +2262,8 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                         # If we can't get annotations, skip this parameter
                         continue
 
+                if documented_kwargs and param_name not in documented_kwargs:
+                    continue
                 param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
                 # Check for default value
@@ -2216,10 +2299,23 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                         f"[ERROR] `{param_name}` is part of {kwarg_param.annotation.__args__[0].__qualname__}, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
                     )
 
-    return docstring
+            # Build **kwargs summary line (added after return_tensors in _process_parameters_section)
+            kwargs_annot_cls = kwarg_param.annotation.__args__[0]
+            kwargs_type_name = _get_base_kwargs_class(kwargs_annot_cls).__name__
+            kwargs_info = source_args_dict.get("__kwargs__", {})
+            kwargs_description = kwargs_info.get(
+                "description",
+                "Additional keyword arguments. Model-specific parameters are listed above.",
+            )
+            kwargs_summary = set_min_indent(
+                f"**kwargs ([`{kwargs_type_name}`], *optional*):{kwargs_description}",
+                indent_level + 8,
+            )
+
+    return docstring, kwargs_summary
 
 
-def _add_return_tensors_for_processor_call(func, parent_class, docstring, indent_level):
+def _add_return_tensors_to_docstring(func, parent_class, docstring, indent_level):
     """
     Add return_tensors parameter documentation for processor __call__ methods if not already present.
 
@@ -2232,16 +2328,24 @@ def _add_return_tensors_for_processor_call(func, parent_class, docstring, indent
     Returns:
         str: Updated docstring with return_tensors if applicable
     """
-    # Check if this is a processor __call__ method
+    # Check if this is a processor __call__ method or an image processor preprocess method
     is_processor_call = False
+    is_image_processor_preprocess = False
     if func.__name__ == "__call__":
         # Check if this is a processor by inspecting class hierarchy
         is_processor_call = _is_processor_class(func, parent_class)
 
-    # If it's a processor __call__ method and return_tensors is not already documented
-    if is_processor_call and "return_tensors" not in docstring:
+    if func.__name__ == "preprocess":
+        is_image_processor_preprocess = _is_image_processor_class(func, parent_class)
+
+    # If it's a processor __call__ method or an image processor preprocess method and return_tensors is not already documented
+    if (is_processor_call or is_image_processor_preprocess) and "return_tensors" not in docstring:
         # Get the return_tensors documentation from ImageProcessorArgs
-        source_args_dict = get_args_doc_from_source(ProcessorArgs)
+        source_args_dict = (
+            get_args_doc_from_source(ProcessorArgs)
+            if is_processor_call
+            else get_args_doc_from_source(ImageProcessorArgs)
+        )
         return_tensors_info = source_args_dict["return_tensors"]
         param_type = return_tensors_info.get("type", "`str` or [`~utils.TensorType`]")
         description = return_tensors_info["description"]
@@ -2288,13 +2392,16 @@ def _process_parameters_section(
     docstring += param_docstring
 
     # Process **kwargs parameters if needed
-    kwargs_docstring = _process_kwargs_parameters(
+    kwargs_docstring, kwargs_summary = _process_kwargs_parameters(
         sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters
     )
     docstring += kwargs_docstring
 
     # Add return_tensors for processor __call__ methods if not already present
-    docstring = _add_return_tensors_for_processor_call(func, parent_class, docstring, indent_level)
+    docstring = _add_return_tensors_to_docstring(func, parent_class, docstring, indent_level)
+
+    # Add **kwargs summary line after return_tensors
+    docstring += kwargs_summary
 
     # Report undocumented parameters
     if len(undocumented_parameters) > 0:
@@ -2615,6 +2722,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
 
     is_dataclass = False
     is_processor = False
+    is_image_processor = False
     docstring_init = ""
     docstring_args = ""
     if "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
@@ -2643,6 +2751,15 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             checkpoint=checkpoint,
             source_args_dict=get_args_doc_from_source(ModelOutputArgs),
         ).__doc__
+    elif any("BaseImageProcessor" in x.__name__ for x in cls.__mro__):
+        is_image_processor = True
+        docstring_init = auto_method_docstring(
+            cls.__init__,
+            parent_class=cls,
+            custom_args=custom_args,
+            checkpoint=checkpoint,
+            source_args_dict=get_args_doc_from_source(ImageProcessorArgs),
+        ).__doc__
     indent_level = get_indent_level(cls)
     model_name_lowercase = get_model_name(cls)
     model_name_title = " ".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
@@ -2653,12 +2770,13 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         model_name_lowercase = model_name_lowercase.replace("_", "-")
 
     name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})$", cls.__name__)
-    if name == [] and custom_intro is None and not is_dataclass and not is_processor:
+
+    if name == [] and custom_intro is None and not is_dataclass and not is_processor and not is_image_processor:
         raise ValueError(
             f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}.\n"
             "Add a `custom_intro` to the decorator if you want to use `auto_docstring` on a class not registered in the auto doc."
         )
-    if name != [] or custom_intro is not None or is_dataclass or is_processor:
+    if name != [] or custom_intro is not None or is_dataclass or is_processor or is_image_processor:
         name = name[0] if name else None
         if custom_intro is not None:
             pre_block = equalize_indent(custom_intro, indent_level)
@@ -2667,6 +2785,11 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         elif is_processor:
             # Generate processor intro dynamically
             pre_block = generate_processor_intro(cls)
+            if pre_block:
+                pre_block = equalize_indent(pre_block, indent_level)
+                pre_block = format_args_docstring(pre_block, model_name_lowercase)
+        elif is_image_processor:
+            pre_block = r"Constructs a {image_processor_class} image processor."
             if pre_block:
                 pre_block = equalize_indent(pre_block, indent_level)
                 pre_block = format_args_docstring(pre_block, model_name_lowercase)

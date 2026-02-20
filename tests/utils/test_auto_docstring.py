@@ -527,6 +527,9 @@ Parameters:
 
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
+            **kwargs ([`ProcessingKwargs`], *optional*):
+                Additional processing options for each modality (text, images, videos, audio). Model-specific parameters
+                are listed above; see the TypedDict class for the complete list of supported arguments.
 
         Returns:
             `<class 'transformers.image_processing_base.BatchFeature'>`:
@@ -578,62 +581,17 @@ Parameters:
             images (`Union[PIL.Image.Image, numpy.ndarray, torch.Tensor, list[PIL.Image.Image], list[numpy.ndarray], list[torch.Tensor]]`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_convert_rgb (`bool`, *optional*):
-                Whether to convert the image to RGB.
-            do_resize (`bool`, *optional*):
-                Whether to resize the image.
-            size (`Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, None]`):
-                Describes the maximum input dimensions to the model.
-            crop_size (`Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, None]`):
-                Size of the output image after applying `center_crop`.
-            resample (`Annotated[Union[int, PILImageResampling, NoneType], None]`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
-                has an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*):
-                Whether to normalize the image.
-            image_mean (`Union[float, list[float], tuple[float, ...]]`, *optional*):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`Union[float, list[float], tuple[float, ...]]`, *optional*):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
-            do_pad (`bool`, *optional*):
-                Whether to pad the image. Padding is done either to the largest size in the batch
-                or to a fixed square size per image. The exact padding strategy depends on the model.
-            pad_size (`Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, None]`):
-                The size in `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-                    provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-                    height and width in the batch. Applied only when `do_pad=True.`
-            do_center_crop (`bool`, *optional*):
-                Whether to center crop the image.
-            data_format (`Union[str, ~image_utils.ChannelDimension]`, *optional*):
-                Only `ChannelDimension.FIRST` is supported. Added for compatibility with slow processors.
-            input_data_format (`Union[str, ~image_utils.ChannelDimension]`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            device (`Annotated[Union[str, torch.device, NoneType], None]`):
-                The device to process the images on. If unset, the device is inferred from the input images.
-            return_tensors (`Annotated[str | ~utils.generic.TensorType | None, None]`):
-                Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
-            disable_grouping (`bool`, *optional*):
-                Whether to disable grouping of images by size to process them individually and not in batches.
-                If None, will be set to True if the images are on CPU, and False otherwise. This choice is based on
-                empirical observations, as detailed here: https://github.com/huggingface/transformers/pull/38157
-            image_seq_length (`int`, *optional*):
-                The number of image tokens to be used for each image in the input.
-                Added for backward compatibility but this should be set as a processor attribute in future models.
             image_grid_pinpoints (`list[list[int]]`, *optional*):
                 A list of possible resolutions to use for processing high resolution images. The best resolution is selected
                 based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
                 method.
             custom_scale (`float`, *optional*, defaults to 255.0):
                 Custom scale factor for preprocessing pipelines.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                Returns stacked tensors if set to `'pt'`, otherwise returns a list of tensors.
+            **kwargs ([`ImagesKwargs`], *optional*):
+                Additional image preprocessing options. Model-specific parameters are listed above; see the TypedDict class
+                for the complete list of supported arguments.
 
         Returns:
             `<class 'transformers.image_processing_base.BatchFeature'>`:
@@ -659,6 +617,19 @@ Parameters:
 
         actual_class_docstring = DummyForTestImageProcessorFast.__doc__
 
-        expected_class_docstring = """\nConstructs a fast DummyForTest image processor.\n"""
+        expected_class_docstring = """
+Constructs a fast DummyForTest image processor.
+
+Args:
+    image_grid_pinpoints (`list[list[int]]`, *optional*):
+        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
+        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
+        method.
+    custom_scale (`float`, *optional*, defaults to 255.0):
+        Custom scale factor for preprocessing pipelines.
+    **kwargs ([`ImagesKwargs`], *optional*):
+        Additional image preprocessing options. Model-specific parameters are listed above; see the TypedDict class
+        for the complete list of supported arguments.
+"""
 
         self.assertEqual(actual_class_docstring, expected_class_docstring)
