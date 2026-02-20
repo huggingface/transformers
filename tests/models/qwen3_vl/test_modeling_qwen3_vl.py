@@ -35,6 +35,7 @@ from ...test_modeling_common import (
     ids_tensor,
 )
 
+
 if is_torch_available():
     from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig
     from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextModel
