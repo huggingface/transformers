@@ -1,8 +1,8 @@
-# coding=utf-8
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 
 import torch
 import torch.nn as nn
+
 from ...modeling_utils import PreTrainedModel
 from .configuration_circuit_gpt import CircuitGptConfig
 
