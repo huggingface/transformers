@@ -1222,27 +1222,42 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
+
         # For BC we keep the original `config_class` definition in case
         # there is a `config_class` attribute (e.g. remote code models),
         # otherwise we derive it from the annotated `config` attribute.
 
-        # defined in this particular subclass
-        child_annotation = cls.__dict__.get("__annotations__", {}).get("config", None)
+        # priority (child config_class -> child annotation -> parent config_class -> parent annotation)
+
+        # Check if config is already on the child class.
         child_attribute = cls.__dict__.get("config_class", None)
-
-        # defined in the class (this subclass or any parent class)
-        full_annotation = get_type_hints(cls).get("config", None)
-        full_attribute = cls.config_class
-
-        # priority (child class_config -> child annotation -> global class_config -> global annotation)
         if child_attribute is not None:
-            cls.config_class = child_attribute
-        elif child_annotation is not None:
-            cls.config_class = child_annotation
-        elif full_attribute is not None:
-            cls.config_class = full_attribute
-        elif full_annotation is not None:
-            cls.config_class = full_annotation
+            return
+
+        # Try to find an annotation within the entire class hierarchy.  Note that with
+        # PEP 649, there's no direct way to get annotations off of an exact class, but
+        # we can run typing.get_type_hints() and compare its result on the child class
+        # versus that of its parent.
+        #
+        # See
+        # https://peps.python.org/pep-0649/#backwards-compatibility-with-stock-semantics
+        # and https://docs.python.org/3/howto/annotations.html.
+        annotation = get_type_hints(cls).get("config", None)
+        parent_cls = cls.__mro__[1] if len(cls.__mro__) > 1 else None
+        parent_annotation = get_type_hints(parent_cls).get("config", None) if parent_cls is not None else None
+
+        # This is an annotation on the child class, prefer it to a parent's config.
+        if annotation is not None and annotation != parent_annotation:
+            cls.config_class = annotation
+            return
+
+        # Check if config is already on a parent class.
+        if cls.config_class is not None:
+            return
+
+        # Otherwise use the parent's annotation.
+        if annotation is not None:
+            cls.config_class = annotation
 
     def __init__(self, config: PreTrainedConfig, *inputs, **kwargs):
         super().__init__()
