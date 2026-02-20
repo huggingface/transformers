@@ -28,6 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -92,15 +93,7 @@ class Timesfm2P5MLP(nn.Module):
 
         self.ff0 = nn.Linear(hidden_size, intermediate_size, bias=use_bias)
         self.ff1 = nn.Linear(intermediate_size, hidden_size, bias=use_bias)
-
-        if config.activation == "swish":
-            self.activation = nn.SiLU()
-        elif config.activation == "relu":
-            self.activation = nn.ReLU()
-        elif config.activation == "none":
-            self.activation = nn.Identity()
-        else:
-            raise ValueError(f"Unsupported activation: {config.activation}")
+        self.activation = ACT2FN[config.activation]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         hidden = self.ff0(x)
@@ -134,15 +127,7 @@ class Timesfm2P5ResidualBlock(nn.Module):
         self.output_layer = nn.Linear(hidden_dims, output_dims, bias=use_bias)
         self.residual_layer = nn.Linear(input_dims, output_dims, bias=use_bias)
 
-        # Activation function
-        if activation == "relu":
-            self.activation = nn.ReLU()
-        elif activation == "swish" or activation == "silu":
-            self.activation = nn.SiLU()
-        elif activation == "none":
-            self.activation = nn.Identity()
-        else:
-            raise ValueError(f"Activation '{activation}' not supported. Choose from 'relu', 'swish', or 'none'.")
+        self.activation = ACT2FN[activation]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """

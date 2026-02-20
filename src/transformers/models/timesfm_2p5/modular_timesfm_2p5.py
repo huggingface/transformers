@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -82,7 +83,7 @@ class Timesfm2P5Config(TimesFmConfig):
         horizon_length: int = 128,
         quantiles: list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         pad_val: float = -1e9,
-        freq_size: int = 10,  # Not used in 2.5, but kept for compatibility
+        freq_size: int = 10,
         hidden_size: int = 1280,
         intermediate_size: int = 1280,
         head_dim: int = 80,
@@ -145,15 +146,15 @@ class Timesfm2P5Config(TimesFmConfig):
             sliding_window=sliding_window,
             **kwargs,
         )
+        self.use_rotary_embeddings = use_rotary_embeddings
+        self.normalize_inputs = normalize_inputs
         self.output_quantile_len = output_quantile_len
         self.decode_index = decode_index
-        self.use_rotary_embeddings = use_rotary_embeddings
         self.use_qk_norm = use_qk_norm
         self.use_per_dim_scale = use_per_dim_scale
         self.use_bias = use_bias
         self.activation = activation
         self.use_continuous_quantile_head = use_continuous_quantile_head
-        self.normalize_inputs = normalize_inputs
         self.force_flip_invariance = force_flip_invariance
         self.infer_is_positive = infer_is_positive
         self.query_pre_attn_scalar = query_pre_attn_scalar
@@ -214,15 +215,7 @@ class Timesfm2P5MLP(nn.Module):
 
         self.ff0 = nn.Linear(hidden_size, intermediate_size, bias=use_bias)
         self.ff1 = nn.Linear(intermediate_size, hidden_size, bias=use_bias)
-
-        if config.activation == "swish":
-            self.activation = nn.SiLU()
-        elif config.activation == "relu":
-            self.activation = nn.ReLU()
-        elif config.activation == "none":
-            self.activation = nn.Identity()
-        else:
-            raise ValueError(f"Unsupported activation: {config.activation}")
+        self.activation = ACT2FN[config.activation]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         hidden = self.ff0(x)
@@ -256,15 +249,7 @@ class Timesfm2P5ResidualBlock(nn.Module):
         self.output_layer = nn.Linear(hidden_dims, output_dims, bias=use_bias)
         self.residual_layer = nn.Linear(input_dims, output_dims, bias=use_bias)
 
-        # Activation function
-        if activation == "relu":
-            self.activation = nn.ReLU()
-        elif activation == "swish" or activation == "silu":
-            self.activation = nn.SiLU()
-        elif activation == "none":
-            self.activation = nn.Identity()
-        else:
-            raise ValueError(f"Activation '{activation}' not supported. Choose from 'relu', 'swish', or 'none'.")
+        self.activation = ACT2FN[activation]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
