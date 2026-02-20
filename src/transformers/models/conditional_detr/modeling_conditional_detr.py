@@ -1674,7 +1674,7 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | ConditionalDetrSegmentationOutput:
+    ) -> ConditionalDetrSegmentationOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Mask to avoid performing attention on certain object queries in the decoder. Mask values selected in `[0, 1]`:

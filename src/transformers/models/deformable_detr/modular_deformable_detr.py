@@ -696,7 +696,7 @@ class DeformableDetrEncoder(DetrEncoder):
         level_start_index=None,
         valid_ratios=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -817,7 +817,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         level_start_index=None,
         valid_ratios=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> DeformableDetrDecoderOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1094,7 +1094,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | DeformableDetrModelOutput:
+    ) -> DeformableDetrModelOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Not used by default. Can be used to mask object queries.
@@ -1338,7 +1338,7 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | DeformableDetrObjectDetectionOutput:
+    ) -> DeformableDetrObjectDetectionOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Not used by default. Can be used to mask object queries.

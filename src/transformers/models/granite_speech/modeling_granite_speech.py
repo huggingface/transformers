@@ -306,9 +306,7 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
-    def forward(
-        self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         hidden_states = self.input_linear(hidden_states)
         for idx, layer in enumerate(self.layers, start=1):
             hidden_states = layer(hidden_states, attention_dists=self.attention_dists)

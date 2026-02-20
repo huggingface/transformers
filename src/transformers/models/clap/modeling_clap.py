@@ -1259,7 +1259,7 @@ class ClapTextEncoder(nn.Module):
         output_hidden_states: bool | None = False,
         return_dict: bool | None = True,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | BaseModelOutput:
+    ) -> BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 

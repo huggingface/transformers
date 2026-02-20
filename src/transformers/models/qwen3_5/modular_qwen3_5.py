@@ -733,7 +733,7 @@ class Qwen3_5Model(Qwen3VLModel):
         video_grid_thw: torch.LongTensor | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen3_5ModelOutputWithPast:
+    ) -> Qwen3_5ModelOutputWithPast:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.

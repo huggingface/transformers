@@ -489,7 +489,7 @@ class CLIPSegEncoder(nn.Module):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
+    ) -> BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):

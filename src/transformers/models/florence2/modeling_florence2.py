@@ -555,9 +555,7 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
-    def forward(
-        self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
             for layer in block:
