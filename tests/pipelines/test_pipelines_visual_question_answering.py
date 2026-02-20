@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 from datasets import load_dataset
@@ -35,6 +36,7 @@ from .test_pipelines_common import ANY
 if is_torch_available():
     import torch
 
+    from transformers import AutoTokenizer, CLIPImageProcessor, GitConfig, GitForCausalLM
     from transformers.pipelines.pt_utils import KeyDataset
 
 
@@ -137,6 +139,55 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         outputs = vqa_pipeline(image=image, question=question)
         self.assertEqual(outputs, [{"answer": ANY(str)}])
 
+    @require_torch
+    def test_small_model_pt_git(self):
+        # GIT uses GitForCausalLM for VQA (generative approach).
+        # Create a tiny GIT model from config since there is no public tiny-random model on the hub.
+        config = GitConfig(
+            vision_config={
+                "num_channels": 3,
+                "image_size": 30,
+                "patch_size": 15,
+                "hidden_size": 32,
+                "projection_dim": 32,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 4,
+            },
+            vocab_size=30522,
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            intermediate_size=37,
+            max_position_embeddings=512,
+        )
+        model = GitForCausalLM(config)
+        model.eval()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            # GIT uses a BertTokenizer and CLIPImageProcessor
+            tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-bert")
+            tokenizer.save_pretrained(tmp_dir)
+            image_processor = CLIPImageProcessor(size={"height": 30, "width": 30}, crop_size={"height": 30, "width": 30})
+            image_processor.save_pretrained(tmp_dir)
+
+            vqa_pipeline = pipeline(
+                "visual-question-answering",
+                model=tmp_dir,
+            )
+
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        question = "How many cats are there?"
+
+        outputs = vqa_pipeline(image=image, question=question)
+        self.assertEqual(outputs, [{"answer": ANY(str)}])
+
+        outputs = vqa_pipeline({"image": image, "question": question})
+        self.assertEqual(outputs, [{"answer": ANY(str)}])
+
+        outputs = vqa_pipeline([{"image": image, "question": question}, {"image": image, "question": question}])
+        self.assertEqual(outputs, [[{"answer": ANY(str)}]] * 2)
+
     @slow
     @require_torch
     def test_large_model_pt(self):
@@ -186,6 +237,22 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
 
         outputs = vqa_pipeline([{"image": image, "question": question}, {"image": image, "question": question}])
         self.assertEqual(outputs, [[{"answer": "two"}]] * 2)
+
+    @slow
+    @require_torch
+    def test_large_model_pt_git(self):
+        vqa_pipeline = pipeline("visual-question-answering", model="microsoft/git-base-textvqa")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        question = "How many cats are there?"
+
+        outputs = vqa_pipeline(image=image, question=question)
+        self.assertEqual(outputs, [{"answer": ANY(str)}])
+
+        outputs = vqa_pipeline({"image": image, "question": question})
+        self.assertEqual(outputs, [{"answer": ANY(str)}])
+
+        outputs = vqa_pipeline([{"image": image, "question": question}, {"image": image, "question": question}])
+        self.assertEqual(outputs, [[{"answer": ANY(str)}]] * 2)
 
     @require_torch
     def test_small_model_pt_image_list(self):

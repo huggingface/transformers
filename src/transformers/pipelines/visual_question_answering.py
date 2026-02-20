@@ -1,3 +1,4 @@
+import inspect
 from typing import Union
 
 from ..generation import GenerationConfig
@@ -178,6 +179,10 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             padding=padding,
             truncation=truncation,
         )
+        # Filter out tokenizer outputs that the model does not accept (e.g., token_type_ids
+        # produced by BERT-based tokenizers but not accepted by models like GIT)
+        model_forward_params = set(inspect.signature(self.model.forward).parameters.keys())
+        model_inputs = {k: v for k, v in model_inputs.items() if k in model_forward_params}
         image_features = self.image_processor(images=image, return_tensors="pt")
         image_features = image_features.to(self.dtype)
         model_inputs.update(image_features)
