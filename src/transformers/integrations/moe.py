@@ -17,7 +17,7 @@ from functools import wraps
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available, is_torchdynamo_compiling
+from ..utils.import_utils import is_grouped_mm_available, is_torch_available, is_torchdynamo_compiling
 
 
 if is_torch_available():
@@ -177,7 +177,7 @@ def _grouped_mm_fallback(input: torch.Tensor, weight: torch.Tensor, offs: torch.
     # single cpu<->gpu sync point here,
     # avoids multiple syncs inside the loop
     for i, end in enumerate(offs.tolist()):
-        if start >= end:
+        if start == end:
             continue
         torch.mm(input[start:end], weight[i], out=output[start:end])
         start = end
@@ -216,7 +216,7 @@ def _grouped_mm_fallback_backward(ctx, grad_output):
     # single cpu<->gpu sync point here,
     # avoids multiple syncs inside the loop
     for i, end in enumerate(ctx.offs.tolist()):
-        if start >= end:
+        if start == end:
             continue
         torch.mm(grad_output[start:end], weight[i].T, out=grad_input[start:end])
         torch.mm(input[start:end].T, grad_output[start:end], out=grad_weight[i])
@@ -235,11 +235,7 @@ if is_torch_available():
     )
 
 
-def _can_use_grouped_mm(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    offs: torch.Tensor,
-) -> bool:
+def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.Tensor) -> bool:
     """
     Check if torch.nn.functional.grouped_mm or torch._grouped_mm can be used based on availability and compatibility with torch.compile.
 
@@ -257,7 +253,7 @@ def _can_use_grouped_mm(
         # torch.grouped_mm is not supported in torch.compile with dtypes other than bfloat16
         return False
 
-    return hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm")
+    return is_grouped_mm_available()
 
 
 def _grouped_mm(
