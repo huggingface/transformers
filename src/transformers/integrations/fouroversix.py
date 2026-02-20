@@ -44,8 +44,12 @@ class FourOverSixQuantize(ConversionOps):
 
         # Delete the high-precision parameters from the module after we used them to create
         # the quantized parameters
-        for parameter_name in module.high_precision_parameter_names:
-            delattr(module, parameter_name)
+        # Cache high_precision_parameter_names to avoid potential race conditions with lazy properties
+        if hasattr(module, "high_precision_parameter_names"):
+            high_precision_params = list(module.high_precision_parameter_names)
+            for param_name in high_precision_params:
+                if hasattr(module, param_name):
+                    delattr(module, param_name)
 
         # Remove these keys from the missing_keys list since we've deleted them from the model
         for key in input_dict:
@@ -71,3 +75,60 @@ def adapt_fouroversix_config(config: FourOverSixConfig):
         modules_to_not_convert=config.modules_to_not_convert,
         module_config_overrides=config.module_config_overrides,
     )
+
+class FourOverSixGptOssDeserialize(ConversionOps):
+    def __init__(self, hf_quantizer, quantized_tensor_cls=None, dtype=None, scale_rule=None):
+        self.hf_quantizer = hf_quantizer
+        self.quantized_tensor_cls = quantized_tensor_cls
+        self.dtype = dtype
+        self.scale_rule = scale_rule
+
+    def convert(
+        self,
+        input_dict: torch.Tensor,
+        model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
+        missing_keys: list[str] | None = None,
+        **kwargs,
+    ) -> dict[str, list[torch.Tensor]]:
+
+        prefix = ""
+        if ".down_proj_blocks" in input_dict:
+            weight = input_dict[".down_proj_blocks"][0]
+            scales = input_dict[".down_proj_scales"][0]
+            prefix = "down"
+        elif ".gate_up_proj_blocks" in input_dict:
+            weight = input_dict[".gate_up_proj_blocks"][0]
+            scales = input_dict[".gate_up_proj_scales"][0]
+            prefix = "gate_up"
+
+        num_experts = weight.shape[0]
+        hidden_size = weight.shape[1]
+        weight = weight.reshape((num_experts, hidden_size, -1))
+
+        dequantized_proj = []
+        for e in range(num_experts):
+            weight_uint8 = weight[e].to(torch.uint8)
+            
+            quantized_tensor = self.quantized_tensor_cls(
+                values=weight_uint8, 
+                scale_factors=scales[e].view(torch.float8_e8m0fnu),
+                amax=torch.ones(
+                    (weight[e].shape[1]),
+                    device=weight[e].device,
+                    dtype=torch.float32,
+                ),
+                dtype=self.dtype,
+                original_shape=(
+                    weight[e].shape[0],
+                    weight[e].shape[1] * 2,
+                ),
+                scale_rule=self.scale_rule,
+            )
+
+            dequantized = quantized_tensor.dequantize()
+            dequantized_proj.append(dequantized)
+
+        dequantized_weight = torch.stack(dequantized_proj, dim=0)
+        
+        return {f"{prefix}_proj": [dequantized_weight]}
