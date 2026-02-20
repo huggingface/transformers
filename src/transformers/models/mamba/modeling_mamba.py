@@ -199,18 +199,14 @@ class MambaMixer(nn.Module):
 
         global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
         causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update, causal_conv1d_fn = (
-            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-            if causal_conv1d is not None
-            else (None, None)
-        )
+        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+
         global mamba_ssm, selective_state_update, selective_scan_fn, mamba_inner_fn
         mamba_ssm = lazy_load_kernel("mamba-ssm")
-        selective_state_update, selective_scan_fn, mamba_inner_fn = (
-            (mamba_ssm.selective_state_update, mamba_ssm.selective_scan_fn, mamba_ssm.mamba_inner_fn)
-            if mamba_ssm is not None
-            else (None, None, None)
-        )
+        selective_state_update = getattr(mamba_ssm, "selective_state_update", None)
+        selective_scan_fn = getattr(mamba_ssm, "selective_scan_fn", None)
+        mamba_inner_fn = getattr(mamba_ssm, "mamba_inner_fn", None)
 
         self.warn_slow_implementation()
 

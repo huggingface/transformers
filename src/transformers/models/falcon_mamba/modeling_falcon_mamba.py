@@ -220,22 +220,14 @@ class FalconMambaMixer(nn.Module):
 
         global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
         causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update, causal_conv1d_fn = (
-            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-            if causal_conv1d is not None
-            else (None, None)
-        )
+        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+
         global falcon_mamba_ssm, selective_state_update, selective_scan_fn, falcon_mamba_inner_fn
         falcon_mamba_ssm = lazy_load_kernel("falcon_mamba-ssm")
-        selective_state_update, selective_scan_fn, falcon_mamba_inner_fn = (
-            (
-                falcon_mamba_ssm.selective_state_update,
-                falcon_mamba_ssm.selective_scan_fn,
-                falcon_mamba_ssm.falcon_mamba_inner_fn,
-            )
-            if falcon_mamba_ssm is not None
-            else (None, None, None)
-        )
+        selective_state_update = getattr(falcon_mamba_ssm, "selective_state_update", None)
+        selective_scan_fn = getattr(falcon_mamba_ssm, "selective_scan_fn", None)
+        falcon_mamba_inner_fn = getattr(falcon_mamba_ssm, "falcon_mamba_inner_fn", None)
 
         self.warn_slow_implementation()
 
