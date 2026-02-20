@@ -1437,6 +1437,7 @@ class Trainer:
         ignore_keys_for_eval: list[str] | None = None,
     ) -> TrainOutput:
         """Run the actual training loop: forward, backward, optimizer step, logging, and checkpointing."""
+        self.accelerator.free_memory()
         if args.auto_find_batch_size:
             self._update_auto_batch_size(batch_size)
         # Data loader and number of training steps
