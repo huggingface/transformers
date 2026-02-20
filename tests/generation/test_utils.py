@@ -4753,16 +4753,16 @@ class GenerationIntegrationTests(unittest.TestCase):
     @pytest.mark.generate
     def test_generate_custom_cache_position(self):
         """
-        Regression test for #39261. Tests that we can continue generating from past key values, returned from a
-        previous `generate` call, without the tokens that correspond to the cached part. This is achieved by passing
-        manually creating `cache_position` -- this tests that it is piped correctly.
+        Test that we can continue generating from past key values, returned from a previous `generate` call, without
+        the tokens that correspond to the cached part IF the `attention_mask` is the mask for the FULL sequence
+        (including previous tokens)
         """
         model = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
         )
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
 
-        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        initial_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
         generate_kwargs = {
             "use_cache": True,
             "do_sample": False,
@@ -4770,73 +4770,55 @@ class GenerationIntegrationTests(unittest.TestCase):
             "output_scores": True,
         }
 
-        # Traditional way to continue generating text using kv cache
-        #                 output2
-        # /~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\
-        #            input2
-        # /~~~~~~~~~~~~~~~~~~~~~~~~\
-        #      output1
-        # /~~~~~~~~~~~~~~~~\
-        #  input1
-        # /~~~~~~\
-        # IIIIIIIIOOOOOOOOOOIIIIIIIIOOOOOOOOOOOOOOOOOO
-        inputs_1a = model_inputs
-        outputs_1a = model.generate(**inputs_1a, **generate_kwargs, max_new_tokens=2)
-        inputs_2a = {**model_inputs}
-        inputs_2a["input_ids"] = torch.cat((outputs_1a.sequences, model_inputs["input_ids"]), dim=1)
-        inputs_2a["attention_mask"] = torch.nn.functional.pad(
-            inputs_1a["attention_mask"],
-            (0, inputs_2a["input_ids"].shape[1] - inputs_1a["input_ids"].shape[1]),
-            mode="constant",
-            value=1,
-        )
-        inputs_2a["past_key_values"] = outputs_1a.past_key_values
-        outputs_2a = model.generate(**inputs_2a, **generate_kwargs, max_new_tokens=2)
-        # Keep only the part of the output related to the second output + last token from the first output, for future
-        # comparison
-        traditional_outputs = copy.deepcopy(outputs_2a)
-        traditional_outputs.sequences = traditional_outputs.sequences[:, outputs_1a.sequences.shape[1] - 1 :]
+        truncated_outputs = model.generate(**initial_inputs, **generate_kwargs, max_new_tokens=2, min_new_tokens=2)
+        full_outputs = model.generate(**initial_inputs, **generate_kwargs, max_new_tokens=4, min_new_tokens=4)
 
-        # Continue generating text using kv cache, but without providing the cached part of the input in the input_ids.
-        #                    cache_position
-        #                   /~~~~~~~\
-        #  inputs2["attention_mask"]
-        # /~~~~~~~~~~~~~~~~~~~~~~~~~\
-        #      output1               output2
-        # /~~~~~~~~~~~~~~~~\/~~~~~~~~~~~~~~~~~~~~~~~~~\
-        #  input1             input2
-        # /~~~~~~\          /~~~~~~~\
-        # IIIIIIIIOOOOOOOOOOIIIIIIIIIOOOOOOOOOOOOOOOOOO
-        #
-        inputs_1b = model_inputs
-        outputs_1b = model.generate(**inputs_1b, **generate_kwargs, max_new_tokens=2)
-        inputs_2b = {**model_inputs}
-        # The last output token isn't cached, so it needs to be included in the new input
-        inputs_2b["input_ids"] = torch.cat((outputs_1b.sequences[:, -1:], model_inputs["input_ids"]), dim=1)
-        inputs_2b["attention_mask"] = torch.nn.functional.pad(
-            inputs_1b["attention_mask"],
-            (0, outputs_1b.sequences.shape[1]),
-            mode="constant",
-            value=1,
+        device = initial_inputs["attention_mask"].device
+        new_full_mask = torch.cat((initial_inputs["attention_mask"], torch.ones(1, 2, device=device)), dim=-1)
+
+        # Check that we can restart from FULL sequence and get the same result
+        full_sequence_inputs = copy.deepcopy(initial_inputs)
+        full_sequence_inputs["input_ids"] = truncated_outputs.sequences
+        full_sequence_inputs["attention_mask"] = new_full_mask
+        full_sequence_inputs["past_key_values"] = copy.deepcopy(truncated_outputs.past_key_values)
+        full_sequence_outputs = model.generate(
+            **full_sequence_inputs, **generate_kwargs, max_new_tokens=2, min_new_tokens=2
         )
-        inputs_2b["past_key_values"] = outputs_1b.past_key_values
-        cache_length_1b = outputs_1b.past_key_values.get_seq_length()
-        inputs_2b["cache_position"] = torch.arange(
-            cache_length_1b,
-            cache_length_1b + inputs_2b["input_ids"].shape[1],
-            dtype=torch.int64,
-            device=model.device,
-        )
-        outputs_2b = model.generate(**inputs_2b, **generate_kwargs, max_new_tokens=2)
-        incremental_outputs = outputs_2b
 
         # The two sets of generated text and past kv should be equal to each other
         if is_moe_model(model.config):
             atol = rtol = 1e-3
         else:
             atol = rtol = 1e-5
-        self.assertTrue(has_similar_generate_outputs(traditional_outputs, incremental_outputs, atol=atol, rtol=rtol))
-        cache1, cache2 = traditional_outputs.past_key_values, incremental_outputs.past_key_values
+
+        self.assertTrue(has_similar_generate_outputs(full_outputs, full_sequence_outputs, atol=atol, rtol=rtol))
+        cache1, cache2 = full_outputs.past_key_values, full_sequence_outputs.past_key_values
+        for idx in range(len(cache1)):
+            if isinstance(cache1, EncoderDecoderCache):
+                for subcache in ["self_attention_cache", "cross_attention_cache"]:
+                    torch.testing.assert_close(
+                        getattr(cache1, subcache).layers[idx].keys, getattr(cache2, subcache).layers[idx].keys
+                    )
+                    torch.testing.assert_close(
+                        getattr(cache1, subcache).layers[idx].values, getattr(cache2, subcache).layers[idx].values
+                    )
+            else:
+                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
+
+        # Now, check that we can do the same while only restarting from last tokens IF we pass the full mask
+        single_token_inputs = copy.deepcopy(initial_inputs)
+        single_token_inputs["input_ids"] = truncated_outputs.sequences[:, -1:]
+        single_token_inputs["attention_mask"] = new_full_mask
+        single_token_inputs["past_key_values"] = copy.deepcopy(truncated_outputs.past_key_values)
+        single_token_outputs = model.generate(
+            **single_token_inputs, **generate_kwargs, max_new_tokens=2, min_new_tokens=2
+        )
+
+        # Of course we get only the new tokens as outputs here, so slice before performing the check
+        full_outputs["sequences"] = full_outputs["sequences"][:, -3:]
+        self.assertTrue(has_similar_generate_outputs(full_outputs, single_token_outputs, atol=atol, rtol=rtol))
+        cache1, cache2 = full_outputs.past_key_values, single_token_outputs.past_key_values
         for idx in range(len(cache1)):
             if isinstance(cache1, EncoderDecoderCache):
                 for subcache in ["self_attention_cache", "cross_attention_cache"]:
