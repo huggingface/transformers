@@ -23,10 +23,8 @@ if TYPE_CHECKING:
     from .image_processing_layoutlmv3 import *
     from .image_processing_layoutlmv3_fast import *
     from .modeling_layoutlmv3 import *
-    from .modeling_tf_layoutlmv3 import *
     from .processing_layoutlmv3 import *
     from .tokenization_layoutlmv3 import *
-    from .tokenization_layoutlmv3_fast import *
 else:
     import sys
 

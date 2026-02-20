@@ -13,12 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-07-15 and added to Hugging Face Transformers on 2020-11-16.*
 
 # FSMT
 
 ## Overview
 
-FSMT (FairSeq MachineTranslation) models were introduced in [Facebook FAIR's WMT19 News Translation Task Submission](https://arxiv.org/abs/1907.06616) by Nathan Ng, Kyra Yee, Alexei Baevski, Myle Ott, Michael Auli, Sergey Edunov.
+FSMT (FairSeq MachineTranslation) models were introduced in [Facebook FAIR's WMT19 News Translation Task Submission](https://huggingface.co/papers/1907.06616) by Nathan Ng, Kyra Yee, Alexei Baevski, Myle Ott, Michael Auli, Sergey Edunov.
 
 The abstract of the paper is the following:
 
@@ -39,7 +40,6 @@ This model was contributed by [stas](https://huggingface.co/stas). The original 
 - FSMT uses source and target vocabulary pairs that aren't combined into one. It doesn't share embeddings tokens
   either. Its tokenizer is very similar to [`XLMTokenizer`] and the main model is derived from
   [`BartModel`].
-
 
 ## FSMTConfig
 

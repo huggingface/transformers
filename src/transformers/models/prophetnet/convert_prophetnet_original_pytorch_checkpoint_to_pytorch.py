@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -132,9 +131,7 @@ def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, py
             else:
                 model = getattr(model, attribute)
 
-                if old_attribute == "":
-                    old_model = old_model
-                else:
+                if old_attribute:
                     if not hasattr(old_model, old_attribute):
                         raise ValueError(f"{old_model} does not have {old_attribute}")
                     old_model = getattr(old_model, old_attribute)

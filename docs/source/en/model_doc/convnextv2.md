@@ -13,17 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-01-02 and added to Hugging Face Transformers on 2023-03-14.*
 
 # ConvNeXt V2
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
 
-The ConvNeXt V2 model was proposed in [ConvNeXt V2: Co-designing and Scaling ConvNets with Masked Autoencoders](https://arxiv.org/abs/2301.00808) by Sanghyun Woo, Shoubhik Debnath, Ronghang Hu, Xinlei Chen, Zhuang Liu, In So Kweon, Saining Xie.
+The ConvNeXt V2 model was proposed in [ConvNeXt V2: Co-designing and Scaling ConvNets with Masked Autoencoders](https://huggingface.co/papers/2301.00808) by Sanghyun Woo, Shoubhik Debnath, Ronghang Hu, Xinlei Chen, Zhuang Liu, In So Kweon, Saining Xie.
 ConvNeXt V2 is a pure convolutional model (ConvNet), inspired by the design of Vision Transformers, and a successor of [ConvNeXT](convnext).
 
 The abstract from the paper is the following:
@@ -33,7 +33,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convnextv2_architecture.png"
 alt="drawing" width="600"/>
 
-<small> ConvNeXt V2 architecture. Taken from the <a href="https://arxiv.org/abs/2301.00808">original paper</a>.</small>
+<small> ConvNeXt V2 architecture. Taken from the <a href="https://huggingface.co/papers/2301.00808">original paper</a>.</small>
 
 This model was contributed by [adirik](https://huggingface.co/adirik). The original code can be found [here](https://github.com/facebookresearch/ConvNeXt-V2).
 
@@ -60,14 +60,3 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] ConvNextV2ForImageClassification
     - forward
-
-## TFConvNextV2Model
-
-[[autodoc]] TFConvNextV2Model
-    - call
-
-
-## TFConvNextV2ForImageClassification
-
-[[autodoc]] TFConvNextV2ForImageClassification
-    - call

@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
-    require_tf,
     require_timm,
     require_torch,
     require_vision,
@@ -77,7 +76,7 @@ class DepthEstimationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         depth_estimator = DepthEstimationPipeline(
             model=model,
@@ -85,7 +84,7 @@ class DepthEstimationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         return depth_estimator, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -122,11 +121,6 @@ class DepthEstimationPipelineTests(unittest.TestCase):
 
         for single_output in outputs:
             compare_pipeline_output_to_hub_spec(single_output, DepthEstimationOutput)
-
-    @require_tf
-    @unittest.skip(reason="Depth estimation is not implemented in TF")
-    def test_small_model_tf(self):
-        pass
 
     @slow
     @require_torch

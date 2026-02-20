@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021, The Microsoft Research Asia MarkupLM Team authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +13,14 @@
 # limitations under the License.
 """MarkupLM model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MarkupLMConfig(PretrainedConfig):
+class MarkupLMConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MarkupLMModel`]. It is used to instantiate a
     MarkupLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -118,17 +117,14 @@ class MarkupLMConfig(PretrainedConfig):
         subs_pad_id=1001,
         xpath_unit_hidden_size=32,
         max_depth=50,
-        position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -141,7 +137,6 @@ class MarkupLMConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
         # additional properties

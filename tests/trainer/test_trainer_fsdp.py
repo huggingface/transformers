@@ -147,11 +147,38 @@ class TestFSDPTrainerWrap(TestCasePlus):
         # successful return here == success - any errors would have caused an error in the sub-call
 
 
+class TestFSDPTrainerTorchCompile(TestCasePlus):
+    @require_torch_multi_accelerator
+    @require_accelerate
+    @run_first
+    def test_trainer(self):
+        output_dir = self.get_auto_remove_tmp_dir()
+        cmd = [
+            "accelerate",
+            "launch",
+            "--use_fsdp",
+            "--main_process_port",
+            f"{get_torch_dist_unique_port()}",
+            "--num_processes",
+            f"{backend_device_count(torch_device)}",
+            "--fsdp_transformer_layer_cls_to_wrap",
+            "GPT2Block",
+            f"{self.test_file_dir}/test_trainer_fsdp.py",
+            "--torch_compile_mode",
+            "default",
+            "--output_dir",
+            f"{output_dir}",
+            "--report_to",
+            "none",
+        ]
+        execute_subprocess_async(cmd, env=self.get_env())
+        # successful return here == success - any errors would have caused an error in the sub-call
+
+
 if __name__ == "__main__":
     parser = HfArgumentParser((Seq2SeqTrainingArguments,))
     training_args = parser.parse_args_into_dataclasses()[0]
     training_args.per_device_eval_batch_size = 1
-    training_args.use_legacy_prediction_loop = False
     training_args.predict_with_generate = True
     training_args.generation_config = GenerationConfig(max_length=30)
 

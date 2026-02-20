@@ -55,7 +55,7 @@ limitations under the License.
 
 一旦你确认该 bug 尚未被报告，请在你的 issue 中包含以下信息，以便我们快速解决：
 
-* 使用的**操作系统类型和版本**，以及 **Python**、**PyTorch** 和 **TensorFlow** 的版本。
+* 使用的**操作系统类型和版本**，以及 **Python** 和 **PyTorch** 的版本。
 * 一个简短、独立的代码片段，可以让我们在不到30秒内重现这个问题。
 * 如果发生异常，请提供*完整的* traceback。
 * 附上你认为可能有帮助的任何其他附加信息，如屏幕截图。
@@ -140,7 +140,7 @@ python src/transformers/commands/transformers_cli.py env
 
    如果在虚拟环境中已经安装了 🤗 Transformers，请先使用 `pip uninstall transformers` 卸载它，然后再用 `-e` 参数以可编辑模式重新安装。
 
-   根据你的操作系统，以及 Transformers 的可选依赖项数量的增加，可能会在执行此命令时出现失败。如果出现这种情况，请确保已经安装了你想使用的深度学习框架（PyTorch, TensorFlow 和 Flax），然后执行以下操作：
+   根据你的操作系统，以及 Transformers 的可选依赖项数量的增加，可能会在执行此命令时出现失败。如果出现这种情况，请确保已经安装了你想使用的深度学习框架（PyTorch），然后执行以下操作：
 
    ```bash
    pip install -e ".[quality]"
@@ -160,13 +160,6 @@ python src/transformers/commands/transformers_cli.py env
 
    🤗 Transformers 使用 `black` 和 `ruff` 来保持代码风格的一致性。进行更改后，使用以下命令自动执行格式更正和代码验证：
 
-   ```bash
-   make fixup
-   ```
-
-   它已经被优化为仅适用于你创建的 PR 所修改过的文件。
-
-   如果想要逐个运行检查，可以使用以下命令：
 
    ```bash
    make style
@@ -175,13 +168,7 @@ python src/transformers/commands/transformers_cli.py env
    🤗 Transformers 还使用了 `ruff` 和一些自定义脚本来检查编码错误。虽然质量管理是通过 CI 进行的，但你也可以使用以下命令来运行相同的检查：
 
    ```bash
-   make quality
-   ```
-
-   最后，我们有许多脚本来确保在添加新模型时不会忘记更新某些文件。你可以使用以下命令运行这些脚本：
-
-   ```bash
-   make repo-consistency
+   make check-repo
    ```
 
    想要了解有关这些检查及如何解决相关问题的更多信息，请阅读 [检查 Pull Request](https://huggingface.co/docs/transformers/pr_checks) 指南。

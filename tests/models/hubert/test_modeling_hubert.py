@@ -14,20 +14,16 @@
 """Testing suite for the PyTorch Hubert model."""
 
 import math
-import os
-import pickle
-import tempfile
 import unittest
 
 import pytest
 
 from transformers import HubertConfig, is_torch_available
-from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torchcodec, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -46,8 +42,6 @@ if is_torch_available():
         Wav2Vec2Processor,
     )
     from transformers.models.hubert.modeling_hubert import _compute_mask_indices
-
-from transformers.utils.fx import symbolic_trace
 
 
 class HubertModelTester:
@@ -312,9 +306,6 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
-    test_pruning = False
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = HubertModelTester(self)
@@ -370,6 +361,9 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.output_hidden_states = True
         config.output_attentions = True
 
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
         model = model_class(config)
@@ -405,156 +399,16 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsNotNone(hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "conv.parametrizations.weight",
-                    "masked_spec_embed",
-                    "quantizer.weight_proj.weight",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
-    # Hubert cannot be TorchScripted because of torch.nn.utils.weight_norm
-    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        # TODO: fix it
-        self.skipTest(reason="torch 2.1 breaks torch fx tests for wav2vec2/hubert.")
-
-        if not self.fx_compatible:
-            self.skipTest(reason="torch fx is not compatible with this model")
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.return_dict = False
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=output_loss)
-
-            try:
-                if model.config.is_encoder_decoder:
-                    model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                    labels = inputs.get("labels", None)
-                    input_names = [
-                        "attention_mask",
-                        "decoder_attention_mask",
-                        "decoder_input_ids",
-                        "input_features",
-                        "input_ids",
-                        "input_values",
-                    ]
-                    if labels is not None:
-                        input_names.append("labels")
-
-                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                    input_names = list(filtered_inputs.keys())
-
-                    model_output = model(**filtered_inputs)
-
-                    traced_model = symbolic_trace(model, input_names)
-                    traced_output = traced_model(**filtered_inputs)
-                else:
-                    input_names = [
-                        "attention_mask",
-                        "bbox",
-                        "input_features",
-                        "input_ids",
-                        "input_values",
-                        "pixel_values",
-                        "token_type_ids",
-                        "visual_feats",
-                        "visual_pos",
-                    ]
-
-                    labels = inputs.get("labels", None)
-                    start_positions = inputs.get("start_positions", None)
-                    end_positions = inputs.get("end_positions", None)
-                    if labels is not None:
-                        input_names.append("labels")
-                    if start_positions is not None:
-                        input_names.append("start_positions")
-                    if end_positions is not None:
-                        input_names.append("end_positions")
-
-                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                    input_names = list(filtered_inputs.keys())
-
-                    model_output = model(**filtered_inputs)
-
-                    traced_model = symbolic_trace(model, input_names)
-                    traced_output = traced_model(**filtered_inputs)
-
-            except Exception as e:
-                self.fail(f"Couldn't trace module: {e}")
-
-            def flatten_output(output):
-                flatten = []
-                for x in output:
-                    if isinstance(x, (tuple, list)):
-                        flatten += flatten_output(x)
-                    elif not isinstance(x, torch.Tensor):
-                        continue
-                    else:
-                        flatten.append(x)
-                return flatten
-
-            model_output = flatten_output(model_output)
-            traced_output = flatten_output(traced_output)
-            num_outputs = len(model_output)
-
-            for i in range(num_outputs):
-                self.assertTrue(
-                    torch.allclose(model_output[i], traced_output[i]),
-                    f"traced {i}th output doesn't match model {i}th output for {model_class}",
-                )
-
-            # Test that the model can be serialized and restored properly
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
-                try:
-                    with open(pkl_file_name, "wb") as f:
-                        pickle.dump(traced_model, f)
-                    with open(pkl_file_name, "rb") as f:
-                        loaded = pickle.load(f)
-                except Exception as e:
-                    self.fail(f"Couldn't serialize / deserialize the traced model: {e}")
-
-                loaded_output = loaded(**filtered_inputs)
-                loaded_output = flatten_output(loaded_output)
-
-                for i in range(num_outputs):
-                    self.assertTrue(
-                        torch.allclose(model_output[i], loaded_output[i]),
-                        f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
-                    )
-
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
@@ -571,8 +425,6 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @require_torch
 class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (HubertForCTC, HubertForSequenceClassification, HubertModel) if is_torch_available() else ()
-    test_pruning = False
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = HubertModelTester(
@@ -632,6 +484,9 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config.output_hidden_states = True
         config.output_attentions = True
 
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
         model = model_class(config)
@@ -667,42 +522,16 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "conv.parametrizations.weight",
-                    "masked_spec_embed",
-                    "quantizer.weight_proj.weight",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
@@ -744,7 +573,7 @@ class HubertUtilsTest(unittest.TestCase):
 
 
 @require_torch
-@require_soundfile
+@require_torchcodec
 @slow
 class HubertModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
@@ -761,14 +590,12 @@ class HubertModelIntegrationTest(unittest.TestCase):
     def _load_superb(self, task, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
         return ds[:num_samples]
 
     def test_inference_ctc_batched(self):
-        model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft", torch_dtype=torch.float16).to(
-            torch_device
-        )
+        model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft", dtype=torch.float16).to(torch_device)
         processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
@@ -792,7 +619,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
     def test_inference_keyword_spotting(self):
         model = HubertForSequenceClassification.from_pretrained(
-            "superb/hubert-base-superb-ks", torch_dtype=torch.float16
+            "superb/hubert-base-superb-ks", dtype=torch.float16
         ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-ks")
         input_data = self._load_superb("ks", 4)
@@ -813,7 +640,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
     def test_inference_intent_classification(self):
         model = HubertForSequenceClassification.from_pretrained(
-            "superb/hubert-base-superb-ic", torch_dtype=torch.float16
+            "superb/hubert-base-superb-ic", dtype=torch.float16
         ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-ic")
         input_data = self._load_superb("ic", 4)
@@ -852,7 +679,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
     def test_inference_speaker_identification(self):
         model = HubertForSequenceClassification.from_pretrained(
-            "superb/hubert-base-superb-sid", torch_dtype=torch.float16
+            "superb/hubert-base-superb-sid", dtype=torch.float16
         ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-sid")
         input_data = self._load_superb("si", 4)
@@ -878,7 +705,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
     def test_inference_emotion_recognition(self):
         model = HubertForSequenceClassification.from_pretrained(
-            "superb/hubert-base-superb-er", torch_dtype=torch.float16
+            "superb/hubert-base-superb-er", dtype=torch.float16
         ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-er")
         input_data = self._load_superb("er", 4)
@@ -956,19 +783,23 @@ class HubertModelIntegrationTest(unittest.TestCase):
         # model(wav)['dense']
         expected_outputs_first = torch.tensor(
             [
-                [0.0267, 0.1776, -0.1706, -0.4559],
-                [-0.2430, -0.2943, -0.1864, -0.1187],
-                [-0.1812, -0.4239, -0.1916, -0.0858],
-                [-0.1495, -0.4758, -0.4036, 0.0302],
+                [
+                    [0.0267, 0.1776, -0.1706, -0.4559],
+                    [-0.2430, -0.2943, -0.1864, -0.1187],
+                    [-0.1812, -0.4239, -0.1916, -0.0858],
+                    [-0.1495, -0.4758, -0.4036, 0.0302],
+                ]
             ],
             device=torch_device,
         )
         expected_outputs_last = torch.tensor(
             [
-                [0.3366, -0.2734, -0.1415, -0.3055],
-                [0.2329, -0.3580, -0.1421, -0.3197],
-                [0.1631, -0.4301, -0.1965, -0.2956],
-                [0.3342, -0.2185, -0.2253, -0.2363],
+                [
+                    [0.3366, -0.2734, -0.1415, -0.3055],
+                    [0.2329, -0.3580, -0.1421, -0.3197],
+                    [0.1631, -0.4301, -0.1965, -0.2956],
+                    [0.3342, -0.2185, -0.2253, -0.2363],
+                ]
             ],
             device=torch_device,
         )

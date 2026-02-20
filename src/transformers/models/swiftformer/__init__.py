@@ -20,7 +20,6 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_swiftformer import *
     from .modeling_swiftformer import *
-    from .modeling_tf_swiftformer import *
 else:
     import sys
 

@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Image processors
 
-Image processors converts images into pixel values, tensors that represent image colors and size. The pixel values are inputs to a vision or video model. To ensure a pretrained model receives the correct input, an image processor can perform the following operations to make sure an image is exactly like the images a model was pretrained on.
+Image processors converts images into pixel values, tensors that represent image colors and size. The pixel values are inputs to a vision model. To ensure a pretrained model receives the correct input, an image processor can perform the following operations to make sure an image is exactly like the images a model was pretrained on.
 
 - [`~BaseImageProcessor.center_crop`] to resize an image
 - [`~BaseImageProcessor.normalize`] or [`~BaseImageProcessor.rescale`] pixel values
@@ -145,7 +145,7 @@ Start by loading a small sample of the [food101](https://hf.co/datasets/food101)
 ```py
 from datasets import load_dataset
 
-dataset = load_dataset("food101", split="train[:100]")
+dataset = load_dataset("ethz/food101", split="train[:100]")
 ```
 
 From the [transforms](https://pytorch.org/vision/stable/transforms.html) module, use the [Compose](https://pytorch.org/vision/master/generated/torchvision.transforms.Compose.html) API to chain together [RandomResizedCrop](https://pytorch.org/vision/main/generated/torchvision.transforms.RandomResizedCrop.html) and [ColorJitter](https://pytorch.org/vision/main/generated/torchvision.transforms.ColorJitter.html). These transforms randomly crop and resize an image, and randomly adjusts an images colors.

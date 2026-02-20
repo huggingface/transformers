@@ -13,56 +13,75 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-01-22 and added to Hugging Face Transformers on 2020-11-16.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # XLM
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-</div>
+[XLM](https://huggingface.co/papers/1901.07291) demonstrates cross-lingual pretraining with two approaches, unsupervised training on a single language and supervised training on more than one language with a cross-lingual language model objective. The XLM model supports the causal language modeling objective, masked language modeling, and translation language modeling (an extension of the [BERT](./bert)) masked language modeling objective to multiple language inputs).
 
-## Overview
+You can find all the original XLM checkpoints under the [Facebook AI community](https://huggingface.co/FacebookAI?search_models=xlm-mlm) organization.
 
-The XLM model was proposed in [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by
-Guillaume Lample, Alexis Conneau. It's a transformer pretrained using one of the following objectives:
+> [!TIP]
+> Click on the XLM models in the right sidebar for more examples of how to apply XLM to different cross-lingual tasks like classification, translation, and question answering.
 
-- a causal language modeling (CLM) objective (next token prediction),
-- a masked language modeling (MLM) objective (BERT-like), or
-- a Translation Language Modeling (TLM) object (extension of BERT's MLM to multiple language inputs)
+The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`] and from the command line.
 
-The abstract from the paper is the following:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-*Recent studies have demonstrated the efficiency of generative pretraining for English natural language understanding.
-In this work, we extend this approach to multiple languages and show the effectiveness of cross-lingual pretraining. We
-propose two methods to learn cross-lingual language models (XLMs): one unsupervised that only relies on monolingual
-data, and one supervised that leverages parallel data with a new cross-lingual language model objective. We obtain
-state-of-the-art results on cross-lingual classification, unsupervised and supervised machine translation. On XNLI, our
-approach pushes the state of the art by an absolute gain of 4.9% accuracy. On unsupervised machine translation, we
-obtain 34.3 BLEU on WMT'16 German-English, improving the previous state of the art by more than 9 BLEU. On supervised
-machine translation, we obtain a new state of the art of 38.5 BLEU on WMT'16 Romanian-English, outperforming the
-previous best approach by more than 4 BLEU. Our code and pretrained models will be made publicly available.*
+```python
+import torch
+from transformers import pipeline
 
-This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/facebookresearch/XLM/).
+pipeline = pipeline(
+    task="fill-mask",
+    model="facebook/xlm-roberta-xl",
+    dtype=torch.float16,
+    device=0
+)
+pipeline("Bonjour, je suis un modèle <mask>.")
+```
 
-## Usage tips
+</hfoption>
+<hfoption id="AutoModel">
 
-- XLM has many different checkpoints, which were trained using different objectives: CLM, MLM or TLM. Make sure to
-  select the correct objective for your task (e.g. MLM checkpoints are not suitable for generation).
-- XLM has multilingual checkpoints which leverage a specific `lang` parameter. Check out the [multi-lingual](../multilingual) page for more information.
-- A transformer model trained on several languages. There are three different type of training for this model and the library provides checkpoints for all of them:
+```python
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-    * Causal language modeling (CLM) which is the traditional autoregressive training (so this model could be in the previous section as well). One of the languages is selected for each training sample, and the model input is a sentence of 256 tokens, that may span over several documents in one of those languages.
-    * Masked language modeling (MLM) which is like RoBERTa. One of the languages is selected for each training sample, and the model input is a sentence of 256 tokens, that may span over several documents in one of those languages, with dynamic masking of the tokens.
-    * A combination of MLM and translation language modeling (TLM). This consists of concatenating a sentence in two different languages, with random masking. To predict one of the masked tokens, the model can use both, the surrounding context in language 1 and the context given by language 2.
+tokenizer = AutoTokenizer.from_pretrained(
+    "FacebookAI/xlm-mlm-en-2048",
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    "FacebookAI/xlm-mlm-en-2048",
+    dtype=torch.float16,
+    device_map="auto",
+)
+inputs = tokenizer("Hello, I'm a <mask> model.", return_tensors="pt").to(model.device)
 
-## Resources
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits.argmax(dim=-1)
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+predicted_token = tokenizer.decode(predictions[0][inputs["input_ids"][0] == tokenizer.mask_token_id])
+print(f"Predicted token: {predicted_token}")
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model FacebookAI/xlm-mlm-en-2048 --device 0
+```
+
+</hfoption>
+</hfoptions>
 
 ## XLMConfig
 
@@ -79,9 +98,6 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 ## XLM specific outputs
 
 [[autodoc]] models.xlm.modeling_xlm.XLMForQuestionAnsweringOutput
-
-<frameworkcontent>
-<pt>
 
 ## XLMModel
 
@@ -117,41 +133,3 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 
 [[autodoc]] XLMForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFXLMModel
-
-[[autodoc]] TFXLMModel
-    - call
-
-## TFXLMWithLMHeadModel
-
-[[autodoc]] TFXLMWithLMHeadModel
-    - call
-
-## TFXLMForSequenceClassification
-
-[[autodoc]] TFXLMForSequenceClassification
-    - call
-
-## TFXLMForMultipleChoice
-
-[[autodoc]] TFXLMForMultipleChoice
-    - call
-
-## TFXLMForTokenClassification
-
-[[autodoc]] TFXLMForTokenClassification
-    - call
-
-## TFXLMForQuestionAnsweringSimple
-
-[[autodoc]] TFXLMForQuestionAnsweringSimple
-    - call
-
-</tf>
-</frameworkcontent>
-
-

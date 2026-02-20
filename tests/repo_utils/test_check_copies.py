@@ -36,12 +36,8 @@ REFERENCE_CODE = """    def __init__(self, config):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -373,11 +369,11 @@ class CopyCheckTester(unittest.TestCase):
         md_list = (
             "1. **[ALBERT](https://huggingface.co/transformers/model_doc/albert.html)** (from Google Research and the"
             " Toyota Technological Institute at Chicago) released with the paper [ALBERT: A Lite BERT for"
-            " Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942), by Zhenzhong"
+            " Self-supervised Learning of Language Representations](https://huggingface.co/papers/1909.11942), by Zhenzhong"
             " Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut.\n1."
             " **[DistilBERT](https://huggingface.co/transformers/model_doc/distilbert.html)** (from HuggingFace),"
             " released together with the paper [DistilBERT, a distilled version of BERT: smaller, faster, cheaper and"
-            " lighter](https://arxiv.org/abs/1910.01108) by Victor Sanh, Lysandre Debut and Thomas Wolf. The same"
+            " lighter](https://huggingface.co/papers/1910.01108) by Victor Sanh, Lysandre Debut and Thomas Wolf. The same"
             " method has been applied to compress GPT2 into"
             " [DistilGPT2](https://github.com/huggingface/transformers/tree/main/examples/distillation), RoBERTa into"
             " [DistilRoBERTa](https://github.com/huggingface/transformers/tree/main/examples/distillation),"
@@ -385,23 +381,23 @@ class CopyCheckTester(unittest.TestCase):
             " [DistilmBERT](https://github.com/huggingface/transformers/tree/main/examples/distillation) and a German"
             " version of DistilBERT.\n1. **[ELECTRA](https://huggingface.co/transformers/model_doc/electra.html)**"
             " (from Google Research/Stanford University) released with the paper [ELECTRA: Pre-training text encoders"
-            " as discriminators rather than generators](https://arxiv.org/abs/2003.10555) by Kevin Clark, Minh-Thang"
+            " as discriminators rather than generators](https://huggingface.co/papers/2003.10555) by Kevin Clark, Minh-Thang"
             " Luong, Quoc V. Le, Christopher D. Manning."
         )
         localized_md_list = (
             "1. **[ALBERT](https://huggingface.co/transformers/model_doc/albert.html)** (来自 Google Research and the"
             " Toyota Technological Institute at Chicago) 伴随论文 [ALBERT: A Lite BERT for Self-supervised Learning of"
-            " Language Representations](https://arxiv.org/abs/1909.11942), 由 Zhenzhong Lan, Mingda Chen, Sebastian"
+            " Language Representations](https://huggingface.co/papers/1909.11942), 由 Zhenzhong Lan, Mingda Chen, Sebastian"
             " Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut 发布。\n"
         )
         converted_md_list_sample = (
             "1. **[ALBERT](https://huggingface.co/transformers/model_doc/albert.html)** (来自 Google Research and the"
             " Toyota Technological Institute at Chicago) 伴随论文 [ALBERT: A Lite BERT for Self-supervised Learning of"
-            " Language Representations](https://arxiv.org/abs/1909.11942), 由 Zhenzhong Lan, Mingda Chen, Sebastian"
+            " Language Representations](https://huggingface.co/papers/1909.11942), 由 Zhenzhong Lan, Mingda Chen, Sebastian"
             " Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut 发布。\n1."
             " **[DistilBERT](https://huggingface.co/transformers/model_doc/distilbert.html)** (来自 HuggingFace) 伴随论文"
             " [DistilBERT, a distilled version of BERT: smaller, faster, cheaper and"
-            " lighter](https://arxiv.org/abs/1910.01108) 由 Victor Sanh, Lysandre Debut and Thomas Wolf 发布。 The same"
+            " lighter](https://huggingface.co/papers/1910.01108) 由 Victor Sanh, Lysandre Debut and Thomas Wolf 发布。 The same"
             " method has been applied to compress GPT2 into"
             " [DistilGPT2](https://github.com/huggingface/transformers/tree/main/examples/distillation), RoBERTa into"
             " [DistilRoBERTa](https://github.com/huggingface/transformers/tree/main/examples/distillation),"
@@ -409,7 +405,7 @@ class CopyCheckTester(unittest.TestCase):
             " [DistilmBERT](https://github.com/huggingface/transformers/tree/main/examples/distillation) and a German"
             " version of DistilBERT.\n1. **[ELECTRA](https://huggingface.co/transformers/model_doc/electra.html)** (来自"
             " Google Research/Stanford University) 伴随论文 [ELECTRA: Pre-training text encoders as discriminators rather"
-            " than generators](https://arxiv.org/abs/2003.10555) 由 Kevin Clark, Minh-Thang Luong, Quoc V. Le,"
+            " than generators](https://huggingface.co/papers/2003.10555) 由 Kevin Clark, Minh-Thang Luong, Quoc V. Le,"
             " Christopher D. Manning 发布。\n"
         )
 
@@ -430,19 +426,19 @@ class CopyCheckTester(unittest.TestCase):
         link_changed_md_list = (
             "1. **[ALBERT](https://huggingface.co/transformers/model_doc/albert.html)** (from Google Research and the"
             " Toyota Technological Institute at Chicago) released with the paper [ALBERT: A Lite BERT for"
-            " Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942), by Zhenzhong"
+            " Self-supervised Learning of Language Representations](https://huggingface.co/papers/1909.11942), by Zhenzhong"
             " Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut."
         )
         link_unchanged_md_list = (
             "1. **[ALBERT](https://huggingface.co/transformers/main/model_doc/albert.html)** (来自 Google Research and"
             " the Toyota Technological Institute at Chicago) 伴随论文 [ALBERT: A Lite BERT for Self-supervised Learning of"
-            " Language Representations](https://arxiv.org/abs/1909.11942), 由 Zhenzhong Lan, Mingda Chen, Sebastian"
+            " Language Representations](https://huggingface.co/papers/1909.11942), 由 Zhenzhong Lan, Mingda Chen, Sebastian"
             " Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut 发布。\n"
         )
         converted_md_list_sample = (
             "1. **[ALBERT](https://huggingface.co/transformers/model_doc/albert.html)** (来自 Google Research and the"
             " Toyota Technological Institute at Chicago) 伴随论文 [ALBERT: A Lite BERT for Self-supervised Learning of"
-            " Language Representations](https://arxiv.org/abs/1909.11942), 由 Zhenzhong Lan, Mingda Chen, Sebastian"
+            " Language Representations](https://huggingface.co/papers/1909.11942), 由 Zhenzhong Lan, Mingda Chen, Sebastian"
             " Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut 发布。\n"
         )
 

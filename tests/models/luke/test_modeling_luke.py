@@ -15,6 +15,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import LukeConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -613,10 +615,8 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_torchscript = False
+
     test_resize_embeddings = True
-    test_head_masking = True
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -758,7 +758,8 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -861,23 +862,17 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         self.assertIsNotNone(entity_hidden_states.grad)
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
 
 @require_torch
@@ -896,7 +891,7 @@ class LukeModelIntegrationTests(unittest.TestCase):
         encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
 
         # move all values to device
-        for key, value in encoding.items():
+        for key in encoding:
             encoding[key] = encoding[key].to(torch_device)
 
         outputs = model(**encoding)
@@ -931,7 +926,7 @@ class LukeModelIntegrationTests(unittest.TestCase):
         encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
 
         # move all values to device
-        for key, value in encoding.items():
+        for key in encoding:
             encoding[key] = encoding[key].to(torch_device)
 
         outputs = model(**encoding)

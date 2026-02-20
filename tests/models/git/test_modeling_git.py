@@ -15,6 +15,7 @@
 import inspect
 import unittest
 
+import pytest
 from huggingface_hub import hf_hub_download
 
 from transformers import GitConfig, GitProcessor, GitVisionConfig, is_torch_available, is_vision_available
@@ -125,10 +126,8 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (GitVisionModel,) if is_torch_available() else ()
-    fx_compatible = True
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = GitVisionModelTester(self)
@@ -166,24 +165,20 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -331,24 +326,6 @@ class GitModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertTrue(result.loss.item() > 0)
 
-    def _test_beam_search_generate(self, config, input_ids, input_mask, pixel_values):
-        model = GitForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # generate
-        generated_ids = model.generate(
-            input_ids,
-            attention_mask=input_mask,
-            pixel_values=pixel_values,
-            do_sample=False,
-            max_length=20,
-            num_beams=2,
-            num_return_sequences=2,
-        )
-
-        self.parent.assertEqual(generated_ids.shape, (self.batch_size * 2, 20))
-
     def _test_batched_generate_captioning(self, config, input_ids, input_mask, pixel_values):
         model = GitForCausalLM(config=config)
         model.to(torch_device)
@@ -396,12 +373,11 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             "image-to-text": GitForCausalLM,
             "text-generation": GitForCausalLM,
             "image-text-to-text": GitForCausalLM,
+            "any-to-any": GitForCausalLM,
         }
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_torchscript = False
 
     # special case for GitForCausalLM model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -431,19 +407,36 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
-    def test_beam_search_generate(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester._test_beam_search_generate(*config_and_inputs)
-
     def test_batched_generate_captioning(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester._test_batched_generate_captioning(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
+    @pytest.mark.generate
+    def test_past_key_values_format(self):
+        """
+        Test that the KV cache is formatted correctly.
+        Having a standard KV cache format is important for a consistent API (and for advanced generation methods).
+        """
+        # GIT seq length shape depends on image inputs, overwrite
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+            # If it doesn't support cache, skip the test
+            decoder_config = config.get_text_config(decoder=True)
+
+            model = model_class(config).to(torch_device)
+            model = model.eval()
+            if "use_cache" not in inputs:
+                inputs["use_cache"] = True
+            outputs = model(**inputs)
+
+            cache = outputs["past_key_values"]
+            batch_size, seq_length = inputs["input_ids"].shape[:2]
+            image_length = int((config.vision_config.image_size / config.vision_config.patch_size) ** 2 + 1)
+
+            # Check the format
+            self._check_past_key_values_for_generate(batch_size, cache, seq_length + image_length, decoder_config)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
@@ -478,23 +471,17 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         pass
 
     @unittest.skip(reason="GIT has pixel values as additional input")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip(reason="GIT has pixel values as additional input")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="GIT has pixel values as additional input")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(reason="GIT has pixel values as additional input")
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
-    @unittest.skip(reason="GIT has pixel values as additional input")
-    def test_dola_decoding_sample(self):
+    @unittest.skip(reason="GIT input and output sequence lengths are not equal due to pixel values additional input")
+    def test_forward_with_logits_to_keep(self):
+        pass
+
+    @unittest.skip(
+        reason="GIT cannot continue from past-kv due to image tokens merged into cache. Not worth fixing, rarely used model"
+    )
+    def test_generate_continue_from_past_key_values(self):
         pass
 
 
@@ -517,7 +504,11 @@ class GitModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 201, 30522))
         self.assertEqual(outputs.logits.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[-0.9514, -0.9512, -0.9507], [-0.5454, -0.5453, -0.5453], [-0.8862, -0.8857, -0.8848]],
+            [
+                [-0.9545, -0.9543, -0.9538],
+                [-0.5421, -0.5420, -0.5420],
+                [-0.8865, -0.8861, -0.8851],
+            ],
             device=torch_device,
         )
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
@@ -540,7 +531,7 @@ class GitModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.sequences.shape, expected_shape)
         self.assertEqual(generated_caption, "two cats laying on a pink blanket")
         self.assertTrue(outputs.scores[-1].shape, expected_shape)
-        expected_slice = torch.tensor([-0.8805, -0.8803, -0.8799], device=torch_device)
+        expected_slice = torch.tensor([-0.8126, -0.8123, -0.8119], device=torch_device)
         torch.testing.assert_close(outputs.scores[-1][0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_visual_question_answering(self):
@@ -583,7 +574,7 @@ class GitModelIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
         generated_captions = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        self.assertEqual(generated_captions, ["two cats sleeping on a pink blanket next to remotes."] * 2)
+        self.assertEqual(generated_captions, ["two cats sleeping on a couch"] * 2)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
@@ -615,7 +606,11 @@ class GitModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-1.0296, 2.5960, 0.8703], [1.7027, 1.3302, -0.4543], [-1.4932, -0.1084, 0.0502]]
+            [
+                [-1.0502, 2.5812, 0.8644],
+                [1.6594, 1.2927, -0.4329],
+                [-1.4966, -0.1032, 0.0572],
+            ]
         ).to(torch_device)
 
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

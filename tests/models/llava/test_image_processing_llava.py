@@ -14,7 +14,6 @@
 
 
 import unittest
-from typing import Union
 
 import numpy as np
 
@@ -151,7 +150,7 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # taken from original implementation: https://github.com/haotian-liu/LLaVA/blob/c121f0432da27facab705978f83c4ada465e46fd/llava/mm_utils.py#L152
         def pad_to_square_original(
-            image: Image.Image, background_color: Union[int, tuple[int, int, int]] = 0
+            image: Image.Image, background_color: int | tuple[int, int, int] = 0
         ) -> Image.Image:
             width, height = image.size
             if width == height:
@@ -226,6 +225,11 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 np.testing.assert_allclose(padded_image, padded_image_original)
 
             # background color length should match channel length
+            if image_inputs[0].shape[0] == image_inputs[0].shape[1]:
+                # This avoids a source of test flakiness - if the image is already square
+                # no padding is done and background colour is not checked.
+                return
+
             with self.assertRaises(ValueError):
                 padded_image = image_processor.pad_to_square(image_inputs[0], background_color=(122, 104))
 

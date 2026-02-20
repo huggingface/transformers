@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 SHI Labs and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,18 +13,16 @@
 # limitations under the License.
 """OneFormer model configuration"""
 
-from typing import Dict, Optional
-
-from ...configuration_utils import PretrainedConfig
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class OneFormerConfig(PretrainedConfig):
+class OneFormerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OneFormerModel`]. It is used to instantiate a
     OneFormer model according to the specified arguments, defining the model architecture. Instantiating a
@@ -33,24 +30,12 @@ class OneFormerConfig(PretrainedConfig):
     [shi-labs/oneformer_ade20k_swin_tiny](https://huggingface.co/shi-labs/oneformer_ade20k_swin_tiny) architecture
     trained on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig`, *optional*, defaults to `SwinConfig`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `SwinConfig()`):
             The configuration of the backbone model.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
-            library.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         ignore_value (`int`, *optional*, defaults to 255):
             Values to be ignored in GT label while calculating loss.
         num_queries (`int`, *optional*, defaults to 150):
@@ -146,15 +131,12 @@ class OneFormerConfig(PretrainedConfig):
     """
 
     model_type = "oneformer"
+    sub_configs = {"backbone_config": AutoConfig}
     attribute_map = {"hidden_size": "hidden_dim"}
 
     def __init__(
         self,
-        backbone_config: Optional[Dict] = None,
-        backbone: Optional[str] = None,
-        use_pretrained_backbone: bool = False,
-        use_timm_backbone: bool = False,
-        backbone_kwargs: Optional[Dict] = None,
+        backbone_config: dict | PreTrainedConfig | None = None,
         ignore_value: int = 255,
         num_queries: int = 150,
         no_object_weight: int = 0.1,
@@ -172,7 +154,7 @@ class OneFormerConfig(PretrainedConfig):
         is_training: bool = False,
         use_auxiliary_loss: bool = True,
         output_auxiliary_logits: bool = True,
-        strides: Optional[list] = [4, 8, 16, 32],
+        strides: list | None = [4, 8, 16, 32],
         task_seq_len: int = 77,
         text_encoder_width: int = 256,
         text_encoder_context_length: int = 77,
@@ -197,38 +179,17 @@ class OneFormerConfig(PretrainedConfig):
         common_stride: int = 4,
         **kwargs,
     ):
-        if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is unset. Initializing the config with the default `Swin` backbone.")
-            backbone_config = CONFIG_MAPPING["swin"](
-                image_size=224,
-                num_channels=3,
-                patch_size=4,
-                embed_dim=96,
-                depths=[2, 2, 6, 2],
-                num_heads=[3, 6, 12, 24],
-                window_size=7,
-                drop_path_rate=0.3,
-                use_absolute_embeddings=False,
-                out_features=["stage1", "stage2", "stage3", "stage4"],
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            default_config_type="swin",
+            default_config_kwargs={
+                "drop_path_rate": 0.3,
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+            **kwargs,
         )
 
         self.backbone_config = backbone_config
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
         self.ignore_value = ignore_value
         self.num_queries = num_queries
         self.no_object_weight = no_object_weight

@@ -14,10 +14,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch D-FINE model."""
 
+import copy
 import inspect
 import math
 import tempfile
 import unittest
+from functools import cached_property
 
 from parameterized import parameterized
 
@@ -27,8 +29,13 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
-from transformers.utils import cached_property
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 
 
 if is_torch_available():
@@ -42,11 +49,11 @@ if is_vision_available():
 from transformers import RTDetrImageProcessor
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-CHECKPOINT = "ustc-community/dfine_s_coco"
+CHECKPOINT = "ustc-community/dfine-small-coco"
 
 
 class DFineModelTester:
@@ -200,7 +207,7 @@ class DFineModelTester:
             stem_channels=[3, 16, 16],
             use_lab=True,
         )
-        return DFineConfig.from_backbone_configs(
+        return DFineConfig(
             backbone_config=backbone_config,
             encoder_hidden_dim=self.encoder_hidden_dim,
             encoder_in_channels=self.encoder_in_channels,
@@ -285,11 +292,8 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     is_encoder_decoder = True
-    test_torchscript = False
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
-    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -355,12 +359,12 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Not relevant for the model")
-    def test_can_init_all_missing_weights(self):
-        pass
-
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
+    def test_load_save_without_tied_weights(self):
         pass
 
     def test_attention_outputs(self):
@@ -371,7 +375,8 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -562,153 +567,85 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_different_timm_backbone(self):
+    def test_backbone_selection(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # let's pick a random timm backbone
-        config.encoder_in_channels = [24, 40, 432]
-        config.backbone = "tf_mobilenetv3_small_075"
-        config.backbone_config = None
-        config.use_timm_backbone = True
-        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
+        def _validate_backbone_init(config):
+            for model_class in self.all_model_classes:
+                model = model_class(copy.deepcopy(config))
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                if model_class.__name__ == "DFineForObjectDetection":
+                    expected_shape = (
+                        self.model_tester.batch_size,
+                        self.model_tester.num_queries,
+                        self.model_tester.num_labels,
+                    )
+                    self.assertEqual(outputs.logits.shape, expected_shape)
+                    # Confirm out_indices was propagated to backbone
+                    self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
+                else:
+                    # Confirm out_indices was propagated to backbone
+                    self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
-            if model_class.__name__ == "DFineForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    self.model_tester.num_labels,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
-                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
-            else:
-                # Confirm out_indices was propogated to backbone
-                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
+                self.assertTrue(outputs)
 
-            self.assertTrue(outputs)
+        # These kwargs are all removed and are supported only for BC
+        # In new models we have only `backbone_config`. Let's test that there is no regression
+        # let's test a random timm backbone
+        config_dict = config.to_dict()
+        config_dict["encoder_in_channels"] = [24, 40, 432]
+        config_dict["backbone"] = "tf_mobilenetv3_small_075"
+        config_dict["backbone_config"] = None
+        config_dict["use_timm_backbone"] = True
+        config_dict["backbone_kwargs"] = {"out_indices": [2, 3, 4]}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
 
-    def test_hf_backbone(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Load a pretrained HF checkpoint as backbone
-        config.backbone = "microsoft/resnet-18"
-        config.backbone_config = None
-        config.use_timm_backbone = False
-        config.use_pretrained_backbone = True
-        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if model_class.__name__ == "DFineForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    self.model_tester.num_labels,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
-                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
-            else:
-                # Confirm out_indices was propogated to backbone
-                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
-
-            self.assertTrue(outputs)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        configs_no_init.initializer_bias_prior_prob = 0.2
-        bias_value = -1.3863  # log_e ((1 - 0.2) / 0.2)
-
-        failed_cases = []
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            # Skip the check for the backbone
-            for name, module in model.named_modules():
-                if module.__class__.__name__ == "DFineConvEncoder":
-                    backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
-                    break
-
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if ("class_embed" in name and "bias" in name) or "enc_score_head.bias" in name:
-                        bias_tensor = torch.full_like(param.data, bias_value)
-                        try:
-                            torch.testing.assert_close(param.data, bias_tensor, atol=1e-4, rtol=1e-4)
-                        except AssertionError:
-                            failed_cases.append(
-                                f"Parameter {name} of model {model_class} seems not properly initialized. "
-                                f"Biases should be initialized to {bias_value}, got {param.data}"
-                            )
-                    elif (
-                        "level_embed" in name
-                        or "sampling_offsets.bias" in name
-                        or "value_proj" in name
-                        or "output_proj" in name
-                        or "reference_points" in name
-                        or "enc_score_head.weight" in name
-                        or ("class_embed" in name and "weight" in name)
-                        or name in backbone_params
-                    ):
-                        continue
-                    else:
-                        mean = param.data.mean()
-                        round_mean = (mean * 1e9).round() / 1e9
-                        round_mean = round_mean.item()
-                        if round_mean not in [0.0, 1.0]:
-                            failed_cases.append(
-                                f"Parameter {name} of model {model_class} seems not properly initialized. "
-                                f"Mean is {round_mean}, but should be in [0, 1]"
-                            )
-
-        message = "\n" + "\n".join(failed_cases)
-        self.assertTrue(not failed_cases, message)
+        # Test a pretrained HF checkpoint as backbone
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "microsoft/resnet-18"
+        config_dict["backbone_config"] = None
+        config_dict["use_timm_backbone"] = False
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone_kwargs"] = {"out_indices": [2, 3, 4]}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
-    def test_inference_with_different_dtypes(self, torch_dtype_str):
-        torch_dtype = {
+    def test_inference_with_different_dtypes(self, dtype_str):
+        dtype = {
             "float32": torch.float32,
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
-        }[torch_dtype_str]
+        }[dtype_str]
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.to(torch_device).to(torch_dtype)
+            model.to(torch_device).to(dtype)
             model.eval()
             for key, tensor in inputs_dict.items():
                 if tensor.dtype == torch.float32:
-                    inputs_dict[key] = tensor.to(torch_dtype)
+                    inputs_dict[key] = tensor.to(dtype)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
-    def test_inference_equivalence_for_static_and_dynamic_anchors(self, torch_dtype_str):
-        torch_dtype = {
+    def test_inference_equivalence_for_static_and_dynamic_anchors(self, dtype_str):
+        dtype = {
             "float32": torch.float32,
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
-        }[torch_dtype_str]
+        }[dtype_str]
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         h, w = inputs_dict["pixel_values"].shape[-2:]
@@ -716,16 +653,16 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         # convert inputs to the desired dtype
         for key, tensor in inputs_dict.items():
             if tensor.dtype == torch.float32:
-                inputs_dict[key] = tensor.to(torch_dtype)
+                inputs_dict[key] = tensor.to(dtype)
 
         for model_class in self.all_model_classes:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model_class(config).save_pretrained(tmpdirname)
                 model_static = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, torch_dtype=torch_dtype
+                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, dtype=dtype
                 ).eval()
                 model_dynamic = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=None, device_map=torch_device, torch_dtype=torch_dtype
+                    tmpdirname, anchor_image_size=None, device_map=torch_device, dtype=dtype
                 ).eval()
 
             self.assertIsNotNone(model_static.config.anchor_image_size)
@@ -751,6 +688,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
+@slow
 class DFineModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
@@ -771,37 +709,38 @@ class DFineModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor(
             [
-                [-3.8097816, -4.7724586, -5.994499],
-                [-5.2974715, -9.499067, -6.1653666],
-                [-5.3502765, -3.9530406, -6.3630295],
+                [-3.8098, -4.7725, -5.9945],
+                [-5.2975, -9.4991, -6.1654],
+                [-5.3502, -3.9532, -6.3631],
             ]
         ).to(torch_device)
         expected_boxes = torch.tensor(
             [
-                [0.7677696, 0.41479152, 0.46441072],
-                [0.16912134, 0.19869131, 0.2123824],
-                [0.2581653, 0.54818195, 0.47512347],
+                [0.7678, 0.4148, 0.4644],
+                [0.1691, 0.1987, 0.2124],
+                [0.2582, 0.5482, 0.4751],
             ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=2e-4, rtol=2e-4)
 
         expected_shape_boxes = torch.Size((1, 300, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=2e-4, rtol=2e-4)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
+
         expected_scores = torch.tensor([0.9642, 0.9542, 0.9536, 0.8548], device=torch_device)
         expected_labels = [15, 65, 15, 57]
         expected_slice_boxes = torch.tensor(
             [
-                [1.3186283e01, 5.4130211e01, 3.1726535e02, 4.7212445e02],
-                [4.0275269e01, 7.2975174e01, 1.7620003e02, 1.1776848e02],
-                [3.4276117e02, 2.3427944e01, 6.3998401e02, 3.7477191e02],
-                [5.8418274e-01, 1.1794567e00, 6.3933154e02, 4.7485995e02],
+                [1.3186e01, 5.4130e01, 3.1727e02, 4.7212e02],
+                [4.0275e01, 7.2975e01, 1.7620e02, 1.1777e02],
+                [3.4276e02, 2.3428e01, 6.3998e02, 3.7477e02],
+                [5.8418e-01, 1.1794e00, 6.3933e02, 4.7486e02],
             ],
             device=torch_device,
         )

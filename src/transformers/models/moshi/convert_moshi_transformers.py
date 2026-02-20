@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -208,7 +207,7 @@ def convert_checkpoint(
     """
     device = _grab_best_device()
 
-    mimi_model = MimiModel.from_pretrained(mimi_repo_id, torch_dtype=torch.bfloat16)
+    mimi_model = MimiModel.from_pretrained(mimi_repo_id, dtype=torch.bfloat16)
 
     if config_path is not None:
         config = MoshiConfig.from_pretrained(config_path)
@@ -268,7 +267,7 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the Hugging Face hub."
     )
 
     args = parser.parse_args()

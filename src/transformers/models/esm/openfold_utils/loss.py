@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, Optional, Tuple
 
 import torch
 
@@ -28,7 +27,7 @@ def _calculate_bin_centers(boundaries: torch.Tensor) -> torch.Tensor:
 def _calculate_expected_aligned_error(
     alignment_confidence_breaks: torch.Tensor,
     aligned_distance_error_probs: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     bin_centers = _calculate_bin_centers(alignment_confidence_breaks)
     return (
         torch.sum(aligned_distance_error_probs * bin_centers, dim=-1),
@@ -41,7 +40,7 @@ def compute_predicted_aligned_error(
     max_bin: int = 31,
     no_bins: int = 64,
     **kwargs,
-) -> Dict[str, torch.Tensor]:
+) -> dict[str, torch.Tensor]:
     """Computes aligned confidence metrics from logits.
 
     Args:
@@ -73,7 +72,7 @@ def compute_predicted_aligned_error(
 
 def compute_tm(
     logits: torch.Tensor,
-    residue_weights: Optional[torch.Tensor] = None,
+    residue_weights: torch.Tensor | None = None,
     max_bin: int = 31,
     no_bins: int = 64,
     eps: float = 1e-8,

@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 이 가이드에서는 다음을 설명합니다:
 
-1. [Food-101](https://huggingface.co/datasets/food101) 데이터 세트에서 [ViT](model_doc/vit)를 미세 조정하여 이미지에서 식품 항목을 분류합니다.
+1. [Food-101](https://huggingface.co/datasets/ethz/food101) 데이터 세트에서 [ViT](model_doc/vit)를 미세 조정하여 이미지에서 식품 항목을 분류합니다.
 2. 추론을 위해 미세 조정 모델을 사용합니다.
 
 <Tip>
@@ -57,7 +57,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ```py
 >>> from datasets import load_dataset
 
->>> food = load_dataset("food101", split="train[:5000]")
+>>> food = load_dataset("ethz/food101", split="train[:5000]")
 ```
 
 데이터 세트의 `train`을 [`~datasets.Dataset.train_test_split`] 메소드를 사용하여 훈련 및 테스트 세트로 분할하세요:
@@ -108,8 +108,6 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 >>> image_processor = AutoImageProcessor.from_pretrained(checkpoint)
 ```
 
-<frameworkcontent>
-<pt>
 이미지에 몇 가지 이미지 변환을 적용하여 과적합에 대해 모델을 더 견고하게 만듭니다. 여기서 Torchvision의 [`transforms`](https://pytorch.org/vision/stable/transforms.html) 모듈을 사용하지만, 원하는 이미지 라이브러리를 사용할 수도 있습니다.
 
 이미지의 임의 부분을 크롭하고 크기를 조정한 다음, 이미지 평균과 표준 편차로 정규화하세요:
@@ -148,95 +146,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 
 >>> data_collator = DefaultDataCollator()
 ```
-</pt>
-</frameworkcontent>
 
-
-<frameworkcontent>
-<tf>
-
-과적합을 방지하고 모델을 보다 견고하게 만들기 위해 데이터 세트의 훈련 부분에 데이터 증강을 추가합니다.
-여기서 Keras 전처리 레이어로 훈련 데이터에 대한 변환(데이터 증강 포함)과
-검증 데이터에 대한 변환(중앙 크로핑, 크기 조정, 정규화만)을 정의합니다.
-`tf.image` 또는 다른 원하는 라이브러리를 사용할 수 있습니다.
-
-```py
->>> from tensorflow import keras
->>> from tensorflow.keras import layers
-
->>> size = (image_processor.size["height"], image_processor.size["width"])
-
->>> train_data_augmentation = keras.Sequential(
-...     [
-...         layers.RandomCrop(size[0], size[1]),
-...         layers.Rescaling(scale=1.0 / 127.5, offset=-1),
-...         layers.RandomFlip("horizontal"),
-...         layers.RandomRotation(factor=0.02),
-...         layers.RandomZoom(height_factor=0.2, width_factor=0.2),
-...     ],
-...     name="train_data_augmentation",
-... )
-
->>> val_data_augmentation = keras.Sequential(
-...     [
-...         layers.CenterCrop(size[0], size[1]),
-...         layers.Rescaling(scale=1.0 / 127.5, offset=-1),
-...     ],
-...     name="val_data_augmentation",
-... )
-```
-
-다음으로 한 번에 하나의 이미지가 아니라 이미지 배치에 적절한 변환을 적용하는 함수를 만듭니다.
-
-```py
->>> import numpy as np
->>> import tensorflow as tf
->>> from PIL import Image
-
-
->>> def convert_to_tf_tensor(image: Image):
-...     np_image = np.array(image)
-...     tf_image = tf.convert_to_tensor(np_image)
-...     # `expand_dims()` is used to add a batch dimension since
-...     # the TF augmentation layers operates on batched inputs.
-...     return tf.expand_dims(tf_image, 0)
-
-
->>> def preprocess_train(example_batch):
-...     """Apply train_transforms across a batch."""
-...     images = [
-...         train_data_augmentation(convert_to_tf_tensor(image.convert("RGB"))) for image in example_batch["image"]
-...     ]
-...     example_batch["pixel_values"] = [tf.transpose(tf.squeeze(image)) for image in images]
-...     return example_batch
-
-
-... def preprocess_val(example_batch):
-...     """Apply val_transforms across a batch."""
-...     images = [
-...         val_data_augmentation(convert_to_tf_tensor(image.convert("RGB"))) for image in example_batch["image"]
-...     ]
-...     example_batch["pixel_values"] = [tf.transpose(tf.squeeze(image)) for image in images]
-...     return example_batch
-```
-
-🤗 Datasets [`~datasets.Dataset.set_transform`]를 사용하여 즉시 변환을 적용하세요:
-
-```py
-food["train"].set_transform(preprocess_train)
-food["test"].set_transform(preprocess_val)
-```
-
-최종 전처리 단계로 `DefaultDataCollator`를 사용하여 예제 배치를 만듭니다. 🤗 Transformers의 다른 데이터 콜레이터와 달리
-`DefaultDataCollator`는 패딩과 같은 추가 전처리를 적용하지 않습니다.
-
-```py
->>> from transformers import DefaultDataCollator
-
->>> data_collator = DefaultDataCollator(return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## 평가[[evaluate]]
 
@@ -266,8 +176,6 @@ food["test"].set_transform(preprocess_val)
 
 ## 훈련[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]를 사용하여 모델을 미세 조정하는 방법에 익숙하지 않은 경우, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인하세요!
@@ -304,7 +212,7 @@ food["test"].set_transform(preprocess_val)
 ...     gradient_accumulation_steps=4,
 ...     per_device_eval_batch_size=16,
 ...     num_train_epochs=3,
-...     warmup_ratio=0.1,
+...     warmup_steps=0.1,
 ...     logging_steps=10,
 ...     load_best_model_at_end=True,
 ...     metric_for_best_model="accuracy",
@@ -329,116 +237,6 @@ food["test"].set_transform(preprocess_val)
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
-
-<frameworkcontent>
-<tf>
-
-<Tip>
-
-Keras를 사용하여 모델을 미세 조정하는 방법에 익숙하지 않은 경우, 먼저 [기본 튜토리얼](./training#train-a-tensorflow-model-with-keras)을 확인하세요!
-
-</Tip>
-
-TensorFlow에서 모델을 미세 조정하려면 다음 단계를 따르세요:
-1. 훈련 하이퍼파라미터를 정의하고 옵티마이저와 학습률 스케쥴을 설정합니다.
-2. 사전 훈련된 모델을 인스턴스화합니다.
-3. 🤗 Dataset을 `tf.data.Dataset`으로 변환합니다.
-4. 모델을 컴파일합니다.
-5. 콜백을 추가하고 훈련을 수행하기 위해 `fit()` 메소드를 사용합니다.
-6. 커뮤니티와 공유하기 위해 모델을 🤗 Hub에 업로드합니다.
-
-하이퍼파라미터, 옵티마이저 및 학습률 스케쥴을 정의하는 것으로 시작합니다:
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_epochs = 5
->>> num_train_steps = len(food["train"]) * num_epochs
->>> learning_rate = 3e-5
->>> weight_decay_rate = 0.01
-
->>> optimizer, lr_schedule = create_optimizer(
-...     init_lr=learning_rate,
-...     num_train_steps=num_train_steps,
-...     weight_decay_rate=weight_decay_rate,
-...     num_warmup_steps=0,
-... )
-```
-
-그런 다음 레이블 매핑과 함께 [`TFAuto ModelForImageClassification`]으로 ViT를 가져옵니다:
-
-```py
->>> from transformers import TFAutoModelForImageClassification
-
->>> model = TFAutoModelForImageClassification.from_pretrained(
-...     checkpoint,
-...     id2label=id2label,
-...     label2id=label2id,
-... )
-```
-
-데이터 세트를 [`~datasets.Dataset.to_tf_dataset`]와 `data_collator`를 사용하여 `tf.data.Dataset` 형식으로 변환하세요:
-
-```py
->>> # converting our train dataset to tf.data.Dataset
->>> tf_train_dataset = food["train"].to_tf_dataset(
-...     columns="pixel_values", label_cols="label", shuffle=True, batch_size=batch_size, collate_fn=data_collator
-... )
-
->>> # converting our test dataset to tf.data.Dataset
->>> tf_eval_dataset = food["test"].to_tf_dataset(
-...     columns="pixel_values", label_cols="label", shuffle=True, batch_size=batch_size, collate_fn=data_collator
-... )
-```
-
-`compile()`를 사용하여 훈련 모델을 구성하세요:
-
-```py
->>> from tensorflow.keras.losses import SparseCategoricalCrossentropy
-
->>> loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
->>> model.compile(optimizer=optimizer, loss=loss)
-```
-
-예측에서 정확도를 계산하고 모델을 🤗 Hub로 푸시하려면 [Keras callbacks](../main_classes/keras_callbacks)를 사용하세요.
-`compute_metrics` 함수를 [KerasMetricCallback](../main_classes/keras_callbacks#transformers.KerasMetricCallback)에 전달하고,
-[PushToHubCallback](../main_classes/keras_callbacks#transformers.PushToHubCallback)을 사용하여 모델을 업로드합니다:
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback, PushToHubCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_eval_dataset)
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="food_classifier",
-...     tokenizer=image_processor,
-...     save_strategy="no",
-... )
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-이제 모델을 훈련할 준비가 되었습니다! 훈련 및 검증 데이터 세트, 에폭 수와 함께 `fit()`을 호출하고,
-콜백을 사용하여 모델을 미세 조정합니다:
-
-```py
->>> model.fit(tf_train_dataset, validation_data=tf_eval_dataset, epochs=num_epochs, callbacks=callbacks)
-Epoch 1/5
-250/250 [==============================] - 313s 1s/step - loss: 2.5623 - val_loss: 1.4161 - accuracy: 0.9290
-Epoch 2/5
-250/250 [==============================] - 265s 1s/step - loss: 0.9181 - val_loss: 0.6808 - accuracy: 0.9690
-Epoch 3/5
-250/250 [==============================] - 252s 1s/step - loss: 0.3910 - val_loss: 0.4303 - accuracy: 0.9820
-Epoch 4/5
-250/250 [==============================] - 251s 1s/step - loss: 0.2028 - val_loss: 0.3191 - accuracy: 0.9900
-Epoch 5/5
-250/250 [==============================] - 238s 949ms/step - loss: 0.1232 - val_loss: 0.3259 - accuracy: 0.9890
-```
-
-축하합니다! 모델을 미세 조정하고 🤗 Hub에 공유했습니다. 이제 추론에 사용할 수 있습니다!
-</tf>
-</frameworkcontent>
 
 
 <Tip>
@@ -454,7 +252,7 @@ Epoch 5/5
 추론을 수행하고자 하는 이미지를 가져와봅시다:
 
 ```py
->>> ds = load_dataset("food101", split="validation[:10]")
+>>> ds = load_dataset("ethz/food101", split="validation[:10]")
 >>> image = ds["image"][0]
 ```
 
@@ -478,8 +276,6 @@ Epoch 5/5
 
 원한다면, `pipeline`의 결과를 수동으로 복제할 수도 있습니다:
 
-<frameworkcontent>
-<pt>
 이미지를 전처리하기 위해 이미지 프로세서를 가져오고 `input`을 PyTorch 텐서로 반환합니다:
 
 ```py
@@ -507,36 +303,3 @@ Epoch 5/5
 >>> model.config.id2label[predicted_label]
 'beignets'
 ```
-</pt>
-</frameworkcontent>
-
-<frameworkcontent>
-<tf>
-이미지를 전처리하기 위해 이미지 프로세서를 가져오고 `input`을 TensorFlow 텐서로 반환합니다:
-
-```py
->>> from transformers import AutoImageProcessor
-
->>> image_processor = AutoImageProcessor.from_pretrained("MariaK/food_classifier")
->>> inputs = image_processor(image, return_tensors="tf")
-```
-
-입력을 모델에 전달하고 logits을 반환합니다:
-
-```py
->>> from transformers import TFAutoModelForImageClassification
-
->>> model = TFAutoModelForImageClassification.from_pretrained("MariaK/food_classifier")
->>> logits = model(**inputs).logits
-```
-
-확률이 가장 높은 예측 레이블을 가져오고, 모델의 `id2label` 매핑을 사용하여 레이블로 변환합니다:
-
-```py
->>> predicted_class_id = int(tf.math.argmax(logits, axis=-1)[0])
->>> model.config.id2label[predicted_class_id]
-'beignets'
-```
-
-</tf>
-</frameworkcontent>

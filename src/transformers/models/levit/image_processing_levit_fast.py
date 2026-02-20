@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,29 +13,21 @@
 # limitations under the License.
 """Fast Image processor class for LeViT."""
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, SizeDict
+from typing import Optional
+
+import torch
+import torchvision.transforms.v2.functional as tvF
+
+from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
 from ...image_transforms import (
     ChannelDimension,
     get_resize_output_image_size,
 )
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
-from ...utils import add_start_docstrings, is_torch_available, is_torchvision_available, is_torchvision_v2_available
+from ...utils import auto_docstring
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-@add_start_docstrings(
-    "Constructs a fast Levit image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class LevitImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -54,7 +45,7 @@ class LevitImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -65,7 +56,7 @@ class LevitImageProcessorFast(BaseImageProcessorFast):
 
         If size is a dict with key "shortest_edge", the shortest edge value `c` is rescaled to `int(c * (256/224))`.
         The smaller edge of the image will be matched to this value i.e, if height > width, then image will be rescaled
-        to `(size["shortest_egde"] * height / width, size["shortest_egde"])`.
+        to `(size["shortest_edge"] * height / width, size["shortest_edge"])`.
 
         Args:
             image (`torch.Tensor`):
@@ -78,7 +69,7 @@ class LevitImageProcessorFast(BaseImageProcessorFast):
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BICUBIC`):
                 Resampling filter to use when resiizing the image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BICUBIC
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BICUBIC
         if size.shortest_edge:
             shortest_edge = int((256 / 224) * size["shortest_edge"])
             new_size = get_resize_output_image_size(
@@ -90,7 +81,7 @@ class LevitImageProcessorFast(BaseImageProcessorFast):
             raise ValueError(
                 f"Size dict must have keys 'height' and 'width' or 'shortest_edge'. Got {size.keys()} {size.keys()}."
             )
-        return F.resize(
+        return tvF.resize(
             image,
             size=new_size,
             interpolation=interpolation,

@@ -16,18 +16,28 @@ import inspect
 import json
 import re
 import types
+from collections.abc import Callable
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Callable, Optional, Union, get_args, get_origin, get_type_hints
+from inspect import isfunction
+from typing import Any, Literal, Union, get_args, get_origin, get_type_hints, no_type_check
 
 from packaging import version
 
+from . import logging
 from .import_utils import is_jinja_available, is_torch_available, is_vision_available
 
 
+logger = logging.get_logger(__name__)
+
 if is_jinja_available():
     import jinja2
+    import jinja2.exceptions
+    import jinja2.ext
+    import jinja2.nodes
+    import jinja2.runtime
     from jinja2.ext import Extension
     from jinja2.sandbox import ImmutableSandboxedEnvironment
 else:
@@ -38,6 +48,9 @@ if is_vision_available():
 
 if is_torch_available():
     from torch import Tensor
+
+
+ChatType = list[dict[str, Any]]
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
@@ -62,16 +75,12 @@ returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL
 class TypeHintParsingException(Exception):
     """Exception raised for errors in parsing type hints to generate JSON schemas"""
 
-    pass
-
 
 class DocstringParsingException(Exception):
     """Exception raised for errors in parsing docstrings to generate JSON schemas"""
 
-    pass
 
-
-def _get_json_schema_type(param_type: str) -> dict[str, str]:
+def _get_json_schema_type(param_type: type) -> dict[str, str]:
     type_mapping = {
         int: {"type": "integer"},
         float: {"type": "number"},
@@ -115,6 +124,20 @@ def _parse_type_hint(hint: str) -> dict:
             return_dict["nullable"] = True
         return return_dict
 
+    elif origin is Literal and len(args) > 0:
+        LITERAL_TYPES = (int, float, str, bool, type(None))
+        args_types = []
+        for arg in args:
+            if type(arg) not in LITERAL_TYPES:
+                raise TypeHintParsingException("Only the valid python literals can be listed in typing.Literal.")
+            arg_type = _get_json_schema_type(type(arg)).get("type")
+            if arg_type is not None and arg_type not in args_types:
+                args_types.append(arg_type)
+        return {
+            "type": args_types.pop() if len(args_types) == 1 else list(args_types),
+            "enum": list(args),
+        }
+
     elif origin is list:
         if not args:
             return {"type": "array"}
@@ -130,13 +153,13 @@ def _parse_type_hint(hint: str) -> dict:
                 f"The type hint {str(hint).replace('typing.', '')} is a Tuple with a single element, which "
                 "we do not automatically convert to JSON schema as it is rarely necessary. If this input can contain "
                 "more than one element, we recommend "
-                "using a List[] type instead, or if it really is a single element, remove the Tuple[] wrapper and just "
+                "using a list[] type instead, or if it really is a single element, remove the tuple[] wrapper and just "
                 "pass the element directly."
             )
         if ... in args:
             raise TypeHintParsingException(
                 "Conversion of '...' is not supported in Tuple type hints. "
-                "Use List[] types for variable-length"
+                "Use list[] types for variable-length"
                 " inputs instead."
             )
         return {"type": "array", "prefixItems": [_parse_type_hint(t) for t in args]}
@@ -155,15 +178,30 @@ def _parse_type_hint(hint: str) -> dict:
 def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     type_hints = get_type_hints(func)
     signature = inspect.signature(func)
+    func_name = getattr(func, "__name__", "operation")
+    # For methods, we need to ignore the first "self" or "cls" parameter. Here we assume that if the first parameter
+    # is named "self" or "cls" and has no type hint, it is an implicit receiver argument.
+    first_param_name = next(iter(signature.parameters), None)
+    if (
+        first_param_name in {"self", "cls"}
+        and signature.parameters[first_param_name].annotation == inspect.Parameter.empty
+    ):
+        implicit_arg_name = first_param_name
+    else:
+        implicit_arg_name = None
     required = []
     for param_name, param in signature.parameters.items():
+        if param_name == implicit_arg_name:
+            continue
         if param.annotation == inspect.Parameter.empty:
-            raise TypeHintParsingException(f"Argument {param.name} is missing a type hint in function {func.__name__}")
+            raise TypeHintParsingException(f"Argument {param.name} is missing a type hint in function {func_name}")
         if param.default == inspect.Parameter.empty:
             required.append(param_name)
 
     properties = {}
     for param_name, param_type in type_hints.items():
+        if param_name == implicit_arg_name:
+            continue
         properties[param_name] = _parse_type_hint(param_type)
 
     schema = {"type": "object", "properties": properties}
@@ -173,7 +211,7 @@ def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     return schema
 
 
-def parse_google_format_docstring(docstring: str) -> tuple[Optional[str], Optional[dict], Optional[str]]:
+def parse_google_format_docstring(docstring: str) -> tuple[str | None, dict | None, str | None]:
     """
     Parses a Google-style docstring to extract the function description,
     argument descriptions, and return description.
@@ -212,7 +250,8 @@ def get_json_schema(func: Callable) -> dict:
     mostly used for passing lists of tools to a chat template. The JSON schema contains the name and description of
     the function, as well as the names, types and descriptions for each of its arguments. `get_json_schema()` requires
     that the function has a docstring, and that each argument has a description in the docstring, in the standard
-    Google docstring format shown below. It also requires that all the function arguments have a valid Python type hint.
+    Google docstring format shown below. It also requires that all user-facing arguments have valid Python type hints.
+    When passing methods, implicit receiver arguments (`self` or `cls`) are ignored.
 
     Although it is not required, a `Returns` block can also be added, which will be included in the schema. This is
     optional because most chat templates ignore the return value of the function.
@@ -314,10 +353,10 @@ def get_json_schema(func: Callable) -> dict:
     }
     """
     doc = inspect.getdoc(func)
+    func_name = getattr(func, "__name__", "operation")
+
     if not doc:
-        raise DocstringParsingException(
-            f"Cannot generate JSON schema for {func.__name__} because it has no docstring!"
-        )
+        raise DocstringParsingException(f"Cannot generate JSON schema for {func_name} because it has no docstring!")
     doc = doc.strip()
     main_doc, param_descriptions, return_doc = parse_google_format_docstring(doc)
 
@@ -328,7 +367,7 @@ def get_json_schema(func: Callable) -> dict:
     for arg, schema in json_schema["properties"].items():
         if arg not in param_descriptions:
             raise DocstringParsingException(
-                f"Cannot generate JSON schema for {func.__name__} because the docstring has no description for the argument '{arg}'"
+                f"Cannot generate JSON schema for {func_name} because the docstring has no description for the argument '{arg}'"
             )
         desc = param_descriptions[arg]
         enum_choices = re.search(r"\(choices:\s*(.*?)\)\s*$", desc, flags=re.IGNORECASE)
@@ -337,7 +376,7 @@ def get_json_schema(func: Callable) -> dict:
             desc = enum_choices.string[: enum_choices.start()].strip()
         schema["description"] = desc
 
-    output = {"name": func.__name__, "description": main_doc, "parameters": json_schema}
+    output = {"name": func_name, "description": main_doc, "parameters": json_schema}
     if return_dict is not None:
         output["return"] = return_dict
     return {"type": "function", "function": output}
@@ -363,6 +402,11 @@ def _render_with_assistant_indices(
 
 @lru_cache
 def _compile_jinja_template(chat_template):
+    return _cached_compile_jinja_template(chat_template)
+
+
+@no_type_check
+def _cached_compile_jinja_template(chat_template):
     if not is_jinja_available():
         raise ImportError(
             "apply_chat_template requires jinja2 to be installed. Please install it using `pip install jinja2`."
@@ -433,3 +477,128 @@ def _compile_jinja_template(chat_template):
     jinja_env.globals["raise_exception"] = raise_exception
     jinja_env.globals["strftime_now"] = strftime_now
     return jinja_env.from_string(chat_template)
+
+
+def render_jinja_template(
+    conversations: list[ChatType],
+    tools: list[dict | Callable] | None = None,
+    documents: ChatType | None = None,
+    chat_template: str | None = None,
+    return_assistant_tokens_mask: bool = False,
+    continue_final_message: bool = False,
+    add_generation_prompt: bool = False,
+    **kwargs,
+) -> str:
+    if return_assistant_tokens_mask and not re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template):
+        logger.warning_once(
+            "return_assistant_tokens_mask==True but chat template does not contain `{% generation %}` keyword."
+        )
+
+    # Compilation function uses a cache to avoid recompiling the same template
+    compiled_template = _compile_jinja_template(chat_template)
+
+    # We accept either JSON schemas or functions for tools. If we get functions, we convert them to schemas
+    if tools is not None:
+        tool_schemas = []
+        for tool in tools:
+            if isinstance(tool, dict):
+                tool_schemas.append(tool)
+            elif isfunction(tool) or inspect.ismethod(tool):
+                tool_schemas.append(get_json_schema(tool))
+            else:
+                raise ValueError(
+                    "Tools should either be a JSON schema, or a callable function with type hints "
+                    "and a docstring suitable for auto-conversion to a schema."
+                )
+    else:
+        tool_schemas = None
+
+    if documents is not None:
+        for document in documents:
+            if not isinstance(document, dict):
+                raise TypeError("Documents should be a list of dicts with 'title' and 'text' keys!")
+
+    rendered = []
+    all_generation_indices = []
+    continue_final_message_tag = "CONTINUE_FINAL_MESSAGE_TAG "
+    for chat in conversations:
+        if hasattr(chat, "messages"):
+            # Indicates it's a Conversation object
+            chat = chat.messages
+        if continue_final_message:
+            chat = deepcopy(chat)
+            final_message = chat[-1]["content"]
+            if isinstance(final_message, (list, tuple)):
+                for content_block in reversed(final_message):
+                    if "text" in content_block:
+                        # Pick the last text block in the message (the first one we hit while iterating in reverse)
+                        final_message = content_block["text"]
+                        content_block["text"] = content_block["text"] + continue_final_message_tag
+                        break
+                else:
+                    raise ValueError(
+                        "continue_final_message is set but we could not find any text to continue in the final message!"
+                    )
+            else:
+                chat[-1]["content"] = chat[-1]["content"] + continue_final_message_tag
+        if return_assistant_tokens_mask:
+            rendered_chat, generation_indices = _render_with_assistant_indices(
+                compiled_template=compiled_template,
+                messages=chat,
+                tools=tool_schemas,
+                documents=documents,
+                add_generation_prompt=add_generation_prompt,
+                **kwargs,
+            )
+            all_generation_indices.append(generation_indices)
+        else:
+            rendered_chat = compiled_template.render(
+                messages=chat,
+                tools=tool_schemas,
+                documents=documents,
+                add_generation_prompt=add_generation_prompt,
+                **kwargs,
+            )
+        if continue_final_message:
+            if (final_message.strip() not in rendered_chat) or (
+                continue_final_message_tag.strip() not in rendered_chat
+            ):
+                raise ValueError(
+                    "continue_final_message is set but the final message does not appear in the chat after "
+                    "applying the chat template! This can happen if the chat template deletes portions of "
+                    "the final message. Please verify the chat template and final message in your chat to "
+                    "ensure they are compatible."
+                )
+            tag_loc = rendered_chat.rindex(continue_final_message_tag.strip())
+            if rendered_chat[tag_loc : tag_loc + len(continue_final_message_tag)] == continue_final_message_tag:
+                # The template preserves spacing, so things are simple
+                rendered_chat = rendered_chat[:tag_loc]
+            else:
+                # The message has trailing spacing that was trimmed, so we must be more cautious
+                rendered_chat = rendered_chat[:tag_loc].rstrip()
+        rendered.append(rendered_chat)
+
+    return rendered, all_generation_indices
+
+
+def is_valid_message(message):
+    """
+    Check that input is a valid message in a chat, namely a dict with "role" and "content" keys.
+    """
+    if not isinstance(message, dict):
+        return False
+    if not ("role" in message and "content" in message):
+        return False
+    return True
+
+
+class Chat:
+    """This class is intended to just be used internally for pipelines and not exposed to users. We convert chats
+    to this format because the rest of the pipeline code tends to assume that lists of messages are
+    actually a batch of samples rather than messages in the same conversation."""
+
+    def __init__(self, messages: dict):
+        for message in messages:
+            if not is_valid_message(message):
+                raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
+        self.messages = messages

@@ -12,6 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "datasets[audio] >= 1.12.0",
+#     "torch >= 1.5",
+#     "torchaudio",
+#     "accelerate >= 0.12.0",
+#     "librosa",
+# ]
+# ///
+
 """Pre-Training a 🤗 Wav2Vec2 model on unlabeled audio data"""
 
 import argparse
@@ -19,8 +30,8 @@ import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union
 
+import aiohttp
 import datasets
 import torch
 from accelerate import Accelerator
@@ -41,7 +52,6 @@ from transformers import (
     set_seed,
 )
 from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices, _sample_negative_indices
-from transformers.utils import send_example_telemetry
 
 
 logger = get_logger(__name__)
@@ -313,7 +323,7 @@ class DataCollatorForWav2Vec2Pretraining:
         mask_time_prob (:obj:`float`, `optional`, defaults to :obj:`0.65`):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked for the contrastive task.
             Note that overlap between masked sequences may decrease the actual percentage of masked vectors.
-            The default value is taken from the original wav2vec 2.0 article (https://arxiv.org/abs/2006.11477),
+            The default value is taken from the original wav2vec 2.0 article (https://huggingface.co/papers/2006.11477),
             and results in about 49 percent of each sequence being masked on average.
         mask_time_length (:obj:`int`, `optional`, defaults to :obj:`10`):
             Length of each vector mask span to mask along the time axis in the contrastive task. The default value
@@ -322,12 +332,12 @@ class DataCollatorForWav2Vec2Pretraining:
 
     model: Wav2Vec2ForPreTraining
     feature_extractor: Wav2Vec2FeatureExtractor
-    padding: Union[bool, str] = "longest"
-    pad_to_multiple_of: Optional[int] = None
-    mask_time_prob: Optional[float] = 0.65
-    mask_time_length: Optional[int] = 10
+    padding: bool | str = "longest"
+    pad_to_multiple_of: int | None = None
+    mask_time_prob: float | None = 0.65
+    mask_time_length: int | None = 10
 
-    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, list[int] | torch.Tensor]]) -> dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
             features,
@@ -398,10 +408,6 @@ def main():
     # We now keep distinct sets of args, for a cleaner separation of concerns.
     args = parse_args()
 
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_wav2vec2_pretraining_no_trainer", args)
-
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     accelerator = Accelerator()
     logger.info(accelerator.state, main_process_only=False)
@@ -454,6 +460,7 @@ def main():
             split=train_split_name,
             cache_dir=args.cache_dir,
             trust_remote_code=args.trust_remote_code,
+            storage_options={"client_kwargs": {"timeout": aiohttp.ClientTimeout(total=60 * 60)}},
         )
         datasets_splits.append(dataset_split)
 

@@ -16,6 +16,8 @@
 import copy
 import tempfile
 import unittest
+import unittest.mock
+from functools import cached_property
 
 import timeout_decorator  # noqa
 
@@ -28,7 +30,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -58,28 +59,16 @@ def prepare_bart_inputs_dict(
     decoder_input_ids=None,
     attention_mask=None,
     decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-    if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
-    if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
         "decoder_attention_mask": attention_mask,
-        "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -99,7 +88,7 @@ class BartModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=50,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -167,10 +156,9 @@ class BartModelTester:
         model = BartModel(config=config).get_decoder().to(torch_device).eval()
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
-        head_mask = inputs_dict["head_mask"]
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
 
@@ -434,8 +422,6 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False  # Fix me Michael
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = BartModelTester(self)
@@ -452,7 +438,7 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -492,6 +478,35 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             with torch.no_grad():
                 model(**inputs)[0]
 
+    def test_input_embeddings_support_forward_hook(self):
+        # Make sure that registering hooks on the input embeddings are indeed called
+        # in forward. This is necessary for gradient checkpointing in PEFT, see also #41821.
+        # For BART with tied embeddings, encoder and decoder have separate embedding modules,
+        # so we need to check that hooks on those modules are called during forward.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            hooks = []
+            base_model = model.model if hasattr(model, "model") else model
+
+            if hasattr(base_model, "encoder") and hasattr(base_model.encoder, "embed_tokens"):
+                hook = unittest.mock.MagicMock(return_value=None)
+                base_model.encoder.embed_tokens.register_forward_hook(hook)
+                hooks.append(hook)
+            if hasattr(base_model, "decoder") and hasattr(base_model.decoder, "embed_tokens"):
+                hook = unittest.mock.MagicMock(return_value=None)
+                base_model.decoder.embed_tokens.register_forward_hook(hook)
+                hooks.append(hook)
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            model(**inputs)
+
+            total_calls = sum(hook.call_count for hook in hooks)
+            self.assertGreater(total_calls, 0, f"Hooks on embeddings were not called for {model_class.__name__}")
+
     @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
@@ -528,7 +543,7 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
         if a.numel() > 100:
@@ -607,7 +622,7 @@ class FastIntegrationTests(unittest.TestCase):
         dct = tok(ARTICLE, return_tensors="pt")
         generated_ids = hf.generate(**dct, num_beams=4)
         result = tok.batch_decode(generated_ids)[0]
-        assert EXPECTED == result
+        assert result == EXPECTED
 
     def test_xsum_1_1_batch_generation(self):
         # test batch
@@ -879,7 +894,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        model = BartModel.from_pretrained("facebook/bart-large").to(torch_device)
+        model = BartModel.from_pretrained("facebook/bart-large", dtype=torch.float32).to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = input_ids.ne(model.config.pad_token_id)
         with torch.no_grad():
@@ -947,7 +962,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             " state."
             "</s>"
         )
-        dct = tok.batch_encode_plus(
+        dct = tok(
             [PGE_ARTICLE],
             max_length=1024,
             padding="max_length",
@@ -971,9 +986,9 @@ class BartModelIntegrationTests(unittest.TestCase):
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
     def test_xsum_config_generation_params(self):
-        config = BartConfig.from_pretrained("facebook/bart-large-xsum")
-        expected_params = {"num_beams": 6, "do_sample": False, "early_stopping": True, "length_penalty": 1.0}
-        config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
+        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-xsum")
+        expected_params = {"num_beams": 6, "do_sample": None, "early_stopping": True, "length_penalty": None}
+        config_params = {k: getattr(model.generation_config, k, "MISSING") for k, v in expected_params.items()}
         self.assertDictEqual(expected_params, config_params)
 
     @slow
@@ -1173,12 +1188,11 @@ class BartModelIntegrationTests(unittest.TestCase):
             " up to four years in prison.  Her next court appearance is scheduled for May 18."
         )
 
-        dct = tok.batch_encode_plus(
+        dct = tok(
             [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY],
             max_length=1024,
             padding="max_length",
-            truncation_strategy="only_first",
-            truncation=True,
+            truncation="only_first",
             return_tensors="pt",
         )
 
@@ -1220,56 +1234,8 @@ class BartModelIntegrationTests(unittest.TestCase):
         assert generated_summaries == EXPECTED
 
     @slow
-    def test_contrastive_search_bart(self):
-        article = (
-            " New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. A"
-            " year later, she got married again in Westchester County, but to a different man and without divorcing"
-            " her first husband.  Only 18 days after that marriage, she got hitched yet again. Then, Barrientos"
-            ' declared "I do" five more times, sometimes only within two weeks of each other. In 2010, she married'
-            " once more, this time in the Bronx. In an application for a marriage license, she stated it was her"
-            ' "first and only" marriage. Barrientos, now 39, is facing two criminal counts of "offering a false'
-            ' instrument for filing in the first degree," referring to her false statements on the 2010 marriage'
-            " license application, according to court documents. Prosecutors said the marriages were part of an"
-            " immigration scam. On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to"
-            " her attorney, Christopher Wright, who declined to comment further. After leaving court, Barrientos was"
-            " arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New"
-            " York subway through an emergency exit, said Detective Annette Markowski, a police spokeswoman. In total,"
-            " Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.  All"
-            " occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be"
-            " married to four men, and at one time, she was married to eight men at once, prosecutors say. Prosecutors"
-            " said the immigration scam involved some of her husbands, who filed for permanent residence status"
-            " shortly after the marriages.  Any divorces happened only after such filings were approved. It was"
-            " unclear whether any of the men will be prosecuted. The case was referred to the Bronx District"
-            " Attorney's Office by Immigration and Customs Enforcement and the Department of Homeland Security's"
-            ' Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt,'
-            " Turkey, Georgia, Pakistan and Mali. Her eighth husband, Rashid Rajput, was deported in 2006 to his"
-            " native Pakistan after an investigation by the Joint Terrorism Task Force. If convicted, Barrientos faces"
-            " up to four years in prison.  Her next court appearance is scheduled for May 18."
-        )
-        bart_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
-        bart_model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn").to(torch_device)
-        input_ids = bart_tokenizer(
-            article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
-        ).input_ids.to(torch_device)
-
-        outputs = bart_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64, num_beams=1)
-        generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-        self.assertListEqual(
-            generated_text,
-            [
-                "Liana Barrientos, 39, pleaded not guilty to charges related to false marriage statements. "
-                "Prosecutors say she married at least 10 times, sometimes within two weeks of each other. She is "
-                "accused of being part of an immigration scam to get permanent residency. If convicted, she faces up "
-                "to four years in"
-            ],
-        )
-
-    @slow
     def test_decoder_attention_mask(self):
-        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large", forced_bos_token_id=0).to(
-            torch_device
-        )
+        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large").to(torch_device)
         tokenizer = self.default_tokenizer
         sentence = "UN Chief Says There Is No <mask> in Syria"
         input_ids = tokenizer(sentence, return_tensors="pt").input_ids.to(torch_device)
@@ -1290,6 +1256,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             max_new_tokens=20,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            forced_bos_token_id=0,
         )
         generated_sentence = tokenizer.batch_decode(generated_ids)[0]
         expected_sentence = "</s><pad><pad><pad><s>UN Chief Says There Is No Plan B for Peace in Syria</s>"
@@ -1314,7 +1281,7 @@ class BartStandaloneDecoderModelTester:
         decoder_layers=2,
         encoder_attention_heads=4,
         decoder_attention_heads=4,
-        max_position_embeddings=30,
+        max_position_embeddings=50,
         is_encoder_decoder=False,
         pad_token_id=0,
         bos_token_id=1,
@@ -1378,6 +1345,7 @@ class BartStandaloneDecoderModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
+            forced_eos_token_id=None,
         )
 
         return (
@@ -1478,9 +1446,9 @@ class BartStandaloneDecoderModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=attn_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(
+            next_tokens, attention_mask=attn_mask, past_key_values=past_key_values, use_cache=True
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -1509,8 +1477,6 @@ class BartStandaloneDecoderModelTester:
 @require_torch
 class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BartDecoder, BartForCausalLM) if is_torch_available() else ()
-    fx_comptatible = True
-    test_pruning = False
     is_encoder_decoder = False
     test_missing_keys = False
 
@@ -1533,4 +1499,8 @@ class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, un
 
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
+        return
+
+    @unittest.skip(reason="Decoder cannot keep gradients")
+    def test_flex_attention_with_grads():
         return

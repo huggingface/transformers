@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,19 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from functools import partial
-from typing import List, Optional
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor, nn
+from torch import Tensor
 
-from ...configuration_utils import PretrainedConfig
-from ...utils import is_torchdynamo_compiling, logging
-from ...utils.backbone_utils import (
-    verify_backbone_config_arguments,
-)
-from ..auto import CONFIG_MAPPING
+from ... import initialization as init
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
+from ...configuration_utils import PreTrainedConfig
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, logging, torch_compilable_check
+from ..auto import AutoConfig
 from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoder,
     RTDetrDecoderLayer,
@@ -39,7 +37,7 @@ from ..rt_detr.modeling_rt_detr import (
 logger = logging.get_logger(__name__)
 
 
-class RTDetrV2Config(PretrainedConfig):
+class RTDetrV2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RTDetrV2Model`]. It is used to instantiate a
     RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -47,8 +45,8 @@ class RTDetrV2Config(PretrainedConfig):
 
     e.g. [PekingU/rtdetr_r18vd](https://huggingface.co/PekingU/rtdetr_r18vd)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         initializer_range (`float`, *optional*, defaults to 0.01):
@@ -60,27 +58,15 @@ class RTDetrV2Config(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        backbone_config (`Dict`, *optional*, defaults to `RTDetrV2ResNetConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `RTDetrV2ResNetConfig()`):
             The configuration of the backbone model.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
-            library.
         freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
             Whether to freeze the batch normalization layers in the backbone.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         encoder_hidden_dim (`int`, *optional*, defaults to 256):
             Dimension of the layers in hybrid encoder.
         encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
             Multi level features input for encoder.
-        feat_strides (`List[int]`, *optional*, defaults to `[8, 16, 32]`):
+        feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
             Strides used in each feature map.
         encoder_layers (`int`, *optional*, defaults to 1):
             Total of layers to be used by the encoder.
@@ -92,7 +78,7 @@ class RTDetrV2Config(PretrainedConfig):
             The ratio for all dropout layers.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        encode_proj_layers (`List[int]`, *optional*, defaults to `[2]`):
+        encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
             Indexes of the projected layers to be used in the encoder.
         positional_encoding_temperature (`int`, *optional*, defaults to 10000):
             The temperature parameter used to create the positional encodings.
@@ -102,7 +88,7 @@ class RTDetrV2Config(PretrainedConfig):
         activation_function (`str`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the general layer. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        eval_size (`Tuple[int, int]`, *optional*):
+        eval_size (`tuple[int, int]`, *optional*):
             Height and width used to compute the effective height and width of the position embeddings after taking
             into account the stride.
         normalize_before (`bool`, *optional*, defaults to `False`):
@@ -139,7 +125,7 @@ class RTDetrV2Config(PretrainedConfig):
             Scale or magnitude of noise to be added to the bounding boxes.
         learn_initial_query (`bool`, *optional*, defaults to `False`):
             Indicates whether the initial query embeddings for the decoder should be learned during training
-        anchor_image_size (`Tuple[int, int]`, *optional*):
+        anchor_image_size (`tuple[int, int]`, *optional*):
             Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
         with_box_refine (`bool`, *optional*, defaults to `True`):
             Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
@@ -178,6 +164,8 @@ class RTDetrV2Config(PretrainedConfig):
             Scaling factor applied to the attention offsets in the decoder.
         decoder_method (`str`, *optional*, defaults to `"default"`):
             The method to use for the decoder: `"default"` or `"discrete"`.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -196,6 +184,7 @@ class RTDetrV2Config(PretrainedConfig):
     """
 
     model_type = "rt_detr_v2"
+    sub_configs = {"backbone_config": AutoConfig}
     layer_types = ["basic", "bottleneck"]
     attribute_map = {
         "hidden_size": "d_model",
@@ -210,11 +199,7 @@ class RTDetrV2Config(PretrainedConfig):
         batch_norm_eps=1e-5,
         # backbone
         backbone_config=None,
-        backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
         freeze_backbone_batch_norms=True,
-        backbone_kwargs=None,
         # encoder HybridEncoder
         encoder_hidden_dim=256,
         encoder_in_channels=[512, 1024, 2048],
@@ -266,54 +251,25 @@ class RTDetrV2Config(PretrainedConfig):
         decoder_n_levels=3,  # default value
         decoder_offset_scale=0.5,  # default value
         decoder_method="default",
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
         self.initializer_range = initializer_range
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
-        # backbone
-        if backbone_config is None and backbone is None:
-            logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `RTDetrV2-ResNet` backbone."
-            )
-            backbone_model_type = "rt_detr_resnet"
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            # this will map it to RTDetrResNetConfig
-            # note: we can instead create RTDetrV2ResNetConfig but it will be exactly the same as V1
-            # and we would need to create RTDetrV2ResNetModel
-            backbone_config = config_class(
-                num_channels=3,
-                embedding_size=64,
-                hidden_sizes=[256, 512, 1024, 2048],
-                depths=[3, 4, 6, 3],
-                layer_type="bottleneck",
-                hidden_act="relu",
-                downsample_in_first_stage=False,
-                downsample_in_bottleneck=False,
-                out_features=None,
-                out_indices=[2, 3, 4],
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.pop("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
 
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            default_config_type="rt_detr_resnet",
+            default_config_kwargs={
+                "out_indices": [2, 3, 4],
+            },
+            **kwargs,
         )
 
         self.backbone_config = backbone_config
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
         self.freeze_backbone_batch_norms = freeze_backbone_batch_norms
-        self.backbone_kwargs = backbone_kwargs
         # encoder
         self.encoder_hidden_dim = encoder_hidden_dim
         self.encoder_in_channels = encoder_in_channels
@@ -368,23 +324,9 @@ class RTDetrV2Config(PretrainedConfig):
         self.decoder_n_levels = decoder_n_levels
         self.decoder_offset_scale = decoder_offset_scale
         self.decoder_method = decoder_method
+        self.tie_word_embeddings = tie_word_embeddings
 
-    @classmethod
-    def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):
-        """Instantiate a [`RTDetrV2Config`] (or a derived class) from a pre-trained backbone model configuration and DETR model
-        configuration.
-
-            Args:
-                backbone_config ([`PretrainedConfig`]):
-                    The backbone configuration.
-
-            Returns:
-                [`RTDetrV2Config`]: An instance of a configuration object
-        """
-        return cls(
-            backbone_config=backbone_config,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 def multi_scale_deformable_attention_v2(
@@ -392,7 +334,7 @@ def multi_scale_deformable_attention_v2(
     value_spatial_shapes: Tensor,
     sampling_locations: Tensor,
     attention_weights: Tensor,
-    num_points_list: List[int],
+    num_points_list: list[int],
     method="default",
 ) -> Tensor:
     batch_size, _, num_heads, hidden_dim = value.shape
@@ -512,15 +454,15 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
-        output_attentions: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         # Process inputs up to sampling locations calculation using parent class logic
         if position_embeddings is not None:
@@ -528,10 +470,10 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
-        if not is_torchdynamo_compiling() and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
@@ -580,7 +522,11 @@ class RTDetrV2DecoderLayer(RTDetrDecoderLayer):
 
 
 class RTDetrV2PreTrainedModel(RTDetrPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, RTDetrV2MultiscaleDeformableAttention):
+            n_points_scale = [1 / n for n in module.n_points_list for _ in range(n)]
+            init.copy_(module.n_points_scale, torch.tensor(n_points_scale, dtype=torch.float32))
 
 
 class RTDetrV2Decoder(RTDetrDecoder):
@@ -601,18 +547,26 @@ class RTDetrV2MLPPredictionHead(RTDetrMLPPredictionHead):
 
 
 class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedModel):
+    _tied_weights_keys = {
+        r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
+        r"class_embed.(?![0])\d+": r"^class_embed.0",
+        "class_embed": "model.decoder.class_embed",
+        "bbox_embed": "model.decoder.bbox_embed",
+    }
+
     def __init__(self, config: RTDetrV2Config):
-        RTDetrV2PreTrainedModel.__init__(config)
+        RTDetrV2PreTrainedModel.__init__(self, config)
         # RTDETR encoder-decoder model
         self.model = RTDetrV2Model(config)
-
-        # Detection heads on top
-        class_embed = partial(nn.Linear, config.d_model, config.num_labels)
-        bbox_embed = partial(RTDetrV2MLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
-
-        self.class_embed = nn.ModuleList([class_embed() for _ in range(config.decoder_layers)])
-        self.bbox_embed = nn.ModuleList([bbox_embed() for _ in range(config.decoder_layers)])
-
+        self.class_embed = nn.ModuleList(
+            [torch.nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
+        )
+        self.bbox_embed = nn.ModuleList(
+            [
+                RTDetrV2MLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
+                for _ in range(config.decoder_layers)
+            ]
+        )
         self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed
 

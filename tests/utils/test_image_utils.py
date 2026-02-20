@@ -11,26 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import codecs
-import os
-import tempfile
 import unittest
-from io import BytesIO
-from typing import Optional
 
+import httpx
 import numpy as np
 import pytest
-import requests
-from huggingface_hub.file_download import hf_hub_url, http_get
-from requests import ConnectTimeout, ReadTimeout
+from huggingface_hub.file_download import hf_hub_download
 
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
 from transformers import is_torch_available, is_vision_available
 from transformers.image_utils import (
     ChannelDimension,
     get_channel_dimension_axis,
-    make_batched_videos,
     make_flat_list_of_images,
     make_list_of_images,
     make_nested_list_of_images,
@@ -48,9 +41,9 @@ if is_vision_available():
     from transformers.image_utils import get_image_size, infer_channel_dimension_format, load_image
 
 
-def get_image_from_hub_dataset(dataset_id: str, filename: str, revision: Optional[str] = None) -> "PIL.Image.Image":
-    url = hf_hub_url(dataset_id, filename, repo_type="dataset", revision=revision)
-    return PIL.Image.open(BytesIO(requests.get(url).content))
+def get_image_from_hub_dataset(dataset_id: str, filename: str, revision: str | None = None) -> "PIL.Image.Image":
+    path = hf_hub_download(dataset_id, filename, repo_type="dataset", revision=revision)
+    return PIL.Image.open(path)
 
 
 def get_random_image(height, width):
@@ -396,133 +389,6 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertEqual(len(images_list[0]), 4)
         self.assertTrue(np.array_equal(images_list[0][0], images[0][0]))
 
-    def test_make_batched_videos_pil(self):
-        # Test a single image is converted to a list of 1 video with 1 frame
-        pil_image = get_random_image(16, 32)
-        videos_list = make_batched_videos(pil_image)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list[0]), 1)
-        self.assertIsInstance(videos_list[0][0], PIL.Image.Image)
-
-        # Test a list of images is converted to a list of 1 video
-        images = [get_random_image(16, 32) for _ in range(4)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 1)
-        self.assertEqual(len(videos_list[0]), 4)
-        self.assertIsInstance(videos_list[0][0], PIL.Image.Image)
-
-        # Test a nested list of images is not modified
-        images = [[get_random_image(16, 32) for _ in range(2)] for _ in range(2)]
-        videos_list = make_nested_list_of_images(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 2)
-        self.assertEqual(len(videos_list[0]), 2)
-        self.assertIsInstance(videos_list[0][0], PIL.Image.Image)
-
-    def test_make_batched_videos_numpy(self):
-        # Test a single image is converted to a list of 1 video with 1 frame
-        images = np.random.randint(0, 256, (16, 32, 3))
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 1)
-        self.assertTrue(np.array_equal(videos_list[0][0], images))
-
-        # Test a 4d array of images is converted to a list of 1 video
-        images = np.random.randint(0, 256, (4, 16, 32, 3))
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertIsInstance(videos_list[0][0], np.ndarray)
-        self.assertEqual(len(videos_list), 1)
-        self.assertEqual(len(videos_list[0]), 4)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0]))
-
-        # Test a list of images is converted to a list of videos
-        images = [np.random.randint(0, 256, (16, 32, 3)) for _ in range(4)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 1)
-        self.assertEqual(len(videos_list[0]), 4)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0]))
-
-        # Test a nested list of images is left unchanged
-        images = [[np.random.randint(0, 256, (16, 32, 3)) for _ in range(2)] for _ in range(2)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 2)
-        self.assertEqual(len(videos_list[0]), 2)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0]))
-
-        # Test a list of 4d array images is converted to a list of videos
-        images = [np.random.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertIsInstance(videos_list[0][0], np.ndarray)
-        self.assertEqual(len(videos_list), 2)
-        self.assertEqual(len(videos_list[0]), 4)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0]))
-
-        # Test a batch of list of 4d array images is converted to a list of videos
-        images = [[np.random.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)] for _ in range(2)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertIsInstance(videos_list[0][0], np.ndarray)
-        self.assertEqual(len(videos_list), 2)
-        self.assertEqual(len(videos_list[0]), 8)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0][0]))
-
-    @require_torch
-    def test_make_batched_videos_torch(self):
-        # Test a single image is converted to a list of 1 video with 1 frame
-        images = torch.randint(0, 256, (16, 32, 3))
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list[0]), 1)
-        self.assertTrue(np.array_equal(videos_list[0][0], images))
-
-        # Test a 4d tensor of images is converted to a list of 1 video
-        images = torch.randint(0, 256, (4, 16, 32, 3))
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertIsInstance(videos_list[0][0], torch.Tensor)
-        self.assertEqual(len(videos_list), 1)
-        self.assertEqual(len(videos_list[0]), 4)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0]))
-
-        # Test a list of images is converted to a list of videos
-        images = [torch.randint(0, 256, (16, 32, 3)) for _ in range(4)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 1)
-        self.assertEqual(len(videos_list[0]), 4)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0]))
-
-        # Test a nested list of images is left unchanged
-        images = [[torch.randint(0, 256, (16, 32, 3)) for _ in range(2)] for _ in range(2)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 2)
-        self.assertEqual(len(videos_list[0]), 2)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0]))
-
-        # Test a list of 4d tensor images is converted to a list of videos
-        images = [torch.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertIsInstance(videos_list[0][0], torch.Tensor)
-        self.assertEqual(len(videos_list), 2)
-        self.assertEqual(len(videos_list[0]), 4)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0]))
-
-        # Test a batch of list of 4d tensor images is converted to a list of videos
-        images = [[torch.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)] for _ in range(2)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertIsInstance(videos_list[0][0], torch.Tensor)
-        self.assertEqual(len(videos_list), 2)
-        self.assertEqual(len(videos_list[0]), 8)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0][0]))
-
     @require_torch
     def test_conversion_torch_to_array(self):
         feature_extractor = ImageFeatureExtractionMixin()
@@ -855,7 +721,7 @@ class LoadImageTester(unittest.TestCase):
 
     @is_flaky()
     def test_load_img_url_timeout(self):
-        with self.assertRaises((ReadTimeout, ConnectTimeout)):
+        with self.assertRaises(httpx.ConnectTimeout):
             load_image(INVOICE_URL, timeout=0.001)
 
     def test_load_img_local(self):
@@ -868,54 +734,30 @@ class LoadImageTester(unittest.TestCase):
         )
 
     def test_load_img_base64_prefix(self):
-        try:
-            tmp_file = tempfile.NamedTemporaryFile(delete=False).name
-            with open(tmp_file, "wb") as f:
-                http_get(
-                    "https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_0.txt", f
-                )
-
-            with open(tmp_file, encoding="utf-8") as b64:
-                img = load_image(b64.read())
-                img_arr = np.array(img)
-
-        finally:
-            os.remove(tmp_file)
-
+        path = hf_hub_download(
+            repo_id="hf-internal-testing/dummy-base64-images", filename="image_0.txt", repo_type="dataset"
+        )
+        with open(path, encoding="utf-8") as b64:
+            img = load_image(b64.read())
+            img_arr = np.array(img)
         self.assertEqual(img_arr.shape, (64, 32, 3))
 
     def test_load_img_base64(self):
-        try:
-            tmp_file = tempfile.NamedTemporaryFile(delete=False).name
-            with open(tmp_file, "wb") as f:
-                http_get(
-                    "https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_1.txt", f
-                )
-
-            with open(tmp_file, encoding="utf-8") as b64:
-                img = load_image(b64.read())
-                img_arr = np.array(img)
-
-        finally:
-            os.remove(tmp_file)
-
+        path = hf_hub_download(
+            repo_id="hf-internal-testing/dummy-base64-images", filename="image_1.txt", repo_type="dataset"
+        )
+        with open(path, encoding="utf-8") as b64:
+            img = load_image(b64.read())
+            img_arr = np.array(img)
         self.assertEqual(img_arr.shape, (64, 32, 3))
 
     def test_load_img_base64_encoded_bytes(self):
-        try:
-            tmp_file = tempfile.NamedTemporaryFile(delete=False).name
-            with open(tmp_file, "wb") as f:
-                http_get(
-                    "https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_2.txt", f
-                )
-
-            with codecs.open(tmp_file, encoding="unicode_escape") as b64:
-                img = load_image(b64.read())
-                img_arr = np.array(img)
-
-        finally:
-            os.remove(tmp_file)
-
+        path = hf_hub_download(
+            repo_id="hf-internal-testing/dummy-base64-images", filename="image_2.txt", repo_type="dataset"
+        )
+        with codecs.open(path, encoding="unicode_escape") as b64:
+            img = load_image(b64.read())
+            img_arr = np.array(img)
         self.assertEqual(img_arr.shape, (256, 256, 3))
 
     def test_load_img_rgba(self):
@@ -927,11 +769,7 @@ class LoadImageTester(unittest.TestCase):
 
         img = load_image(img)  # img with mode RGBA
         img_arr = np.array(img)
-
-        self.assertEqual(
-            img_arr.shape,
-            (512, 512, 3),
-        )
+        self.assertEqual(img_arr.shape, (512, 512, 3))
 
     def test_load_img_la(self):
         # we use revision="refs/pr/1" until the PR is merged

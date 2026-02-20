@@ -15,6 +15,7 @@
 
 import argparse
 import os
+from pathlib import Path
 
 import transformers
 
@@ -27,11 +28,21 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-TOKENIZER_CLASSES = {
-    # Phi3 uses Llama tokenizer
-    name: getattr(transformers, "LlamaTokenizerFast" if name == "Phi3Tokenizer" else name + "Fast")
-    for name in SLOW_TO_FAST_CONVERTERS
-}
+TOKENIZER_CLASSES = {}
+for name in SLOW_TO_FAST_CONVERTERS:
+    # Special cases for tokenizers that don't have their own Fast tokenizer
+    if name == "Phi3Tokenizer":
+        tokenizer_class_name = "LlamaTokenizerFast"
+    elif name == "ElectraTokenizer":
+        tokenizer_class_name = "BertTokenizerFast"
+    else:
+        tokenizer_class_name = name + "Fast"
+
+    try:
+        TOKENIZER_CLASSES[name] = getattr(transformers, tokenizer_class_name)
+    except AttributeError:
+        # Skip tokenizers that don't have a Fast version
+        pass
 
 
 def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, force_download):
@@ -69,6 +80,15 @@ def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, 
             if "/" in checkpoint:
                 checkpoint_directory, checkpoint_prefix_name = checkpoint.split("/")
                 dump_path_full = os.path.join(dump_path, checkpoint_directory)
+
+                # Security check
+                try:
+                    Path(dump_path_full).resolve().relative_to(Path(dump_path).resolve())
+                except ValueError:
+                    raise ValueError(
+                        f"Invalid checkpoint path: '{checkpoint}' attempts to escape `dump_path`: {dump_path}"
+                    )
+
             elif add_prefix:
                 checkpoint_prefix_name = checkpoint
                 dump_path_full = dump_path

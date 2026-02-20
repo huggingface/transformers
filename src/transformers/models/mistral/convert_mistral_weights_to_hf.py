@@ -176,7 +176,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 32768):
     new_config_kwargs.update({k: v for k, v in original_config.items() if k in similar_keys_to_keep})
 
     # These are not always defined depending on `params.json`
-    new_config_kwargs["sliding_window"] = original_config.get("sliding_window", None)
+    new_config_kwargs["sliding_window"] = original_config.get("sliding_window")
     new_config_kwargs["num_key_value_heads"] = original_config.get(
         "n_kv_heads", new_config_kwargs["num_attention_heads"]
     )

@@ -15,7 +15,7 @@
 
 import unittest
 
-from packaging import version
+import pytest
 
 from transformers import AutoTokenizer, MobileBertConfig, MobileBertForMaskedLM, is_torch_available
 from transformers.models.auto import get_values
@@ -282,7 +282,6 @@ class MobileBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -360,7 +359,9 @@ TOLERANCE = 1e-3
 class MobileBertModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = MobileBertModel.from_pretrained("google/mobilebert-uncased").to(torch_device)
+        model = MobileBertModel.from_pretrained("google/mobilebert-uncased", attn_implementation="eager").to(
+            torch_device
+        )
         input_ids = _long_tensor([[101, 7110, 1005, 1056, 2023, 11333, 17413, 1029, 102]])
         with torch.no_grad():
             output = model(input_ids)[0]
@@ -386,11 +387,9 @@ class MobileBertModelIntegrationTests(unittest.TestCase):
 
         self.assertTrue(lower_bound and upper_bound)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         mobilebert_model = "google/mobilebert-uncased"
         device = "cpu"
         attn_implementation = "eager"

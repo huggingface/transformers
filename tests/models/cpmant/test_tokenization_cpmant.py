@@ -13,23 +13,28 @@
 # limitations under the License.
 
 import os
+import shutil
+import tempfile
 import unittest
 
 from transformers.models.cpmant.tokenization_cpmant import VOCAB_FILES_NAMES, CpmAntTokenizer
-from transformers.testing_utils import require_jieba, tooslow
+from transformers.testing_utils import require_rjieba, tooslow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-@require_jieba
+@require_rjieba
 class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "openbmb/cpm-ant-10b"
+    from_pretrained_id = "hf-internal-testing/cpm-ant-10b-testing"
     tokenizer_class = CpmAntTokenizer
     test_rust_tokenizer = False
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+
+        old_tmpdirname = cls.tmpdirname
+        cls.tmpdirname = tempfile.mkdtemp()
 
         vocab_tokens = [
             "<d>",
@@ -53,18 +58,20 @@ class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
+        shutil.rmtree(old_tmpdirname, ignore_errors=True)
+
     @tooslow
     def test_pre_tokenization(self):
         tokenizer = CpmAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
         texts = "今天天气真好！"
-        jieba_tokens = ["今天", "天气", "真", "好", "！"]
+        rjieba_tokens = ["今天", "天气", "真", "好", "！"]
         tokens = tokenizer.tokenize(texts)
-        self.assertListEqual(tokens, jieba_tokens)
+        self.assertListEqual(tokens, rjieba_tokens)
         normalized_text = "今天天气真好！"
         input_tokens = [tokenizer.bos_token] + tokens
 
-        input_jieba_tokens = [6, 9802, 14962, 2082, 831, 244]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_jieba_tokens)
+        input_rjieba_tokens = [6, 9802, 14962, 2082, 831, 244]
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_rjieba_tokens)
 
-        reconstructed_text = tokenizer.decode(input_jieba_tokens)
+        reconstructed_text = tokenizer.decode(input_rjieba_tokens)
         self.assertEqual(reconstructed_text, normalized_text)

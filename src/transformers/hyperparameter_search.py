@@ -11,23 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
 
 from .integrations import (
     is_optuna_available,
     is_ray_tune_available,
-    is_sigopt_available,
     is_wandb_available,
     run_hp_search_optuna,
     run_hp_search_ray,
-    run_hp_search_sigopt,
     run_hp_search_wandb,
 )
 from .trainer_utils import (
     HPSearchBackend,
     default_hp_space_optuna,
     default_hp_space_ray,
-    default_hp_space_sigopt,
     default_hp_space_wandb,
 )
 from .utils import logging
@@ -38,7 +34,7 @@ logger = logging.get_logger(__name__)
 
 class HyperParamSearchBackendBase:
     name: str
-    pip_package: Optional[str] = None
+    pip_package: str | None = None
 
     @staticmethod
     def is_available():
@@ -90,20 +86,6 @@ class RayTuneBackend(HyperParamSearchBackendBase):
         return default_hp_space_ray(trial)
 
 
-class SigOptBackend(HyperParamSearchBackendBase):
-    name = "sigopt"
-
-    @staticmethod
-    def is_available():
-        return is_sigopt_available()
-
-    def run(self, trainer, n_trials: int, direction: str, **kwargs):
-        return run_hp_search_sigopt(trainer, n_trials, direction, **kwargs)
-
-    def default_hp_space(self, trial):
-        return default_hp_space_sigopt(trial)
-
-
 class WandbBackend(HyperParamSearchBackendBase):
     name = "wandb"
 
@@ -119,7 +101,7 @@ class WandbBackend(HyperParamSearchBackendBase):
 
 
 ALL_HYPERPARAMETER_SEARCH_BACKENDS = {
-    HPSearchBackend(backend.name): backend for backend in [OptunaBackend, RayTuneBackend, SigOptBackend, WandbBackend]
+    HPSearchBackend(backend.name): backend for backend in [OptunaBackend, RayTuneBackend, WandbBackend]
 }
 
 

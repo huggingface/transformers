@@ -16,10 +16,11 @@
 import tempfile
 import unittest
 
+import pytest
 import requests
 
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig, pipeline
-from transformers.testing_utils import cleanup, require_torch, require_torch_sdpa, slow, torch_device
+from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -67,6 +68,7 @@ class SamVisionModelTester:
         num_pos_feats=16,
         mlp_dim=None,
         batch_size=2,
+        is_training=True,
     ):
         self.parent = parent
         self.hidden_size = hidden_size
@@ -94,6 +96,7 @@ class SamVisionModelTester:
         self.num_pos_feats = num_pos_feats
         self.mlp_dim = mlp_dim
         self.batch_size = batch_size
+        self.is_training = is_training
 
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -157,12 +160,8 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (SamVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torchscript = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = SamVisionModelTester(self)
@@ -202,7 +201,8 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -227,43 +227,11 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
                 list(expected_attention_shape),
             )
 
-    @unittest.skip(reason="SamVisionModel does not support training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="SamVisionModel does not support training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="SamVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="SamVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
-    @unittest.skip(reason="SamVisionModel does not support training")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in create_and_check_model tests")
     def test_hidden_states_output(self):
         pass
 
-    @require_torch_sdpa
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SAM model can't be compiled dynamic yet")
 
@@ -380,6 +348,7 @@ class SamModelTester:
         num_pos_feats=16,
         mlp_dim=None,
         batch_size=2,
+        is_training=True,
     ):
         self.parent = parent
         self.image_size = image_size
@@ -407,6 +376,7 @@ class SamModelTester:
         self.num_pos_feats = num_pos_feats
         self.mlp_dim = mlp_dim
         self.batch_size = batch_size
+        self.is_training = is_training
 
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -520,11 +490,8 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {"feature-extraction": SamModel, "mask-generation": SamModel} if is_torch_available() else {}
     )
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torchscript = False
     _is_composite = True
 
     # TODO: Fix me @Arthur: `run_batch_test` in `tests/test_pipeline_mixin.py` not working
@@ -590,9 +557,11 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
+            print(model.__class__, model._can_record_outputs)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -604,8 +573,10 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
+            config.mask_decoder_config.output_attentions = True
+            config.vision_config.output_attentions = True
             config.output_attentions = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -626,32 +597,12 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 list(expected_mask_decoder_attention_shape),
             )
 
-    @unittest.skip(reason="SamModel does not support training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="SamModel does not support training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="SamModel does not support training")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in create_and_check_model tests")
     def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="Tested on the vision only counterpart; only works if vision related input is given")
+    def test_retain_grad_hidden_states_attentions(self):
         pass
 
     @slow
@@ -660,16 +611,15 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model = SamModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @require_torch_sdpa
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SAM model can't be compiled dynamic yet")
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
         This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
-        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        In contrast to the above test, this one checks if the "config._attn_implementation" is a dict after the model
         is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
         See https://github.com/huggingface/transformers/pull/32238 for more info
 
@@ -757,7 +707,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         scores = outputs.iou_scores.squeeze().cpu()
         masks = outputs.pred_masks[0, 0, 0, 0, :3].cpu()
         torch.testing.assert_close(scores[-1], torch.tensor(0.4515), rtol=2e-4, atol=2e-4)
-        torch.testing.assert_close(masks, torch.tensor([-4.1800, -3.4948, -3.4481]), rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(masks, torch.tensor([-4.1795, -3.4934, -3.4477]), rtol=2e-4, atol=2e-4)
 
     def test_inference_mask_generation_one_point_one_bb(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -777,9 +727,18 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze().cpu()
-        masks = outputs.pred_masks[0, 0, 0, 0, :3].cpu()
+        masks = outputs.pred_masks[0, 0, 0, 0, :3]
+
+        expectations = Expectations(
+            {
+                (None, None): [-12.7729, -12.3665, -12.6061],
+                ("cuda", 8): [-12.7731, -12.3667, -12.6063],
+            }
+        )
+        expected_masks = torch.tensor(expectations.get_expectation()).to(torch_device)
+
         torch.testing.assert_close(scores[-1], torch.tensor(0.9566), rtol=2e-4, atol=2e-4)
-        torch.testing.assert_close(masks, torch.tensor([-12.7729, -12.3665, -12.6061]), rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(masks, expected_masks, rtol=2e-4, atol=2e-4)
 
     def test_inference_mask_generation_batched_points_batched_images(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -1000,7 +959,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 2, 3))
         torch.testing.assert_close(
-            iou_scores, torch.tensor([[[0.9105, 0.9825, 0.9675], [0.7646, 0.7943, 0.7774]]]), atol=1e-4, rtol=1e-4
+            iou_scores, torch.tensor([[[0.9105, 0.9825, 0.9675], [0.7646, 0.7944, 0.7769]]]), atol=1e-4, rtol=1e-4
         )
 
     def test_inference_mask_generation_three_boxes_point_batch(self):
@@ -1012,14 +971,8 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         raw_image = prepare_image()
 
-        # fmt: off
-        input_boxes = torch.Tensor([[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]],  [[75, 275, 1725, 850]]]).cpu()
-        EXPECTED_IOU = torch.tensor([[
-            [0.9773, 0.9881, 0.9522],
-            [0.5996, 0.7661, 0.7937],
-            [0.5996, 0.7661, 0.7937],
-        ]])
-        # fmt: on
+        input_boxes = torch.Tensor([[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]], [[75, 275, 1725, 850]]]).cpu()
+        EXPECTED_IOU = torch.tensor([[[0.9773, 0.9880, 0.9522], [0.5995, 0.7658, 0.7936], [0.5995, 0.7658, 0.7936]]])
         input_boxes = input_boxes.unsqueeze(0)
 
         inputs = processor(raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)

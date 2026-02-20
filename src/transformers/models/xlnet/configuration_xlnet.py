@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -15,29 +14,27 @@
 # limitations under the License.
 """XLNet configuration"""
 
-import warnings
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class XLNetConfig(PretrainedConfig):
+class XLNetConfig(PreTrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`XLNetModel`] or a [`TFXLNetModel`]. It is used to
+    This is the configuration class to store the configuration of a [`XLNetModel`]. It is used to
     instantiate a XLNet model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
     [xlnet/xlnet-large-cased](https://huggingface.co/xlnet/xlnet-large-cased) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the XLNet model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`XLNetModel`] or [`TFXLNetModel`].
+            `inputs_ids` passed when calling [`XLNetModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
         n_layer (`int`, *optional*, defaults to 24):
@@ -49,8 +46,6 @@ class XLNetConfig(PretrainedConfig):
         ff_activation (`str` or `Callable`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the If string, `"gelu"`, `"relu"`, `"silu"` and
             `"gelu_new"` are supported.
-        untie_r (`bool`, *optional*, defaults to `True`):
-            Whether or not to untie relative position biases
         attn_type (`str`, *optional*, defaults to `"bi"`):
             The attention type used by the model. Set `"bi"` for XLNet, `"uni"` for Transformer-XL.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -150,7 +145,6 @@ class XLNetConfig(PretrainedConfig):
         n_head=16,
         d_inner=4096,
         ff_activation="gelu",
-        untie_r=True,
         attn_type="bi",
         initializer_range=0.02,
         layer_norm_eps=1e-12,
@@ -171,6 +165,7 @@ class XLNetConfig(PretrainedConfig):
         pad_token_id=5,
         bos_token_id=1,
         eos_token_id=2,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         """Constructs XLNetConfig."""
@@ -188,7 +183,6 @@ class XLNetConfig(PretrainedConfig):
         self.d_head = d_model // n_head
         self.ff_activation = ff_activation
         self.d_inner = d_inner
-        self.untie_r = untie_r
         self.attn_type = attn_type
 
         self.initializer_range = initializer_range
@@ -211,18 +205,11 @@ class XLNetConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
-
-        if "use_cache" in kwargs:
-            warnings.warn(
-                "The `use_cache` argument is deprecated and will be removed in a future version, use `use_mems_eval`"
-                " instead.",
-                FutureWarning,
-            )
-            use_mems_eval = kwargs["use_cache"]
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.use_mems_eval = use_mems_eval
         self.use_mems_train = use_mems_train
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
     @property
     def max_position_embeddings(self):

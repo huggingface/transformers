@@ -109,10 +109,10 @@ class PixtralVisionModelModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (PixtralVisionModel,) if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
-    test_torchscript = False
+    additional_model_inputs = ["image_sizes"]
+
     test_resize_embeddings = False
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = PixtralVisionModelTester(self)

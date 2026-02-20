@@ -19,8 +19,6 @@ rendered properly in your Markdown viewer.
 每个框架都在它们各自的 `GenerationMixin` 类中实现了文本生成的 `generate` 方法：
 
 - PyTorch [`~generation.GenerationMixin.generate`] 在 [`~generation.GenerationMixin`] 中实现。
-- TensorFlow [`~generation.TFGenerationMixin.generate`] 在 [`~generation.TFGenerationMixin`] 中实现。
-- Flax/JAX [`~generation.FlaxGenerationMixin.generate`] 在 [`~generation.FlaxGenerationMixin`] 中实现。
 
 无论您选择哪个框架，都可以使用 [`~generation.GenerationConfig`] 类实例对 generate 方法进行参数化。有关生成方法的控制参数的完整列表，请参阅此类。
 
@@ -38,14 +36,3 @@ rendered properly in your Markdown viewer.
 [[autodoc]] generation.GenerationMixin
 	- generate
 	- compute_transition_scores
-
-## TFGenerationMixin
-
-[[autodoc]] generation.TFGenerationMixin
-	- generate
-	- compute_transition_scores
-
-## FlaxGenerationMixin
-
-[[autodoc]] generation.FlaxGenerationMixin
-	- generate

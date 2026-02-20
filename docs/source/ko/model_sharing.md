@@ -56,7 +56,7 @@ picture-in-picture" allowfullscreen></iframe>
 모델을 허브에 공유하기 전에 Hugging Face 자격 증명이 필요합니다. 터미널에 액세스할 수 있는 경우, 🤗 Transformers가 설치된 가상 환경에서 다음 명령을 실행합니다. 그러면 Hugging Face 캐시 폴더(기본적으로 `~/.cache/`)에 액세스 토큰을 저장합니다:
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Jupyter 또는 Colaboratory와 같은 노트북을 사용 중인 경우, [`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library) 라이브러리가 설치되었는지 확인하세요. 이 라이브러리를 사용하면 API로 허브와 상호 작용할 수 있습니다.
@@ -79,43 +79,15 @@ pip install huggingface_hub
 
 체크포인트를 다른 프레임워크로 변환하는 것은 쉽습니다. PyTorch 및 TensorFlow가 설치되어 있는지 확인한 다음(설치 지침은 [여기](installation) 참조) 다른 프레임워크에서 작업에 대한 특정 모델을 찾습니다.
 
-<frameworkcontent>
-<pt>
 체크포인트를 TensorFlow에서 PyTorch로 변환하려면 `from_tf=True`를 지정하세요:
 
 ```py
 >>> pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
 >>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
-</pt>
-<tf>
-체크포인트를 PyTorch에서 TensorFlow로 변환하려면 `from_pt=True`를 지정하세요:
-
-```py
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
-```
-
-그런 다음 새로운 체크포인트와 함께 새로운 TensorFlow 모델을 저장할 수 있습니다:
-
-```py
->>> tf_model.save_pretrained("path/to/awesome-name-you-picked")
-```
-</tf>
-<jax>
-Flax에서 모델을 사용하는 경우, PyTorch에서 Flax로 체크포인트를 변환할 수도 있습니다:
-
-```py
->>> flax_model = FlaxDistilBertForSequenceClassification.from_pretrained(
-...     "path/to/awesome-name-you-picked", from_pt=True
-... )
-```
-</jax>
-</frameworkcontent>
 
 ## 훈련 중 모델 푸시하기[[push-a-model-during-training]]
 
-<frameworkcontent>
-<pt>
 <Youtube id="Z1-XMy-GNLQ"/>
 
 모델을 허브에 공유하는 것은 추가 매개변수나 콜백을 추가하는 것만큼 간단합니다. [미세 조정 튜토리얼](training)에서 [`TrainingArguments`] 클래스는 하이퍼파라미터와 추가 훈련 옵션을 지정하는 곳이라는 것을 기억하세요. 이러한 훈련 옵션 중 하나는 모델을 허브로 직접 푸시하는 기능을 포함합니다. [`TrainingArguments`]에서 `push_to_hub=True`를 설정하세요:
@@ -141,29 +113,6 @@ Flax에서 모델을 사용하는 경우, PyTorch에서 Flax로 체크포인트�
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-[`PushToHubCallback`]을 사용하여 모델을 허브에 공유하려면, [`PushToHubCallback`]에 다음 인수를 정의하세요:
-
-- 출력된 모델의 파일 경로
-- 토크나이저
-- `{Hub 사용자 이름}/{모델 이름}` 형식의 `hub_model_id`
-
-```py
->>> from transformers import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="./your_model_save_path", tokenizer=tokenizer, hub_model_id="your-username/my-awesome-model"
-... )
-```
-
-[`fit`](https://keras.io/api/models/model_training_apis/)에 콜백을 추가하면, 🤗 Transformers가 훈련된 모델을 허브로 푸시합니다:
-
-```py
->>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3, callbacks=push_to_hub_callback)
-```
-</tf>
-</frameworkcontent>
 
 ## `push_to_hub` 함수 사용하기[[use-the-pushtohub-function]]
 

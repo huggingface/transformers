@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 state-spaces/mamba org and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@
 import argparse
 import json
 import math
-from typing import Tuple
 
 import torch
 
@@ -53,7 +51,7 @@ logger = logging.get_logger(__name__)
 
 def convert_mamba_ssm_checkpoint_to_huggingface_model(
     original_state_dict: dict, original_ssm_config_dict: dict
-) -> Tuple[MambaForCausalLM, AutoTokenizer]:
+) -> tuple[MambaForCausalLM, AutoTokenizer]:
     if not is_mamba_ssm_available():
         raise ImportError(
             "Calling convert_mamba_ssm_checkpoint_to_huggingface_model requires the mamba_ssm library to be installed. Please install it with `pip install mamba_ssm`."

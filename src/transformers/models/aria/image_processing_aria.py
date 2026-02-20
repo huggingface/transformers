@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2024 The Rhymes-AI Teams Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,12 +17,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
-from typing import Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, select_best_resolution
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_transforms import PaddingMode, convert_to_rgb, pad, resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
@@ -43,12 +41,12 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
+def divide_to_patches(image: np.ndarray, patch_size: int, input_data_format) -> list[np.ndarray]:
     """
     Divides an image into patches of a specified size.
 
     Args:
-        image (`np.array`):
+        image (`np.ndarray`):
             The input image.
         patch_size (`int`):
             The size of each patch.
@@ -56,7 +54,7 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
             The channel dimension format of the input image.
 
     Returns:
-        list: A list of np.array representing the patches.
+        list: A list of np.ndarray representing the patches.
     """
     patches = []
     height, width = get_image_size(image, channel_dim=input_data_format)
@@ -69,23 +67,6 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
             patches.append(patch)
 
     return patches
-
-
-def _get_patch_output_size(image, target_resolution, input_data_format):
-    original_height, original_width = get_image_size(image, channel_dim=input_data_format)
-    target_height, target_width = target_resolution
-
-    scale_w = target_width / original_width
-    scale_h = target_height / original_height
-
-    if scale_w < scale_h:
-        new_width = target_width
-        new_height = min(math.ceil(original_height * scale_w), target_height)
-    else:
-        new_height = target_height
-        new_width = min(math.ceil(original_width * scale_h), target_width)
-
-    return new_height, new_width
 
 
 class AriaImageProcessor(BaseImageProcessor):
@@ -124,16 +105,16 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        image_mean: Optional[List[float]] = None,
-        image_std: Optional[List[float]] = None,
+        image_mean: list[float] | None = None,
+        image_std: list[float] | None = None,
         max_image_size: int = 980,
         min_image_size: int = 336,
-        split_resolutions: Optional[List[Tuple[int, int]]] = None,
-        split_image: Optional[bool] = False,
-        do_convert_rgb: Optional[bool] = True,
+        split_resolutions: list[tuple[int, int]] | None = None,
+        split_image: bool | None = False,
+        do_convert_rgb: bool | None = True,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: Optional[bool] = True,
+        rescale_factor: int | float = 1 / 255,
+        do_normalize: bool | None = True,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         **kwargs,
     ):
@@ -160,20 +141,20 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: Union[ImageInput, List[ImageInput]],
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        max_image_size: Optional[int] = None,
-        min_image_size: Optional[int] = None,
-        split_image: Optional[bool] = None,
-        do_convert_rgb: Optional[bool] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        resample: PILImageResampling = None,
-        return_tensors: Optional[Union[str, TensorType]] = "pt",
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        images: ImageInput | list[ImageInput],
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        max_image_size: int | None = None,
+        min_image_size: int | None = None,
+        split_image: bool | None = None,
+        do_convert_rgb: bool | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        resample: PILImageResampling | None = None,
+        return_tensors: str | TensorType | None = "pt",
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Process a list of images.
@@ -245,13 +226,11 @@ class AriaImageProcessor(BaseImageProcessor):
         if max_image_size not in [490, 980]:
             raise ValueError("max_image_size must be either 490 or 980")
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_normalize=do_normalize,
@@ -357,13 +336,13 @@ class AriaImageProcessor(BaseImageProcessor):
         )
 
     def _resize_for_patching(
-        self, image: np.array, target_resolution: tuple, resample, input_data_format: ChannelDimension
-    ) -> np.array:
+        self, image: np.ndarray, target_resolution: tuple, resample, input_data_format: ChannelDimension
+    ) -> np.ndarray:
         """
         Resizes an image to a target resolution while maintaining aspect ratio.
 
         Args:
-            image (np.array):
+            image (np.ndarray):
                 The input image.
             target_resolution (tuple):
                 The target resolution (height, width) of the image.
@@ -373,39 +352,43 @@ class AriaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image.
 
         Returns:
-            np.array: The resized and padded image.
+            np.ndarray: The resized and padded image.
         """
-        new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
+        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
 
         # Resize the image
         resized_image = resize(image, (new_height, new_width), resample=resample, input_data_format=input_data_format)
 
         return resized_image
 
+    def _get_padding_size(self, original_resolution: tuple, target_resolution: tuple):
+        original_height, original_width = original_resolution
+        target_height, target_width = target_resolution
+        paste_x, r_x = divmod(target_width - original_width, 2)
+        paste_y, r_y = divmod(target_height - original_height, 2)
+        return (paste_y, paste_y + r_y), (paste_x, paste_x + r_x)
+
     def _pad_for_patching(
-        self, image: np.array, target_resolution: tuple, input_data_format: ChannelDimension
-    ) -> np.array:
+        self, image: np.ndarray, target_resolution: tuple, input_data_format: ChannelDimension
+    ) -> np.ndarray:
         """
         Pad an image to a target resolution while maintaining aspect ratio.
         """
-        target_height, target_width = target_resolution
-        new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
+        new_resolution = get_patch_output_size(image, target_resolution, input_data_format)
+        padding = self._get_padding_size(new_resolution, target_resolution)
 
-        paste_x = (target_width - new_width) // 2
-        paste_y = (target_height - new_height) // 2
-
-        padded_image = self.pad(image, padding=((paste_y, paste_y), (paste_x, paste_x)))
+        padded_image = self.pad(image, padding=padding)
 
         return padded_image
 
     def pad(
         self,
         image: np.ndarray,
-        padding: Union[int, Tuple[int, int], Iterable[Tuple[int, int]]],
+        padding: int | tuple[int, int] | Iterable[tuple[int, int]],
         mode: PaddingMode = PaddingMode.CONSTANT,
-        constant_values: Union[float, Iterable[float]] = 0.0,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        constant_values: float | Iterable[float] = 0.0,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Pads the `image` with the specified `padding` and `mode`. Padding can be in the (`height`, `width`)
@@ -415,7 +398,7 @@ class AriaImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 The image to pad.
-            padding (`int` or `Tuple[int, int]` or `Iterable[Tuple[int, int]]`):
+            padding (`int` or `tuple[int, int]` or `Iterable[tuple[int, int]]`):
                 Padding to apply to the edges of the height, width axes. Can be one of three formats:
                 - `((before_height, after_height), (before_width, after_width))` unique pad widths for each axis.
                 - `((before, after),)` yields same before and after pad for height and width.
@@ -466,20 +449,20 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def get_image_patches(
         self,
-        image: np.array,
-        grid_pinpoints: List[Tuple[int, int]],
+        image: np.ndarray,
+        grid_pinpoints: list[tuple[int, int]],
         patch_size: int,
         resample: PILImageResampling,
         data_format: ChannelDimension,
         input_data_format: ChannelDimension,
-    ) -> List[np.array]:
+    ) -> list[np.ndarray]:
         """
         Process an image with variable resolutions by dividing it into patches.
 
         Args:
-            image (`np.array`):
+            image (`np.ndarray`):
                 The input image to be processed.
-            grid_pinpoints (List[Tuple[int, int]]):
+            grid_pinpoints (list[tuple[int, int]]):
                 A list of possible resolutions as tuples.
             patch_size (`int`):
                 Size of the patches to divide the image into.
@@ -491,7 +474,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image.
 
         Returns:
-            `List[np.array]`: A list of NumPy arrays containing the processed image patches.
+            `list[np.ndarray]`: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
             raise TypeError("grid_pinpoints must be a list of possible resolutions.")
@@ -513,6 +496,27 @@ class AriaImageProcessor(BaseImageProcessor):
             for patch in patches
         ]
         return patches
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of patches per image.
+        """
+        split_image = images_kwargs.get("split_image", self.split_image)
+        max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
+
+        resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
+        num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
+        return num_patches
 
 
 __all__ = ["AriaImageProcessor"]

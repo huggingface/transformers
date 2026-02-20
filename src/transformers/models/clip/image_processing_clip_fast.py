@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,13 @@
 # limitations under the License.
 """Fast Image processor class for CLIP."""
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...utils import add_start_docstrings
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import auto_docstring
 
 
-@add_start_docstrings(
-    "Constructs a fast CLIP image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class CLIPImageProcessorFast(BaseImageProcessorFast):
     # To be checked against the slow image processor
     # None values left after checking can be removed
@@ -37,6 +34,14 @@ class CLIPImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+
+    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+        # for backwards compatibility of KOSMOS-2
+        if "use_square_size" in kwargs and kwargs["use_square_size"]:
+            kwargs["size"] = {"height": self.size["shortest_edge"], "width": self.size["shortest_edge"]}
+            kwargs.pop("use_square_size")
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["CLIPImageProcessorFast"]

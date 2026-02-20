@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,9 +16,10 @@
 import argparse
 import json
 from collections import OrderedDict
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -170,9 +170,9 @@ def read_in_q_k_v(state_dict, is_panoptic=False):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -224,7 +224,7 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
     read_in_q_k_v(state_dict, is_panoptic=is_panoptic)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
     prefix = "detr.model." if is_panoptic else "model."
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if is_panoptic:
             if (
                 key.startswith("detr")

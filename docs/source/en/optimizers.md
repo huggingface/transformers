@@ -138,7 +138,6 @@ args = TrainingArguments(
     per_device_train_batch_size=4,
 +   optim="adalomo",
     gradient_checkpointing=True,
-    gradient_checkpointing=True,
     logging_strategy="steps",
     logging_steps=1,
     learning_rate=2e-6,
@@ -155,7 +154,7 @@ pip install schedulefree
 
 [Schedule Free optimizer (SFO)](https://hf.co/papers/2405.15682) replaces the base optimizers momentum with a combination of averaging and interpolation. Unlike a traditional scheduler, SFO completely removes the need to anneal the learning rate.
 
-SFO supports the RAdam (`schedule_free_radam`), AdamW (`schedule_free_adamw`) and SGD (`schedule_free_sgd`) optimizers. The RAdam scheduler doesn't require `warmup_steps` or `warmup_ratio`.
+SFO supports the RAdam (`schedule_free_radam`), AdamW (`schedule_free_adamw`) and SGD (`schedule_free_sgd`) optimizers. The RAdam scheduler doesn't require `warmup_steps`.
 
 By default, it is recommended to set `lr_scheduler_type="constant"`. Other `lr_scheduler_type` values may also work, but combining SFO optimizers with other learning rate schedules could affect SFOs intended behavior and performance.
 
@@ -164,7 +163,7 @@ args = TrainingArguments(
     output_dir="./test-schedulefree",
     max_steps=1000,
     per_device_train_batch_size=4,
-+   optim="schedule_free_radamw,
++   optim="schedule_free_radamw",
 +   lr_scheduler_type="constant",
     gradient_checkpointing=True,
     logging_strategy="steps",
@@ -172,5 +171,31 @@ args = TrainingArguments(
     learning_rate=2e-6,
     save_strategy="no",
     run_name="sfo",
+)
+```
+
+## StableAdamW
+
+```bash
+pip install torch-optimi
+```
+
+[StableAdamW](https://huggingface.co/papers/2304.13013) is a hybrid between AdamW and AdaFactor. It ports AdaFactor's update clipping into AdamW, which removes the need for gradient clipping. Otherwise, it behaves as a drop-in replacement for AdamW.
+
+> [!TIP]
+> If training on large batch sizes or still observing training loss spikes, consider reducing beta_2 between [0.95, 0.99].
+
+```diff
+args = TrainingArguments(
+    output_dir="./test-stable-adamw",
+    max_steps=1000,
+    per_device_train_batch_size=4,
++   optim="stable_adamw",
+    gradient_checkpointing=True,
+    logging_strategy="steps",
+    logging_steps=1,
+    learning_rate=2e-6,
+    save_strategy="no",
+    run_name="stable-adamw",
 )
 ```

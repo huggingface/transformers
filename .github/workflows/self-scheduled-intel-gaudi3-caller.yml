@@ -1,0 +1,67 @@
+name: Self-hosted runner (Intel Gaudi3 scheduled CI caller)
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * *"
+
+jobs:
+  model-ci:
+    name: Model CI
+    uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
+    with:
+      job: run_models_gpu
+      ci_event: Scheduled CI (Intel) - Gaudi3
+      runner_scale_set: itac-bm-emr-gaudi3-dell
+      slack_report_channel: "#transformers-ci-daily-intel-gaudi3"
+      report_repo_id: optimum-intel/transformers_daily_ci_intel_gaudi3
+
+    secrets: inherit
+
+  pipeline-ci:
+    name: Pipeline CI
+    uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
+    with:
+      job: run_pipelines_torch_gpu
+      ci_event: Scheduled CI (Intel) - Gaudi3
+      runner_scale_set: itac-bm-emr-gaudi3-dell
+      slack_report_channel: "#transformers-ci-daily-intel-gaudi3"
+      report_repo_id: optimum-intel/transformers_daily_ci_intel_gaudi3
+
+    secrets: inherit
+
+  example-ci:
+    name: Example CI
+    uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
+    with:
+      job: run_examples_gpu
+      ci_event: Scheduled CI (Intel) - Gaudi3
+      runner_scale_set: itac-bm-emr-gaudi3-dell
+      slack_report_channel: "#transformers-ci-daily-intel-gaudi3"
+      report_repo_id: optimum-intel/transformers_daily_ci_intel_gaudi3
+
+    secrets: inherit
+
+  deepspeed-ci:
+    name: DeepSpeed CI
+    uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
+    with:
+      job: run_torch_cuda_extensions_gpu
+      ci_event: Scheduled CI (Intel) - Gaudi3
+      runner_scale_set: itac-bm-emr-gaudi3-dell
+      slack_report_channel: "#transformers-ci-daily-intel-gaudi3"
+      report_repo_id: optimum-intel/transformers_daily_ci_intel_gaudi3
+
+    secrets: inherit
+
+  trainer-fsdp-ci:
+    name: Trainer/FSDP CI
+    uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
+    with:
+      job: run_trainer_and_fsdp_gpu
+      ci_event: Scheduled CI (Intel) - Gaudi3
+      runner_scale_set: itac-bm-emr-gaudi3-dell
+      slack_report_channel: "#transformers-ci-daily-intel-gaudi3"
+      report_repo_id: optimum-intel/transformers_daily_ci_intel_gaudi3
+    secrets: inherit

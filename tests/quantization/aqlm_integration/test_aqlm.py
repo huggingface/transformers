@@ -18,28 +18,27 @@ import tempfile
 import unittest
 from unittest import skip
 
+import pytest
 from packaging import version
 
 from transformers import AqlmConfig, AutoConfig, AutoModelForCausalLM, AutoTokenizer, OPTForCausalLM, StaticCache
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_accelerate,
     require_aqlm,
-    require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_accelerator,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_aqlm_available, is_torch_available
+from transformers.utils import is_aqlm_available, is_torch_available
 
 
 if is_torch_available():
     import torch
 
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
-
-@require_torch_gpu
+@require_torch_accelerator
 class AqlmConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """
@@ -70,7 +69,7 @@ class AqlmConfigTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_aqlm
 @require_accelerate
 class AqlmTest(unittest.TestCase):
@@ -81,8 +80,6 @@ class AqlmTest(unittest.TestCase):
 
     EXPECTED_OUTPUT = "Hello my name is Katie. I am a 20 year old college student. I am a very outgoing person. I love to have fun and be active. I"
 
-    device_map = "cuda"
-
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
@@ -92,12 +89,12 @@ class AqlmTest(unittest.TestCase):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
-            device_map=cls.device_map,
+            device_map=torch_device,
         )
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_quantized_model_conversion(self):
@@ -112,7 +109,7 @@ class AqlmTest(unittest.TestCase):
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
         quantization_config = AqlmConfig()
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         nb_linears = 0
@@ -129,7 +126,7 @@ class AqlmTest(unittest.TestCase):
         self.assertEqual(nb_linears, nb_aqlm_linear)
 
         # Try with `linear_weights_not_to_quantize`
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         model, _ = replace_with_aqlm_linear(
@@ -170,7 +167,7 @@ class AqlmTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
+            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=torch_device)
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
@@ -180,7 +177,7 @@ class AqlmTest(unittest.TestCase):
     @skip(
         "inference doesn't work with quantized aqlm models using torch.Any type with recent torch versions. Waiting for the fix from AQLM side"
     )
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_quantized_model_multi_gpu(self):
         """
         Simple test that checks if the quantized model is working properly with multiple GPUs
@@ -199,6 +196,7 @@ class AqlmTest(unittest.TestCase):
         is_aqlm_available() and version.parse(importlib.metadata.version("aqlm")) >= version.parse("1.0.3"),
         "test requires `aqlm>=1.0.3`",
     )
+    @pytest.mark.torch_compile_test
     def test_quantized_model_compile(self):
         """
         Simple test that checks if the quantized model is working properly
@@ -225,10 +223,8 @@ class AqlmTest(unittest.TestCase):
         # Setup static KV cache for generation
         past_key_values = StaticCache(
             config=self.quantized_model.config,
-            max_batch_size=1,
+            batch_size=input_ids.shape[0],
             max_cache_len=seq_length + self.max_new_tokens + 1,
-            device=torch_device,
-            dtype=self.quantized_model.config._pre_quantization_dtype,
         )
 
         # Allocate token ids to be generated and copy prefix ids

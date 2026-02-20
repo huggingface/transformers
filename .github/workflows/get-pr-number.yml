@@ -1,0 +1,42 @@
+name: Get PR number
+on:
+  workflow_call:
+    outputs:
+      PR_NUMBER:
+        description: "The extracted PR number"
+        value: ${{ jobs.get-pr-number.outputs.PR_NUMBER }}
+
+jobs:
+  get-pr-number:
+    runs-on: ubuntu-22.04
+    name: Get PR number
+    outputs:
+      PR_NUMBER: ${{ steps.set_pr_number.outputs.PR_NUMBER }}
+    steps:
+      - name: Get PR number
+        shell: bash
+        env:
+          issue_number: ${{ github.event.issue.number }}
+          is_pull_request_issue: ${{ github.event.issue.pull_request != null }}
+          pr_number: ${{ github.event.pull_request.number }}
+          is_pull_request: ${{ github.event.pull_request != null }}
+          event_number: ${{ github.event.number }}
+        run: |
+          if [[ "$issue_number" != "" && "$is_pull_request_issue" == "true" ]]; then
+            echo "PR_NUMBER=$issue_number" >> $GITHUB_ENV
+          elif [[ "$pr_number" != "" ]]; then
+            echo "PR_NUMBER=$pr_number" >> $GITHUB_ENV
+          elif [[ "$is_pull_request" == "true" ]]; then
+            echo "PR_NUMBER=$event_number" >> $GITHUB_ENV
+          else
+            echo "PR_NUMBER=" >> $GITHUB_ENV
+          fi
+
+      - name: Check PR number
+        shell: bash
+        run: |
+          echo "$PR_NUMBER"
+
+      - name: Set PR number
+        id: set_pr_number
+        run: echo "PR_NUMBER=$PR_NUMBER" >> "$GITHUB_OUTPUT"

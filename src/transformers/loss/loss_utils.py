@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -22,19 +21,23 @@ from .loss_d_fine import DFineForObjectDetectionLoss
 from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
+from .loss_lw_detr import LwDetrForObjectDetectionLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 
 
 def fixed_cross_entropy(
     source: torch.Tensor,
     target: torch.Tensor,
-    num_items_in_batch: Optional[int] = None,
+    num_items_in_batch: torch.Tensor | None = None,
     ignore_index: int = -100,
     **kwargs,
 ) -> torch.Tensor:
     reduction = "sum" if num_items_in_batch is not None else "mean"
     loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
     if reduction == "sum":
+        # just in case users pass an int for num_items_in_batch, which could be the case for custom trainer
+        if torch.is_tensor(num_items_in_batch):
+            num_items_in_batch = num_items_in_batch.to(loss.device)
         loss = loss / num_items_in_batch
     return loss
 
@@ -43,9 +46,9 @@ def ForCausalLMLoss(
     logits,
     labels,
     vocab_size: int,
-    num_items_in_batch: Optional[int] = None,
+    num_items_in_batch: torch.Tensor | None = None,
     ignore_index: int = -100,
-    shift_labels: Optional[torch.Tensor] = None,
+    shift_labels: torch.Tensor | None = None,
     **kwargs,
 ) -> torch.Tensor:
     # Upcast to float if we need to compute the loss to avoid potential precision issues
@@ -59,7 +62,6 @@ def ForCausalLMLoss(
     # Flatten the tokens
     logits = logits.view(-1, vocab_size)
     shift_labels = shift_labels.view(-1)
-    # Enable model parallelism
     shift_labels = shift_labels.to(logits.device)
     loss = fixed_cross_entropy(logits, shift_labels, num_items_in_batch, ignore_index, **kwargs)
     return loss
@@ -69,7 +71,7 @@ def ForMaskedLMLoss(
     logits: torch.Tensor,
     labels: torch.Tensor,
     vocab_size: int,
-    num_items_in_batch: Optional[int] = None,
+    num_items_in_batch: torch.Tensor | None = None,
     ignore_index: int = -100,
     **kwargs,
 ):
@@ -79,7 +81,6 @@ def ForMaskedLMLoss(
     # Flatten the tokens
     logits = logits.view(-1, vocab_size)
     labels = labels.view(-1)
-    # Enable model parallelism
 
     labels = labels.to(logits.device)
     loss = fixed_cross_entropy(logits, labels, num_items_in_batch, ignore_index, **kwargs)
@@ -147,15 +148,21 @@ LOSS_MAPPING = {
     "ForQuestionAnswering": ForQuestionAnsweringLoss,
     "ForSequenceClassification": ForSequenceClassificationLoss,
     "ForImageClassification": ForSequenceClassificationLoss,
+    "ForVideoClassification": ForSequenceClassificationLoss,
+    "ForAudioClassification": ForSequenceClassificationLoss,
     "ForTokenClassification": ForTokenClassification,
     "ForSegmentation": ForSegmentationLoss,
     "ForObjectDetection": ForObjectDetectionLoss,
+    "ForConditionalGeneration": ForCausalLMLoss,
     "DeformableDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "ConditionalDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "DabDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "GroundingDinoForObjectDetection": GroundingDinoForObjectDetectionLoss,
+    "MMGroundingDinoForObjectDetection": GroundingDinoForObjectDetectionLoss,
     "ConditionalDetrForSegmentation": DeformableDetrForSegmentationLoss,
     "RTDetrForObjectDetection": RTDetrForObjectDetectionLoss,
     "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,
     "DFineForObjectDetection": DFineForObjectDetectionLoss,
+    "CsmForConditionalGeneration": ForCausalLMLoss,
+    "LwDetrForObjectDetection": LwDetrForObjectDetectionLoss,
 }

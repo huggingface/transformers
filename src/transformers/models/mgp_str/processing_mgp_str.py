@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +13,12 @@
 # limitations under the License.
 """Processor class for MGP-STR."""
 
-import warnings
-
 from transformers import AutoTokenizer
 from transformers.utils import is_torch_available
 from transformers.utils.generic import ExplicitEnum
 
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 from ...utils.import_utils import requires
 
 
@@ -38,53 +36,17 @@ SUPPORTED_ANNOTATION_FORMATS = (DecodeType.CHARACTER, DecodeType.BPE, DecodeType
 
 
 @requires(backends=("sentencepiece",))
+@auto_docstring
 class MgpstrProcessor(ProcessorMixin):
-    r"""
-    Constructs a MGP-STR processor which wraps an image processor and MGP-STR tokenizers into a single
-
-    [`MgpstrProcessor`] offers all the functionalities of `ViTImageProcessor`] and [`MgpstrTokenizer`]. See the
-    [`~MgpstrProcessor.__call__`] and [`~MgpstrProcessor.batch_decode`] for more information.
-
-    Args:
-        image_processor (`ViTImageProcessor`, *optional*):
-            An instance of `ViTImageProcessor`. The image processor is a required input.
-        tokenizer ([`MgpstrTokenizer`], *optional*):
-            The tokenizer is a required input.
-    """
-
-    attributes = ["image_processor", "char_tokenizer"]
-    image_processor_class = ("ViTImageProcessor", "ViTImageProcessorFast")
-    char_tokenizer_class = "MgpstrTokenizer"
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
-        feature_extractor = None
-        if "feature_extractor" in kwargs:
-            warnings.warn(
-                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
-                " instead.",
-                FutureWarning,
-            )
-            feature_extractor = kwargs.pop("feature_extractor")
-
-        image_processor = image_processor if image_processor is not None else feature_extractor
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         self.char_tokenizer = tokenizer
         self.bpe_tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         self.wp_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
-        """
-        When used in normal mode, this method forwards all its arguments to ViTImageProcessor's
-        [`~ViTImageProcessor.__call__`] and returns its output. This method also forwards the `text` and `kwargs`
-        arguments to MgpstrTokenizer's [`~MgpstrTokenizer.__call__`] if `text` is not `None` to encode the text. Please
-        refer to the docstring of the above methods for more information.
-        """
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
@@ -110,11 +72,11 @@ class MgpstrProcessor(ProcessorMixin):
                 List of tokenized input ids.
 
         Returns:
-            `Dict[str, any]`: Dictionary of all the outputs of the decoded results.
-                generated_text (`List[str]`): The final results after fusion of char, bpe, and wp. scores
-                (`List[float]`): The final scores after fusion of char, bpe, and wp. char_preds (`List[str]`): The list
-                of character decoded sentences. bpe_preds (`List[str]`): The list of bpe decoded sentences. wp_preds
-                (`List[str]`): The list of wp decoded sentences.
+            `dict[str, any]`: Dictionary of all the outputs of the decoded results.
+                generated_text (`list[str]`): The final results after fusion of char, bpe, and wp. scores
+                (`list[float]`): The final scores after fusion of char, bpe, and wp. char_preds (`list[str]`): The list
+                of character decoded sentences. bpe_preds (`list[str]`): The list of bpe decoded sentences. wp_preds
+                (`list[str]`): The list of wp decoded sentences.
 
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
@@ -154,7 +116,7 @@ class MgpstrProcessor(ProcessorMixin):
                 Type of model prediction. Must be one of ['char', 'bpe', 'wp'].
         Returns:
             `tuple`:
-                dec_strs(`str`): The decode strings of model prediction. conf_scores(`List[float]`): The confidence
+                dec_strs(`str`): The decode strings of model prediction. conf_scores(`list[float]`): The confidence
                 score of model prediction.
         """
         if format == DecodeType.CHARACTER:
@@ -201,7 +163,7 @@ class MgpstrProcessor(ProcessorMixin):
             sequences (`torch.Tensor`):
                 List of tokenized input ids.
         Returns:
-            `List[str]`: The list of char decoded sentences.
+            `list[str]`: The list of char decoded sentences.
         """
         decode_strs = [seq.replace(" ", "") for seq in self.char_tokenizer.batch_decode(sequences)]
         return decode_strs
@@ -214,7 +176,7 @@ class MgpstrProcessor(ProcessorMixin):
             sequences (`torch.Tensor`):
                 List of tokenized input ids.
         Returns:
-            `List[str]`: The list of bpe decoded sentences.
+            `list[str]`: The list of bpe decoded sentences.
         """
         return self.bpe_tokenizer.batch_decode(sequences)
 
@@ -226,10 +188,15 @@ class MgpstrProcessor(ProcessorMixin):
             sequences (`torch.Tensor`):
                 List of tokenized input ids.
         Returns:
-            `List[str]`: The list of wp decoded sentences.
+            `list[str]`: The list of wp decoded sentences.
         """
         decode_strs = [seq.replace(" ", "") for seq in self.wp_tokenizer.batch_decode(sequences)]
         return decode_strs
+
+    @property
+    def model_input_names(self):
+        image_processor_input_names = self.image_processor.model_input_names
+        return image_processor_input_names + ["labels"]
 
 
 __all__ = ["MgpstrProcessor"]

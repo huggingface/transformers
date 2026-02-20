@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Build your own machine
 
-One of the most important consideration when building a machine for deep learning is the GPU choice. GPUs are the standard workhorse for deep learning owing to their tensor cores for performing very efficient matrix multiplication and high memory bandwidth. To train large models, you either need a more powerful GPU, multiple GPUs, or take advantage of techniques that offload some of the load to the CPU or NVMe.
+One of the most important considerations when building a machine for deep learning is the GPU choice. GPUs are the standard workhorse for deep learning owing to their tensor cores for performing very efficient matrix multiplication and high memory bandwidth. To train large models, you either need a more powerful GPU, multiple GPUs, or take advantage of techniques that offload some of the load to the CPU or NVMe.
 
 This guide provides some practical tips for setting up a GPU for deep learning. For a more detailed discussion and comparison of GPUs, take a look at the [Which GPU(s) to Get for Deep Learning](https://timdettmers.com/2023/01/30/which-gpu-for-deep-learning/) blog post.
 
@@ -25,11 +25,11 @@ High-end consumer GPUs may have two or three PCIe 8-pin power sockets, and you s
 
 Each PCIe 8-pin power cable should be connected to a 12V rail on the power supply unit (PSU) and can deliver up to 150W. Other GPUs may use a PCIe 12-pin connector which can deliver up to 500-600W. Lower-end GPUs may only use a PCIe 6-pin connector which supplies up to 75W.
 
-It is important the PSU has stable voltage otherwise it may not be able to supply the GPU with enough power to function properly during peak usage.
+It is important that the PSU maintains stable voltage; otherwise, it may fail to supply the GPU with enough power during peak usage.
 
 ## Cooling
 
-An overheated GPU throttles its performance and can even shutdown if it's too hot to prevent damage. Keeping the GPU temperature low, anywhere between 158 - 167F, is essential for delivering full performance and maintaining its lifespan. Once temperatures reach 183 - 194F, the GPU may begin to throttle performance.
+An overheated GPU throttles its performance and can even shutdown if it's too hot to prevent damage. Keeping the GPU temperature low, anywhere between 158–167°F, is essential for delivering full performance and maintaining its lifespan. Once temperatures reach 183 - 194°F, the GPU may begin to throttle performance.
 
 ## Multi-GPU connectivity
 

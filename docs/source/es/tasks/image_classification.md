@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 La clasificación de imágenes asigna una etiqueta o clase a una imagen. A diferencia de la clasificación de texto o audio, las entradas son los valores de los píxeles que representan una imagen. La clasificación de imágenes tiene muchos usos, como la detección de daños tras una catástrofe, el control de la salud de los cultivos o la búsqueda de signos de enfermedad en imágenes médicas.
 
-Esta guía te mostrará como hacer fine-tune al [ViT](https://huggingface.co/docs/transformers/v4.16.2/en/model_doc/vit) en el dataset [Food-101](https://huggingface.co/datasets/food101) para clasificar un alimento en una imagen.
+Esta guía te mostrará como hacer fine-tune al [ViT](https://huggingface.co/docs/transformers/v4.16.2/en/model_doc/vit) en el dataset [Food-101](https://huggingface.co/datasets/ethz/food101) para clasificar un alimento en una imagen.
 
 <Tip>
 
@@ -35,7 +35,7 @@ Carga solo las primeras 5000 imágenes del dataset Food-101 de la biblioteca �
 ```py
 >>> from datasets import load_dataset
 
->>> food = load_dataset("food101", split="train[:5000]")
+>>> food = load_dataset("ethz/food101", split="train[:5000]")
 ```
 
 Divide el dataset en un train y un test set:

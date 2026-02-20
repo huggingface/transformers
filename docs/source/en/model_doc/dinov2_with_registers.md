@@ -6,6 +6,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2023-09-28 and added to Hugging Face Transformers on 2024-12-24.*
 
 # DINOv2 with Registers
 
@@ -17,13 +18,14 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The DINOv2 with Registers model was proposed in [Vision Transformers Need Registers](https://arxiv.org/abs/2309.16588) by Timothée Darcet, Maxime Oquab, Julien Mairal, Piotr Bojanowski.
+The DINOv2 with Registers model was proposed in [Vision Transformers Need Registers](https://huggingface.co/papers/2309.16588) by Timothée Darcet, Maxime Oquab, Julien Mairal, Piotr Bojanowski.
 
 The [Vision Transformer](vit) (ViT) is a transformer encoder model (BERT-like) originally introduced to do supervised image classification on ImageNet.
 
 Next, people figured out ways to make ViT work really well on self-supervised image feature extraction (i.e. learning meaningful features, also called embeddings) on images without requiring any labels. Some example papers here include [DINOv2](dinov2) and [MAE](vit_mae).
 
-The authors of DINOv2 noticed that ViTs have artifacts in attention maps. It’s due to the model using some image patches as “registers”. The authors propose a fix: just add some new tokens (called "register" tokens), which you only use during pre-training (and throw away afterwards). This results in:
+The authors of DINOv2 noticed that ViTs have artifacts in attention maps. It's due to the model using some image patches as “registers”. The authors propose a fix: just add some new tokens (called "register" tokens), which you only use during pre-training (and throw away afterwards). This results in:
+
 - no artifacts
 - interpretable attention maps
 - and improved performances.
@@ -35,7 +37,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dinov2_with_registers_visualization.png"
 alt="drawing" width="600"/>
 
-<small> Visualization of attention maps of various models trained with vs. without registers. Taken from the <a href="https://arxiv.org/abs/2309.16588">original paper</a>. </small>
+<small> Visualization of attention maps of various models trained with vs. without registers. Taken from the <a href="https://huggingface.co/papers/2309.16588">original paper</a>. </small>
 
 Tips:
 
@@ -43,7 +45,6 @@ Tips:
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/facebookresearch/dinov2).
-
 
 ## Dinov2WithRegistersConfig
 

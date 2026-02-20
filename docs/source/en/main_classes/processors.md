@@ -17,6 +17,7 @@ rendered properly in your Markdown viewer.
 # Processors
 
 Processors can mean two different things in the Transformers library:
+
 - the objects that pre-process inputs for multi-modal models such as [Wav2Vec2](../model_doc/wav2vec2) (speech and text)
   or [CLIP](../model_doc/clip) (text and vision)
 - deprecated objects that were used in older versions of the library to preprocess data for GLUE or SQUAD.
@@ -71,14 +72,13 @@ Additionally, the following method can be used to load values from a data file a
 
 [[autodoc]] data.processors.glue.glue_convert_examples_to_features
 
-
 ## XNLI
 
 [The Cross-Lingual NLI Corpus (XNLI)](https://www.nyu.edu/projects/bowman/xnli/) is a benchmark that evaluates the
 quality of cross-lingual text representations. XNLI is crowd-sourced dataset based on [*MultiNLI*](http://www.nyu.edu/projects/bowman/multinli/): pairs of text are labeled with textual entailment annotations for 15
 different languages (including both high-resource language such as English and low-resource languages such as Swahili).
 
-It was released together with the paper [XNLI: Evaluating Cross-lingual Sentence Representations](https://arxiv.org/abs/1809.05053)
+It was released together with the paper [XNLI: Evaluating Cross-lingual Sentence Representations](https://huggingface.co/papers/1809.05053)
 
 This library hosts the processor to load the XNLI data:
 
@@ -88,13 +88,12 @@ Please note that since the gold labels are available on the test set, evaluation
 
 An example using these processors is given in the [run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_xnli.py) script.
 
-
 ## SQuAD
 
 [The Stanford Question Answering Dataset (SQuAD)](https://rajpurkar.github.io/SQuAD-explorer//) is a benchmark that
 evaluates the performance of models on question answering. Two versions are available, v1.1 and v2.0. The first version
-(v1.1) was released together with the paper [SQuAD: 100,000+ Questions for Machine Comprehension of Text](https://arxiv.org/abs/1606.05250). The second version (v2.0) was released alongside the paper [Know What You Don't
-Know: Unanswerable Questions for SQuAD](https://arxiv.org/abs/1806.03822).
+(v1.1) was released together with the paper [SQuAD: 100,000+ Questions for Machine Comprehension of Text](https://huggingface.co/papers/1606.05250). The second version (v2.0) was released alongside the paper [Know What You Don't
+Know: Unanswerable Questions for SQuAD](https://huggingface.co/papers/1806.03822).
 
 This library hosts a processor for each of the two versions:
 
@@ -115,10 +114,8 @@ Additionally, the following method can be used to convert SQuAD examples into
 
 [[autodoc]] data.processors.squad.squad_convert_examples_to_features
 
-
 These processors as well as the aforementioned method can be used with files containing the data as well as with the
 *tensorflow_datasets* package. Examples are given below.
-
 
 ### Example usage
 

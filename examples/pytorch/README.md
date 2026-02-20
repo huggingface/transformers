@@ -43,7 +43,7 @@ Coming soon!
 | [**`speech-recognition`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/speech-recognition) | [TIMIT](https://huggingface.co/datasets/timit_asr) | ✅ | - |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/speech_recognition.ipynb)
 | [**`multi-lingual speech-recognition`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/speech-recognition) | [Common Voice](https://huggingface.co/datasets/common_voice) | ✅ | - |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multi_lingual_speech_recognition.ipynb)
 | [**`audio-classification`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/audio-classification) | [SUPERB KS](https://huggingface.co/datasets/superb) | ✅ | - |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb)
-| [**`image-pretraining`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining) | [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k) | ✅ | - |✅ | /
+| [**`image-pretraining`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining) | [ImageNet-1k](https://huggingface.co/datasets/ILSVRC/imagenet-1k) | ✅ | - |✅ | /
 | [**`image-classification`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) | [CIFAR-10](https://huggingface.co/datasets/cifar10) | ✅ | ✅ |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)
 | [**`semantic-segmentation`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/semantic-segmentation) | [SCENE_PARSE_150](https://huggingface.co/datasets/scene_parse_150) | ✅ | ✅ |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/semantic_segmentation.ipynb)
 | [**`object-detection`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/object-detection) | [CPPE-5](https://huggingface.co/datasets/cppe-5) | ✅ | ✅ |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/transformers_doc/en/pytorch/object_detection.ipynb)
@@ -65,15 +65,14 @@ examples/pytorch/token-classification/run_ner.py \
 
 Most example scripts should have the first two command line arguments and some have the third one. You can quickly check if a given example supports any of these by passing a `-h` option, e.g.:
 ```bash
-examples/pytorch/token-classification/run_ner.py -h
+token-classification/run_ner.py -h
 ```
 
 ## Resuming training
 
 You can resume training from a previous checkpoint like this:
 
-1. Pass `--output_dir previous_output_dir` without `--overwrite_output_dir` to resume training from the latest checkpoint in `output_dir` (what you would use if the training was interrupted, for instance).
-2. Pass `--resume_from_checkpoint path_to_a_specific_checkpoint` to resume training from that checkpoint folder.
+1. Pass `--resume_from_checkpoint path_to_a_specific_checkpoint` to resume training from that checkpoint folder.
 
 Should you want to turn an example into a notebook where you'd no longer have access to the command
 line, 🤗 Trainer supports resuming from a checkpoint via `trainer.train(resume_from_checkpoint)`.
@@ -90,7 +89,7 @@ To specify a given repository name, use the `--hub_model_id` argument. You will 
 
 A few notes on this integration:
 
-- you will need to be logged in to the Hugging Face website locally for it to work, the easiest way to achieve this is to run `huggingface-cli login` and then type your username and password when prompted. You can also pass along your authentication token with the `--hub_token` argument.
+- you will need to be logged in to the Hugging Face website locally for it to work, the easiest way to achieve this is to run `hf auth login` and then type your username and password when prompted. You can also pass along your authentication token with the `--hub_token` argument.
 - the `output_dir` you pick will either need to be a new folder or a local clone of the distant repository you are using.
 
 ## Distributed training and mixed precision
@@ -110,7 +109,7 @@ classification MNLI task using the `run_glue` script, with 8 GPUs:
 
 ```bash
 torchrun \
-    --nproc_per_node 8 pytorch/text-classification/run_glue.py \
+    --nproc_per_node 8 text-classification/run_glue.py \
     --model_name_or_path google-bert/bert-large-uncased-whole-word-masking \
     --task_name mnli \
     --do_train \
@@ -123,8 +122,7 @@ torchrun \
 ```
 
 If you have a GPU with mixed precision capabilities (architecture Pascal or more recent), you can use mixed precision
-training with PyTorch 1.6.0 or latest, or by installing the [Apex](https://github.com/NVIDIA/apex) library for previous
-versions. Just add the flag `--fp16` to your command launching one of the scripts mentioned above!
+training with PyTorch 1.6.0 or latest. Just add the flag `--fp16` to your command launching one of the scripts mentioned above!
 
 Using mixed precision training usually results in 2x-speedup for training with the same final results (as shown in
 [this table](https://github.com/huggingface/transformers/tree/main/examples/text-classification#mixed-precision-training)
@@ -201,7 +199,6 @@ You can easily log and monitor your runs code. The following are currently suppo
 * [TensorBoard](https://www.tensorflow.org/tensorboard)
 * [Weights & Biases](https://docs.wandb.ai/integrations/huggingface)
 * [Comet ML](https://www.comet.com/docs/v2/integrations/ml-frameworks/transformers/)
-* [Neptune](https://docs.neptune.ai/integrations-and-supported-tools/model-training/hugging-face)
 * [ClearML](https://clear.ml/docs/latest/docs/getting_started/ds/ds_first_steps)
 * [DVCLive](https://dvc.org/doc/dvclive/ml-frameworks/huggingface)
 
@@ -257,91 +254,6 @@ or if in a Conda environment:
 ```bash
 conda install -c comet_ml -c anaconda -c conda-forge comet_ml
 ```
-
-### Neptune
-
-First, install the Neptune client library. You can do it with either `pip` or `conda`:
-
-`pip`:
-
-```bash
-pip install neptune
-```
-
-`conda`:
-
-```bash
-conda install -c conda-forge neptune
-```
-
-Next, in your model training script, import `NeptuneCallback`:
-
-```python
-from transformers.integrations import NeptuneCallback
-```
-
-To enable Neptune logging, in your `TrainingArguments`, set the `report_to` argument to `"neptune"`:
-
-```python
-training_args = TrainingArguments(
-    "quick-training-distilbert-mrpc",
-    eval_strategy="steps",
-    eval_steps=20,
-    report_to="neptune",
-)
-
-trainer = Trainer(
-    model,
-    training_args,
-    ...
-)
-```
-
-**Note:** This method requires saving your Neptune credentials as environment variables (see the bottom of the section).
-
-Alternatively, for more logging options, create a Neptune callback:
-
-```python
-neptune_callback = NeptuneCallback()
-```
-
-To add more detail to the tracked run, you can supply optional arguments to `NeptuneCallback`.
-
-Some examples:
-
-```python
-neptune_callback = NeptuneCallback(
-    name = "DistilBERT",
-    description = "DistilBERT fine-tuned on GLUE/MRPC",
-    tags = ["args-callback", "fine-tune", "MRPC"],  # tags help you manage runs in Neptune
-    base_namespace="callback",  # the default is "finetuning"
-    log_checkpoints = "best",  # other options are "last", "same", and None
-    capture_hardware_metrics = False,  # additional keyword arguments for a Neptune run
-)
-```
-
-Pass the callback to the Trainer:
-
-```python
-training_args = TrainingArguments(..., report_to=None)
-trainer = Trainer(
-    model,
-    training_args,
-    ...
-    callbacks=[neptune_callback],
-)
-```
-
-Now, when you start the training with `trainer.train()`, your metadata will be logged in Neptune.
-
-**Note:** Although you can pass your **Neptune API token** and **project name** as arguments when creating the callback, the recommended way is to save them as environment variables:
-
-| Environment variable | Value                                                |
-| :------------------- | :--------------------------------------------------- |
-| `NEPTUNE_API_TOKEN`  | Your Neptune API token. To find and copy it, click your Neptune avatar and select **Get your API token**. |
-| `NEPTUNE_PROJECT` | The full name of your Neptune project (`workspace-name/project-name`). To find and copy it, head to **project settings** &rarr; **Properties**. |
-
-For detailed instructions and examples, see the [Neptune docs](https://docs.neptune.ai/integrations/transformers/).
 
 ### ClearML
 

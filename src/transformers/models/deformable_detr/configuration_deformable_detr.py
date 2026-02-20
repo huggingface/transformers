@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 SenseTime and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,30 +13,27 @@
 # limitations under the License.
 """Deformable DETR model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class DeformableDetrConfig(PretrainedConfig):
+class DeformableDetrConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeformableDetrModel`]. It is used to instantiate
     a Deformable DETR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Deformable DETR
     [SenseTime/deformable-detr](https://huggingface.co/SenseTime/deformable-detr) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        use_timm_backbone (`bool`, *optional*, defaults to `True`):
-            Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
-            API.
-        backbone_config (`PretrainedConfig` or `dict`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
             case it will default to `ResNetConfig()`.
         num_channels (`int`, *optional*, defaults to 3):
@@ -74,21 +70,12 @@ class DeformableDetrConfig(PretrainedConfig):
         init_xavier_std (`float`, *optional*, defaults to 1):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         auxiliary_loss (`bool`, *optional*, defaults to `False`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
-        backbone (`str`, *optional*, defaults to `"resnet50"`):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use pretrained weights for the backbone.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         dilation (`bool`, *optional*, defaults to `False`):
             Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
             `use_timm_backbone` = `True`.
@@ -127,6 +114,8 @@ class DeformableDetrConfig(PretrainedConfig):
         disable_custom_kernels (`bool`, *optional*, defaults to `False`):
             Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
             kernels are not supported by PyTorch ONNX export.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -144,6 +133,7 @@ class DeformableDetrConfig(PretrainedConfig):
     ```"""
 
     model_type = "deformable_detr"
+    sub_configs = {"backbone_config": AutoConfig}
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -151,7 +141,6 @@ class DeformableDetrConfig(PretrainedConfig):
 
     def __init__(
         self,
-        use_timm_backbone=True,
         backbone_config=None,
         num_channels=3,
         num_queries=300,
@@ -174,9 +163,6 @@ class DeformableDetrConfig(PretrainedConfig):
         return_intermediate=True,
         auxiliary_loss=False,
         position_embedding_type="sine",
-        backbone="resnet50",
-        use_pretrained_backbone=True,
-        backbone_kwargs=None,
         dilation=False,
         num_feature_levels=4,
         encoder_n_points=4,
@@ -194,35 +180,28 @@ class DeformableDetrConfig(PretrainedConfig):
         eos_coefficient=0.1,
         focal_alpha=0.25,
         disable_custom_kernels=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        # We default to values which were previously hard-coded in the model. This enables configurability of the config
-        # while keeping the default behavior the same.
-        if use_timm_backbone and backbone_kwargs is None:
-            backbone_kwargs = {}
-            if dilation:
-                backbone_kwargs["output_stride"] = 16
-            backbone_kwargs["out_indices"] = [2, 3, 4] if num_feature_levels > 1 else [4]
-            backbone_kwargs["in_chans"] = num_channels
-        # Backwards compatibility
-        elif not use_timm_backbone and backbone in (None, "resnet50"):
-            if backbone_config is None:
-                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-            elif isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
+        # Init timm backbone with hardcoded values for BC
+        timm_default_kwargs = {
+            "num_channels": 3,
+            "features_only": True,
+            "use_pretrained_backbone": False,
+            "out_indices": [2, 3, 4] if num_feature_levels > 1 else [4],
+        }
+        if dilation:
+            timm_default_kwargs["output_stride"] = 16
 
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            default_backbone="resnet50",
+            default_config_type="resnet50",
+            default_config_kwargs={"out_features": ["stage4"]},
+            timm_default_kwargs=timm_default_kwargs,
+            **kwargs,
         )
 
-        self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
         self.num_channels = num_channels
         self.num_queries = num_queries
@@ -243,9 +222,6 @@ class DeformableDetrConfig(PretrainedConfig):
         self.encoder_layerdrop = encoder_layerdrop
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.backbone_kwargs = backbone_kwargs
         self.dilation = dilation
         # deformable attributes
         self.num_feature_levels = num_feature_levels
@@ -268,15 +244,9 @@ class DeformableDetrConfig(PretrainedConfig):
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
+        self.tie_word_embeddings = tie_word_embeddings
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
 
 
 __all__ = ["DeformableDetrConfig"]

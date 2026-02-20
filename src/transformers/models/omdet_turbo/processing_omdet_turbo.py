@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +15,7 @@
 Processor class for OmDet-Turbo.
 """
 
-import warnings
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
@@ -26,10 +24,10 @@ from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Un
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import requires
 
 
@@ -38,7 +36,14 @@ if TYPE_CHECKING:
 
 
 class OmDetTurboTextKwargs(TextKwargs, total=False):
-    task: Optional[Union[str, List[str], TextInput, PreTokenizedInput]]
+    """
+    task (`str`, `list[str]`, `TextInput`, or `PreTokenizedInput`, *optional*):
+        The detection task description(s) to encode. If not provided, a default task description is generated
+        from the `text` input (e.g., "Detect {text}."). Can be a single string, a list of strings (one per image),
+        or pre-tokenized input. The task description guides the model on what objects to detect in the images.
+    """
+
+    task: str | list[str] | TextInput | PreTokenizedInput | None
 
 
 if is_torch_available():
@@ -66,30 +71,10 @@ class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
             "verbose": True,
             "task": None,
         },
-        "images_kwargs": {},
     }
 
 
-class DictWithDeprecationWarning(dict):
-    message = (
-        "The `classes` key is deprecated for `OmDetTurboProcessor.post_process_grounded_object_detection` "
-        "output dict and will be removed in a 4.51.0 version. Please use `text_labels` instead."
-    )
-
-    def __getitem__(self, key):
-        if key == "classes":
-            warnings.warn(self.message, FutureWarning)
-            return super().__getitem__("text_labels")
-        return super().__getitem__(key)
-
-    def get(self, key, *args, **kwargs):
-        if key == "classes":
-            warnings.warn(self.message, FutureWarning)
-            return super().get("text_labels", *args, **kwargs)
-        return super().get(key, *args, **kwargs)
-
-
-def clip_boxes(box, box_size: Tuple[int, int]):
+def clip_boxes(box, box_size: tuple[int, int]):
     """
     Clip the boxes by limiting x coordinates to the range [0, width]
     and y coordinates to the range [0, height].
@@ -128,11 +113,11 @@ def _post_process_boxes_for_image(
     scores: "torch.Tensor",
     labels: "torch.Tensor",
     image_num_classes: int,
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
     threshold: float,
     nms_threshold: float,
-    max_num_det: Optional[int] = None,
-) -> Tuple["torch.Tensor", "torch.Tensor", "torch.Tensor"]:
+    max_num_det: int | None = None,
+) -> tuple["torch.Tensor", "torch.Tensor", "torch.Tensor"]:
     """
     Filter predicted results using given thresholds and NMS.
 
@@ -147,7 +132,7 @@ def _post_process_boxes_for_image(
             A Tensor of predicted labels for the image.
         image_num_classes (`int`):
             The number of classes queried for detection on the image.
-        image_size (`Tuple[int, int]`):
+        image_size (`tuple[int, int]`):
             A tuple of (height, width) for the image.
         threshold (`float`):
             Only return detections with a confidence score exceeding this threshold.
@@ -201,57 +186,18 @@ def _post_process_boxes_for_image(
 
 
 @requires(backends=("vision", "torchvision"))
+@auto_docstring
 class OmDetTurboProcessor(ProcessorMixin):
-    r"""
-    Constructs a OmDet-Turbo processor which wraps a Deformable DETR image processor and an AutoTokenizer into a
-    single processor.
-
-    [`OmDetTurboProcessor`] offers all the functionalities of [`DetrImageProcessor`] and
-    [`AutoTokenizer`]. See the docstring of [`~OmDetTurboProcessor.__call__`] and [`~OmDetTurboProcessor.decode`]
-    for more information.
-
-    Args:
-        image_processor (`DetrImageProcessor`):
-            An instance of [`DetrImageProcessor`]. The image processor is a required input.
-        tokenizer (`AutoTokenizer`):
-            An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("DetrImageProcessor", "DetrImageProcessorFast")
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
-        images: ImageInput = None,
-        text: Optional[Union[List[str], List[List[str]]]] = None,
-        audio=None,
-        videos=None,
+        images: ImageInput | None = None,
+        text: list[str] | list[list[str]] | None = None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
     ) -> BatchFeature:
-        """
-        This method uses [*DetrImageProcessor.__call__] method to prepare image(s) for the model, and
-        [CLIPTokenizerFast.__call__] to prepare text for the model.
-
-        Please refer to the docstring of the above two methods for more information.
-
-        Args:
-            images (`ImageInput`):
-               Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
-            text (`Union[str, List[str], List[List[str]]]`):
-                The classes used to limit the scope of the open vocabulary detection. Expects a list of strings or a list
-                of list of strings. Batched classes can be of different lengths.
-                Examples: ["cat", "dog", "bird"], [["cat", "dog", "bird"], ["hat", "person"], ["car"]]
-        Kwargs:
-            task (`Union[str, List[str], TextInput, PreTokenizedInput]`):
-                The grounded text used to guide open vocabulary detection. Expects a single string or a list of strings.
-                Examples: "Detect a cat, a dog, and a bird.",[ "Detect everything.", "Detect trees and flowers."]
-                When not provided, the default task is "Detect [class1], [class2], [class3]" etc.
-            ...
-        """
         if images is None or text is None:
             raise ValueError("You have to specify both `images` and `text`")
 
@@ -269,7 +215,7 @@ class OmDetTurboProcessor(ProcessorMixin):
 
         task = output_kwargs["text_kwargs"].pop("task", None)
         if task is None:
-            task = ["Detect {}.".format(", ".join(text_single)) for text_single in text]
+            task = [f"Detect {', '.join(text_single)}." for text_single in text]
         elif not isinstance(task, (list, tuple)):
             task = [task]
 
@@ -290,23 +236,19 @@ class OmDetTurboProcessor(ProcessorMixin):
 
         return encoding
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+    @property
+    def model_input_names(self):
+        image_processor_input_names = self.image_processor.model_input_names
+        tokenizer_input_names = [
+            "classes_attention_mask",
+            "tasks_attention_mask",
+            "tasks_input_ids",
+            "classes_input_ids",
+            "classes_structure",
+        ]
+        return tokenizer_input_names + image_processor_input_names
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with BertTokenizerFast->PreTrainedTokenizer
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    def _get_default_image_size(self) -> Tuple[int, int]:
+    def _get_default_image_size(self) -> tuple[int, int]:
         height = (
             self.image_processor.size["height"]
             if "height" in self.image_processor.size
@@ -319,16 +261,14 @@ class OmDetTurboProcessor(ProcessorMixin):
         )
         return height, width
 
-    @deprecate_kwarg("score_threshold", new_name="threshold", version="4.51.0")
-    @deprecate_kwarg("classes", new_name="text_labels", version="4.51.0")
     def post_process_grounded_object_detection(
         self,
         outputs: "OmDetTurboObjectDetectionOutput",
-        text_labels: Optional[Union[List[str], List[List[str]]]] = None,
+        text_labels: list[str] | list[list[str]] | None = None,
         threshold: float = 0.3,
         nms_threshold: float = 0.5,
-        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
-        max_num_det: Optional[int] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
+        max_num_det: int | None = None,
     ):
         """
         Converts the raw output of [`OmDetTurboForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -337,19 +277,19 @@ class OmDetTurboProcessor(ProcessorMixin):
         Args:
             outputs ([`OmDetTurboObjectDetectionOutput`]):
                 Raw outputs of the model.
-            text_labels (Union[List[str], List[List[str]]], *optional*):
+            text_labels (Union[list[str], list[list[str]]], *optional*):
                 The input classes names. If not provided, `text_labels` will be set to `None` in `outputs`.
             threshold (float, defaults to 0.3):
                 Only return detections with a confidence score exceeding this threshold.
             nms_threshold (float, defaults to 0.5):
                 The threshold to use for box non-maximum suppression. Value in [0, 1].
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
             max_num_det (`int`, *optional*):
                 The maximum number of detections to return.
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, classes and boxes for an image
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, classes and boxes for an image
             in the batch as predicted by the model.
         """
 
@@ -399,9 +339,7 @@ class OmDetTurboProcessor(ProcessorMixin):
                 nms_threshold=nms_threshold,
                 max_num_det=max_num_det,
             )
-            result = DictWithDeprecationWarning(
-                {"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None}
-            )
+            result = {"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None}
             results.append(result)
 
         # Add text labels

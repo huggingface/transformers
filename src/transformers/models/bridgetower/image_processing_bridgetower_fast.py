@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,39 +13,30 @@
 # limitations under the License.
 """Fast Image processor class for BridgeTower."""
 
-from typing import Dict, Iterable, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Optional
+
+import torch
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
     ImageInput,
     SizeDict,
     TensorType,
     Unpack,
-    get_max_height_width,
     group_images_by_shape,
     reorder_images,
 )
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...utils import add_start_docstrings, is_torch_available, is_torchvision_available, is_torchvision_v2_available
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+from ...utils import auto_docstring
+from .image_processing_bridgetower import BridgeTowerImageProcessorKwargs
 
 
 def make_pixel_mask(
     image: "torch.Tensor",
-    output_size: Tuple[int, int],
+    output_size: tuple[int, int],
 ) -> "torch.Tensor":
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -54,7 +44,7 @@ def make_pixel_mask(
     Args:
         image (`np.ndarray`):
             Image to make the pixel mask for.
-        output_size (`Tuple[int, int]`):
+        output_size (`tuple[int, int]`):
             Output size of the mask.
     """
     input_height, input_width = image.shape[-2:]
@@ -69,7 +59,7 @@ def get_resize_output_image_size(
     shorter: int = 800,
     longer: int = 1333,
     size_divisor: int = 32,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     input_height, input_width = input_image.shape[-2:]
     min_size, max_size = shorter, longer
 
@@ -94,23 +84,7 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
-class BridgeTowerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    size_divisor: Optional[int]
-    do_pad: Optional[bool]
-
-
-@add_start_docstrings(
-    "Constructs a fast BridgeTower image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        size_divisor (`int`, *optional*, defaults to 32):
-            The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
-            is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
-            the `do_pad` parameter in the `preprocess` method.
-    """,
-)
+@auto_docstring
 class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
@@ -124,23 +98,14 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_pad = True
     size_divisor = 32
-    valid_kwargs = BridgeTowerFastImageProcessorKwargs
+    valid_kwargs = BridgeTowerImageProcessorKwargs
+    model_input_names = ["pixel_values", "pixel_mask"]
 
-    def __init__(self, **kwargs: Unpack[BridgeTowerFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[BridgeTowerImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            size_divisor (`int`, *optional*, defaults to 32):
-                The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
-                is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
-            do_pad (`bool`, *optional*, defaults to `True`):
-                Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
-                the `do_pad` parameter in the `preprocess` method.
-        """,
-    )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[BridgeTowerFastImageProcessorKwargs]) -> BatchFeature:
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[BridgeTowerImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(
@@ -148,7 +113,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         image: "torch.Tensor",
         size: SizeDict,
         size_divisor: int = 32,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -172,23 +137,28 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `torch.Tensor`: The resized image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
         if not size.shortest_edge:
             raise ValueError(f"The `size` dictionary must contain the key `shortest_edge`. Got {size.keys()}")
         shorter = size.shortest_edge
         longer = int(1333 / 800 * shorter)
-        output_size = get_resize_output_image_size(
+        output_height, output_width = get_resize_output_image_size(
             image,
             shorter=shorter,
             longer=longer,
             size_divisor=size_divisor,
         )
-        return F.resize(image, output_size, interpolation=interpolation, antialias=antialias)
+        return super().resize(
+            image=image,
+            size=SizeDict(height=output_height, width=output_width),
+            interpolation=interpolation,
+            antialias=antialias,
+        )
 
     def center_crop(
         self,
         image: "torch.Tensor",
-        size: Dict[str, int],
+        size: dict[str, int],
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -198,11 +168,11 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         Args:
             image (`torch.Tensor`):
                 Image to center crop.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image in the form `{"height": h, "width": w}`.
         """
         output_size = size.shortest_edge
-        return F.center_crop(
+        return tvF.center_crop(
             image,
             output_size=(output_size, output_size),
             **kwargs,
@@ -211,8 +181,8 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     def _pad_image(
         self,
         image: "torch.Tensor",
-        output_size: Tuple[int, int],
-        constant_values: Union[float, Iterable[float]] = 0,
+        output_size: tuple[int, int],
+        constant_values: float | Iterable[float] = 0,
     ) -> "torch.Tensor":
         """
         Pad an image with zeros to the given size.
@@ -223,83 +193,34 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         pad_bottom = output_height - input_height
         pad_right = output_width - input_width
         padding = (0, 0, pad_right, pad_bottom)
-        padded_image = F.pad(
+        padded_image = tvF.pad(
             image,
             padding,
             fill=constant_values,
         )
         return padded_image
 
-    def pad(
-        self,
-        images: list["torch.Tensor"],
-        constant_values: Union[float, Iterable[float]] = 0,
-        return_pixel_mask: bool = True,
-    ) -> tuple:
-        """
-        Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
-        in the batch and optionally returns their corresponding pixel mask.
-
-        Args:
-            image (`torch.Tensor`):
-                Image to pad.
-            constant_values (`float` or `Iterable[float]`, *optional*):
-                The value to use for the padding if `mode` is `"constant"`.
-            return_pixel_mask (`bool`, *optional*, defaults to `True`):
-                Whether to return a pixel mask.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-        """
-        pad_size = get_max_height_width(images)
-
-        grouped_images, grouped_images_index = group_images_by_shape(images)
-        processed_images_grouped = {}
-        processed_masks_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            stacked_images = self._pad_image(
-                stacked_images,
-                pad_size,
-                constant_values=constant_values,
-            )
-            processed_images_grouped[shape] = stacked_images
-
-            if return_pixel_mask:
-                stacked_masks = make_pixel_mask(image=stacked_images, output_size=pad_size)
-                processed_masks_grouped[shape] = stacked_masks
-
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-
-        processed_masks = None
-        if return_pixel_mask:
-            processed_masks = reorder_images(processed_masks_grouped, grouped_images_index)
-
-        return processed_images, processed_masks
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        size_divisor: Optional[int],
-        interpolation: Optional["F.InterpolationMode"],
+        size_divisor: int | None,
+        interpolation: Optional["tvF.InterpolationMode"],
         do_pad: bool,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -311,7 +232,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
@@ -326,11 +247,11 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
 
         data = {}
         if do_pad:
-            processed_images, processed_masks = self.pad(processed_images, return_pixel_mask=True)
-            processed_masks = torch.stack(processed_masks, dim=0) if return_tensors else processed_masks
+            processed_images, processed_masks = self.pad(
+                processed_images, return_mask=True, disable_grouping=disable_grouping
+            )
             data["pixel_mask"] = processed_masks
 
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         data["pixel_values"] = processed_images
 
         return BatchFeature(data=data, tensor_type=return_tensors)

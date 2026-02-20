@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,9 +16,10 @@
 import argparse
 import collections
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 import yaml
 from huggingface_hub import hf_hub_download
@@ -60,7 +60,7 @@ def load_orig_config_file(orig_cfg_file):
             for k, v in flat_cfg.items():
                 setattr(config, k, v)
         except yaml.YAMLError as exc:
-            logger.error("Error while loading config file: {}. Error message: {}".format(orig_cfg_file, str(exc)))
+            logger.error(f"Error while loading config file: {orig_cfg_file}. Error message: {str(exc)}")
     return config
 
 
@@ -134,7 +134,7 @@ def create_rename_keys(state_dict, base_model=False):
         model_prefix = "mobilevitv2."
 
     rename_keys = []
-    for k in state_dict.keys():
+    for k in state_dict:
         if k[:8] == "encoder.":
             k_new = k[8:]
         else:
@@ -216,7 +216,7 @@ def create_rename_keys(state_dict, base_model=False):
 def remove_unused_keys(state_dict):
     """remove unused keys (e.g.: seg_head.aux_head)"""
     keys_to_ignore = []
-    for k in state_dict.keys():
+    for k in state_dict:
         if k.startswith("seg_head.aux_head."):
             keys_to_ignore.append(k)
     for k in keys_to_ignore:
@@ -227,8 +227,9 @@ def remove_unused_keys(state_dict):
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     # url = "https://cdn.britannica.com/86/141086-050-9D7C75EE/Gulfstream-G450-business-jet-passengers.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()

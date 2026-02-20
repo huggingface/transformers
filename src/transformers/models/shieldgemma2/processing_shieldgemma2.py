@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Mapping, Sequence
-from typing import Optional
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -47,8 +45,8 @@ DEFAULT_SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
 
 
 class ShieldGemma2ProcessorKwargs(Gemma3ProcessorKwargs, total=False):
-    policies: Optional[Sequence[str]]
-    custom_policies: Optional[Mapping[str, str]]
+    policies: Sequence[str] | None
+    custom_policies: Mapping[str, str] | None
     _defaults = {
         "text_kwargs": {
             "padding": True,
@@ -85,10 +83,8 @@ class ShieldGemma2Processor(Gemma3Processor):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: ImageInput | None = None,
         text=None,
-        videos=None,
-        audio=None,
         **kwargs: Unpack[ShieldGemma2ProcessorKwargs],
     ) -> BatchFeature:
         """Generates a batch of inputs from the provided images.
@@ -120,8 +116,6 @@ class ShieldGemma2Processor(Gemma3Processor):
             `(len(images) * len(policies), )`, and the order within the batch will be
             img1_policy1, ... img1_policyN, ... imgM_policyN.
         """
-        del text, videos, audio
-
         if not images:
             raise ValueError("ShieldGemma 2 needs images to classify")
         elif not isinstance(images, Sequence):
@@ -129,6 +123,10 @@ class ShieldGemma2Processor(Gemma3Processor):
 
         if not self.chat_template:
             raise ValueError("ShieldGemma 2 requires the use of a specific chat template")
+
+        common_kwargs = kwargs.setdefault("common_kwargs", {})
+        if "return_tensors" in kwargs:
+            common_kwargs["return_tensors"] = kwargs.pop("return_tensors")
 
         # Disable pan and scan
         images_kwargs = kwargs.setdefault("images_kwargs", {})
@@ -154,42 +152,39 @@ class ShieldGemma2Processor(Gemma3Processor):
         messages = []
         expanded_images = []
         for img in images:
+            if not isinstance(img, list):
+                img = [img]
+            elif len(img) > 1:
+                raise ValueError(f"SheildGemma can process at most one image per sample, but got {len(img)} images")
+
             for policy in policies:
-                messages.append(
-                    [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "image"},
-                                {"type": "text", "text": policy_definitions[policy]},
-                            ],
-                        }
-                    ]
-                )
-                expanded_images.append([img])
+                if img:
+                    messages.append(
+                        [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "image"},
+                                    {"type": "text", "text": policy_definitions[policy]},
+                                ],
+                            }
+                        ]
+                    )
+                else:
+                    messages.append(
+                        [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": policy_definitions[policy]},
+                                ],
+                            }
+                        ]
+                    )
+                expanded_images.append(img)
 
         text = self.apply_chat_template(messages, tokenize=False)
         return super().__call__(images=expanded_images, text=text, **kwargs)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids"]
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
 __all__ = ["ShieldGemma2Processor"]

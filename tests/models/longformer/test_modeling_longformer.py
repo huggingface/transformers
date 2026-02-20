@@ -16,7 +16,14 @@
 import unittest
 
 from transformers import LongformerConfig, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    is_flaky,
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -297,9 +304,6 @@ class LongformerModelTester:
 
 @require_torch
 class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_pruning = False  # pruning is not supported
-    test_torchscript = False
-
     all_model_classes = (
         (
             LongformerModel,
@@ -327,6 +331,7 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     # Need to use `0.6` instead of `0.5` for `test_disk_offload`
     model_split_percents = [0.6, 0.7, 0.9]
+    test_torch_exportable = False
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -354,6 +359,14 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def setUp(self):
         self.model_tester = LongformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LongformerConfig, hidden_size=37)
+
+    # Without this, 0.01% failure rate.
+    @is_flaky(
+        max_attempts=2,
+        description="When `inputs_dict['attention_mask'][:, -1]` is all `0`s, we get shorter length along the last dimension of the output's `attentions`.",
+    )
+    def test_attention_outputs(self):
+        super().test_attention_outputs()
 
     def test_config(self):
         self.config_tester.run_common_tests()

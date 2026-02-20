@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +13,14 @@
 # limitations under the License.
 """Wav2Vec2Bert model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Wav2Vec2BertConfig(PretrainedConfig):
+class Wav2Vec2BertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Wav2Vec2BertModel`]. It is used to
     instantiate an Wav2Vec2Bert model according to the specified arguments, defining the model architecture.
@@ -29,8 +28,8 @@ class Wav2Vec2BertConfig(PretrainedConfig):
     [facebook/wav2vec2-bert-rel-pos-large](https://huggingface.co/facebook/wav2vec2-bert-rel-pos-large)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -63,7 +62,7 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`Wav2Vec2BertForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):
-            The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
+            The LayerDrop probability. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556) for more
             details.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -72,7 +71,7 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         apply_spec_augment (`bool`, *optional*, defaults to `True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
             [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
-            Recognition](https://arxiv.org/abs/1904.08779).
+            Recognition](https://huggingface.co/papers/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
             procedure generates `mask_time_prob*len(time_axis)/mask_time_length ``independent masks over the axis. If
@@ -110,13 +109,13 @@ class Wav2Vec2BertConfig(PretrainedConfig):
             instance of [`Wav2Vec2BertForSequenceClassification`].
         classifier_proj_size (`int`, *optional*, defaults to 768):
             Dimensionality of the projection before token mean-pooling for classification.
-        tdnn_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
+        tdnn_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
             A tuple of integers defining the number of output channels of each 1D convolutional layer in the *TDNN*
             module of the *XVector* model. The length of *tdnn_dim* defines the number of *TDNN* layers.
-        tdnn_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 3, 3, 1, 1)`):
+        tdnn_kernel (`tuple[int]` or `list[int]`, *optional*, defaults to `(5, 3, 3, 1, 1)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the *TDNN* module of the
             *XVector* model. The length of *tdnn_kernel* has to match the length of *tdnn_dim*.
-        tdnn_dilation (`Tuple[int]` or `List[int]`, *optional*, defaults to `(1, 2, 3, 1, 1)`):
+        tdnn_dilation (`tuple[int]` or `list[int]`, *optional*, defaults to `(1, 2, 3, 1, 1)`):
             A tuple of integers defining the dilation factor of each 1D convolutional layer in *TDNN* module of the
             *XVector* model. The length of *tdnn_dilation* has to match the length of *tdnn_dim*.
         xvector_output_dim (`int`, *optional*, defaults to 512):
@@ -148,7 +147,7 @@ class Wav2Vec2BertConfig(PretrainedConfig):
                 - `rotary`, for rotary position embeddings.
                 - `relative`, for relative position embeddings.
                 - `relative_key`, for relative position embeddings as defined by Shaw in [Self-Attention
-            with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
             If left to `None`, no relative position embeddings is applied.
         rotary_embedding_base (`int`, *optional*, defaults to 10000):
             If `"rotary"` position embeddings are used, defines the size of the embedding base.
@@ -230,7 +229,10 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         conformer_conv_dropout=0.1,
         **kwargs,
     ):
-        super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
@@ -269,7 +271,7 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
         self.conformer_conv_dropout = conformer_conv_dropout
 
-        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        # fine-tuning config parameters for SpecAugment: https://huggingface.co/papers/1904.08779
         self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length

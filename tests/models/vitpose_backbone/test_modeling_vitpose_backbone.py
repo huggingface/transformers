@@ -17,8 +17,8 @@ import inspect
 import unittest
 
 from transformers import VitPoseBackboneConfig
-from transformers.testing_utils import require_torch, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch
+from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -26,13 +26,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
-    import torch
-
     from transformers import VitPoseBackbone
-
-
-if is_vision_available():
-    pass
 
 
 class VitPoseBackboneModelTester:
@@ -46,7 +40,7 @@ class VitPoseBackboneModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -126,11 +120,8 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (VitPoseBackbone,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = VitPoseBackboneModelTester(self)
@@ -141,10 +132,8 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # TODO: @Pavel
-    @unittest.skip(reason="currently failing")
-    def test_initialization(self):
-        pass
+    def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     @unittest.skip(reason="VitPoseBackbone does not support input and output embeddings")
     def test_model_common_attributes(self):
@@ -170,18 +159,6 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip(reason="VitPoseBackbone does not support training yet")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="VitPoseBackbone does not support training yet")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="VitPoseBackbone does not support training yet")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -193,17 +170,6 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_torch_export(self):
-        # Dense architecture
-        super().test_torch_export()
-
-        # MOE architecture
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_experts = 2
-        config.part_features = config.hidden_size // config.num_experts
-        inputs_dict["dataset_index"] = torch.tensor([0] * self.model_tester.batch_size, device=torch_device)
-        super().test_torch_export(config=config, inputs_dict=inputs_dict)
 
 
 @require_torch

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023, HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,22 @@
 # limitations under the License.
 """NLLB-MoE model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class NllbMoeConfig(PretrainedConfig):
+class NllbMoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NllbMoeModel`]. It is used to instantiate an
     NLLB-MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the NLLB-MoE
     [facebook/nllb-moe-54b](https://huggingface.co/facebook/nllb-moe-54b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -67,10 +66,10 @@ class NllbMoeConfig(PretrainedConfig):
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         second_expert_policy ( `str`, *optional*, default to `"all"`):
             The policy used for the sampling the probability of being sampled to a second expert for each token.
@@ -94,7 +93,7 @@ class NllbMoeConfig(PretrainedConfig):
             Frequency of the sparse layers in the decoder. 4 means that one out of 4 layers will be sparse.
         router_dtype (`str`, *optional*, default to `"float32"`):
             The `dtype` used for the routers. It is preferable to keep the `dtype` to `"float32"` as specified in the
-            *selective precision* discussion in [the paper](https://arxiv.org/abs/2101.03961).
+            *selective precision* discussion in [the paper](https://huggingface.co/papers/2101.03961).
         router_ignore_padding_tokens (`bool`, *optional*, defaults to `False`):
             Whether to ignore padding tokens when routing. if `False`, the padding tokens are not routed to any
             experts.
@@ -166,6 +165,7 @@ class NllbMoeConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        tie_word_embeddings=True,
         output_router_logits=False,
         **kwargs,
     ):
@@ -206,14 +206,12 @@ class NllbMoeConfig(PretrainedConfig):
         self.moe_eval_capacity_token_fraction = moe_eval_capacity_token_fraction
         self.moe_token_dropout = moe_token_dropout
         self.output_router_logits = output_router_logits
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["NllbMoeConfig"]

@@ -16,10 +16,9 @@ import logging
 import os
 import unittest
 from pathlib import Path
-from typing import Union
 
 import transformers
-from transformers.testing_utils import require_tf, require_torch, slow
+from transformers.testing_utils import require_torch, slow
 
 
 logger = logging.getLogger()
@@ -27,15 +26,14 @@ logger = logging.getLogger()
 
 @unittest.skip(reason="Temporarily disable the doc tests.")
 @require_torch
-@require_tf
 @slow
 class TestCodeExamples(unittest.TestCase):
     def analyze_directory(
         self,
         directory: Path,
-        identifier: Union[str, None] = None,
-        ignore_files: Union[list[str], None] = None,
-        n_identifier: Union[str, list[str], None] = None,
+        identifier: str | None = None,
+        ignore_files: list[str] | None = None,
+        n_identifier: str | list[str] | None = None,
         only_modules: bool = True,
     ):
         """

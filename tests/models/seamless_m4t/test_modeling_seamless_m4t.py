@@ -16,16 +16,17 @@
 import copy
 import tempfile
 import unittest
+from functools import cached_property
+
+import pytest
 
 from transformers import SeamlessM4TConfig, is_speech_available, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_speech, require_torch, slow, torch_device
 from transformers.trainer_utils import set_seed
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -255,8 +256,6 @@ class SeamlessM4TModelTester:
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, decoder_input_ids.shape[1], self.vocab_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.decoder_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -339,13 +338,9 @@ class SeamlessM4TModelTester:
 @require_torch
 class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
-    fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
-    test_model_parallel = False
+
     test_resize_embeddings = False
-    test_headmasking = False
-    test_torchscript = False
 
     all_model_classes = (
         (
@@ -376,44 +371,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
         model = SeamlessM4TModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "masked_spec_embed",
-                    "codevectors",
-                    "quantizer.weight_proj.weight",
-                    "project_hid.weight",
-                    "project_hid.bias",
-                    "project_q.weight",
-                    "project_q.bias",
-                    "pos_bias_v",
-                    "pos_bias_u",
-                    "pointwise_conv1",
-                    "pointwise_conv2",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                    "objective.weight",
-                    "adapter",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     @unittest.skip(reason="SeamlessM4TSpeechEncoder doesn't have an embedding layer")
     def test_inputs_embeds(self):
         pass
@@ -432,23 +389,17 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     def test_forward_signature(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(
         reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
@@ -475,7 +426,8 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -562,23 +514,21 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
-    def test_retain_grad_hidden_states_attentions(self):
-        # When training the model, the first speech encoder layer is sometimes skipped.
-        # Setting the seed to always have the first layer.
-        set_seed(0)
-        super().test_retain_grad_hidden_states_attentions()
+    def _prepare_config_and_inputs_for_retain_grad_hidden_states_attentions(self):
+        # Layerdrop can skip layers and return None attentions. Disable it for this test.
+        config, inputs_dict = super()._prepare_config_and_inputs_for_retain_grad_hidden_states_attentions()
+        config.speech_encoder_layerdrop = 0.0
+        config.encoder_layerdrop = 0.0
+        config.decoder_layerdrop = 0.0
+        return config, inputs_dict
 
 
 @require_torch
 class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
-    fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
-    test_model_parallel = False
+
     test_resize_embeddings = True
-    test_headmasking = False
-    test_torchscript = False
 
     all_model_classes = (
         (
@@ -621,44 +571,6 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, PipelineTesterMixin, u
         model = SeamlessM4TModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "masked_spec_embed",
-                    "codevectors",
-                    "quantizer.weight_proj.weight",
-                    "project_hid.weight",
-                    "project_hid.bias",
-                    "project_q.weight",
-                    "project_q.bias",
-                    "pos_bias_v",
-                    "pos_bias_u",
-                    "pointwise_conv1",
-                    "pointwise_conv2",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                    "objective.weight",
-                    "adapter",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     @unittest.skip(
         reason="Expected missing keys serve when using SeamlessM4TForXXX.from_pretrained from a checkpoint saved by SeamlessM4TModel.save_pretrained."
     )
@@ -673,23 +585,17 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, PipelineTesterMixin, u
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(
         reason="In training model, the first encoder layer is sometimes skipped. Training is not supported yet, so the test is ignored."
@@ -710,7 +616,7 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
     # test generation of: SeamlessM4TModel, SeamlessM4TForSpeechToSpeech, SeamlessM4TForSpeechToText, SeamlessM4TForTextToSpeech
 
     def setUp(self):
-        self.speech_model_tester = SeamlessM4TModelTester(self, input_modality="speech")
+        self.audio_model_tester = SeamlessM4TModelTester(self, input_modality="speech")
         self.text_model_tester = SeamlessM4TModelTester(self, input_modality="text")
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -744,7 +650,7 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
         return config, input_dict
 
     def prepare_speech_input(self):
-        config, inputs, decoder_input_ids, input_mask, lm_labels = self.speech_model_tester.prepare_config_and_inputs()
+        config, inputs, decoder_input_ids, input_mask, lm_labels = self.audio_model_tester.prepare_config_and_inputs()
 
         input_dict = {
             "input_features": inputs,
@@ -757,7 +663,7 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
         return config, input_dict
 
     def prepare_speech_and_text_input(self):
-        config, inputs, decoder_input_ids, input_mask, lm_labels = self.speech_model_tester.prepare_config_and_inputs()
+        config, inputs, decoder_input_ids, input_mask, lm_labels = self.audio_model_tester.prepare_config_and_inputs()
 
         input_speech = {
             "input_features": inputs,
@@ -779,7 +685,7 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
         return config, input_speech, input_text
 
     def factory_generation_speech_test(self, model, inputs):
-        set_seed(0)
+        set_seed(42)
         output = model.generate(**inputs)
         return output
 
@@ -948,12 +854,12 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def input_audio(self):
-        set_seed(0)
+        set_seed(42)
         seq_len = 20000
         sampling_rate = 16000
         input_features = torch.rand((2, seq_len))
 
-        return self.processor(audios=[input_features.tolist()], sampling_rate=sampling_rate, return_tensors="pt").to(
+        return self.processor(audio=[input_features.tolist()], sampling_rate=sampling_rate, return_tensors="pt").to(
             torch_device
         )
 
@@ -961,9 +867,9 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         model1 = class1.from_pretrained(self.repo_id).to(torch_device)
         model2 = class2.from_pretrained(self.repo_id).to(torch_device)
 
-        set_seed(0)
+        set_seed(42)
         output_1 = model1.generate(**inputs, **class1_kwargs)
-        set_seed(0)
+        set_seed(42)
         output_2 = model2.generate(**inputs, **class2_kwargs)
 
         for key in output_1:
@@ -992,7 +898,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         expected_wav_slice = [-3e-05, -0.0004, -0.00037, -0.00013, -6e-05, 0.00012, -0.00016, 0.00025, 7e-05, -3e-05]  # fmt: skip
 
-        set_seed(0)
+        set_seed(42)
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="eng", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
@@ -1019,7 +925,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         expected_wav_slice = [1e-05, -7e-05, -4e-05, -4e-05, -6e-05, -9e-05, -0.0001, -2e-05, -7e-05, -2e-05]  # fmt: skip
 
-        set_seed(0)
+        set_seed(42)
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="swh", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
@@ -1027,6 +933,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
 
+    @require_speech
     @slow
     def test_to_rus_speech(self):
         model = SeamlessM4TModel.from_pretrained(self.repo_id).to(torch_device)
@@ -1046,7 +953,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         expected_wav_slice = [0.00013, 0.00012, 0.00014, 3e-05, 0.0, -6e-05, -0.00018, -0.00016, -0.00021, -0.00018]  # fmt: skip
 
-        set_seed(0)
+        set_seed(42)
         output = model.generate(**self.input_audio, num_beams=1, tgt_lang="rus", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
@@ -1065,6 +972,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         }
         self.factory_test_task(SeamlessM4TModel, SeamlessM4TForTextToText, self.input_text, kwargs1, kwargs2)
 
+    @require_speech
     @slow
     def test_speech_to_text_model(self):
         kwargs1 = {"tgt_lang": "eng", "return_intermediate_token_ids": True, "generate_speech": False}
@@ -1076,6 +984,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         }
         self.factory_test_task(SeamlessM4TModel, SeamlessM4TForSpeechToText, self.input_audio, kwargs1, kwargs2)
 
+    @require_speech
     @slow
     def test_speech_to_speech_model(self):
         kwargs1 = {"tgt_lang": "eng", "return_intermediate_token_ids": True}

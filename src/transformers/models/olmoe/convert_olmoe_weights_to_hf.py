@@ -23,7 +23,7 @@ rm -rf olmoe; mkdir olmoe; python /data/niklas/transformers/src/transformers/mod
 ```
 from transformers import OlmoeForCausalLM, AutoTokenizer
 import torch
-model = OlmoeForCausalLM.from_pretrained("../transformers/olmoe", torch_dtype=torch.bfloat16).cuda()
+model = OlmoeForCausalLM.from_pretrained("../transformers/olmoe", dtype=torch.bfloat16).cuda()
 model = OlmoeForCausalLM.from_pretrained("../transformers/olmoe").cuda()
 tokenizer = AutoTokenizer.from_pretrained("../transformers/olmoe")
 inputs = tokenizer("Bitcoin is", return_tensors="pt")
@@ -88,7 +88,7 @@ def write_json(text, path):
         json.dump(text, f)
 
 
-def write_model(model_path, input_base_path, tokenizer_path=None, safe_serialization=True, fix_eos_token_id=True):
+def write_model(model_path, input_base_path, tokenizer_path=None, fix_eos_token_id=True):
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
     os.makedirs(tmp_model_path, exist_ok=True)
@@ -207,11 +207,11 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
         _write_tokenizer(model_path, config, tokenizer_path, fix_eos_token_id)
 
     print("Loading the checkpoint in a OLMoE model.")
-    model = OlmoeForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16)
+    model = OlmoeForCausalLM.from_pretrained(tmp_model_path, dtype=torch.bfloat16)
     # Avoid saving this as part of the config.
     del model.config._name_or_path
     print("Saving in the Transformers format.")
-    model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    model.save_pretrained(model_path)
     shutil.rmtree(tmp_model_path)
 
 
@@ -264,14 +264,10 @@ def main():
         dest="fix_eos_token_id",
         help="If set, does not change eos token id from 0 to 50279 if it is 0. Changing 0 to 50279 is a bug fix, so use this option with care.",
     )
-    parser.add_argument(
-        "--safe_serialization", type=bool, default=True, help="Whether or not to save using `safetensors`."
-    )
     args = parser.parse_args()
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
-        safe_serialization=args.safe_serialization,
         tokenizer_path=args.tokenizer_json_path,
         fix_eos_token_id=args.fix_eos_token_id,
     )

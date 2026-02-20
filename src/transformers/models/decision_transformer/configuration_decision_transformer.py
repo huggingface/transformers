@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +13,14 @@
 # limitations under the License.
 """Decision Transformer model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DecisionTransformerConfig(PretrainedConfig):
+class DecisionTransformerConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`DecisionTransformerModel`]. It is used to
     instantiate a Decision Transformer model according to the specified arguments, defining the model architecture.
@@ -29,8 +28,8 @@ class DecisionTransformerConfig(PretrainedConfig):
     DecisionTransformer architecture. Many of the config options are used to instantiate the GPT2 model that is used as
     part of the architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -125,8 +124,10 @@ class DecisionTransformerConfig(PretrainedConfig):
         eos_token_id=50256,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
+        add_cross_attention=False,
         **kwargs,
     ):
+        self.add_cross_attention = add_cross_attention
         self.state_dim = state_dim
         self.act_dim = act_dim
         self.hidden_size = hidden_size
@@ -151,7 +152,7 @@ class DecisionTransformerConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["DecisionTransformerConfig"]

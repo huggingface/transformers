@@ -66,7 +66,6 @@ class FlavaImageProcessingTester:
         image_std=FLAVA_IMAGE_STD,
         input_size_patches=14,
         total_mask_patches=75,
-        mask_group_max_patches=None,
         mask_group_min_patches=16,
         mask_group_min_aspect_ratio=0.3,
         mask_group_max_aspect_ratio=None,
@@ -103,7 +102,6 @@ class FlavaImageProcessingTester:
 
         self.input_size_patches = input_size_patches
         self.total_mask_patches = total_mask_patches
-        self.mask_group_max_patches = mask_group_max_patches
         self.mask_group_min_patches = mask_group_min_patches
         self.mask_group_min_aspect_ratio = mask_group_min_aspect_ratio
         self.mask_group_max_aspect_ratio = mask_group_max_aspect_ratio
@@ -133,7 +131,6 @@ class FlavaImageProcessingTester:
             "crop_size": self.crop_size,
             "input_size_patches": self.input_size_patches,
             "total_mask_patches": self.total_mask_patches,
-            "mask_group_max_patches": self.mask_group_max_patches,
             "mask_group_min_patches": self.mask_group_min_patches,
             "mask_group_min_aspect_ratio": self.mask_group_min_aspect_ratio,
             "mask_group_max_aspect_ratio": self.mask_group_min_aspect_ratio,
@@ -418,15 +415,8 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_fast = image_processor_fast(
             dummy_image, return_tensors="pt", return_codebook_pixels=True, return_image_mask=True
         )
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
-        self.assertTrue(
-            torch.allclose(encoding_slow.codebook_pixel_values, encoding_fast.codebook_pixel_values, atol=1e-1)
-        )
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.codebook_pixel_values - encoding_fast.codebook_pixel_values)).item(),
-            1e-3,
+        self._assert_slow_fast_tensors_equivalence(
+            encoding_slow.codebook_pixel_values, encoding_fast.codebook_pixel_values
         )

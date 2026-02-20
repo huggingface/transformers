@@ -174,12 +174,8 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         else ()
     )
     pipeline_model_mapping = {"feature-extraction": MaskFormerSwinModel} if is_torch_available() else {}
-    fx_compatible = False
-    test_torchscript = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = MaskFormerSwinModelTester(self)
@@ -310,10 +306,6 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     @unittest.skip(reason="MaskFormerSwin doesn't have pretrained checkpoints")
     def test_model_from_pretrained(self):
-        pass
-
-    @unittest.skip(reason="This will be fixed once MaskFormerSwin is replaced by native Swin")
-    def test_initialization(self):
         pass
 
     @unittest.skip(reason="This will be fixed once MaskFormerSwin is replaced by native Swin")

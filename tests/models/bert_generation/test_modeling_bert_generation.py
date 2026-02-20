@@ -248,6 +248,12 @@ class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         else {}
     )
 
+    # Overwriting to add `is_decoder` flag
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs = super().prepare_config_and_inputs_for_generate(batch_size)
+        config.is_decoder = True
+        return config, inputs
+
     def setUp(self):
         self.model_tester = BertGenerationEncoderTester(self)
         self.config_tester = ConfigTester(self, config_class=BertGenerationConfig, hidden_size=37)
@@ -307,7 +313,9 @@ class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 class BertGenerationEncoderIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = BertGenerationEncoder.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
+        model = BertGenerationEncoder.from_pretrained(
+            "google/bert_for_seq_generation_L-24_bbc_encoder", attn_implementation="eager"
+        )
         input_ids = torch.tensor([[101, 7592, 1010, 2026, 3899, 2003, 10140, 102]])
         with torch.no_grad():
             output = model(input_ids)[0]
@@ -323,7 +331,9 @@ class BertGenerationEncoderIntegrationTest(unittest.TestCase):
 class BertGenerationDecoderIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = BertGenerationDecoder.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
+        model = BertGenerationDecoder.from_pretrained(
+            "google/bert_for_seq_generation_L-24_bbc_encoder", attn_implementation="eager"
+        )
         input_ids = torch.tensor([[101, 7592, 1010, 2026, 3899, 2003, 10140, 102]])
         with torch.no_grad():
             output = model(input_ids)[0]

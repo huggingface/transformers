@@ -21,7 +21,7 @@ limitations under the License.
 
 The script [`run_speech_wav2vec2_pretraining_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/speech-pretraining/run_wav2vec2_pretraining_no_trainer.py) can be used to pre-train a [Wav2Vec2](https://huggingface.co/transformers/model_doc/wav2vec2.html?highlight=wav2vec2) model from scratch.
 
-In the script [`run_speech_wav2vec2_pretraining_no_trainer`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/speech-pretraining/run_wav2vec2_pretraining_no_trainer.py), a Wav2Vec2 model is pre-trained on audio data alone using [Wav2Vec2's contrastive loss objective](https://arxiv.org/abs/2006.11477).
+In the script [`run_speech_wav2vec2_pretraining_no_trainer`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/speech-pretraining/run_wav2vec2_pretraining_no_trainer.py), a Wav2Vec2 model is pre-trained on audio data alone using [Wav2Vec2's contrastive loss objective](https://huggingface.co/papers/2006.11477).
 
 The following examples show how to fine-tune a `"base"`-sized Wav2Vec2 model as well as a `"large"`-sized Wav2Vec2 model using [`accelerate`](https://github.com/huggingface/accelerate).
 
@@ -129,7 +129,7 @@ To pre-train `"large-sized"` Wav2Vec2 model, *e.g.* [facebook/wav2vec2-large-lv6
 on [librispeech_asr](https://huggingface.co/datasets/librispeech_asr), the following command can be run:
 
 ```bash
-accelerate launch run_wav2vec2_pretraining_no_trainer.py \ 
+accelerate launch run_wav2vec2_pretraining_no_trainer.py \
 	--dataset_name=librispeech_asr \
 	--dataset_config_names clean clean other \
 	--dataset_split_names train.100 train.360 train.500 \
@@ -141,7 +141,7 @@ accelerate launch run_wav2vec2_pretraining_no_trainer.py \
 	--weight_decay=0.01 \
 	--max_duration_in_seconds=20.0 \
 	--min_duration_in_seconds=2.0 \
-	--model_name_or_path=./ 
+	--model_name_or_path=./ \
 	--logging_steps=1 \
 	--saving_steps=10000 \
 	--per_device_train_batch_size=2 \

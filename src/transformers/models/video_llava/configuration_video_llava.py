@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft Research & University of Wisconsin-Madison and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 # limitations under the License.
 """VideoLlava model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -21,7 +20,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class VideoLlavaConfig(PretrainedConfig):
+class VideoLlavaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VideoLlavaForConditionalGeneration`]. It is used to instantiate an
     VideoLlava model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -29,8 +28,8 @@ class VideoLlavaConfig(PretrainedConfig):
 
     e.g. [LanguageBind/Video-LLaVA-7B-hf](https://huggingface.co/LanguageBind/Video-LLaVA-7B-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`VideoLlavaVisionConfig`, *optional*):
@@ -47,7 +46,7 @@ class VideoLlavaConfig(PretrainedConfig):
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the CLIP backbone.
             Can be either "full" to select all features or "default" to select features without `CLS`.
-        vision_feature_layer (`Union[int, List[int]]`, *optional*, defaults to -2):
+        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -2):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
             vision features.
@@ -57,6 +56,8 @@ class VideoLlavaConfig(PretrainedConfig):
             Sequence length of one video embedding.
         multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the multimodal projector.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -98,6 +99,7 @@ class VideoLlavaConfig(PretrainedConfig):
         image_seq_length=256,
         video_seq_length=2056,
         multimodal_projector_bias=True,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -108,6 +110,7 @@ class VideoLlavaConfig(PretrainedConfig):
         self.image_seq_length = image_seq_length
         self.video_seq_length = video_seq_length
         self.multimodal_projector_bias = multimodal_projector_bias
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.vision_config = vision_config
 

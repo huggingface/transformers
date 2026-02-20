@@ -24,11 +24,12 @@ from parameterized import parameterized
 
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 from transformers.testing_utils import (
+    Expectations,
+    cleanup,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
     require_torch_multi_accelerator,
-    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -38,8 +39,8 @@ from transformers.utils import is_torch_available, is_vision_available
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -155,10 +156,8 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Blip2VisionModel,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Blip2VisionModelTester(self)
@@ -183,9 +182,8 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
@@ -198,24 +196,20 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -428,7 +422,7 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
@@ -461,12 +455,10 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
 @require_torch
 class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
-    fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+    additional_model_inputs = ["input_ids"]
+
     test_resize_embeddings = False
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -482,6 +474,12 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
+
+    @unittest.skip(
+        reason="Blip2QFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -499,12 +497,20 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     def test_model_get_set_embeddings(self):
         pass
 
-    @require_torch_sdpa
+    @pytest.mark.generate
+    @unittest.skip(reason="Blip2Model does not support generation from no inputs")
+    def test_generate_without_input_ids(self):
+        pass
+
+    @unittest.skip(reason="BLIP2 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
         This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
-        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        In contrast to the above test, this one checks if the "config._attn_implementation" is a dict after the model
         is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
         See https://github.com/huggingface/transformers/pull/32238 for more info
 
@@ -526,15 +532,11 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
-                vision_attn = "sdpa" if model.vision_model._supports_sdpa else "eager"
-                qformer_attn = "sdpa" if model.qformer._supports_sdpa else "eager"
-
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
-                self.assertTrue(model.vision_model.config._attn_implementation == vision_attn)
-                self.assertTrue(model.qformer.config._attn_implementation == qformer_attn)
+                self.assertTrue(model.language_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model.vision_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model.qformer.config._attn_implementation == "eager")
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
@@ -545,19 +547,12 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    if (
+                        class_name.endswith("Attention")
+                        and getattr(submodule, "config", None)
+                        and submodule.config._attn_implementation == "sdpa"
+                    ):
                         raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa and any(
-                    module_attn == "sdpa" for module_attn in [text_attn, vision_attn, qformer_attn]
-                ):
-                    raise ValueError("The SDPA model should have SDPA attention layers")
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -598,98 +593,6 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
         super()._check_generate_outputs(
             output, config, use_cache=use_cache, num_return_sequences=num_return_sequences, num_beams=num_beams
         )
-
-    # overwrite because BLIP2 cannot generate only from input ids, and requires pixel values in all cases to be present
-    @pytest.mark.generate
-    def test_left_padding_compatibility(self):
-        # NOTE: left-padding results in small numerical differences. This is expected.
-        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
-
-        # First, filter out models that don't support left padding
-        # - The model must have generative capabilities
-        if len(self.all_generative_model_classes) == 0:
-            self.skipTest(reason="No generative architecture available for this model.")
-
-        # - The model must support padding
-        if not self.has_attentions:
-            self.skipTest(reason="This model doesn't support padding.")
-
-        # - The model must be a decoder-only architecture (encoder-based architectures use right-padding)
-        decoder_only_classes = []
-        for model_class in self.all_generative_model_classes:
-            config, _ = self.prepare_config_and_inputs_for_generate()
-            if config.is_encoder_decoder:
-                continue
-            else:
-                decoder_only_classes.append(model_class)
-        if len(decoder_only_classes) == 0:
-            self.skipTest(reason="No decoder-only architecture available for this model.")
-
-        # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
-        #   added support for it yet. We skip these models for now.
-        has_encoder_attributes = any(
-            attr_name
-            for attr_name in config.to_dict().keys()
-            if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
-        )
-        if has_encoder_attributes:
-            self.skipTest(
-                reason="The decoder-only derived from encoder-decoder models are not expected to support left-padding."
-            )
-
-        # Then, test left-padding
-        def _prepare_model_kwargs(input_ids, attention_mask, signature):
-            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
-            if "position_ids" in signature:
-                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                model_kwargs["position_ids"] = position_ids
-            if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
-                model_kwargs["cache_position"] = cache_position
-            return model_kwargs
-
-        for model_class in decoder_only_classes:
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            input_ids = inputs_dict["input_ids"]
-            attention_mask = inputs_dict.get("attention_mask")
-            pixel_values = inputs_dict["pixel_values"]
-            if attention_mask is None:
-                attention_mask = torch.ones_like(input_ids)
-
-            model = model_class(config).to(torch_device).eval()
-            signature = inspect.signature(model.forward).parameters.keys()
-
-            # no cache as some models require special cache classes to be init outside forward
-            model.generation_config.use_cache = False
-
-            # Without padding
-            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
-            next_logits_wo_padding = model(**model_kwargs, pixel_values=pixel_values).logits[:, -1, :]
-
-            # With left-padding (length 32)
-            # can hardcode pad_token to be 0 as we'll do attn masking anyway
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
-            )
-            pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
-            next_logits_with_padding = model(**model_kwargs, pixel_values=pixel_values).logits[:, -1, :]
-
-            # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
-
-    @unittest.skip("BLIP2 cannot generate only from input ids, and requires pixel values in all cases to be present")
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    def test_generate_from_inputs_embeds(self, _, num_beams):
-        pass
-
-    @unittest.skip("BLIP2 cannot generate only from input ids, and requires pixel values in all cases to be present")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
 
 
 # this class is based on `T5ModelTester` found in tests/models/t5/test_modeling_t5.py
@@ -782,13 +685,40 @@ class Blip2TextModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
+            is_encoder_decoder=True,
         )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            labels,
+        ) = config_and_inputs
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+            "labels": labels,
+        }
+        return config, inputs_dict
 
 
 # this model tester uses an encoder-decoder language model (T5)
 class Blip2ModelTester:
     def __init__(
-        self, parent, vision_kwargs=None, qformer_kwargs=None, text_kwargs=None, is_training=True, num_query_tokens=10
+        self,
+        parent,
+        vision_kwargs=None,
+        qformer_kwargs=None,
+        text_kwargs=None,
+        is_training=True,
+        num_query_tokens=10,
+        image_token_index=4,
     ):
         if vision_kwargs is None:
             vision_kwargs = {}
@@ -803,8 +733,10 @@ class Blip2ModelTester:
         self.text_model_tester = Blip2TextModelTester(parent, **text_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
+        self.encoder_seq_length = self.text_model_tester.encoder_seq_length
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
+        self.image_token_index = image_token_index
 
     def prepare_config_and_inputs(self):
         _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
@@ -822,11 +754,12 @@ class Blip2ModelTester:
         return config, input_ids, attention_mask, pixel_values, decoder_input_ids, decoder_attention_mask, lm_labels
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
             num_query_tokens=self.num_query_tokens,
+            image_token_index=self.image_token_index,
         )
 
     def create_and_check_for_conditional_generation(
@@ -867,26 +800,23 @@ class Blip2ModelTester:
 
 
 @require_torch
-class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration, Blip2Model) if is_torch_available() else ()
-    # Doesn't run generation tests. TODO: fix generation tests for Blip2ForConditionalGeneration
-    all_generative_model_classes = ()
+    additional_model_inputs = ["input_ids", "decoder_input_ids"]
     pipeline_model_mapping = (
         {
             "feature-extraction": Blip2Model,
             "image-to-text": Blip2ForConditionalGeneration,
             "visual-question-answering": Blip2ForConditionalGeneration,
             "image-text-to-text": Blip2ForConditionalGeneration,
+            "any-to-any": Blip2ForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     # TODO: Fix the failed tests
@@ -920,6 +850,12 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
 
+    @unittest.skip(
+        reason="Blip2QFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -940,12 +876,20 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_cpu_offload(self):
         pass
 
-    @require_torch_sdpa
+    @pytest.mark.generate
+    @unittest.skip(reason="Blip2Model does not support generation from no inputs")
+    def test_generate_without_input_ids(self):
+        pass
+
+    @unittest.skip(reason="BLIP2 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
         This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
-        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        In contrast to the above test, this one checks if the "config._attn_implementation" is a dict after the model
         is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
         See https://github.com/huggingface/transformers/pull/32238 for more info
 
@@ -967,15 +911,11 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
-                vision_attn = "sdpa" if model.vision_model._supports_sdpa else "eager"
-                qformer_attn = "sdpa" if model.qformer._supports_sdpa else "eager"
-
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
-                self.assertTrue(model.vision_model.config._attn_implementation == vision_attn)
-                self.assertTrue(model.qformer.config._attn_implementation == qformer_attn)
+                self.assertTrue(model.language_model.config._attn_implementation == "eager")
+                self.assertTrue(model.vision_model.config._attn_implementation == "sdpa")
+                self.assertTrue(model.qformer.config._attn_implementation == "eager")
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
@@ -986,24 +926,16 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    if (
+                        class_name.endswith("Attention")
+                        and getattr(submodule, "config", None)
+                        and submodule.config._attn_implementation == "sdpa"
+                    ):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa and any(
-                    module_attn == "sdpa" for module_attn in [text_attn, vision_attn, qformer_attn]
-                ):
-                    raise ValueError("The SDPA model should have SDPA attention layers")
-
     def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
@@ -1039,13 +971,12 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         inputs_dict = {
             "input_ids": torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]).to(torch_device),
             "attention_mask": torch.LongTensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]).to(torch_device),
-            "decoder_input_ids": torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]).to(torch_device),
         }
 
         model = Blip2Model(config).to(torch_device)
         model.eval()
         text_features = model.get_text_features(**inputs_dict)
-        self.assertEqual(text_features[0].shape, (1, 10, config.text_config.vocab_size))
+        self.assertEqual(text_features[0].shape, (1, 10, config.text_config.hidden_size))
 
     def test_get_image_features(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1059,12 +990,8 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model.eval()
         image_features = model.get_image_features(**inputs_dict)
         self.assertEqual(
-            image_features[0].shape,
-            (
-                self.model_tester.vision_model_tester.batch_size,
-                self.model_tester.vision_model_tester.seq_length,
-                config.vision_config.hidden_size,
-            ),
+            image_features.pooler_output[0].shape,
+            (config.vision_config.hidden_size,),
         )
 
     def test_get_qformer_features(self):
@@ -1080,25 +1007,17 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         qformer_features = model.get_qformer_features(**inputs_dict)
         self.assertEqual(
             qformer_features[0].shape,
-            (self.model_tester.vision_model_tester.batch_size, 10, config.vision_config.hidden_size),
+            (10, config.vision_config.hidden_size),
         )
 
-    # override from common to deal with nested configurations (`vision_config`, `text_config` and `qformer_config`)
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    @unittest.skip("T5 backbone deepcopies the configs, and fixing it would be more involved")
+    def test_internal_model_config_and_subconfig_are_same(self):
+        pass
 
-        configs_no_init = _config_zero_init(config)
-        for key in ["vision_config", "qformer_config", "text_config"]:
-            setattr(configs_no_init, key, _config_zero_init(getattr(configs_no_init, key)))
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip("Won't fix: Blip2 + T5 backbone needs custom input preparation for this test")
+    def test_eager_matches_sdpa_inference(self, *args):
+        pass
 
 
 class Blip2TextModelWithProjectionTester:
@@ -1115,7 +1034,7 @@ class Blip2TextModelWithProjectionTester:
         self.batch_size = self.vision_model_tester.batch_size  # need bs for batching_equivalence test
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
         )
@@ -1138,6 +1057,7 @@ class Blip2TextModelWithProjectionTester:
 
     def create_and_check_model(self, config, input_ids, attention_mask):
         model = Blip2TextModelWithProjection(config=config)
+        model.set_attn_implementation("eager")
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -1176,13 +1096,9 @@ class Blip2TextModelWithProjectionTester:
 @require_torch
 class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2TextModelWithProjection,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
-    test_head_masking = False
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Blip2TextModelWithProjectionTester(self)
@@ -1193,10 +1109,6 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Training is not yet supported")
     def test_training(self):
-        pass
-
-    @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
@@ -1274,7 +1186,7 @@ class Blip2VisionModelWithProjectionTester:
         self.batch_size = self.vision_model_tester.batch_size  # need bs for batching_equivalence test
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
         )
@@ -1295,6 +1207,7 @@ class Blip2VisionModelWithProjectionTester:
     def create_and_check_model(self, config, pixel_values):
         model = Blip2VisionModelWithProjection(config=config)
         model.to(torch_device)
+        model.set_attn_implementation("eager")
         model.eval()
         with torch.no_grad():
             result = model(pixel_values, output_attentions=True, output_hidden_states=True)
@@ -1335,12 +1248,8 @@ class Blip2VisionModelWithProjectionTester:
 @require_torch
 class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2VisionModelWithProjection,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
-    test_head_masking = False
 
     test_resize_embeddings = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Blip2VisionModelWithProjectionTester(self)
@@ -1349,20 +1258,20 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="Training is not yet supported")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Training is not yet supported")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="Blip2VisionModelWithProjection does not use inputs_embeds")
@@ -1437,7 +1346,7 @@ class Blip2TextRetrievalModelTester:
         self.batch_size = self.vision_model_tester.batch_size  # need bs for batching_equivalence test
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
         )
@@ -1485,12 +1394,10 @@ class Blip2TextRetrievalModelTester:
 @require_torch
 class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForImageTextRetrieval,) if is_torch_available() else ()
-    fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+    additional_model_inputs = ["input_ids"]
+
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Blip2TextRetrievalModelTester(self)
@@ -1590,42 +1497,12 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="Training is not yet supported")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initialized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    elif name == "temp":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            0.07,
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
+    @unittest.skip(reason="Training is not yet supported")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
 
 
 # We will verify our results on an image of cute cats
@@ -1639,11 +1516,17 @@ def prepare_img():
 @require_torch
 @slow
 class Blip2ModelIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     def test_inference_opt(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16).to(
+            torch_device
+        )
 
         # prepare image
         image = prepare_img()
@@ -1672,9 +1555,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_interpolate_pos_encoding(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16).to(
+            torch_device
+        )
         processor.image_processor.size = {"height": 500, "width": 500}
 
         image = prepare_img()
@@ -1689,9 +1572,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_opt_batched_beam_search(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", dtype=torch.float16).to(
+            torch_device
+        )
 
         # prepare image
         image = prepare_img()
@@ -1706,9 +1589,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_t5(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-flan-t5-xl", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-flan-t5-xl", dtype=torch.float16).to(
+            torch_device
+        )
 
         # prepare image
         image = prepare_img()
@@ -1717,9 +1600,23 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         predictions = model.generate(**inputs)
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
+        expectations = Expectations(
+            {
+                ("xpu", 3): [
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    "a woman is playing with her dog on the beach",
+                ],
+                ("cuda", 7): [
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    "a woman is playing with her dog on the beach",
+                ],
+            }
+        )
+        expected_outputs = expectations.get_expectation()
+
         # Test output
-        self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
-        self.assertEqual("woman playing with dog on the beach", generated_text)
+        self.assertEqual(predictions[0].tolist(), expected_outputs[0])
+        self.assertEqual(expected_outputs[1], generated_text)
 
         # image and context
         prompt = "Question: which city is this? Answer:"
@@ -1728,15 +1625,29 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         predictions = model.generate(**inputs)
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
+        expectations = Expectations(
+            {
+                ("xpu", 3): [
+                    [0, 3, 7, 152, 2515, 11389, 3523, 1],
+                    "san francisco",
+                ],
+                ("cuda", 7): [
+                    [0, 3, 7, 152, 2515, 11389, 3523, 1],
+                    "san francisco",
+                ],
+            }
+        )
+        expected_outputs = expectations.get_expectation()
+
         # Test output
-        self.assertEqual(predictions[0].tolist(), [0, 3, 7, 152, 67, 839, 1])
-        self.assertEqual(generated_text, "san diego")
+        self.assertEqual(predictions[0].tolist(), expected_outputs[0])
+        self.assertEqual(generated_text, expected_outputs[1])
 
     def test_inference_t5_batched_beam_search(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-flan-t5-xl", torch_dtype=torch.float16
-        ).to(torch_device)
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-flan-t5-xl", dtype=torch.float16).to(
+            torch_device
+        )
 
         # prepare image
         image = prepare_img()
@@ -1744,15 +1655,29 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         predictions = model.generate(**inputs, num_beams=2)
 
+        expectations = Expectations(
+            {
+                ("xpu", 3): [
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                ],
+                ("cuda", 7): [
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                ],
+            }
+        )
+        expected_predictions = expectations.get_expectation()
+
         # Test output (in this case, slightly different from greedy search)
-        self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
-        self.assertEqual(predictions[1].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
+        self.assertEqual(predictions[0].tolist(), expected_predictions[0])
+        self.assertEqual(predictions[1].tolist(), expected_predictions[1])
 
     @require_torch_multi_accelerator
     def test_inference_opt_multi_accelerator(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
         model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16, device_map="balanced"
+            "Salesforce/blip2-opt-2.7b", dtype=torch.float16, device_map="balanced"
         )
 
         # prepare image
@@ -1763,7 +1688,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(predictions[0].tolist(), [2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118])
+        expected_ids = [2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118]
+        self.assertEqual(predictions[0].tolist(), [50265] * 32 + expected_ids)  # 50265 is the img token id
         self.assertEqual("a woman sitting on the beach with a dog", generated_text)
 
         # image and context
@@ -1774,16 +1700,14 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(
-            predictions[0].tolist(),
-            [2, 45641, 35, 61, 343, 16, 42, 116, 31652, 35, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118],
-        )
+        expected_ids = [2, 45641, 35, 61, 343, 16, 42, 116, 31652, 35, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118]
+        self.assertEqual(predictions[0].tolist(), [50265] * 32 + expected_ids)  # 50265 is the img token id
         self.assertEqual(generated_text, "Question: which city is this? Answer: it's not a city, it's a beach")
 
     @require_torch_multi_accelerator
     def test_inference_t5_multi_accelerator(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
-        device_map = device_map = {
+        device_map = {
             "query_tokens": 0,
             "vision_model": 0,
             "language_model": 1,
@@ -1792,7 +1716,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         }
 
         model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-flan-t5-xl", torch_dtype=torch.float16, device_map=device_map
+            "Salesforce/blip2-flan-t5-xl", dtype=torch.float16, device_map=device_map
         )
 
         # prepare image
@@ -1803,8 +1727,20 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
-        self.assertEqual("woman playing with dog on the beach", generated_text)
+        expected_ids_and_text = Expectations(
+            {
+                ("cuda", None): (
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    "a woman is playing with her dog on the beach",
+                ),
+                ("rocm", (9, 5)): (
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    "a woman is playing with her dog on the beach",
+                ),
+            }
+        ).get_expectation()
+        self.assertEqual(predictions[0].tolist(), expected_ids_and_text[0])
+        self.assertEqual(generated_text, expected_ids_and_text[1])
 
         # image and context
         prompt = "Question: which city is this? Answer:"
@@ -1814,41 +1750,14 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(
-            predictions[0].tolist(),
-            [0, 3, 7, 152, 67, 839, 1],
-        )
-        self.assertEqual(generated_text, "san diego")
-
-    def test_expansion_in_processing(self):
-        processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
-        ).to(torch_device)
-
-        image = prepare_img()
-        prompt = "Question: which city is this? Answer:"
-
-        # Make sure we will go the legacy path by setting these args to None
-        processor.num_query_tokens = None
-        model.config.image_token_index = None
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
-
-        predictions = model.generate(**inputs, do_sample=False, max_new_tokens=15)
-        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
-
-        # Add args to the config to trigger new logic when inputs are expanded in processing file
-        processor.num_query_tokens = model.config.num_query_tokens
-        processor.tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
-        model.config.image_token_index = len(processor.tokenizer) - 1
-        model.resize_token_embeddings(processor.tokenizer.vocab_size, pad_to_multiple_of=64)
-
-        # Generate again with new inputs
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
-        predictions_expanded = model.generate(**inputs, do_sample=False, max_new_tokens=15)
-        generated_text_expanded = processor.batch_decode(predictions_expanded, skip_special_tokens=True)[0].strip()
-
-        self.assertTrue(generated_text_expanded == generated_text)
+        expected_ids_and_text = Expectations(
+            {
+                ("cuda", None): ([0, 3, 7, 152, 2515, 11389, 3523, 1], "san francisco"),
+                ("rocm", (9, 5)): ([0, 3, 7, 152, 2515, 11389, 3523, 1], "san francisco"),
+            }
+        ).get_expectation()
+        self.assertEqual(predictions[0].tolist(), expected_ids_and_text[0])
+        self.assertEqual(generated_text, expected_ids_and_text[1])
 
     @require_torch_accelerator
     def test_inference_itm(self):
@@ -1874,7 +1783,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     def test_inference_itm_fp16(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)
-        model = Blip2ForImageTextRetrieval.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
+        model = Blip2ForImageTextRetrieval.from_pretrained(model_name, dtype=torch.float16).to(torch_device)
 
         image = prepare_img()
         text = "A woman and her dog sitting in a beach"
@@ -1894,7 +1803,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     def test_inference_vision_with_projection_fp16(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)
-        model = Blip2VisionModelWithProjection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
+        model = Blip2VisionModelWithProjection.from_pretrained(model_name, dtype=torch.float16).to(torch_device)
 
         image = prepare_img()
         inputs = processor(images=image, return_tensors="pt").to(torch_device, dtype=torch.float16)
@@ -1918,7 +1827,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     def test_inference_text_with_projection_fp16(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)
-        model = Blip2TextModelWithProjection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
+        model = Blip2TextModelWithProjection.from_pretrained(model_name, dtype=torch.float16).to(torch_device)
 
         inputs = processor(text="a woman sitting on the beach with a dog", padding=True, return_tensors="pt").to(
             torch_device

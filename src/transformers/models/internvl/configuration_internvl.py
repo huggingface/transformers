@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,11 +13,11 @@
 # limitations under the License.
 
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class InternVLVisionConfig(PretrainedConfig):
+class InternVLVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InternVLVisionModel`]. It is used to instantiate an InternVLVisionModel
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
@@ -139,15 +138,15 @@ class InternVLVisionConfig(PretrainedConfig):
         self.use_mean_pooling = use_mean_pooling
 
 
-class InternVLConfig(PretrainedConfig):
+class InternVLConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InternVLForConditionalGeneration`]. It is used to instantiate a
     InternVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of InternVL3-1B.
     e.g. [OpenGVLab/InternVL3-1B-hf](https://huggingface.co/OpenGVLab/InternVL3-1B-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -168,6 +167,9 @@ class InternVLConfig(PretrainedConfig):
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
+
 
     ```python
     >>> from transformers import InternVLForConditionalGeneration, InternVLConfig
@@ -195,6 +197,7 @@ class InternVLConfig(PretrainedConfig):
         projector_hidden_act="gelu",
         vision_feature_layer=-1,
         vision_feature_select_strategy="default",
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.image_token_id = image_token_id
@@ -212,12 +215,13 @@ class InternVLConfig(PretrainedConfig):
             self.vision_config = InternVLVisionConfig()
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "qwen2"
+            text_config["model_type"] = text_config.get("model_type", "qwen2")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["qwen2"]()
 
         self.text_config = text_config
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

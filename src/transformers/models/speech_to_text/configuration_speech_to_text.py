@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,22 @@
 # limitations under the License.
 """Speech2Text model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Speech2TextConfig(PretrainedConfig):
+class Speech2TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Speech2TextModel`]. It is used to instantiate a
     Speech2Text model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Speech2Text
     [facebook/s2t-small-librispeech-asr](https://huggingface.co/facebook/s2t-small-librispeech-asr) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -49,10 +48,10 @@ class Speech2TextConfig(PretrainedConfig):
         decoder_attention_heads (`int`, *optional*, defaults to 4):
             Number of attention heads for each attention layer in the Transformer decoder.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](https://arxiv.org/abs/1909.11556) for
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](https://huggingface.co/papers/1909.11556) for
             more details.
         decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](https://arxiv.org/abs/1909.11556) for
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](https://huggingface.co/papers/1909.11556) for
             more details.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether the model should return the last key/values attentions (not used by all models).
@@ -88,7 +87,7 @@ class Speech2TextConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         num_conv_layers (`int`, *optional*, defaults to 2):
             Number of 1D convolutional layers in the conv module.
-        conv_kernel_sizes (`Tuple[int]`, *optional*, defaults to `(5, 5)`):
+        conv_kernel_sizes (`tuple[int]`, *optional*, defaults to `(5, 5)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the conv module. The length
             of `conv_kernel_sizes` has to match `num_conv_layers`.
         conv_channels (`int`, *optional*, defaults to 1024):
@@ -99,6 +98,8 @@ class Speech2TextConfig(PretrainedConfig):
             features.
         input_channels (`int`, *optional*, defaults to 1):
             An integer specifying number of input channels of the input feature vector.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -150,6 +151,7 @@ class Speech2TextConfig(PretrainedConfig):
         conv_channels=1024,
         input_feat_per_channel=80,
         input_channels=1,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -186,14 +188,12 @@ class Speech2TextConfig(PretrainedConfig):
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["Speech2TextConfig"]

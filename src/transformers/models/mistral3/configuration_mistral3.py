@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,19 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class Mistral3Config(PretrainedConfig):
+class Mistral3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Mistral3ForConditionalGeneration`]. It is used to instantiate an
     Mistral3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     [mistralai/Mistral-Small-3.1-24B-Instruct-2503](https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `PixtralVisionConfig`):
@@ -37,7 +36,7 @@ class Mistral3Config(PretrainedConfig):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
-        vision_feature_layer (`Union[int, List[int]]`, *optional*, defaults to -1):
+        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -1):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
             vision features.
@@ -45,6 +44,8 @@ class Mistral3Config(PretrainedConfig):
             Whether to use bias in the multimodal projector.
         spatial_merge_size (`int`, *optional*, defaults to 2):
             The downsampling factor for the spatial merge operation.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie the input and output embeddings.
 
     Example:
 
@@ -83,16 +84,16 @@ class Mistral3Config(PretrainedConfig):
         vision_feature_layer=-1,
         multimodal_projector_bias=False,
         spatial_merge_size=2,
+        tie_word_embeddings: bool = True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
 
         self.vision_feature_layer = vision_feature_layer
 
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config["model_type"] if "model_type" in vision_config else "pixtral"
+            vision_config["model_type"] = vision_config.get("model_type", "pixtral")
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             vision_config = CONFIG_MAPPING["pixtral"](
@@ -110,7 +111,7 @@ class Mistral3Config(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "mistral"
+            text_config["model_type"] = text_config.get("model_type", "mistral")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["mistral"](
@@ -135,6 +136,9 @@ class Mistral3Config(PretrainedConfig):
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
         self.spatial_merge_size = spatial_merge_size
+        self.tie_word_embeddings = tie_word_embeddings
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["Mistral3Config"]

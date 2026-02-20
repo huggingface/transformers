@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-12-18 and added to Hugging Face Transformers on 2024-12-19.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -43,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="answerdotai/ModernBERT-base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create [MASK] through a process known as photosynthesis.")
@@ -61,11 +62,11 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "answerdotai/ModernBERT-base",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
-inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to("cuda")
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -88,12 +89,55 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 </hfoption>
 </hfoptions>
 
+## Padding-free inference and training
+
+ModernBERT supports padding-free inference and training. For example, you can leverage the [`DataCollatorWithFlattening`] to prepare your inputs:
+
+> [!TIP]
+> Padding-free inference and training requires `flash_attention_2` as the attention implementation. Since ModernBERT no longer defaults to FlashAttention2, you must explicitly set `attn_implementation="flash_attention_2"` when loading the model for padding-free usage.
+
+```python
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer, DataCollatorWithFlattening
+
+model_id = "answerdotai/ModernBERT-base"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+collator = DataCollatorWithFlattening(return_flash_attn_kwargs=True)
+
+
+def prepare_text_for_padding_free(texts):
+    # base tokenization with padding and subsequent flattening
+    inputs_dict = tokenizer(texts, return_tensors="pt", padding=True).to("cuda")
+    flattened_features = collator(
+        [
+            {"input_ids": i[a.bool()].tolist()}
+            for i, a in zip(inputs_dict["input_ids"], inputs_dict["attention_mask"])
+        ]
+    )
+
+    for k, v in flattened_features.items():
+        if isinstance(v, torch.Tensor):
+            flattened_features[k] = v.to("cuda")
+
+    return flattened_features
+
+
+inputs = prepare_text_for_padding_free(
+    ["The capital of France is [MASK].", "ModernBERT is a [MASK] model."]
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    model_id, attn_implementation="flash_attention_2", dtype=torch.bfloat16, device_map="cuda"
+)
+
+# Optional: use torch.compile for faster inference
+# model.forward = torch.compile(model.forward, fullgraph=True)
+
+out = model(**inputs)
+```
+
 ## ModernBertConfig
 
 [[autodoc]] ModernBertConfig
-
-<frameworkcontent>
-<pt>
 
 ## ModernBertModel
 
@@ -115,6 +159,11 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 [[autodoc]] ModernBertForTokenClassification
     - forward
 
+## ModernBertForMultipleChoice
+
+[[autodoc]] ModernBertForMultipleChoice
+    - forward
+
 ## ModernBertForQuestionAnswering
 
 [[autodoc]] ModernBertForQuestionAnswering
@@ -123,7 +172,3 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 ### Usage tips
 
 The ModernBert model can be fine-tuned using the HuggingFace Transformers library with its [official script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/question-answering/run_qa.py) for question-answering tasks.
-
-
-</pt>
-</frameworkcontent>

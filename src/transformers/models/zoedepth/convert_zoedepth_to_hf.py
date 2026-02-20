@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -255,7 +254,7 @@ def read_in_q_k_v_metric_head(state_dict):
 
 
 def convert_state_dict(orig_state_dict):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         # rename key
@@ -266,7 +265,7 @@ def convert_state_dict(orig_state_dict):
 
 
 def remove_ignore_keys(state_dict):
-    for key, _ in state_dict.copy().items():
+    for key in state_dict.copy():
         if (
             "fc_norm" in key
             or "relative_position_index" in key

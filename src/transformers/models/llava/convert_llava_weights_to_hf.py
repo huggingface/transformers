@@ -39,8 +39,8 @@ Example for creating the old state dict file with Python:
     from llava.model.language_model.llava_llama import LlavaLlamaForCausalLM
 
     # load model
-    kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
-    model = LlavaLlamaForCausalLM.from_pretrained("liuhaotian/llava-v1.5-7b", low_cpu_mem_usage=True, **kwargs)
+    kwargs = {"device_map": "auto", "dtype": torch.float16}
+    model = LlavaLlamaForCausalLM.from_pretrained("liuhaotian/llava-v1.5-7b", **kwargs)
 
     # load vision tower
     model.get_vision_tower().load_model()
@@ -161,13 +161,11 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
     vocab_size = config.text_config.vocab_size
     model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
     model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
-        tuple(
-            (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0]))
-        ),
+        tuple(dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0])),
         dim=0,
     )
     model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
+        tuple(dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0])),
         dim=0,
     )
 

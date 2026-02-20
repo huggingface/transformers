@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,39 +13,30 @@
 # limitations under the License.
 """OmDet-Turbo model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class OmDetTurboConfig(PretrainedConfig):
+class OmDetTurboConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OmDetTurboForObjectDetection`].
     It is used to instantiate a OmDet-Turbo model according to the specified arguments, defining the model architecture
     Instantiating a configuration with the defaults will yield a similar configuration to that of the OmDet-Turbo
     [omlab/omdet-turbo-swin-tiny-hf](https://huggingface.co/omlab/omdet-turbo-swin-tiny-hf) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        text_config (`PretrainedConfig`, *optional*):
+        text_config (`PreTrainedConfig`, *optional*):
             The configuration of the text backbone.
-        backbone_config (`PretrainedConfig`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `SwinConfig()`):
             The configuration of the vision backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use the timm for the vision backbone.
-        backbone (`str`, *optional*, defaults to `"swin_tiny_patch4_window7_224"`):
-            The name of the pretrained vision backbone to use. If `use_pretrained_backbone=False` a randomly initialized
-            backbone with the same architecture `backbone` is used.
-        backbone_kwargs (`dict`, *optional*):
-            Additional kwargs for the vision backbone.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use a pretrained vision backbone.
         apply_layernorm_after_vision_backbone (`bool`, *optional*, defaults to `True`):
             Whether to apply layer normalization on the feature maps of the vision backbone output.
         image_size (`int`, *optional*, defaults to 640):
@@ -68,7 +58,7 @@ class OmDetTurboConfig(PretrainedConfig):
         class_embed_dim (`int`, *optional*, defaults to 512):
             The dimension of the classes embeddings.
         class_distance_type (`str`, *optional*, defaults to `"cosine"`):
-            The type of of distance to compare predicted classes to projected classes embeddings.
+            The type of distance to compare predicted classes to projected classes embeddings.
             Can be `"cosine"` or `"dot"`.
         num_queries (`int`, *optional*, defaults to 900):
             The number of queries.
@@ -116,7 +106,7 @@ class OmDetTurboConfig(PretrainedConfig):
             The number of points sampled in the decoder multi-scale deformable attention module.
         decoder_dropout (`float`, *optional*, defaults to 0.0):
             The dropout rate for the decoder.
-        eval_size (`Tuple[int, int]`, *optional*):
+        eval_size (`tuple[int, int]`, *optional*):
             Height and width used to computes the effective height and width of the position embeddings after taking
             into account the stride (see RTDetr).
         learn_initial_query (`bool`, *optional*, defaults to `False`):
@@ -125,7 +115,7 @@ class OmDetTurboConfig(PretrainedConfig):
             The cache size for the classes and prompts caches.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder-decoder model or not.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Additional parameters from the architecture. The values in kwargs will be saved as part of the configuration
             and can be used to control the model outputs.
 
@@ -145,6 +135,7 @@ class OmDetTurboConfig(PretrainedConfig):
     ```"""
 
     model_type = "omdet-turbo"
+    sub_configs = {"backbone_config": AutoConfig, "text_config": AutoConfig}
     attribute_map = {
         "encoder_hidden_dim": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -154,10 +145,6 @@ class OmDetTurboConfig(PretrainedConfig):
         self,
         text_config=None,
         backbone_config=None,
-        use_timm_backbone=True,
-        backbone="swin_tiny_patch4_window7_224",
-        backbone_kwargs=None,
-        use_pretrained_backbone=False,
         apply_layernorm_after_vision_backbone=True,
         image_size=640,
         disable_custom_kernels=False,
@@ -198,40 +185,23 @@ class OmDetTurboConfig(PretrainedConfig):
         is_encoder_decoder=True,
         **kwargs,
     ):
-        if use_timm_backbone:
-            if backbone_config is None:
-                backbone_kwargs = {
-                    "out_indices": [1, 2, 3],
-                    "img_size": image_size,
-                    "always_partition": True,
-                }
-        elif backbone_config is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `swin` vision config.")
-            backbone_config = CONFIG_MAPPING["swin"](
-                window_size=7,
-                image_size=image_size,
-                embed_dim=96,
-                depths=[2, 2, 6, 2],
-                num_heads=[3, 6, 12, 24],
-                out_indices=[2, 3, 4],
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
+        # Init timm backbone with hardcoded values for BC
+        timm_default_kwargs = {
+            "out_indices": [1, 2, 3],
+            "img_size": image_size,
+            "always_partition": True,
+        }
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            default_backbone="swin_tiny_patch4_window7_224",
+            default_config_type="swin",
+            default_config_kwargs={"image_size": image_size, "out_indices": [2, 3, 4]},
+            timm_default_kwargs=timm_default_kwargs,
+            **kwargs,
         )
 
         if text_config is None:
-            logger.info(
-                "`text_config` is `None`. Initializing the config with the default `clip_text_model` text config."
-            )
+            logger.info("`text_config` is `None`. Initializing the config with the default `clip_text_model`")
             text_config = CONFIG_MAPPING["clip_text_model"]()
         elif isinstance(text_config, dict):
             text_model_type = text_config.get("model_type")
@@ -244,10 +214,6 @@ class OmDetTurboConfig(PretrainedConfig):
 
         self.text_config = text_config
         self.backbone_config = backbone_config
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone = backbone
-        self.backbone_kwargs = backbone_kwargs
-        self.use_pretrained_backbone = use_pretrained_backbone
         self.apply_layernorm_after_vision_backbone = apply_layernorm_after_vision_backbone
         self.image_size = image_size
         self.disable_custom_kernels = disable_custom_kernels
@@ -285,7 +251,6 @@ class OmDetTurboConfig(PretrainedConfig):
         self.eval_size = eval_size
         self.learn_initial_query = learn_initial_query
         self.cache_size = cache_size
-        self.is_encoder_decoder = is_encoder_decoder
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

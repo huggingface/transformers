@@ -29,17 +29,17 @@ rendered properly in your Markdown viewer.
 我们将采用一些我们可能想要调整的 ResNet 类的参数举例。不同的配置将为我们提供不同类型可能的 ResNet 模型。在确认其中一些参数的有效性后，我们只需存储这些参数。
 
 ```python
-from transformers import PretrainedConfig
+from transformers import PreTrainedConfig
 from typing import List
 
 
-class ResnetConfig(PretrainedConfig):
+class ResnetConfig(PreTrainedConfig):
     model_type = "resnet"
 
     def __init__(
         self,
         block_type="bottleneck",
-        layers: List[int] = [3, 4, 6, 3],
+        layers: list[int] = [3, 4, 6, 3],
         num_classes: int = 1000,
         input_channels: int = 3,
         cardinality: int = 1,
@@ -67,11 +67,11 @@ class ResnetConfig(PretrainedConfig):
 ```
 
 编写自定义配置时需要记住的三个重要事项如下：
-- 必须继承自 `PretrainedConfig`，
-- `PretrainedConfig` 的 `__init__` 方法必须接受任何 kwargs，
+- 必须继承自 `PreTrainedConfig`，
+- `PreTrainedConfig` 的 `__init__` 方法必须接受任何 kwargs，
 - 这些 `kwargs` 需要传递给超类的 `__init__` 方法。
 
-继承是为了确保你获得来自 🤗 Transformers 库的所有功能，而另外两个约束源于 `PretrainedConfig` 的字段比你设置的字段多。在使用 `from_pretrained` 方法重新加载配置时，这些字段需要被你的配置接受，然后传递给超类。
+继承是为了确保你获得来自 🤗 Transformers 库的所有功能，而另外两个约束源于 `PreTrainedConfig` 的字段比你设置的字段多。在使用 `from_pretrained` 方法重新加载配置时，这些字段需要被你的配置接受，然后传递给超类。
 
 为你的配置定义 `model_type`（此处为 `model_type="resnet"`）不是必须的，除非你想使用自动类注册你的模型（请参阅最后一节）。
 
@@ -88,7 +88,7 @@ resnet50d_config.save_pretrained("custom-resnet")
 resnet50d_config = ResnetConfig.from_pretrained("custom-resnet")
 ```
 
-你还可以使用 [`PretrainedConfig`] 类的任何其他方法，例如 [`~PretrainedConfig.push_to_hub`]，直接将配置上传到 Hub。
+你还可以使用 [`PreTrainedConfig`] 类的任何其他方法，例如 [`~PreTrainedConfig.push_to_hub`]，直接将配置上传到 Hub。
 
 ## 编写自定义模型
 
@@ -246,7 +246,7 @@ resnet50d.model.load_state_dict(pretrained_model.state_dict())
 现在要将模型推送到集线器，请确保你已登录。你看可以在终端中运行以下命令：
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 或者在笔记本中运行以下代码：

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,7 +59,7 @@ def rename_key(orig_key):
 
 
 def convert_checkpoint_helper(max_position_embeddings, orig_state_dict):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if ("pooler" in key) or ("sen_class" in key):

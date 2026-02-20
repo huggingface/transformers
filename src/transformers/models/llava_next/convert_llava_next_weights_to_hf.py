@@ -27,11 +27,11 @@ import argparse
 import gc
 import glob
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import hf_hub_download, snapshot_download
 from PIL import Image
 from safetensors import safe_open
@@ -88,7 +88,8 @@ def convert_state_dict_to_hf(state_dict):
 
 def load_image():
     url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     return image
 
 
@@ -127,7 +128,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     torch.set_default_dtype(torch.float16)
     text_config = AutoConfig.from_pretrained(text_model_id)
 
-    use_fast = False if model_id == "liuhaotian/llava-v1.6-34b" else True
+    use_fast = model_id != "liuhaotian/llava-v1.6-34b"
     tokenizer = AutoTokenizer.from_pretrained(text_model_id, use_fast=use_fast)
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
 
@@ -145,7 +146,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         image_token_id=image_token_id,
     )
 
-    with init_empty_weights():
+    with torch.device("meta"):
         model = LlavaNextForConditionalGeneration(config)
 
     # load original state dict
@@ -175,15 +176,12 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         model.resize_token_embeddings(num_tokens, pad_to_multiple_of=pad_shape)
         model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
             tuple(
-                (
-                    dist.sample()
-                    for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0])
-                )
+                dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0])
             ),
             dim=0,
         )
         model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-            tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
+            tuple(dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0])),
             dim=0,
         )
 
@@ -334,7 +332,8 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     # verify batched generation
     print("Batched generation...")
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    cats_image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        cats_image = Image.open(BytesIO(response.read()))
 
     inputs = processor(
         images=[image, cats_image],
@@ -390,7 +389,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", type=str, required=True, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     args = parser.parse_args()
 

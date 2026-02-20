@@ -15,6 +15,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import FNetConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_tokenizers, require_torch, slow, torch_device
@@ -37,7 +39,7 @@ if is_torch_available():
         FNetForSequenceClassification,
         FNetForTokenClassification,
         FNetModel,
-        FNetTokenizerFast,
+        FNetTokenizer,
     )
 
 
@@ -254,8 +256,6 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     # Skip Tests
-    test_pruning = False
-    test_head_masking = False
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -292,23 +292,17 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -439,61 +433,6 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class FNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_for_masked_lm(self):
-        """
-        For comparison:
-        1. Modify the pre-training model `__call__` to skip computing metrics and return masked_lm_output like so:
-            ```
-            ...
-            sequence_output, pooled_output = EncoderModel(
-            self.config, random_seed=self.random_seed, name="encoder")(
-                input_ids, input_mask, type_ids, deterministic=deterministic)
-
-            masked_lm_output = nn.Dense(
-                self.config.d_emb,
-                kernel_init=default_kernel_init,
-                name="predictions_dense")(
-                    sequence_output)
-            masked_lm_output = nn.gelu(masked_lm_output)
-            masked_lm_output = nn.LayerNorm(
-                epsilon=LAYER_NORM_EPSILON, name="predictions_layer_norm")(
-                    masked_lm_output)
-            masked_lm_logits = layers.OutputProjection(
-                kernel=self._get_embedding_table(), name="predictions_output")(
-                    masked_lm_output)
-
-            next_sentence_logits = layers.OutputProjection(
-                n_out=2, kernel_init=default_kernel_init, name="classification")(
-                    pooled_output)
-
-            return masked_lm_logits
-            ...
-            ```
-        2. Run the following:
-            >>> import jax.numpy as jnp
-            >>> import sentencepiece as spm
-            >>> from flax.training import checkpoints
-            >>> from f_net.models import PreTrainingModel
-            >>> from f_net.configs.pretraining import get_config, ModelArchitecture
-
-            >>> pretrained_params = checkpoints.restore_checkpoint('./f_net/f_net_checkpoint', None) # Location of original checkpoint
-            >>> pretrained_config  = get_config()
-            >>> pretrained_config.model_arch = ModelArchitecture.F_NET
-
-            >>> vocab_filepath = "./f_net/c4_bpe_sentencepiece.model" # Location of the sentence piece model
-            >>> tokenizer = spm.SentencePieceProcessor()
-            >>> tokenizer.Load(vocab_filepath)
-            >>> with pretrained_config.unlocked():
-            >>>     pretrained_config.vocab_size = tokenizer.GetPieceSize()
-            >>> tokens = jnp.array([[0, 1, 2, 3, 4, 5]])
-            >>> type_ids = jnp.zeros_like(tokens, dtype="i4")
-            >>> attention_mask = jnp.ones_like(tokens) # Dummy. This gets deleted inside the model.
-
-            >>> flax_pretraining_model = PreTrainingModel(pretrained_config)
-            >>> pretrained_model_params = freeze(pretrained_params['target'])
-            >>> flax_model_outputs = flax_pretraining_model.apply({"params": pretrained_model_params}, tokens, attention_mask, type_ids, None, None, None, None, deterministic=True)
-            >>> masked_lm_logits[:, :3, :3]
-        """
-
         model = FNetForMaskedLM.from_pretrained("google/fnet-base")
         model.to(torch_device)
 
@@ -516,7 +455,7 @@ class FNetModelIntegrationTest(unittest.TestCase):
     @slow
     @require_tokenizers
     def test_inference_long_sentence(self):
-        tokenizer = FNetTokenizerFast.from_pretrained("google/fnet-base")
+        tokenizer = FNetTokenizer.from_pretrained("google/fnet-base")
 
         inputs = tokenizer(
             "the man worked as a [MASK].",

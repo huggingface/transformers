@@ -86,19 +86,19 @@ DistilBertConfig {
 }
 ```
 
-事前学習済みモデルの属性は、[`~PretrainedConfig.from_pretrained`] 関数で変更できます：
+事前学習済みモデルの属性は、[`~PreTrainedConfig.from_pretrained`] 関数で変更できます：
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("distilbert/distilbert-base-uncased", activation="relu", attention_dropout=0.4)
 ```
 
-Once you are satisfied with your model configuration, you can save it with [`PretrainedConfig.save_pretrained`]. Your configuration file is stored as a JSON file in the specified save directory.
+Once you are satisfied with your model configuration, you can save it with [`PreTrainedConfig.save_pretrained`]. Your configuration file is stored as a JSON file in the specified save directory.
 
 ```py
 >>> my_config.save_pretrained(save_directory="./your_model_save_path")
 ```
 
-設定ファイルを再利用するには、[`~PretrainedConfig.from_pretrained`]を使用してそれをロードします：
+設定ファイルを再利用するには、[`~PreTrainedConfig.from_pretrained`]を使用してそれをロードします：
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/config.json")
@@ -116,8 +116,6 @@ Once you are satisfied with your model configuration, you can save it with [`Pre
 すべてのモデルは [`PreTrainedModel`] をベースクラスとし、入力埋め込みのリサイズやセルフアテンションヘッドのプルーニングなど、共通のメソッドがいくつかあります。
 さらに、すべてのモデルは [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html)、[`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model)、または [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) のいずれかのサブクラスでもあります。つまり、モデルはそれぞれのフレームワークの使用法と互換性があります。
 
-<frameworkcontent>
-<pt>
 モデルにカスタム構成属性をロードします：
 
 ```py
@@ -144,43 +142,12 @@ Once you are satisfied with your model configuration, you can save it with [`Pre
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
-</pt>
-<tf>
-モデルにカスタム設定属性をロードしてください：
-
-```py
->>> from transformers import TFDistilBertModel
-
->>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
->>> tf_model = TFDistilBertModel(my_config)
-```
-
-これにより、事前学習済みの重みではなくランダムな値を持つモデルが作成されます。
-このモデルを有用な目的にはまだ使用することはできません。トレーニングはコストがかかり、時間がかかるプロセスです。
-一般的には、トレーニングに必要なリソースの一部しか使用せずに、より速く優れた結果を得るために事前学習済みモデルを使用することが良いでしょう。
-
-[`~TFPreTrainedModel.from_pretrained`]を使用して事前学習済みモデルを作成します：
-
-
-```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-事前学習済みの重みをロードする際、モデルが🤗 Transformersによって提供されている場合、デフォルトのモデル構成が自動的にロードされます。ただし、必要であればデフォルトのモデル構成属性の一部またはすべてを独自のもので置き換えることもできます：
-
-```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
-```
-</tf>
-</frameworkcontent>
 
 
 ### Model heads
 
 この時点で、ベースのDistilBERTモデルがあり、これは隠れた状態を出力します。隠れた状態はモデルのヘッドへの入力として渡され、最終的な出力を生成します。🤗 Transformersは、モデルがそのタスクをサポートしている限り、各タスクに対応する異なるモデルヘッドを提供します（つまり、DistilBERTを翻訳のようなシーケンス対シーケンスタスクに使用することはできません）。
 
-<frameworkcontent>
-<pt>
 たとえば、[`DistilBertForSequenceClassification`]は、シーケンス分類ヘッドを持つベースのDistilBERTモデルです。シーケンス分類ヘッドは、プールされた出力の上にある線形層です。
 
 ```py
@@ -199,28 +166,6 @@ Once you are satisfied with your model configuration, you can save it with [`Pre
 >>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-</pt>
-<tf>
-例えば、[`TFDistilBertForSequenceClassification`]は、シーケンス分類ヘッドを持つベースのDistilBERTモデルです。シーケンス分類ヘッドは、プールされた出力の上にある線形層です。
-
-```py
->>> from transformers import TFDistilBertForSequenceClassification
-
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-別のタスクにこのチェックポイントを簡単に再利用することができ、異なるモデルヘッドに切り替えるだけです。
-質問応答タスクの場合、[`TFDistilBertForQuestionAnswering`]モデルヘッドを使用します。
-質問応答ヘッドはシーケンス分類ヘッドと似ていますが、隠れ状態の出力の上に線形層があるだけです。
-
-
-```py
->>> from transformers import TFDistilBertForQuestionAnswering
-
->>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
-```
-</tf>
-</frameworkcontent>
 
 ## Tokenizer
 

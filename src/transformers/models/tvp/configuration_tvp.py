@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Intel AIA Team Authors, and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License=, Version 2.0 (the "License");
@@ -14,43 +13,29 @@
 # limitations under the License.
 """TVP model configuration"""
 
-import copy
-
-from ...configuration_utils import PretrainedConfig
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class TvpConfig(PretrainedConfig):
+class TvpConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TvpModel`]. It is used to instantiate an Tvp
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Tvp
     [Intel/tvp-base](https://huggingface.co/Intel/tvp-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
-        backbone_config (`PretrainedConfig` or `dict`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
-            library.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         distance_loss_weight (`float`, *optional*, defaults to 1.0):
             The weight of distance loss.
         duration_loss_weight (`float`, *optional*, defaults to 0.1):
@@ -70,6 +55,8 @@ class TvpConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the Tvp text model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`TvpModel`].
+        type_vocab_size (`int`, *optional*, defaults to 2):
+            The vocabulary size of the `token_type_ids` passed when calling [`TvpModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers.
         intermediate_size (`int`, *optional*, defaults to 3072):
@@ -96,17 +83,16 @@ class TvpConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability of attention layers.
+        pad_token_id (`int`, *optional*):
+            The id of a PAD token in the vocabulary.
     """
 
     model_type = "tvp"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
         backbone_config=None,
-        backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
         distance_loss_weight=1.0,
         duration_loss_weight=0.1,
         visual_prompter_type="framepad",
@@ -115,6 +101,7 @@ class TvpConfig(PretrainedConfig):
         max_img_size=448,
         num_frames=48,
         vocab_size=30522,
+        type_vocab_size=2,
         hidden_size=768,
         intermediate_size=3072,
         num_hidden_layers=12,
@@ -127,30 +114,17 @@ class TvpConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         initializer_range=0.02,
         attention_probs_dropout_prob=0.1,
+        pad_token_id=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-        if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-            backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            default_config_type="resnet",
+            default_config_kwargs={"out_features": ["stage4"]},
+            **kwargs,
         )
 
         self.backbone_config = backbone_config
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
         self.distance_loss_weight = distance_loss_weight
         self.duration_loss_weight = duration_loss_weight
         self.visual_prompter_type = visual_prompter_type
@@ -159,6 +133,7 @@ class TvpConfig(PretrainedConfig):
         self.max_img_size = max_img_size
         self.num_frames = num_frames
         self.vocab_size = vocab_size
+        self.type_vocab_size = type_vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
@@ -171,31 +146,9 @@ class TvpConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.pad_token_id = pad_token_id
 
-    @classmethod
-    def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
-        """Instantiate a [`TvpConfig`] (or a derived class) from a pre-trained backbone model configuration.
-
-        Args:
-            backbone_config ([`PretrainedConfig`]):
-                The backbone configuration.
-        Returns:
-            [`TvpConfig`]: An instance of a configuration object
-        """
-        return cls(backbone_config=backbone_config, **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        if output["backbone_config"] is not None:
-            output["backbone_config"] = self.backbone_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
+        super().__init__(**kwargs)
 
 
 __all__ = ["TvpConfig"]

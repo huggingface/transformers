@@ -16,7 +16,7 @@ Integration with Deepspeed
 """
 
 import copy
-import importlib.metadata as importlib_metadata
+import importlib.metadata
 import importlib.util
 import weakref
 from functools import partialmethod
@@ -40,9 +40,9 @@ def is_deepspeed_available():
     # AND checking it has an author field in the metadata that is HuggingFace.
     if package_exists:
         try:
-            _ = importlib_metadata.metadata("deepspeed")
+            _ = importlib.metadata.metadata("deepspeed")
             return True
-        except importlib_metadata.PackageNotFoundError:
+        except importlib.metadata.PackageNotFoundError:
             return False
 
 
@@ -54,7 +54,7 @@ else:
     from builtins import object as DeepSpeedConfig
 
 
-class HfDeepSpeedConfig(DeepSpeedConfig):
+class HfDeepSpeedConfig(DeepSpeedConfig):  # noqa UP004
     """
     This object contains a DeepSpeed configuration dictionary and can be quickly queried for things like zero stage.
 
@@ -170,12 +170,6 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         self.fill_match("scheduler.params.warmup_max_lr", args.learning_rate, "learning_rate")
         # total_num_steps - will get set in trainer_config_finalize
 
-        # fp16
-        if args.fp16 or args.fp16_full_eval:
-            fp16_backend = "apex" if args.fp16_backend == "apex" else "amp"
-        else:
-            fp16_backend = None
-
         if args.save_on_each_node:
             # deepspeed uses shared storage by default. Let's override this setting if save_on_each_node == True
             self.config["checkpoint"] = self.config.get("checkpoint", {})
@@ -183,26 +177,16 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
         # any here unless the user did the work
-        self.fill_match(
-            "fp16.enabled",
-            ((args.fp16 or args.fp16_full_eval) and fp16_backend == "amp"),
-            "fp16|fp16_full_eval+fp16_backend(amp)",
-        )
-
-        # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
-        # ZeRO features
-        self.fill_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
-        self.fill_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
-
+        self.fill_match("fp16.enabled", (args.fp16 or args.fp16_full_eval), "fp16|fp16_full_eval")
         self.fill_match("bf16.enabled", (args.bf16 or args.bf16_full_eval), "bf16|bf16_full_eval")
 
         # deepspeed's default mode is fp16 unless there is a config that says differently
         if self.is_true("bf16.enabled"):
             self._dtype = torch.bfloat16
-        elif self.is_false("fp16.enabled"):
-            self._dtype = torch.float32
-        else:
+        elif self.is_true("fp16.enabled"):
             self._dtype = torch.float16
+        else:
+            self._dtype = torch.float32
 
     def trainer_config_finalize(self, args, model, num_training_steps):
         """
@@ -221,17 +205,20 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         hidden_size_auto_keys = [x for x in hidden_size_based_keys if self.is_auto(x)]
 
         if len(hidden_size_auto_keys) > 0:
-            if hasattr(model.config, "hidden_size"):
-                hidden_size = model.config.hidden_size
-            elif hasattr(model.config, "hidden_sizes"):
-                # if there are many hidden sizes pick the largest one
-                hidden_size = max(model.config.hidden_sizes)
-            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_size"):
-                hidden_size = model.config.text_config.hidden_size
-            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_sizes"):
-                # if there are many hidden sizes pick the largest one
-                hidden_size = max(model.config.text_config.hidden_sizes)
-            else:
+            hidden_size = None
+            if hasattr(model, "config"):
+                if hasattr(model.config, "hidden_size"):
+                    hidden_size = model.config.hidden_size
+                elif hasattr(model.config, "hidden_sizes"):
+                    # if there are many hidden sizes pick the largest one
+                    hidden_size = max(model.config.hidden_sizes)
+                elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_size"):
+                    hidden_size = model.config.text_config.hidden_size
+                elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_sizes"):
+                    # if there are many hidden sizes pick the largest one
+                    hidden_size = max(model.config.text_config.hidden_sizes)
+
+            if hidden_size is None:
                 raise ValueError(
                     "The model's config file has neither `hidden_size` nor `hidden_sizes` entry, "
                     "therefore it's not possible to automatically fill out the following `auto` entries "
@@ -303,12 +290,124 @@ def deepspeed_config():
         return None
 
 
-def _load_state_dict_into_zero3_model(model_to_load, state_dict):
+def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
+    """
+    Apply weight conversions (renaming and merging/splitting operations) to a state dict.
+    This is a simplified version that handles the conversion without loading into the model.
+    """
+    # Check for Tensor Parallelism - weight conversions are not tested with TP
+    # TP uses ReplaceWithTensorSlicing which may conflict with our weight conversions
+    ds_config = deepspeed_config()
+    if ds_config is not None:
+        # Check training config (tensor_parallel.autotp_size)
+        tp_size = ds_config.get("tensor_parallel", {}).get("autotp_size", 1)
+        # Check inference config (inference.tensor_parallel.tp_size)
+        inference_config = ds_config.get("inference", {})
+        if isinstance(inference_config, dict):
+            tp_size = max(tp_size, inference_config.get("tensor_parallel", {}).get("tp_size", 1))
+        if tp_size > 1:
+            raise NotImplementedError(
+                "Weight conversions (e.g., MoE expert fusion) with DeepSpeed Tensor Parallelism "
+                "are not yet implemented but support is coming soon. Please disable tensor_parallel "
+                "in your DeepSpeed config or convert your checkpoint to the expected format first."
+            )
+
+    from ..core_model_loading import WeightConverter, WeightRenaming, dot_natural_key, rename_source_key
+
+    # Preserve metadata from the original state dict
+    metadata = getattr(state_dict, "_metadata", None)
+
+    prefix = model.base_model_prefix
+
+    # Build a meta state dict for matching - only keys/shapes, no actual tensor data
+    # This minimizes memory since we don't duplicate the model's parameters
+    model_state_dict = {}
+    for key, param in model.state_dict().items():
+        model_state_dict[key] = torch.empty(param.shape, dtype=param.dtype, device="meta")
+
+    renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
+    converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
+
+    # Fast path: if we only have simple renamings and no converters, we can skip the expensive collection logic
+    if len(converters) == 0:
+        new_state_dict = {}
+        for original_key, tensor in state_dict.items():
+            renamed_key, _ = rename_source_key(original_key, renamings, [], prefix, model_state_dict)
+            if renamed_key in model_state_dict:
+                new_state_dict[renamed_key] = tensor
+        # Attach metadata to the new state dict
+        if metadata is not None:
+            new_state_dict._metadata = metadata
+        return new_state_dict
+
+    # Full path: we have WeightConverter operations that require tensor fusion/splitting
+    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+
+    # Build a mapping of what needs to be converted
+    # Sort keys to ensure consistent ordering (important for MoE conversions)
+    # Iterate over sorted keys and pop from state_dict to free memory immediately
+    conversion_mapping = {}
+    new_state_dict = {}
+    sorted_keys = sorted(state_dict.keys(), key=lambda k: dot_natural_key(k))
+    for original_key in sorted_keys:
+        tensor = state_dict.pop(original_key)
+        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, prefix, model_state_dict)
+
+        # Only process if the renamed key is in the model's state dict
+        if renamed_key in model_state_dict:
+            # If source_pattern is not None, this key needs WeightConverter (e.g., MoE fusion)
+            if source_pattern is not None:
+                # Create a fresh converter for this layer to hold its tensors
+                # Share operations list (lightweight, no large data) but get new collected_tensors
+                converter = pattern_to_converter[source_pattern]
+                new_converter = WeightConverter(
+                    source_patterns=converter.source_patterns,
+                    target_patterns=converter.target_patterns,
+                    operations=converter.operations,
+                )
+                mapping = conversion_mapping.setdefault(renamed_key, new_converter)
+                mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
+            else:
+                # No conversion needed - add tensor directly to new_state_dict
+                # (this handles keys like embed_tokens, lm_head, layernorm, attention)
+                new_state_dict[renamed_key] = tensor
+
+    # Apply the conversions and build the new state dict
+    for renamed_key, mapping in conversion_mapping.items():
+        try:
+            realized_value = mapping.convert(
+                renamed_key,
+                model=model,
+                config=model.config,
+            )
+            for target_name, param in realized_value.items():
+                param = param[0] if isinstance(param, list) else param
+                new_state_dict[target_name] = param
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to apply weight conversion for '{renamed_key}'. "
+                f"This likely means the checkpoint format is incompatible with the current model version. "
+                f"Error: {e}"
+            ) from e
+
+    # Attach metadata to the new state dict
+    if metadata is not None:
+        new_state_dict._metadata = metadata
+
+    return new_state_dict
+
+
+def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=None):
     """
     Loads state dict into a model specifically for Zero3, since DeepSpeed does not support the `transformers`
     tensor parallelism API.
 
     Nearly identical code to PyTorch's `_load_from_state_dict`
+
+    Args:
+        model_to_load: The model to load weights into
+        state_dict: The state dict containing the weights
+        load_config: Optional LoadStateDictConfig containing weight_mapping and other loading options
     """
     # copy state_dict so `_load_state_dict_into_zero3_model` can modify it
     metadata = getattr(state_dict, "_metadata", None)
@@ -316,7 +415,27 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict):
     if metadata is not None:
         state_dict._metadata = metadata
 
+    # Extract weight_mapping from load_config if provided
+    weight_mapping = None
+    if load_config is not None:
+        weight_mapping = getattr(load_config, "weight_mapping", None)
+
+    # Apply weight conversions if provided
+    if weight_mapping is not None and len(weight_mapping) > 0:
+        state_dict = _apply_weight_conversions_to_state_dict(model_to_load, state_dict, weight_mapping)
+        # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
+        model_to_load._weight_conversions = weight_mapping
+
     error_msgs = []
+    meta_model_state_dict = model_to_load.state_dict()
+    missing_keys = set(meta_model_state_dict.keys())
+
+    prefix_model = getattr(model_to_load, "base_model_prefix", None)
+    # take care of the case where in the checkpoint we don't have the prefix
+    state_dict = {
+        (f"{prefix_model}.{k}" if meta_model_state_dict.get(f"{prefix_model}.{k}") is not None else k): v
+        for k, v in state_dict.items()
+    }
 
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
@@ -327,13 +446,21 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict):
         args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
         # Parameters of module and children will start with prefix. We can exit early if there are none in this
         # state_dict
-        if is_deepspeed_zero3_enabled() and len([key for key in state_dict if key.startswith(prefix)]) > 0:
+        if is_deepspeed_zero3_enabled():
             import deepspeed
 
             # In sharded models, each shard has only part of the full state_dict, so only gather
             # parameters that are in the current state_dict.
             named_parameters = dict(module.named_parameters(prefix=prefix[:-1], recurse=False))
-            params_to_gather = [named_parameters[k] for k in state_dict.keys() if k in named_parameters]
+            params_to_gather = []
+            for k in named_parameters:
+                if k in state_dict:
+                    param = named_parameters[k]
+                    # crutial to not init the weight again
+                    param._is_hf_initialized = True
+                    params_to_gather.append(param)
+                    missing_keys.discard(k)
+
             if len(params_to_gather) > 0:
                 # because zero3 puts placeholders in model params, this context
                 # manager gathers (unpartitions) the params of the current layer, then loads from
@@ -348,7 +475,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict):
 
     load(model_to_load, state_dict, assign_to_params_buffers=False)
 
-    return error_msgs
+    return error_msgs, missing_keys
 
 
 def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps, model_parameters):
@@ -369,11 +496,6 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
 
     optimizer = None
     if "optimizer" in config:
-        if args.adafactor:
-            raise ValueError(
-                "--adafactor was passed, but also found `optimizer` configured in the DeepSpeed config. "
-                "Only one optimizer can be configured."
-            )
         optimizer = DummyOptim(params=model_parameters)
     else:
         if hf_deepspeed_config.is_offload():
@@ -406,8 +528,6 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
                 return lr_scheduler
 
             lr_scheduler = DummyScheduler(optimizer, lr_scheduler_callable=_lr_scheduler_callable)
-        else:
-            lr_scheduler = trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
     return optimizer, lr_scheduler
 
@@ -458,11 +578,16 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
         model_parameters = None
     else:
         trainer.optimizer = None  # important for when deepspeed_init is used as re-init
-        tp_size = hf_deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 0)
-        if tp_size > 1:
+        deepspeed_tp_size = hf_deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 1)
+        if deepspeed_tp_size > 1:
             import deepspeed
 
-            model = deepspeed.tp_model_init(model=model, tp_size=tp_size, dtype=hf_deepspeed_config.dtype())
+            model = deepspeed.tp_model_init(
+                model=model,
+                tp_size=deepspeed_tp_size,
+                dtype=hf_deepspeed_config.dtype(),
+                config=hf_deepspeed_config.config,
+            )
         model_parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
         optimizer, lr_scheduler = deepspeed_optim_sched(
             trainer, hf_deepspeed_config, args, num_training_steps, model_parameters
@@ -496,3 +621,67 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_str
             raise ValueError(f"[deepspeed] failed to resume from checkpoint {checkpoint_path}")
     else:
         raise ValueError(f"Can't find a valid checkpoint at {checkpoint_path}")
+
+
+def propagate_args_to_deepspeed(accelerator, args, auto_find_batch_size=False):
+    """
+    Sets values in the deepspeed plugin based on the TrainingArguments.
+
+    Args:
+        accelerator (`Accelerator`): The Accelerator object.
+        args (`TrainingArguments`): The training arguments to propagate to DeepSpeed config.
+        auto_find_batch_size (`bool`, *optional*, defaults to `False`):
+            Whether batch size was auto-discovered by trying increasingly smaller sizes.
+    """
+    ds_plugin = accelerator.state.deepspeed_plugin
+
+    ds_plugin.hf_ds_config = HfTrainerDeepSpeedConfig(ds_plugin.hf_ds_config.config)
+    ds_plugin.deepspeed_config = ds_plugin.hf_ds_config.config
+    ds_plugin.hf_ds_config.trainer_config_process(args, auto_find_batch_size)
+
+
+def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
+    """
+    Computes the loss under sequence parallelism with `sp_backend="deepspeed"` and `sp_size > 1`.
+
+    Performs weighted loss aggregation across SP ranks, accounting for varying numbers of valid tokens per rank
+    (e.g., when some ranks receive only padding or prompt tokens that are masked with -100).
+
+    Args:
+        accelerator (`Accelerator`): The accelerator instance with `torch_device_mesh` support.
+        model (`torch.nn.Module`): The model to compute the loss for.
+        inputs (`dict[str, torch.Tensor | Any]`): The input data for the model. Must include `"shift_labels"` key.
+        return_outputs (`bool`): Whether to return the model outputs along with the loss.
+        pc (`accelerate.parallelism_config.ParallelismConfig`): The parallelism configuration.
+
+    Returns:
+        The loss, or a tuple of `(loss, outputs)` if `return_outputs` is `True`.
+    """
+    # DeepSpeed SP automatically injects shift_labels into inputs (pre-shifted labels for SP).
+    # The model's forward pass receives shift_labels via **kwargs and passes it to the loss function.
+    # Both standard transformer models and Liger-patched models handle shift_labels correctly,
+    # so we can directly use the computed loss from the model output.
+    # See: https://huggingface.co/docs/accelerate/en/concept_guides/sequence_parallelism
+    if "labels" not in inputs and "shift_labels" in inputs:
+        # DeepSpeed SP Dataloader removes "labels" but we need it, otherwise, we won't compute the loss.
+        inputs["labels"] = inputs["shift_labels"]
+    outputs = model(**inputs)
+    loss = outputs.loss
+
+    sp_group = accelerator.torch_device_mesh["sp"].get_group()
+    sp_world_size = pc.sp_size
+    # differentiable weighted per-shard-loss aggregation across ranks
+    losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
+    # special dealing with SFT that has prompt tokens that aren't used in loss computation
+    good_tokens = (inputs["shift_labels"] != -100).view(-1).sum()
+    good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
+    # Skip ranks with zero valid tokens
+    total_loss = sum(
+        losses_per_rank[rank] * good_tokens_per_rank[rank]
+        for rank in range(sp_world_size)
+        if good_tokens_per_rank[rank] > 0
+    )
+    total_good_tokens = sum(good_tokens_per_rank)
+    loss = total_loss / max(total_good_tokens, 1)
+
+    return (loss, outputs) if return_outputs else loss

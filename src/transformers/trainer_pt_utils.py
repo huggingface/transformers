@@ -15,12 +15,14 @@
 Torch utilities for the Trainer class.
 """
 
+import contextlib
 import copy
 import datetime
 import io
 import json
 import math
 import os
+import re
 import sys
 import warnings
 from collections.abc import Iterator, Mapping
@@ -28,11 +30,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from itertools import chain
 from logging import StreamHandler
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
 import torch.distributed as dist
+from packaging import version
 from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
@@ -68,12 +71,9 @@ def get_dataloader_sampler(dataloader):
         return dataloader.sampler
 
 
-def atleast_1d(tensor_or_array: Union[torch.Tensor, np.ndarray]):
+def atleast_1d(tensor_or_array: torch.Tensor | np.ndarray):
     if isinstance(tensor_or_array, torch.Tensor):
-        if hasattr(torch, "atleast_1d"):
-            tensor_or_array = torch.atleast_1d(tensor_or_array)
-        elif tensor_or_array.ndim < 1:
-            tensor_or_array = tensor_or_array[None]
+        tensor_or_array = torch.atleast_1d(tensor_or_array)
     else:
         tensor_or_array = np.atleast_1d(tensor_or_array)
     return tensor_or_array
@@ -148,13 +148,11 @@ def find_batch_size(tensors):
             if result is not None:
                 return result
     elif isinstance(tensors, Mapping):
-        for key, value in tensors.items():
+        for value in tensors.values():
             result = find_batch_size(value)
             if result is not None:
                 return result
-    elif isinstance(tensors, torch.Tensor):
-        return tensors.shape[0] if len(tensors.shape) >= 1 else None
-    elif isinstance(tensors, np.ndarray):
+    elif isinstance(tensors, (torch.Tensor, np.ndarray)):
         return tensors.shape[0] if len(tensors.shape) >= 1 else None
 
 
@@ -200,7 +198,7 @@ def nested_xla_mesh_reduce(tensors, name):
         raise ImportError("Torch xla must be installed to use `nested_xla_mesh_reduce`")
 
 
-def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) -> Any:
+def distributed_concat(tensor: Any, num_total_examples: int | None = None) -> Any:
     try:
         if isinstance(tensor, (tuple, list)):
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
@@ -219,10 +217,74 @@ def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) ->
         raise AssertionError("Not currently using distributed training")
 
 
+def nested_gather(tensors, parallel_mode, name=None):
+    """
+    Gather value of `tensors` (tensor or list/tuple of nested tensors) across processes.
+    """
+    from .training_args import ParallelMode
+
+    if tensors is None:
+        return
+    if is_torch_xla_available():
+        if name is None:
+            name = "nested_gather"
+        tensors = nested_xla_mesh_reduce(tensors, name)
+    elif is_sagemaker_mp_enabled():
+        tensors = smp_gather(tensors)
+    elif parallel_mode == ParallelMode.DISTRIBUTED:
+        tensors = distributed_concat(tensors)
+    return tensors
+
+
+def is_attention_mask_causal(attention_mask):
+    """
+    Check if an attention mask is causal (compatible with causal attention).
+
+    Context parallelism only supports causal attention patterns. This function
+    checks if the provided attention mask is compatible.
+
+    Args:
+        attention_mask (`torch.Tensor`): The attention mask to check.
+
+    Returns:
+        `bool`: True if the mask is causal or compatible with causal attention.
+    """
+    if attention_mask is None:
+        return True  # No mask is considered causal (model uses default causal masking)
+
+    # Handle different mask dimensions
+    if attention_mask.dim() == 2:
+        # (batch_size, seq_len) - standard padding mask, compatible with causal attention
+        return True
+    elif attention_mask.dim() in [3, 4]:
+        # (batch_size, seq_len, seq_len) or (batch_size, num_heads, seq_len, seq_len)
+        # Check if it's lower triangular (causal)
+        seq_len = attention_mask.shape[-1]
+        if seq_len <= 1:
+            return True  # Single token or empty is always causal
+
+        # Take first batch and head (if 4D) for checking pattern
+        if attention_mask.dim() == 4:
+            mask = attention_mask[0, 0]  # First batch, first head
+        else:
+            mask = attention_mask[0]  # First batch
+
+        # Check if upper triangular part is masked (should be 0 or very negative for causal)
+        upper_triangular = torch.triu(mask, diagonal=1)
+
+        # For causal masks, upper triangular should be 0 or very negative (like -inf)
+        # Use a reasonable threshold to handle float precision issues
+        is_causal = torch.all(upper_triangular <= 1e-6) or torch.all(upper_triangular < -1e4)
+        return is_causal.item() if isinstance(is_causal, torch.Tensor) else is_causal
+
+    # For unknown dimensions, be conservative and reject
+    return False
+
+
 def distributed_broadcast_scalars(
-    scalars: list[Union[int, float]],
-    num_total_examples: Optional[int] = None,
-    device: Optional[torch.device] = torch.device("cuda"),
+    scalars: list[int | float],
+    num_total_examples: int | None = None,
+    device: torch.device | None = torch.device("cuda"),
 ) -> torch.Tensor:
     try:
         tensorized_scalar = torch.tensor(scalars, device=device)
@@ -271,7 +333,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
             Dataset used for sampling.
         batch_size (`int`):
             The batch size used with this sampler
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             All other keyword arguments passed to `DistributedSampler`.
     """
 
@@ -341,62 +403,6 @@ class EvalLoopContainer:
         return self.arrays
 
 
-class SequentialDistributedSampler(Sampler):
-    """
-    Distributed Sampler that subsamples indices sequentially, making it easier to collate all results at the end.
-
-    Even though we only use this sampler for eval and predict (no training), which means that the model params won't
-    have to be synced (i.e. will not hang for synchronization even if varied number of forward passes), we still add
-    extra samples to the sampler to make it evenly divisible (like in `DistributedSampler`) to make it easy to `gather`
-    or `reduce` resulting tensors at the end of the loop.
-    """
-
-    def __init__(self, dataset, num_replicas=None, rank=None, batch_size=None):
-        warnings.warn(
-            "SequentialDistributedSampler is deprecated and will be removed in v5 of Transformers.",
-            FutureWarning,
-        )
-        if num_replicas is None:
-            if not dist.is_available():
-                raise RuntimeError("Requires distributed package to be available")
-            num_replicas = dist.get_world_size()
-        if rank is None:
-            if not dist.is_available():
-                raise RuntimeError("Requires distributed package to be available")
-            rank = dist.get_rank()
-        self.dataset = dataset
-        self.num_replicas = num_replicas
-        self.rank = rank
-        num_samples = len(self.dataset)
-        # Add extra samples to make num_samples a multiple of batch_size if passed
-        if batch_size is not None:
-            self.num_samples = int(math.ceil(num_samples / (batch_size * num_replicas))) * batch_size
-        else:
-            self.num_samples = int(math.ceil(num_samples / num_replicas))
-        self.total_size = self.num_samples * self.num_replicas
-        self.batch_size = batch_size
-
-    def __iter__(self):
-        indices = list(range(len(self.dataset)))
-
-        # add extra samples to make it evenly divisible
-        indices += indices[: (self.total_size - len(indices))]
-        assert len(indices) == self.total_size, (
-            f"Indices length {len(indices)} and total size {self.total_size} mismatched"
-        )
-
-        # subsample
-        indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
-        assert len(indices) == self.num_samples, (
-            f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
-        )
-
-        return iter(indices)
-
-    def __len__(self):
-        return self.num_samples
-
-
 def get_tpu_sampler(dataset: torch.utils.data.Dataset, batch_size: int):
     if xr.world_size() <= 1:
         return RandomSampler(dataset)
@@ -425,114 +431,6 @@ def nested_truncate(tensors, limit):
         return type(tensors)({k: nested_truncate(t, limit) for k, t in tensors.items()})
 
     return tensors[:limit]
-
-
-class DistributedTensorGatherer:
-    """
-    A class responsible for properly gathering tensors (or nested list/tuple of tensors) on the CPU by chunks.
-
-    If our dataset has 16 samples with a batch size of 2 on 3 processes and we gather then transfer on CPU at every
-    step, our sampler will generate the following indices:
-
-        `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1]`
-
-    to get something of size a multiple of 3 (so that each process gets the same dataset length). Then process 0, 1 and
-    2 will be responsible of making predictions for the following samples:
-
-        - P0: `[0, 1, 2, 3, 4, 5]`
-        - P1: `[6, 7, 8, 9, 10, 11]`
-        - P2: `[12, 13, 14, 15, 0, 1]`
-
-    The first batch treated on each process will be:
-
-        - P0: `[0, 1]`
-        - P1: `[6, 7]`
-        - P2: `[12, 13]`
-
-    So if we gather at the end of the first batch, we will get a tensor (nested list/tuple of tensor) corresponding to
-    the following indices:
-
-        `[0, 1, 6, 7, 12, 13]`
-
-    If we directly concatenate our results without taking any precautions, the user will then get the predictions for
-    the indices in this order at the end of the prediction loop:
-
-        `[0, 1, 6, 7, 12, 13, 2, 3, 8, 9, 14, 15, 4, 5, 10, 11, 0, 1]`
-
-    For some reason, that's not going to roll their boat. This class is there to solve that problem.
-
-    Args:
-        world_size (`int`):
-            The number of processes used in the distributed training.
-        num_samples (`int`):
-            The number of samples in our dataset.
-        make_multiple_of (`int`, *optional*):
-            If passed, the class assumes the datasets passed to each process are made to be a multiple of this argument
-            (by adding samples).
-        padding_index (`int`, *optional*, defaults to -100):
-            The padding index to use if the arrays don't all have the same sequence length.
-    """
-
-    def __init__(self, world_size, num_samples, make_multiple_of=None, padding_index=-100):
-        warnings.warn(
-            "DistributedTensorGatherer is deprecated and will be removed in v5 of Transformers.",
-            FutureWarning,
-        )
-        self.world_size = world_size
-        self.num_samples = num_samples
-        total_size = world_size if make_multiple_of is None else world_size * make_multiple_of
-        self.total_samples = int(np.ceil(num_samples / total_size)) * total_size
-        self.process_length = self.total_samples // world_size
-        self._storage = None
-        self._offsets = None
-        self.padding_index = padding_index
-
-    def add_arrays(self, arrays):
-        """
-        Add `arrays` to the internal storage, Will initialize the storage to the full size at the first arrays passed
-        so that if we're bound to get an OOM, it happens at the beginning.
-        """
-        if arrays is None:
-            return
-        if self._storage is None:
-            self._storage = nested_new_like(arrays, self.total_samples, padding_index=self.padding_index)
-            self._offsets = list(range(0, self.total_samples, self.process_length))
-
-        slice_len, self._storage = self._nested_set_tensors(self._storage, arrays)
-        for i in range(self.world_size):
-            self._offsets[i] += slice_len
-
-    def _nested_set_tensors(self, storage, arrays):
-        if isinstance(arrays, (list, tuple)):
-            result = [self._nested_set_tensors(x, y) for x, y in zip(storage, arrays)]
-            return result[0][0], type(arrays)(r[1] for r in result)
-        assert arrays.shape[0] % self.world_size == 0, (
-            f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
-        )
-
-        slice_len = arrays.shape[0] // self.world_size
-        for i in range(self.world_size):
-            if len(arrays.shape) == 1:
-                storage[self._offsets[i] : self._offsets[i] + slice_len] = arrays[i * slice_len : (i + 1) * slice_len]
-            else:
-                # Expand the array on the fly if needed.
-                if len(storage.shape) > 1 and storage.shape[1] < arrays.shape[1]:
-                    storage = expand_like(storage, arrays.shape[1], padding_index=self.padding_index)
-                storage[self._offsets[i] : self._offsets[i] + slice_len, : arrays.shape[1]] = arrays[
-                    i * slice_len : (i + 1) * slice_len
-                ]
-        return slice_len, storage
-
-    def finalize(self):
-        """
-        Return the properly gathered arrays and truncate to the number of samples (since the sampler added some extras
-        to get each process a dataset of the same length).
-        """
-        if self._storage is None:
-            return
-        if self._offsets[0] != self.process_length:
-            logger.warning("Not all data has been set. Are you sure you passed all values?")
-        return nested_truncate(self._storage, self.num_samples)
 
 
 @dataclass
@@ -622,9 +520,9 @@ class LengthGroupedSampler(Sampler):
     def __init__(
         self,
         batch_size: int,
-        dataset: Optional[Dataset] = None,
-        lengths: Optional[list[int]] = None,
-        model_input_name: Optional[str] = None,
+        dataset: Dataset | None = None,
+        lengths: list[int] | None = None,
+        model_input_name: str | None = None,
         generator=None,
     ):
         if dataset is None and lengths is None:
@@ -633,10 +531,7 @@ class LengthGroupedSampler(Sampler):
         self.batch_size = batch_size
         if lengths is None:
             model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if (
-                not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
-                or model_input_name not in dataset[0]
-            ):
+            if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{model_input_name}' key."
@@ -644,7 +539,7 @@ class LengthGroupedSampler(Sampler):
             lengths = [len(feature[model_input_name]) for feature in dataset]
         elif isinstance(lengths, torch.Tensor):
             logger.info(
-                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to List[int]..."
+                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to list[int]..."
             )
             lengths = lengths.tolist()
 
@@ -669,13 +564,13 @@ class DistributedLengthGroupedSampler(DistributedSampler):
     def __init__(
         self,
         batch_size: int,
-        dataset: Optional[Dataset] = None,
-        num_replicas: Optional[int] = None,
-        rank: Optional[int] = None,
+        dataset: Dataset | None = None,
+        num_replicas: int | None = None,
+        rank: int | None = None,
         seed: int = 0,
         drop_last: bool = False,
-        lengths: Optional[list[int]] = None,
-        model_input_name: Optional[str] = None,
+        lengths: list[int] | None = None,
+        model_input_name: str | None = None,
     ):
         if dataset is None and lengths is None:
             raise ValueError("One of dataset and lengths must be provided.")
@@ -696,10 +591,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
 
         if lengths is None:
             model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if (
-                not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
-                or model_input_name not in dataset[0]
-            ):
+            if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{model_input_name}' key."
@@ -708,7 +600,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         elif isinstance(lengths, torch.Tensor):
             logger.info(
                 "If lengths is a torch.Tensor, DistributedLengthGroupedSampler will be slow. Converting lengths to"
-                " List[int]..."
+                " list[int]..."
             )
             lengths = lengths.tolist()
 
@@ -899,34 +791,6 @@ class IterableDatasetShard(IterableDataset):
             return math.ceil(len(self.dataset) / (self.batch_size * self.num_processes)) * self.batch_size
 
 
-# In order to keep `trainer.py` compact and easy to understand, place any secondary PT Trainer
-# helper methods here
-
-
-def _get_learning_rate(self):
-    if self.is_deepspeed_enabled:
-        # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
-        # not run for the first few dozen steps while loss scale is too large, and thus during
-        # that time `get_last_lr` will fail if called during that warm up stage, so work around it:
-        try:
-            last_lr = self.lr_scheduler.get_last_lr()[0]
-        except AssertionError as e:
-            if "need to call step" in str(e):
-                logger.warning("tried to get lr value before scheduler/optimizer started stepping, returning lr=0")
-                last_lr = 0
-            else:
-                raise
-    else:
-        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-            last_lr = self.optimizer.param_groups[0]["lr"]
-        else:
-            last_lr = self.lr_scheduler.get_last_lr()[0]
-
-    if torch.is_tensor(last_lr):
-        last_lr = last_lr.item()
-    return last_lr
-
-
 def _secs2timedelta(secs):
     """
     Convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimal places.
@@ -936,16 +800,16 @@ def _secs2timedelta(secs):
     return f"{datetime.timedelta(seconds=int(secs))}.{msec:02d}"
 
 
-def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
+def metrics_format(metrics: dict[str, float]) -> dict[str, float]:
     """
     Reformat Trainer metrics values to a human-readable format.
 
     Args:
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predict
 
     Returns:
-        metrics (`Dict[str, float]`): The reformatted metrics
+        metrics (`dict[str, float]`): The reformatted metrics
     """
 
     metrics_copy = metrics.copy()
@@ -962,6 +826,7 @@ def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
     return metrics_copy
 
 
+# Trainer helper method: imported into the Trainer class and used as a method (takes `self` as first argument).
 def log_metrics(self, split, metrics):
     """
     Log metrics in a specially formatted way.
@@ -971,7 +836,7 @@ def log_metrics(self, split, metrics):
     Args:
         split (`str`):
             Mode/split name: one of `train`, `eval`, `test`
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predictmetrics: metrics dict
 
     Notes on memory reports:
@@ -1045,13 +910,14 @@ def log_metrics(self, split, metrics):
         return
 
     print(f"***** {split} metrics *****")
-    metrics_formatted = self.metrics_format(metrics)
-    k_width = max(len(str(x)) for x in metrics_formatted.keys())
+    metrics_formatted = metrics_format(metrics)
+    k_width = max(len(str(x)) for x in metrics_formatted)
     v_width = max(len(str(x)) for x in metrics_formatted.values())
     for key in sorted(metrics_formatted.keys()):
         print(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
 
 
+# Trainer helper method
 def save_metrics(self, split, metrics, combined=True):
     """
     Save metrics into a json file for that split, e.g. `train_results.json`.
@@ -1061,7 +927,7 @@ def save_metrics(self, split, metrics, combined=True):
     Args:
         split (`str`):
             Mode/split name: one of `train`, `eval`, `test`, `all`
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predict
         combined (`bool`, *optional*, defaults to `True`):
             Creates combined metrics by updating `all_results.json` with metrics of this call
@@ -1090,6 +956,7 @@ def save_metrics(self, split, metrics, combined=True):
             json.dump(all_metrics, f, indent=4, sort_keys=True)
 
 
+# Trainer helper method
 def save_state(self):
     """
     Saves the Trainer state, since Trainer.save_model saves only the tokenizer with the model.
@@ -1101,6 +968,42 @@ def save_state(self):
 
     path = os.path.join(self.args.output_dir, "trainer_state.json")
     self.state.save_to_json(path)
+
+
+# Trainer helper method
+def get_num_trainable_parameters(self) -> int:
+    """
+    Get the number of trainable parameters.
+    """
+    return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+
+
+# Trainer helper method
+def get_learning_rates(self) -> list[float]:
+    """
+    Returns the learning rate of each parameter from self.optimizer.
+    """
+    if self.optimizer is None:
+        raise ValueError("Trainer optimizer is None, please make sure you have setup the optimizer before.")
+    return [group["lr"] for group in self.optimizer.param_groups]
+
+
+# Trainer helper method
+def get_optimizer_group(self, param: str | torch.nn.parameter.Parameter | None = None):
+    """
+    Returns optimizer group for a parameter if given, else returns all optimizer groups for params.
+
+    Args:
+        param (`str` or `torch.nn.parameter.Parameter`, *optional*):
+            The parameter for which optimizer group needs to be returned.
+    """
+    if self.optimizer is None:
+        raise ValueError("Trainer optimizer is None, please make sure you have setup the optimizer before.")
+    if param is not None:
+        for group in self.optimizer.param_groups:
+            if param in group["params"]:
+                return group
+    return [group["params"] for group in self.optimizer.param_groups]
 
 
 def get_model_param_count(model, trainable_only=False):
@@ -1124,8 +1027,9 @@ def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None
     """
     Returns the names of the model parameters that are not inside a forbidden layer.
     """
-    if forbidden_layer_names is None:
-        forbidden_layer_names = []
+    forbidden_layer_patterns = (
+        [re.compile(pattern) for pattern in forbidden_layer_names] if forbidden_layer_names is not None else []
+    )
     result = []
     for name, child in model.named_children():
         child_params = get_parameter_names(child, forbidden_layer_types, forbidden_layer_names)
@@ -1133,12 +1037,13 @@ def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None
             f"{name}.{n}"
             for n in child_params
             if not isinstance(child, tuple(forbidden_layer_types))
-            and not any(forbidden in f"{name}.{n}".lower() for forbidden in forbidden_layer_names)
+            and not any(pattern.search(f"{name}.{n}".lower()) for pattern in forbidden_layer_patterns)
         ]
     # Add model specific parameters that are not in any child
     result += [
-        k for k in model._parameters.keys() if not any(forbidden in k.lower() for forbidden in forbidden_layer_names)
+        k for k in model._parameters if not any(pattern.search(k.lower()) for pattern in forbidden_layer_patterns)
     ]
+
     return result
 
 
@@ -1239,8 +1144,6 @@ class AcceleratorConfig:
             Any of the following (optional) keys are acceptable:
               num_steps (`int`): Will take precedence over [`~.TrainingArguments.gradient_accumulation_steps`] if
                 the latter is set to 1, otherwise an exception will be raised.
-              adjust_scheduler (`bool`): Whether to adjust the scheduler steps to account for [`~.TrainingArguments.gradient_accumulation_steps`].
-                The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`.
               sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch.
                 The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`.
         non_blocking (`bool`, *optional*, defaults to `False`):
@@ -1264,7 +1167,7 @@ class AcceleratorConfig:
             " in your script multiplied by the number of processes."
         },
     )
-    dispatch_batches: Optional[bool] = field(
+    dispatch_batches: bool | None = field(
         default=None,
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
@@ -1290,7 +1193,7 @@ class AcceleratorConfig:
         },
     )
 
-    non_blocking: Optional[bool] = field(
+    non_blocking: bool = field(
         default=False,
         metadata={
             "help": "Whether to use non-blocking CUDA calls to help minimize synchronization during "
@@ -1300,15 +1203,13 @@ class AcceleratorConfig:
         },
     )
 
-    gradient_accumulation_kwargs: Optional[dict] = field(
+    gradient_accumulation_kwargs: dict | None = field(
         default=None,
         metadata={
             "help": "Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`]. "
             "Any of the following (optional) keys are acceptable: "
             "  num_steps (`int`): Will take precedence over [`~.TrainingArguments.gradient_accumulation_steps`] if "
             "    the latter is set to 1, otherwise an exception will be raised. "
-            "  adjust_scheduler (`bool`): Whether to adjust the scheduler steps to account for [`~.TrainingArguments.gradient_accumulation_steps`]. "
-            "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`. "
             "  sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch. "
             "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`."
         },
@@ -1328,7 +1229,7 @@ class AcceleratorConfig:
         with open_file(json_file, "r", encoding="utf-8") as f:
             config_dict = json.load(f)
         # Check for keys and load sensible defaults
-        extra_keys = sorted(key for key in config_dict.keys() if key not in cls.__dataclass_fields__.keys())
+        extra_keys = sorted(key for key in config_dict if key not in cls.__dataclass_fields__)
         if len(extra_keys) > 0:
             raise ValueError(
                 f"The config file at {json_file} had unknown keys ({extra_keys}), please try upgrading your `transformers`"
@@ -1354,7 +1255,7 @@ class LayerWiseDummyOptimizer(torch.optim.Optimizer):
     https://github.com/hiyouga/LLaMA-Factory/commit/8664262cde3919e10eaecbd66e8c5d356856362e#diff-ebe08ab14496dfb9e06075f0fdd36799ef6d1535cc4dd4715b74c4e3e06fe3ba
     """
 
-    def __init__(self, optimizer_dict=None, *args, **kwargs):
+    def __init__(self, optimizer_dict=None, **kwargs):
         dummy_tensor = torch.randn(1, 1)
         self.optimizer_dict = optimizer_dict
         super().__init__([dummy_tensor], {"lr": kwargs.get("lr", 1e-03)})
@@ -1362,7 +1263,7 @@ class LayerWiseDummyOptimizer(torch.optim.Optimizer):
     def zero_grad(self, set_to_none: bool = True) -> None:
         pass
 
-    def step(self, closure=None) -> Optional[float]:
+    def step(self, closure=None) -> float | None:
         pass
 
 
@@ -1378,8 +1279,7 @@ class LayerWiseDummyScheduler(LRScheduler):
         self.default_lr = kwargs["lr"]
         optimizer = LayerWiseDummyOptimizer(**kwargs)
         last_epoch = -1
-        verbose = False
-        super().__init__(optimizer, last_epoch, verbose)
+        super().__init__(optimizer, last_epoch)
 
     def get_lr(self):
         # default value
@@ -1410,3 +1310,27 @@ def set_rng_state_for_device(device_name, device_module, checkpoint_rng_state, i
     except Exception as e:
         # Log error if setting RNG state fails
         logger.error(err_template.format(backend=device_name, exception=e))
+
+
+def safe_globals():
+    """
+    Context manager to allowlist numpy objects for torch.load with weights_only=True.
+
+    Starting from version 2.4 PyTorch introduces a check for the objects loaded
+    with torch.load(weights_only=True). Starting from 2.6 weights_only=True becomes
+    a default and requires allowlisting of objects being loaded.
+
+    See: https://github.com/pytorch/pytorch/pull/137602
+    See: https://pytorch.org/docs/stable/notes/serialization.html#torch.serialization.add_safe_globals
+    See: https://github.com/huggingface/accelerate/pull/3036
+    """
+    if version.parse(torch.__version__).release < version.parse("2.6").release:
+        return contextlib.nullcontext()
+
+    np_core = np._core if version.parse(np.__version__) >= version.parse("2.0.0") else np.core
+    allowlist = [np_core.multiarray._reconstruct, np.ndarray, np.dtype]
+    # numpy >1.25 defines numpy.dtypes.UInt32DType, but below works for
+    # all versions of numpy
+    allowlist += [type(np.dtype(np.uint32))]
+
+    return torch.serialization.safe_globals(allowlist)

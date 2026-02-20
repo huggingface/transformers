@@ -18,9 +18,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..utils import is_vision_available
-from .loss_for_object_detection import (
-    box_iou,
-)
+from .loss_for_object_detection import box_iou
 from .loss_rt_detr import RTDetrHungarianMatcher, RTDetrLoss
 
 
@@ -28,21 +26,13 @@ if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
 
-@torch.jit.unused
 def _set_aux_loss(outputs_class, outputs_coord):
-    # this is a workaround to make torchscript happy, as torchscript
-    # doesn't support dictionary with non-homogeneous values, such
-    # as a dict having both a Tensor and a list.
     return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
 
-@torch.jit.unused
 def _set_aux_loss2(
     outputs_class, outputs_coord, outputs_corners, outputs_ref, teacher_corners=None, teacher_logits=None
 ):
-    # this is a workaround to make torchscript happy, as torchscript
-    # doesn't support dictionary with non-homogeneous values, such
-    # as a dict having both a Tensor and a list.
     return [
         {
             "logits": a,
@@ -97,7 +87,7 @@ def translate_gt(gt: torch.Tensor, max_num_bins: int, reg_scale: int, up: torch.
         up (Tensor): Controls the upper bounds of the Weighting Function.
 
     Returns:
-        Tuple[Tensor, Tensor, Tensor]:
+        tuple[Tensor, Tensor, Tensor]:
             - indices (Tensor): Index of the left bin closest to each GT value, shape (N, ).
             - weight_right (Tensor): Weight assigned to the right bin, shape (N, ).
             - weight_left (Tensor): Weight assigned to the left bin, shape (N, ).
@@ -152,8 +142,8 @@ def bbox2distance(points, bbox, max_num_bins, reg_scale, up, eps=0.1):
         points (Tensor): (n, 4) [x, y, w, h], where (x, y) is the center.
         bbox (Tensor): (n, 4) bounding boxes in "xyxy" format.
         max_num_bins (float): Maximum bin value.
-        reg_scale (float): Controling curvarture of W(n).
-        up (Tensor): Controling upper bounds of W(n).
+        reg_scale (float): Controlling curvarture of W(n).
+        up (Tensor): Controlling upper bounds of W(n).
         eps (float): Small value to ensure target < max_num_bins.
 
     Returns:
@@ -184,7 +174,7 @@ class DFineLoss(RTDetrLoss):
         weight_dict (`Dict`):
             Dictionary relating each loss with its weights. These losses are configured in DFineConf as
             `weight_loss_vfl`, `weight_loss_bbox`, `weight_loss_giou`, `weight_loss_fgl`, `weight_loss_ddf`
-        losses (`List[str]`):
+        losses (`list[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
         alpha (`float`):
             Parameter alpha used to compute the focal loss.

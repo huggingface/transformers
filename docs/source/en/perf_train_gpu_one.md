@@ -31,7 +31,7 @@ Refer to the table below to quickly help you identify the features relevant to y
 | data preloading | yes | no |
 | torch_empty_cache_steps | no | yes |
 | torch.compile | yes | no |
-| PEFT | no | yes |
+| scaled dot production attention (SDPA) | yes | yes |
 
 ## Trainer
 
@@ -128,7 +128,7 @@ fp16 isn't memory-optimized because the gradients that are computed in fp16 are 
 
 [bf16](https://cloud.google.com/blog/products/ai-machine-learning/bfloat16-the-secret-to-high-performance-on-cloud-tpus) trades off some precision for a much larger dynamic range, which is helpful for avoiding overflow and underflow errors. You can use bf16 without adding any loss scaling methods like you would with fp16. bf16 is supported by NVIDIAs Ampere architecture or newer.
 
-Configure [`~TrainingArguments.fp16`] in [`TrainingArguments`] to enable mixed precision training with the bf16 data type.
+Configure [`~TrainingArguments.bf16`] in [`TrainingArguments`] to enable mixed precision training with the bf16 data type.
 
 ```py
 from transformers import TrainingArguments
@@ -277,7 +277,6 @@ Refer to the table below to help you choose the right backend for your training 
 | ofi | uses TorchScripts [optimize_for_inference](https://pytorch.org/docs/stable/generated/torch.jit.optimize_for_inference.html#torch-jit-optimize-for-inference) | inference |
 | fx2trt | uses [Torch-TensorRT](https://pytorch.org/TensorRT/tutorials/getting_started_with_fx_path.html) | inference |
 | onnxrt | uses [ONNX-RT](https://onnxruntime.ai/) for CPU and GPU inference | inference |
-| ipex | uses [IPEX](https://github.com/intel/intel-extension-for-pytorch) for CPU inference | inference |
 
 ### Scaled dot production attention
 

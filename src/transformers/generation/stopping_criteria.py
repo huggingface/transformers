@@ -3,13 +3,11 @@ import warnings
 from abc import ABC
 from collections import OrderedDict
 from copy import deepcopy
-from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 from torch.nn import functional as F
 
-from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import add_start_docstrings, logging
 
@@ -33,12 +31,13 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
             Prediction scores of a language modeling head. These can be scores for each vocabulary token before SoftMax
             or scores for each vocabulary token after SoftMax. If this stopping criteria depends on the `scores` input,
             make sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Additional stopping criteria specific kwargs.
 
     Return:
-        `torch.BoolTensor`. (`torch.BoolTensor` of shape `(batch_size, 1)`), where `True` indicates we stop generation
-            for a particular row, `True` indicates we should continue.
+        `torch.BoolTensor`. (`torch.BoolTensor` of shape `(batch_size, 1)`):
+            `True` indicates we stop generation for a particular row.
+            `False` indicates we should continue.
 
 """
 
@@ -67,17 +66,17 @@ class MaxLengthCriteria(StoppingCriteria):
             The maximum model length, as defined by the model's `config.max_position_embeddings` attribute.
     """
 
-    def __init__(self, max_length: int, max_position_embeddings: Optional[int] = None):
+    def __init__(self, max_length: int, max_position_embeddings: int | None = None):
         self.max_length = max_length
         self.max_position_embeddings = max_position_embeddings
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
-        cur_len = input_ids.shape[-1]
+        cur_len = input_ids.shape[1]
         is_done = cur_len >= self.max_length
-        if self.max_position_embeddings is not None and not is_done and cur_len >= self.max_position_embeddings:
+        if self.max_position_embeddings is not None and not is_done and cur_len > self.max_position_embeddings:
             logger.warning_once(
-                "This is a friendly reminder - the current text generation call will exceed the model's predefined "
+                "This is a friendly reminder - the current text generation call has exceeded the model's predefined "
                 f"maximum length ({self.max_position_embeddings}). Depending on the model, you may observe "
                 "exceptions, performance degradation, or nothing at all."
             )
@@ -97,7 +96,7 @@ class MaxTimeCriteria(StoppingCriteria):
             The start of the generation allowed time.
     """
 
-    def __init__(self, max_time: float, initial_timestamp: Optional[float] = None):
+    def __init__(self, max_time: float, initial_timestamp: float | None = None):
         self.max_time = max_time
         self.initial_timestamp = time.time() if initial_timestamp is None else initial_timestamp
 
@@ -208,7 +207,7 @@ class StopStringCriteria(StoppingCriteria):
     Args:
         tokenizer (`PreTrainedTokenizer`):
             The model's associated tokenizer (necessary to extract vocab and tokenize the termination sequences)
-        stop_strings (`Union[str, List[str]]`):
+        stop_strings (`Union[str, list[str]]`):
             A list of strings that should end generation. If a string is passed, it will be treated like a
             list with a single element.
 
@@ -238,17 +237,17 @@ class StopStringCriteria(StoppingCriteria):
     ```
     """
 
-    def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, List[str]]):
+    def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: str | list[str]):
         if isinstance(stop_strings, str):
             stop_strings = [stop_strings]
-        self.stop_strings: Tuple[str, ...] = tuple(stop_strings)
+        self.stop_strings: tuple[str, ...] = tuple(stop_strings)
         vocab = tokenizer.get_vocab()
         token_list, token_indices = tuple(vocab.keys()), tuple(vocab.values())
         self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = self.clean_and_embed_tokens_with_cache(
             token_list, token_indices, tokenizer
         )
 
-        self.maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
+        self.maximum_token_len = max(len(stop_string) for stop_string in self.stop_strings)
         self.num_stop_strings = len(self.stop_strings)
         self.target_lens = torch.tensor([len(stop_string) for stop_string in stop_strings], dtype=torch.int32)
 
@@ -297,7 +296,7 @@ class StopStringCriteria(StoppingCriteria):
     @staticmethod
     def _stop_string_get_matching_positions(
         token_list, token_indices, stop_strings
-    ) -> Tuple[Dict[str, Dict[str, List[int]]], Dict[str, Dict[str, List[int]]]]:
+    ) -> tuple[dict[str, dict[str, list[int]]], dict[str, dict[str, list[int]]]]:
         """This function preprocesses stop strings and the tokenizer vocabulary to determine where tokens can
         validly appear in the stop strings. For each token, it computes a list of positions in the stop string where the
         token appears, as well as a list of the possible "end overlaps" for that token - that is, the number of characters
@@ -336,7 +335,7 @@ class StopStringCriteria(StoppingCriteria):
         return token_valid_positions, token_end_overlaps
 
     @staticmethod
-    def _stop_string_create_embedding_vec(token_list, token_indices, stop_strings) -> Dict[str, torch.tensor]:
+    def _stop_string_create_embedding_vec(token_list, token_indices, stop_strings) -> dict[str, torch.tensor]:
         """This function precomputes everything needed for the run-time checks in StopStringCriteria, and packs
         them into an embedding tensor that can be accessed with pure tensor operations. For the specifics of the values
         that are precomputed and what they are used for, please refer to the StopStringCriteria docstring!"""
@@ -430,7 +429,7 @@ class StopStringCriteria(StoppingCriteria):
         initial_match = end_lengths > 0
 
         # Tokens continue the string if the cumsum() so far is one of the valid positions for that token
-        # Note that we're actually tracking one cumsum() for for each possible end_length
+        # Note that we're actually tracking one cumsum() for each possible end_length
         later_match = torch.any(cumsum[:, :-1, :, None] == valid_positions[:, :, :, :, None], axis=-2)
 
         # The match vector is a boolean vector that indicates which positions have valid tokens
@@ -454,11 +453,11 @@ class EosTokenCriteria(StoppingCriteria):
     By default, it uses the `model.generation_config.eos_token_id`.
 
     Args:
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
     """
 
-    def __init__(self, eos_token_id: Union[int, List[int], torch.Tensor]):
+    def __init__(self, eos_token_id: int | list[int] | torch.Tensor):
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
@@ -468,7 +467,7 @@ class EosTokenCriteria(StoppingCriteria):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
         self.eos_token_id = self.eos_token_id.to(input_ids.device)
-        is_done = isin_mps_friendly(input_ids[:, -1], self.eos_token_id)
+        is_done = torch.isin(input_ids[:, -1], self.eos_token_id)
         return is_done
 
 
@@ -502,7 +501,7 @@ class StoppingCriteriaList(list):
         return is_done
 
     @property
-    def max_length(self) -> Optional[int]:
+    def max_length(self) -> int | None:
         for stopping_criterium in self:
             if isinstance(stopping_criterium, MaxLengthCriteria):
                 return stopping_criterium.max_length

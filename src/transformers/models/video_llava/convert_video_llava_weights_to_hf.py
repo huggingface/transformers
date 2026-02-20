@@ -36,8 +36,8 @@ Example for creating the old state dict file with Python:
     from video_llava.model.language_model.video_llava import VideoLlavaForCausalLM
 
     # load model
-    kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
-    model = VideoLlavaForCausalLM.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", low_cpu_mem_usage=True, **kwargs)
+    kwargs = {"device_map": "auto", "dtype": torch.float16}
+    model = VideoLlavaForCausalLM.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", **kwargs)
 
     # load vision tower
     model.get_vision_tower().load_model()
@@ -116,11 +116,11 @@ def convert_video_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     # We add an image and video token so we resize the model
     model.resize_token_embeddings(config.text_config.vocab_size + 3, pad_shape)
     model.language_model.model.embed_tokens.weight.data[32000:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))),
+        tuple(dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0])),
         dim=0,
     )
     model.language_model.lm_head.weight.data[32000:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
+        tuple(dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0])),
         dim=0,
     )
 

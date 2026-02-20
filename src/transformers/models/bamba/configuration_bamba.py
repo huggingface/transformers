@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 IBM and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +13,15 @@
 # limitations under the License.
 """Bamba model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BambaConfig(PretrainedConfig):
+class BambaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BambaModel`]. It is used to instantiate a
     BambaModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -30,8 +30,8 @@ class BambaConfig(PretrainedConfig):
     The BambaModel is a hybrid [mamba2](https://github.com/state-spaces/mamba) architecture with SwiGLU.
     The checkpoints are  jointly trained by IBM, Princeton, and UIUC.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 128000):
@@ -53,8 +53,8 @@ class BambaConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `8`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -100,7 +100,18 @@ class BambaConfig(PretrainedConfig):
             Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
         mamba_proj_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
-
+        time_step_min (`float`, *optional*, defaults to 0.001):
+            Minimum `time_step` used to bound `dt_proj.bias`.
+        time_step_max (`float`, *optional*, defaults to 0.1):
+            Maximum `time_step` used to bound `dt_proj.bias`.
+        time_step_limit (`tuple`, *optional*, defaults to `(0.0, inf)`):
+            Accepted range of time step values for clamping.
+        z_loss_coefficient (`float`, *optional*, defaults to 0.0):
+            Coefficient for auxiliary z-loss used to control logit growth during training
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
     """
 
     model_type = "bamba"
@@ -108,33 +119,38 @@ class BambaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=128000,
-        tie_word_embeddings=False,
-        hidden_size=4096,
-        intermediate_size=14336,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=8,
-        hidden_act="silu",
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        num_logits_to_keep=1,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        max_position_embeddings=262144,
-        attention_dropout=0.0,
-        attn_layer_indices=None,
-        mamba_n_heads=128,
-        mamba_d_head="auto",
-        mamba_n_groups=1,
-        mamba_d_state=256,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_chunk_size=256,
-        mamba_conv_bias=True,
-        mamba_proj_bias=False,
+        vocab_size: int | None = 128000,
+        tie_word_embeddings: bool | None = False,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 14336,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 8,
+        hidden_act: str | None = "silu",
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-5,
+        use_cache: bool | None = True,
+        num_logits_to_keep: int | None = 1,
+        pad_token_id: int | None = 0,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        max_position_embeddings: int | None = 262144,
+        attention_dropout: float | None = 0.0,
+        attn_layer_indices: list[int] | None = None,
+        mamba_n_heads: int | None = 128,
+        mamba_d_head: str | None = "auto",
+        mamba_n_groups: int | None = 1,
+        mamba_d_state: int | None = 256,
+        mamba_d_conv: int | None = 4,
+        mamba_expand: int | None = 2,
+        mamba_chunk_size: int | None = 256,
+        mamba_conv_bias: bool | None = True,
+        mamba_proj_bias: bool | None = False,
+        time_step_min: float | None = 0.001,
+        time_step_max: float | None = 0.1,
+        time_step_limit: tuple[float, float] | None = (0.0, float("inf")),
+        z_loss_coefficient: float | None = 0.0,
+        rope_parameters: RopeParameters | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -161,10 +177,6 @@ class BambaConfig(PretrainedConfig):
         self.num_logits_to_keep = num_logits_to_keep
 
         self.attn_layer_indices = attn_layer_indices
-        self.rope_theta = 10000.0
-        self.rope_scaling = None
-        self.partial_rotary_factor = 0.5
-
         mamba_intermediate = mamba_expand * hidden_size
 
         if mamba_intermediate % mamba_n_heads != 0:
@@ -186,14 +198,18 @@ class BambaConfig(PretrainedConfig):
         self.mamba_chunk_size = mamba_chunk_size
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
+        self.time_step_min = time_step_min
+        self.time_step_max = time_step_max
+        self.time_step_limit = tuple(time_step_limit) if time_step_limit is not None else None
+        self.z_loss_coefficient = z_loss_coefficient
+        self.rope_parameters = rope_parameters
+        kwargs["partial_rotary_factor"] = 0.5  # hardcode for BC
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
     @property
     def layers_block_type(self):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022, Google and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,22 @@
 # limitations under the License.
 """Switch Transformers model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class SwitchTransformersConfig(PretrainedConfig):
+class SwitchTransformersConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SwitchTransformersModel`]. It is used to
     instantiate a SwitchTransformers model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
     SwitchTransformers [google/switch-base-8](https://huggingface.co/google/switch-base-8) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 32128):
@@ -49,10 +48,14 @@ class SwitchTransformersConfig(PretrainedConfig):
             Number of dense hidden layers in the Transformer encoder layer.
         num_sparse_encoder_layers (`int`, *optional*, defaults to 3):
             Number of sparse (MoE) dense hidden layers in the Transformer encoder layer.
+            Note: When set to 0 with `num_layers=1`, the current implementation may still create a sparse layer
+            due to the sparse step calculation. This edge case is not encountered in existing checkpoints.
         num_decoder_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
         num_sparse_decoder_layers (`int`, *optional*, defaults to 3):
             Number of sparse (MoE) dense hidden layers in the Transformer decoder layer.
+            Note: When set to 0 with `num_decoder_layers=1`, the current implementation may still create a sparse
+            layer due to the sparse step calculation. This edge case is not encountered in existing checkpoints.
         num_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_experts (`int`, *optional*, defaults to 8):
@@ -63,7 +66,7 @@ class SwitchTransformersConfig(PretrainedConfig):
             Amount of noise to add to the router.
         router_dtype (`str`, *optional*, default to `"float32"`):
             The `dtype` used for the routers. It is preferable to keep the `dtype` to `"float32"` as specified in the
-            *selective precision* discussion in [the paper](https://arxiv.org/abs/2101.03961).
+            *selective precision* discussion in [the paper](https://huggingface.co/papers/2101.03961).
         router_ignore_padding_tokens (`bool`, *optional*, defaults to `False`):
             Whether to ignore padding tokens when routing.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -124,8 +127,14 @@ class SwitchTransformersConfig(PretrainedConfig):
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
+        bos_token_id=None,
+        tie_word_embeddings=True,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -145,7 +154,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         else:
             self.encoder_sparse_step = self.num_layers  # HACK: this will create 0 sparse layers
 
-        # This tells us, each how many encoder layer we'll have to set a sparse layer.
+        # This tells us, each how many decoder layer we'll have to set a sparse layer.
         if self.num_sparse_decoder_layers > 0:
             self.decoder_sparse_step = self.num_decoder_layers // self.num_sparse_decoder_layers
         else:
@@ -173,13 +182,12 @@ class SwitchTransformersConfig(PretrainedConfig):
         self.router_z_loss_coef = router_z_loss_coef
         self.router_aux_loss_coef = router_aux_loss_coef
         self.dense_act_fn = dense_act_fn
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["SwitchTransformersConfig"]

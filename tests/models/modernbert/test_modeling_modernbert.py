@@ -11,27 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import json
 import os
-import tempfile
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import AutoTokenizer, ModernBertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
-    CaptureLogger,
+    Expectations,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -41,11 +38,11 @@ if is_torch_available():
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         ModernBertForMaskedLM,
+        ModernBertForMultipleChoice,
         ModernBertForQuestionAnswering,
         ModernBertForSequenceClassification,
         ModernBertForTokenClassification,
         ModernBertModel,
-        logging,
     )
 
 
@@ -142,18 +139,9 @@ class ModernBertModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
-        if test := os.environ.get("PYTEST_CURRENT_TEST", False):
+        if test := os.environ.get("PYTEST_CURRENT_TEST", None):
             test_name = test.split(":")[-1].split(" ")[0]
 
-            # If we're testing `test_retain_grad_hidden_states_attentions`, we normally get an error
-            # that compilation doesn't work. Users can then set compile=False when loading the model,
-            # much like here. We're testing whether it works once they've done that.
-
-            # If we're testing `test_inputs_embeds_matches_input_ids`, then we'd like to test with `reference_compile`
-            # set to False, otherwise the input_ids with compiled input embeddings will not match the inputs_embeds
-            # with atol=1e-8 and rtol=1e-5
-            if test_name in ("test_retain_grad_hidden_states_attentions", "test_inputs_embeds_matches_input_ids"):
-                config.reference_compile = False
             # Some tests require attentions to be outputted, in that case we'll set the attention implementation to eager
             # as the others don't support outputted attentions
             if test_name in (
@@ -202,6 +190,22 @@ class ModernBertModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
+    def create_and_check_for_multiple_choice(
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_labels = self.num_labels
+        model = ModernBertForMultipleChoice(config=config)
+        model.to(torch_device)
+        model.eval()
+        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        result = model(
+            multiple_choice_inputs_ids,
+            attention_mask=multiple_choice_input_mask,
+            labels=choice_labels,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -218,8 +222,6 @@ class ModernBertModelTester:
 
 @require_torch
 class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_torchscript = False
-
     all_model_classes = (
         (
             ModernBertModel,
@@ -227,6 +229,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
             ModernBertForQuestionAnswering,
+            ModernBertForMultipleChoice,
         )
         if is_torch_available()
         else ()
@@ -243,9 +246,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     model_split_percents = [0.5, 0.8, 0.9]
 
     # special case for ForPreTraining model
@@ -276,36 +277,6 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                # The classifier.weight from ModernBertForSequenceClassification and ModernBertForTokenClassification
-                # are initialized without `initializer_range`, so they're not set to ~0 via the _config_zero_init
-                if param.requires_grad and not (
-                    name == "classifier.weight"
-                    and model_class
-                    in [
-                        ModernBertForSequenceClassification,
-                        ModernBertForTokenClassification,
-                        ModernBertForQuestionAnswering,
-                    ]
-                ):
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
@@ -318,34 +289,9 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
-    def test_for_warning_if_padding_and_no_attention_mask(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.model_tester.prepare_config_and_inputs()
-
-        # Set pad tokens in the input_ids
-        input_ids[0, 0] = config.pad_token_id
-
-        # Check for warnings if the attention_mask is missing.
-        logger = logging.get_logger("transformers.modeling_utils")
-        # clear cache so we can test the warning is emitted (from `warning_once`).
-        logger.warning_once.cache_clear()
-
-        with CaptureLogger(logger) as cl:
-            model = ModernBertModel(config=config)
-            model.to(torch_device)
-            model.eval()
-            model(input_ids, attention_mask=None)
-        self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
-
-    @unittest.skip("ModernBert doesn't use separate classes for SDPA, but a function instead.")
-    def test_sdpa_can_dispatch_non_composite_models(self):
-        pass
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
@@ -353,39 +299,12 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         model = ModernBertModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="ModernBert flash attention does not support right padding")
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_conversion(self):
-        self.skipTest(reason="ModernBert doesn't use the ModernBertFlashAttention2 class method.")
-
-    def test_saved_config_excludes_reference_compile(self):
-        config = ModernBertConfig(reference_compile=True)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            config.save_pretrained(tmpdirname)
-            with open(os.path.join(tmpdirname, "config.json")) as f:
-                config_dict = json.load(f)
-            self.assertNotIn("reference_compile", config_dict)
-
 
 @require_torch
 class ModernBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
-        model = ModernBertForMaskedLM.from_pretrained(
-            "answerdotai/ModernBERT-base", reference_compile=False, attn_implementation="sdpa"
-        )
+        model = ModernBertForMaskedLM.from_pretrained("answerdotai/ModernBERT-base", attn_implementation="sdpa")
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
 
         inputs = tokenizer("Hello World!", return_tensors="pt")
@@ -402,12 +321,7 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
-        model = ModernBertModel.from_pretrained(
-            "answerdotai/ModernBERT-base", reference_compile=False, attn_implementation="sdpa"
-        )
+        model = ModernBertModel.from_pretrained("answerdotai/ModernBERT-base", attn_implementation="sdpa")
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
 
         inputs = tokenizer("Hello World!", return_tensors="pt")
@@ -424,12 +338,8 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_token_classification(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         model = ModernBertForTokenClassification.from_pretrained(
             "hf-internal-testing/tiny-random-ModernBertForTokenClassification",
-            reference_compile=False,
             attn_implementation="sdpa",
         )
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-ModernBertForTokenClassification")
@@ -447,12 +357,8 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_sequence_classification(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         model = ModernBertForSequenceClassification.from_pretrained(
             "hf-internal-testing/tiny-random-ModernBertForSequenceClassification",
-            reference_compile=False,
             attn_implementation="sdpa",
         )
         tokenizer = AutoTokenizer.from_pretrained(
@@ -468,11 +374,9 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         expected = torch.tensor([[1.6466, 4.5662]])
         torch.testing.assert_close(output, expected, rtol=1e-4, atol=1e-4)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         bert_model = "answerdotai/ModernBERT-base"
         device = "cpu"
         attn_implementation = "sdpa"
@@ -506,3 +410,66 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
         ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
         self.assertEqual(eg_predicted_mask, ep_predicted_mask)
+
+    @slow
+    def test_inference_multiple_choice(self):
+        tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
+        model = (
+            ModernBertForMultipleChoice.from_pretrained(
+                "netique/ModernBertForMultipleChoice",
+                attn_implementation="sdpa",
+            )
+            .eval()
+            .to(torch_device)
+        )
+
+        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        choices = [
+            "It is eaten with a fork and a knife.",
+            "It is eaten while held in the hand.",
+            "It also walks on the sidewalks.",
+            "It is a common drink.",
+        ]
+        labels = torch.tensor([0], device=torch_device)
+
+        encoding = tokenizer([prompt for _ in choices], choices, return_tensors="pt", padding=True)
+        outputs = model(**{k: v.unsqueeze(0).to(torch_device) for k, v in encoding.items()}, labels=labels)
+
+        expected_logits = torch.tensor([[0.1973, 0.2041, 0.1835, 0.1896]])
+        logits = outputs.logits.to("cpu")
+
+        self.assertTrue(
+            torch.allclose(logits, expected_logits, atol=1e-4, rtol=1e-4),
+            f"Logits: {logits.tolist()}\nExpected: {expected_logits.tolist()}",
+        )
+
+    @require_flash_attn
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_inference_masked_lm_flash_attention_2(self):
+        model = ModernBertForMaskedLM.from_pretrained(
+            "answerdotai/ModernBERT-base", dtype=torch.float16, attn_implementation="flash_attention_2"
+        ).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
+
+        inputs = tokenizer("Hello World!", return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            output = model(**inputs)[0]
+        expected_shape = torch.Size((1, 5, 50368))
+        self.assertEqual(output.shape, expected_shape)
+
+        # compare the actual values for a slice.
+        expected_slice = Expectations(
+            {
+                ("cuda", None): torch.tensor(
+                    [[[3.8203, -0.2125, 12.2812], [3.6055, 0.6797, 14.6875], [-5.1094, -3.8105, 11.9922]]],
+                    dtype=torch.float16,
+                ),
+                ("xpu", None): torch.tensor(
+                    [[[3.8555, -0.1993, 12.2969], [3.6387, 0.6943, 14.7109], [-5.1172, -3.8086, 11.9844]]],
+                    dtype=torch.float16,
+                ),
+            }
+        ).get_expectation()
+        torch.testing.assert_close(output[:, :3, :3].cpu(), expected_slice, rtol=1e-4, atol=1e-4)

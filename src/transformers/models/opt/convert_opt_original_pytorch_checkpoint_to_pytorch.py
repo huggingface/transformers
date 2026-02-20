@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +29,7 @@ logger = logging.get_logger(__name__)
 def load_checkpoint(checkpoint_path):
     """Checkpoint path should end in model.pt"""
     sd = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
-    if "model" in sd.keys():
+    if "model" in sd:
         sd = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
 
     # pop unnecessary weights

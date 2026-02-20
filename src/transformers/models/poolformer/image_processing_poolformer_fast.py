@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,12 @@
 # limitations under the License.
 """Fast Image processor class for PoolFormer."""
 
-from typing import Optional, Union
+from typing import Optional
 
-from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    BaseImageProcessorFast,
-    BatchFeature,
-    DefaultFastImageProcessorKwargs,
-)
+import torch
+import torchvision.transforms.v2.functional as tvF
+
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import (
     ChannelDimension,
     get_resize_output_image_size,
@@ -41,35 +37,12 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
+    auto_docstring,
 )
+from .image_processing_poolformer import PoolFormerImageProcessorKwargs
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-class PoolFormerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    crop_pct: Optional[float]
-
-
-@add_start_docstrings(
-    "Constructs a fast PoolFormer image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
-            Percentage of the image to crop. Only has an effect if `do_resize` is set to `True`.
-    """,
-)
+@auto_docstring
 class PoolFormerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -82,27 +55,21 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
     do_center_crop = True
     do_rescale = True
     do_normalize = True
-    valid_kwargs = PoolFormerFastImageProcessorKwargs
+    valid_kwargs = PoolFormerImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[PoolFormerFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[PoolFormerImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
-                Percentage of the image to crop. Only has an effect if `do_resize` is set to `True`.
-        """,
-    )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[PoolFormerFastImageProcessorKwargs]) -> BatchFeature:
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[PoolFormerImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        crop_pct: Optional[float] = None,
-        interpolation: "F.InterpolationMode" = None,
+        crop_pct: float | None = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -135,7 +102,7 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `torch.Tensor`: The resized image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
         if crop_pct is not None:
             if size.shortest_edge:
                 scale_size = int(size.shortest_edge / crop_pct)
@@ -145,7 +112,7 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
                 else:
                     scale_size = (int(size.height / crop_pct), int(size.width / crop_pct))
             else:
-                raise ValueError("Invalid size for resize: {}".format(size))
+                raise ValueError(f"Invalid size for resize: {size}")
 
             new_size = get_resize_output_image_size(
                 image,
@@ -178,7 +145,7 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
                     "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
                     f" {size}."
                 )
-        return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+        return tvF.resize(image, new_size, interpolation=interpolation, antialias=antialias)
 
     def center_crop(
         self,
@@ -193,7 +160,7 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
         Args:
             image (`"torch.Tensor"`):
                 Image to center crop.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
 
         Returns:
@@ -211,14 +178,14 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
                 (crop_width - image_width + 1) // 2 if crop_width > image_width else 0,
                 (crop_height - image_height + 1) // 2 if crop_height > image_height else 0,
             ]
-            image = F.pad(image, padding_ltrb, fill=0)  # PIL uses fill value 0
+            image = tvF.pad(image, padding_ltrb, fill=0)  # PIL uses fill value 0
             image_height, image_width = image.shape[-2:]
             if crop_width == image_width and crop_height == image_height:
                 return image
 
         crop_top = int((image_height - crop_height) / 2.0)
         crop_left = int((image_width - crop_width) / 2.0)
-        return F.crop(image, crop_top, crop_left, crop_height, crop_width)
+        return tvF.crop(image, crop_top, crop_left, crop_height, crop_width)
 
     def _preprocess(
         self,
@@ -226,19 +193,20 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         crop_pct: float,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -250,7 +218,7 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
@@ -262,7 +230,6 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

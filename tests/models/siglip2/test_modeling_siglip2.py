@@ -18,15 +18,17 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 from parameterized import parameterized
 from pytest import mark
 
 from transformers import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
 from transformers.testing_utils import (
+    Expectations,
     is_flaky,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -43,7 +45,6 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
     random_attention_mask,
-    require_torch_sdpa,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -61,7 +62,6 @@ if is_vision_available():
 
 
 class Siglip2ModelTesterMixin(ModelTesterMixin):
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -91,14 +91,14 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
             self.assertTrue(model_eager.config._attn_implementation == "eager")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence(self):
         dtype = torch.float16
 
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             # Prepare inputs
@@ -120,10 +120,8 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                 model = model_class(config)
                 model.save_pretrained(tmp_dir)
 
-                model = model_class.from_pretrained(tmp_dir, torch_dtype=dtype)
-                model_fa = model_class.from_pretrained(
-                    tmp_dir, torch_dtype=dtype, attn_implementation="flash_attention_2"
-                )
+                model = model_class.from_pretrained(tmp_dir, dtype=dtype)
+                model_fa = model_class.from_pretrained(tmp_dir, dtype=dtype, attn_implementation="flash_attention_2")
 
             model_fa.to(torch_device)
             model.to(torch_device)
@@ -180,7 +178,7 @@ class Siglip2VisionModelTester:
         patch_size=2,
         num_channels=3,
         is_training=True,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
@@ -270,10 +268,8 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (Siglip2VisionModel,) if is_torch_available() else ()
     additional_model_inputs = ["pixel_attention_mask", "spatial_shapes"]
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["Siglip2MultiheadAttentionPoolingHead"]
     # in the dispatch_model function
@@ -319,26 +315,6 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="Siglip2VisionModel does not support standalone training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="Siglip2VisionModel does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="Siglip2VisionModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="Siglip2VisionModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/siglip2-base-patch16-naflex"
@@ -346,7 +322,6 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # adding only flaky decorator here and call the parent test method
@@ -363,7 +338,7 @@ class Siglip2TextModelTester:
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
@@ -441,10 +416,8 @@ class Siglip2TextModelTester:
 @require_torch
 class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Siglip2TextModel,) if is_torch_available() else ()
-    fx_compatible = False
     test_resize_embeddings = False
-    test_pruning = False
-    test_head_masking = False
+
     model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
@@ -458,28 +431,24 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="Siglip2TextModel does not support standalone training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Siglip2TextModel does not support standalone training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="Siglip2TextModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip2TextModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="Siglip2 does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
     @slow
@@ -513,9 +482,9 @@ class Siglip2ModelTester:
         return config, input_ids, attention_mask, pixel_values, pixel_attention_mask, spatial_shapes
 
     def get_config(self):
-        return Siglip2Config.from_text_vision_configs(
-            self.text_model_tester.get_config(),
-            self.vision_model_tester.get_config(),
+        return Siglip2Config(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
         )
 
     def create_and_check_model(
@@ -555,9 +524,7 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
         "pixel_attention_mask",
         "spatial_shapes",
     ]
-    fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
@@ -595,10 +562,6 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
-        pass
-
     def test_load_vision_text_config(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -614,6 +577,26 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
             text_config = Siglip2TextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
+    @unittest.skip(reason="The SigLIP2 family currently does not work with output_attentions.")
+    def test_get_text_features_attentions(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_attentions.
+        pass
+
+    @unittest.skip(reason="The SigLIP2 family currently does not work with output_hidden_states.")
+    def test_get_text_features_hidden_states(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_hidden_states.
+        pass
+
+    @unittest.skip(reason="The SigLIP2 family currently does not work with output_attentions.")
+    def test_get_image_features_attentions(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_attentions.
+        pass
+
+    @unittest.skip(reason="The SigLIP2 family currently does not work with output_hidden_states.")
+    def test_get_image_features_hidden_states(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_hidden_states.
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/siglip2-base-patch16-naflex"
@@ -621,7 +604,7 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
         self.assertIsNotNone(model)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest("Siglip2 does not support right padding")
@@ -657,9 +640,7 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
     all_model_classes = (Siglip2ForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": Siglip2ForImageClassification} if is_torch_available() else {}
     additional_model_inputs = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
-    fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
@@ -681,21 +662,17 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Siglip2ForImageClassification does not support gradient checkpointing yet")
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(reason="Siglip2ForImageClassification does not support gradient checkpointing yet")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="Siglip2ForImageClassification does not support gradient checkpointing yet")
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
-        pass
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
 
 # Draw a circle on an images with different aspect ratios
@@ -760,17 +737,24 @@ class Siglip2ModelIntegrationTest(unittest.TestCase):
 
         # verify the logits values
         # fmt: off
-        expected_logits_per_text = torch.tensor(
-            [
-                [  1.0195,  -0.0280,  -1.4468],
-                [ -4.5395,  -6.2269,  -1.5667],
-                [  4.1757,   5.0358,   3.5159],
-                [  9.4264,  10.1879,   6.3353],
-                [  2.4409,   3.1058,   4.5491],
-                [-12.3230, -13.7355, -13.4632],
+        expected_logits_per_texts = Expectations({
+            ("cuda", None): [
+                [  1.0195,  -0.0280,  -1.4468], [ -4.5395,  -6.2269,  -1.5667], [  4.1757,   5.0358,   3.5159],
+                [  9.4264,  10.1879,   6.3353], [  2.4409,   3.1058,   4.5491], [-12.3230, -13.7355, -13.4632],
                 [  1.1520,   1.1687,  -1.9647],
-            ]
-        ).to(torch_device)
+            ],
+            ("rocm", (9, 5)): [
+                [  1.0236,  -0.0376,  -1.4464], [ -4.5358,  -6.2235,  -1.5628], [  4.1708,   5.0334,   3.5187],
+                [  9.4241,  10.1828,   6.3366], [  2.4371,   3.1062,   4.5530], [-12.3173, -13.7240, -13.4580],
+                [  1.1502,   1.1716,  -1.9623]
+            ],
+            ("xpu", 3): [
+                [  1.0195,  -0.0280,  -1.4468], [ -4.5395,  -6.2269,  -1.5667], [  4.1757,   5.0358,   3.5159],
+                [  9.4264,  10.1879,   6.3353], [  2.4409,   3.1058,   4.5491], [-12.3230, -13.7355, -13.4632],
+                [  1.1520,   1.1687,  -1.9647]
+            ],
+        })
+        EXPECTED_LOGITS_PER_TEXT = torch.tensor(expected_logits_per_texts.get_expectation()).to(torch_device)
         # fmt: on
 
-        torch.testing.assert_close(outputs.logits_per_text, expected_logits_per_text, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(outputs.logits_per_text, EXPECTED_LOGITS_PER_TEXT, rtol=1e-3, atol=1e-3)

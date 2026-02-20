@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +15,9 @@
 
 import argparse
 import json
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -29,9 +29,9 @@ from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 def get_focalnet_config(model_name):
     depths = [2, 2, 6, 2] if "tiny" in model_name else [2, 2, 18, 2]
-    use_conv_embed = True if "large" in model_name or "huge" in model_name else False
-    use_post_layernorm = True if "large" in model_name or "huge" in model_name else False
-    use_layerscale = True if "large" in model_name or "huge" in model_name else False
+    use_conv_embed = bool("large" in model_name or "huge" in model_name)
+    use_post_layernorm = bool("large" in model_name or "huge" in model_name)
+    use_layerscale = bool("large" in model_name or "huge" in model_name)
 
     if "large" in model_name or "xlarge" in model_name or "huge" in model_name:
         if "fl3" in model_name:
@@ -141,7 +141,7 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
 
     # rename keys
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
 
@@ -155,6 +155,9 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     # verify conversion
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+
     processor = BitImageProcessor(
         do_resize=True,
         size={"shortest_edge": 256},
@@ -165,7 +168,6 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         image_mean=IMAGENET_DEFAULT_MEAN,
         image_std=IMAGENET_DEFAULT_STD,
     )
-    image = Image.open(requests.get(url, stream=True).raw)
     inputs = processor(images=image, return_tensors="pt")
 
     image_transforms = transforms.Compose(

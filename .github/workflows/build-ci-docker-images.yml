@@ -26,7 +26,7 @@ jobs:
 
     strategy:
       matrix:
-        file: ["quality", "consistency", "custom-tokenizers", "torch-light", "tf-light", "exotic-models", "torch-tf-light", "jax-light", "examples-torch",  "examples-tf"]
+        file: ["quality", "consistency", "custom-tokenizers", "torch-light", "exotic-models", "examples-torch"]
     continue-on-error: true
 
     steps:

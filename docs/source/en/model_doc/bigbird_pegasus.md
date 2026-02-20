@@ -13,60 +13,127 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-07-28 and added to Hugging Face Transformers on 2021-05-07.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # BigBirdPegasus
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[BigBirdPegasus](https://huggingface.co/papers/2007.14062) is an encoder-decoder (sequence-to-sequence) transformer model for long-input summarization. It extends the [BigBird](./big_bird) architecture with an additional pretraining objective borrowed from [Pegasus](./pegasus) called gap sequence generation (GSG). Whole sentences are masked and the model has to fill in the gaps in the document. BigBirdPegasus's ability to keep track of long contexts makes it effective at summarizing lengthy inputs, surpassing the performance of base Pegasus models.
 
-## Overview
+You can find all the original BigBirdPegasus checkpoints under the [Google](https://huggingface.co/google/models?search=bigbird-pegasus) organization.
 
-The BigBird model was proposed in [Big Bird: Transformers for Longer Sequences](https://arxiv.org/abs/2007.14062) by
-Zaheer, Manzil and Guruganesh, Guru and Dubey, Kumar Avinava and Ainslie, Joshua and Alberti, Chris and Ontanon,
-Santiago and Pham, Philip and Ravula, Anirudh and Wang, Qifan and Yang, Li and others. BigBird, is a sparse-attention
-based transformer which extends Transformer based models, such as BERT to much longer sequences. In addition to sparse
-attention, BigBird also applies global attention as well as random attention to the input sequence. Theoretically, it
-has been shown that applying sparse, global, and random attention approximates full attention, while being
-computationally much more efficient for longer sequences. As a consequence of the capability to handle longer context,
-BigBird has shown improved performance on various long document NLP tasks, such as question answering and
-summarization, compared to BERT or RoBERTa.
+> [!TIP]
+> This model was contributed by [vasudevgupta](https://huggingface.co/vasudevgupta).
+>
+> Click on the BigBirdPegasus models in the right sidebar for more examples of how to apply BigBirdPegasus to different language tasks.
 
-The abstract from the paper is the following:
+The example below demonstrates how to summarize text with [`Pipeline`], [`AutoModel`], and from the command line.
 
-*Transformers-based models, such as BERT, have been one of the most successful deep learning models for NLP.
-Unfortunately, one of their core limitations is the quadratic dependency (mainly in terms of memory) on the sequence
-length due to their full attention mechanism. To remedy this, we propose, BigBird, a sparse attention mechanism that
-reduces this quadratic dependency to linear. We show that BigBird is a universal approximator of sequence functions and
-is Turing complete, thereby preserving these properties of the quadratic, full attention model. Along the way, our
-theoretical analysis reveals some of the benefits of having O(1) global tokens (such as CLS), that attend to the entire
-sequence as part of the sparse attention mechanism. The proposed sparse attention can handle sequences of length up to
-8x of what was previously possible using similar hardware. As a consequence of the capability to handle longer context,
-BigBird drastically improves performance on various NLP tasks such as question answering and summarization. We also
-propose novel applications to genomics data.*
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The original code can be found [here](https://github.com/google-research/bigbird).
+```py
+import torch
+from transformers import pipeline
 
-## Usage tips
+pipeline = pipeline(
+    task="summarization",
+    model="google/bigbird-pegasus-large-arxiv",
+    dtype=torch.float32,
+    device=0
+)
+pipeline("""Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet.
+Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts. In the presence of light, plants absorb carbon dioxide from the atmosphere through small pores in their leaves called stomata, and take in water from the soil through their root systems.
+These ingredients are then transformed into glucose, a type of sugar that serves as a source of chemical energy, and oxygen, which is released as a byproduct into the atmosphere. The glucose produced during photosynthesis is not just used immediately; plants also store it as starch or convert it into other organic compounds like cellulose, which is essential for building their cellular structure.
+This energy reserve allows them to grow, develop leaves, produce flowers, bear fruit, and carry out various physiological processes throughout their lifecycle.""")
+```
 
-- For an in-detail explanation on how BigBird's attention works, see [this blog post](https://huggingface.co/blog/big-bird).
-- BigBird comes with 2 implementations: **original_full** & **block_sparse**. For the sequence length < 1024, using
-  **original_full** is advised as there is no benefit in using **block_sparse** attention.
-- The code currently uses window size of 3 blocks and 2 global blocks.
-- Sequence length must be divisible by block size.
-- Current implementation supports only **ITC**.
-- Current implementation doesn't support **num_random_blocks = 0**.
-- BigBirdPegasus uses the [PegasusTokenizer](https://github.com/huggingface/transformers/blob/main/src/transformers/models/pegasus/tokenization_pegasus.py).
-- BigBird is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
-  the left.
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+tokenizer = AutoTokenizer.from_pretrained(
+    "google/bigbird-pegasus-large-arxiv"
+)
+model = AutoModelForSeq2SeqLM.from_pretrained(
+    "google/bigbird-pegasus-large-arxiv",
+    dtype=torch.bfloat16,
+    device_map="auto",
+)
+
+input_text = """Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet.
+Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts. In the presence of light, plants absorb carbon dioxide from the atmosphere through small pores in their leaves called stomata, and take in water from the soil through their root systems.
+These ingredients are then transformed into glucose, a type of sugar that serves as a source of chemical energy, and oxygen, which is released as a byproduct into the atmosphere. The glucose produced during photosynthesis is not just used immediately; plants also store it as starch or convert it into other organic compounds like cellulose, which is essential for building their cellular structure.
+This energy reserve allows them to grow, develop leaves, produce flowers, bear fruit, and carry out various physiological processes throughout their lifecycle."""
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+<hfoption id="transformers">
+
+```bash
+echo -e "Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet. Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts." | transformers run --task summarization --model google/bigbird-pegasus-large-arxiv --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
+
+```py
+import torch
+from transformers import BitsAndBytesConfig, AutoModelForSeq2SeqLM, AutoTokenizer
+
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_quant_type="nf4"
+)
+model = AutoModelForSeq2SeqLM.from_pretrained(
+    "google/bigbird-pegasus-large-arxiv",
+    dtype=torch.bfloat16,
+    device_map="auto",
+    quantization_config=quantization_config
+)
+
+tokenizer = AutoTokenizer.from_pretrained(
+    "google/bigbird-pegasus-large-arxiv"
+)
+
+input_text = """Plants are among the most remarkable and essential life forms on Earth, possessing a unique ability to produce their own food through a process known as photosynthesis. This complex biochemical process is fundamental not only to plant life but to virtually all life on the planet.
+Through photosynthesis, plants capture energy from sunlight using a green pigment called chlorophyll, which is located in specialized cell structures called chloroplasts. In the presence of light, plants absorb carbon dioxide from the atmosphere through small pores in their leaves called stomata, and take in water from the soil through their root systems.
+These ingredients are then transformed into glucose, a type of sugar that serves as a source of chemical energy, and oxygen, which is released as a byproduct into the atmosphere. The glucose produced during photosynthesis is not just used immediately; plants also store it as starch or convert it into other organic compounds like cellulose, which is essential for building their cellular structure.
+This energy reserve allows them to grow, develop leaves, produce flowers, bear fruit, and carry out various physiological processes throughout their lifecycle."""
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+## Notes
+
+- BigBirdPegasus also uses the [`PegasusTokenizer`].
+- Inputs should be padded on the right because BigBird uses absolute position embeddings.
+- BigBirdPegasus supports `original_full` and `block_sparse` attention. If the input sequence length is less than 1024, it is recommended to use `original_full` since sparse patterns don't offer much benefit for smaller inputs.
+- The current implementation uses window size of 3 blocks and 2 global blocks, only supports the ITC-implementation, and doesn't support `num_random_blocks=0`.
+- The sequence length must be divisible by the block size.
 
 ## Resources
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Translation task guide](../tasks/translation)
-- [Summarization task guide](../tasks/summarization)
+Read the [Understanding BigBird's Block Sparse Attention](https://huggingface.co/blog/big-bird) blog post for more details about how BigBird's attention works.
 
 ## BigBirdPegasusConfig
 

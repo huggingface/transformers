@@ -11,24 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class SuperPointConfig(PretrainedConfig):
+class SuperPointConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SuperPointForKeypointDetection`]. It is used to instantiate a
     SuperPoint model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SuperPoint
     [magic-leap-community/superpoint](https://huggingface.co/magic-leap-community/superpoint) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         encoder_hidden_sizes (`List`, *optional*, defaults to `[64, 64, 128, 128]`):
@@ -63,7 +62,7 @@ class SuperPointConfig(PretrainedConfig):
 
     def __init__(
         self,
-        encoder_hidden_sizes: List[int] = [64, 64, 128, 128],
+        encoder_hidden_sizes: list[int] = [64, 64, 128, 128],
         decoder_hidden_size: int = 256,
         keypoint_decoder_dim: int = 65,
         descriptor_decoder_dim: int = 256,

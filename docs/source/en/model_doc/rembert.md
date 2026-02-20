@@ -13,17 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-10-24 and added to Hugging Face Transformers on 2021-07-24.*
 
 # RemBERT
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
 
-The RemBERT model was proposed in [Rethinking Embedding Coupling in Pre-trained Language Models](https://arxiv.org/abs/2010.12821) by Hyung Won Chung, Thibault Févry, Henry Tsai, Melvin Johnson, Sebastian Ruder.
+The RemBERT model was proposed in [Rethinking Embedding Coupling in Pre-trained Language Models](https://huggingface.co/papers/2010.12821) by Hyung Won Chung, Thibault Févry, Henry Tsai, Melvin Johnson, Sebastian Ruder.
 
 The abstract from the paper is the following:
 
@@ -62,21 +62,14 @@ also similar to the Albert one rather than the BERT one.
 ## RemBertTokenizer
 
 [[autodoc]] RemBertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## RemBertTokenizerFast
 
 [[autodoc]] RemBertTokenizerFast
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
-
-<frameworkcontent>
-<pt>
 
 ## RemBertModel
 
@@ -112,44 +105,3 @@ also similar to the Albert one rather than the BERT one.
 
 [[autodoc]] RemBertForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFRemBertModel
-
-[[autodoc]] TFRemBertModel
-    - call
-
-## TFRemBertForMaskedLM
-
-[[autodoc]] TFRemBertForMaskedLM
-    - call
-
-## TFRemBertForCausalLM
-
-[[autodoc]] TFRemBertForCausalLM
-    - call
-
-## TFRemBertForSequenceClassification
-
-[[autodoc]] TFRemBertForSequenceClassification
-    - call
-
-## TFRemBertForMultipleChoice
-
-[[autodoc]] TFRemBertForMultipleChoice
-    - call
-
-## TFRemBertForTokenClassification
-
-[[autodoc]] TFRemBertForTokenClassification
-    - call
-
-## TFRemBertForQuestionAnswering
-
-[[autodoc]] TFRemBertForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>

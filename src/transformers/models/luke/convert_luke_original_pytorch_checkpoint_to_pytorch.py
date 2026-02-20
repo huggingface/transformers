@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -127,7 +126,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
         raise ValueError
 
     # Finally, save our PyTorch model and tokenizer
-    print("Saving PyTorch model to {}".format(pytorch_dump_folder_path))
+    print(f"Saving PyTorch model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
 

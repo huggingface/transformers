@@ -13,12 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-04-18 and added to Hugging Face Transformers on 2022-05-24.*
 
 # LayoutLMv3
 
 ## Overview
 
-The LayoutLMv3 model was proposed in [LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking](https://arxiv.org/abs/2204.08387) by Yupan Huang, Tengchao Lv, Lei Cui, Yutong Lu, Furu Wei.
+The LayoutLMv3 model was proposed in [LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking](https://huggingface.co/papers/2204.08387) by Yupan Huang, Tengchao Lv, Lei Cui, Yutong Lu, Furu Wei.
 LayoutLMv3 simplifies [LayoutLMv2](layoutlmv2) by using patch embeddings (as in [ViT](vit)) instead of leveraging a CNN backbone, and pre-trains the model on 3 objectives: masked language modeling (MLM), masked image modeling (MIM)
 and word-patch alignment (WPA).
 
@@ -29,15 +30,15 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/layoutlmv3_architecture.png"
 alt="drawing" width="600"/>
 
-<small> LayoutLMv3 architecture. Taken from the <a href="https://arxiv.org/abs/2204.08387">original paper</a>. </small>
+<small> LayoutLMv3 architecture. Taken from the <a href="https://huggingface.co/papers/2204.08387">original paper</a>. </small>
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version of this model was added by [chriskoo](https://huggingface.co/chriskoo), [tokec](https://huggingface.co/tokec), and [lre](https://huggingface.co/lre). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/layoutlmv3).
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/layoutlmv3).
 
 ## Usage tips
 
 - In terms of data processing, LayoutLMv3 is identical to its predecessor [LayoutLMv2](layoutlmv2), except that:
-    - images need to be resized and normalized with channels in regular RGB format. LayoutLMv2 on the other hand normalizes the images internally and expects the channels in BGR format.
-    - text is tokenized using byte-pair encoding (BPE), as opposed to WordPiece.
+  - images need to be resized and normalized with channels in regular RGB format. LayoutLMv2 on the other hand normalizes the images internally and expects the channels in BGR format.
+  - text is tokenized using byte-pair encoding (BPE), as opposed to WordPiece.
   Due to these differences in data preprocessing, one can use [`LayoutLMv3Processor`] which internally combines a [`LayoutLMv3ImageProcessor`] (for the image modality) and a [`LayoutLMv3Tokenizer`]/[`LayoutLMv3TokenizerFast`] (for the text modality) to prepare all data for the model.
 - Regarding usage of [`LayoutLMv3Processor`], we refer to the [usage guide](layoutlmv2#usage-layoutlmv2processor) of its predecessor.
 
@@ -72,16 +73,12 @@ LayoutLMv3 is nearly identical to LayoutLMv2, so we've also included LayoutLMv2 
 - [Question answering task guide](../tasks/question_answering)
 
 **Document question answering**
+
 - [Document question answering task guide](../tasks/document_question_answering)
 
 ## LayoutLMv3Config
 
 [[autodoc]] LayoutLMv3Config
-
-## LayoutLMv3FeatureExtractor
-
-[[autodoc]] LayoutLMv3FeatureExtractor
-    - __call__
 
 ## LayoutLMv3ImageProcessor
 
@@ -109,9 +106,6 @@ LayoutLMv3 is nearly identical to LayoutLMv2, so we've also included LayoutLMv2 
 [[autodoc]] LayoutLMv3Processor
     - __call__
 
-<frameworkcontent>
-<pt>
-
 ## LayoutLMv3Model
 
 [[autodoc]] LayoutLMv3Model
@@ -131,29 +125,3 @@ LayoutLMv3 is nearly identical to LayoutLMv2, so we've also included LayoutLMv2 
 
 [[autodoc]] LayoutLMv3ForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFLayoutLMv3Model
-
-[[autodoc]] TFLayoutLMv3Model
-    - call
-
-## TFLayoutLMv3ForSequenceClassification
-
-[[autodoc]] TFLayoutLMv3ForSequenceClassification
-    - call
-
-## TFLayoutLMv3ForTokenClassification
-
-[[autodoc]] TFLayoutLMv3ForTokenClassification
-    - call
-
-## TFLayoutLMv3ForQuestionAnswering
-
-[[autodoc]] TFLayoutLMv3ForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>
