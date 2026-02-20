@@ -18,16 +18,8 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
-
-if is_vision_available():
-    from transformers import PromptDepthAnythingImageProcessor
-
-    if is_torchvision_available():
-        from transformers import PromptDepthAnythingImageProcessorFast
 
 
 class PromptDepthAnythingImageProcessingTester(unittest.TestCase):
@@ -86,9 +78,6 @@ class PromptDepthAnythingImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = PromptDepthAnythingImageProcessor if is_vision_available() else None
-    fast_image_processing_class = PromptDepthAnythingImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = PromptDepthAnythingImageProcessingTester(self)
@@ -98,7 +87,7 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -112,7 +101,7 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
             self.assertTrue(hasattr(image_processing, "prompt_scale_to_meter"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
@@ -121,7 +110,7 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
 
     def test_keep_aspect_ratio(self):
         size = {"height": 512, "width": 512}
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
 
             image = np.zeros((489, 640, 3))
@@ -132,7 +121,7 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
 
     def test_prompt_depth_processing(self):
         size = {"height": 756, "width": 756}
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
 
             image = np.zeros((756, 1008, 3))
@@ -145,62 +134,59 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
             self.assertEqual(list(pixel_values.shape), [1, 3, 768, 1024])
             self.assertEqual(list(prompt_depth_values.shape), [1, 1, 192, 256])
 
-    @require_torch
-    @require_vision
-    def test_slow_fast_equivalence(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+    def test_backends_equivalence(self):
+        """Override base class test to also compare prompt_depth."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         image = np.zeros((756, 1008, 3))
         prompt_depth = np.random.random((192, 256))
 
         size = {"height": 756, "width": 756}
-        image_processor_slow = self.image_processing_class(
-            size=size, keep_aspect_ratio=True, ensure_multiple_of=32, do_pad=True, size_divisor=51
-        )
-        image_processor_fast = self.fast_image_processing_class(
-            size=size, keep_aspect_ratio=True, ensure_multiple_of=32, do_pad=True, size_divisor=51
-        )
-
-        encoding_slow = image_processor_slow(image, prompt_depth=prompt_depth, return_tensors="pt")
-        encoding_fast = image_processor_fast(image, prompt_depth=prompt_depth, return_tensors="pt")
-
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
-        self.assertEqual(encoding_slow.prompt_depth.dtype, encoding_fast.prompt_depth.dtype)
-
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.prompt_depth, encoding_fast.prompt_depth)
-
-    @require_torch
-    @require_vision
-    def test_slow_fast_equivalence_batched(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
-
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
-            self.skipTest(
-                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(
+                size=size, keep_aspect_ratio=True, ensure_multiple_of=32, do_pad=True, size_divisor=51
             )
+            encodings[backend_name] = image_processor(image, prompt_depth=prompt_depth, return_tensors="pt")
+
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values
+            )
+            self.assertEqual(
+                encodings[reference_backend].prompt_depth.dtype, encodings[backend_name].prompt_depth.dtype
+            )
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].prompt_depth, encodings[backend_name].prompt_depth
+            )
+
+    def test_slow_fast_equivalence_batched(self):
+        """Override base class test to also compare prompt_depth."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         batch_size = self.image_processor_tester.batch_size
         images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
         prompt_depths = [np.random.random((192, 256)) for _ in range(batch_size)]
 
         size = {"height": 756, "width": 756}
-        image_processor_slow = self.image_processing_class(size=size, keep_aspect_ratio=False, ensure_multiple_of=32)
-        image_processor_fast = self.fast_image_processing_class(
-            size=size, keep_aspect_ratio=False, ensure_multiple_of=32
-        )
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(size=size, keep_aspect_ratio=False, ensure_multiple_of=32)
+            encodings[backend_name] = image_processor(images, prompt_depth=prompt_depths, return_tensors="pt")
 
-        encoding_slow = image_processor_slow(images, prompt_depth=prompt_depths, return_tensors="pt")
-        encoding_fast = image_processor_fast(images, prompt_depth=prompt_depths, return_tensors="pt")
-
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
-        self.assertEqual(encoding_slow.prompt_depth.dtype, encoding_fast.prompt_depth.dtype)
-
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.prompt_depth, encoding_fast.prompt_depth)
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values
+            )
+            self.assertEqual(
+                encodings[reference_backend].prompt_depth.dtype, encodings[backend_name].prompt_depth.dtype
+            )
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].prompt_depth, encodings[backend_name].prompt_depth
+            )

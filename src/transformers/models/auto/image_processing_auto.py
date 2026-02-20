@@ -102,7 +102,7 @@ else:
             ("detr", {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"}),
             ("dinat", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("dinov2", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
-            ("dinov3_vit", {"torchvision": "Dinov3VitImageProcessor"}),
+            ("dinov3_vit", {"torchvision": "DINOv3ViTImageProcessor"}),
             ("donut-swin", {"torchvision": "DonutImageProcessor", "pil": "DonutImageProcessorPil"}),
             ("dpt", {"torchvision": "DPTImageProcessor", "pil": "DPTImageProcessorPil"}),
             ("edgetam", {"torchvision": "Sam2ImageProcessor"}),

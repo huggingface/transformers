@@ -303,7 +303,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         model-specific processors that need to handle multiple image-like input types (e.g., images
         and segmentation maps) or need custom orchestration of the preprocessing pipeline.
         """
-        images = self._prepare_image_like_inputs(images, *args, **kwargs)
+        images = self._prepare_image_like_inputs(images, **kwargs)
         return self._preprocess(images, *args, **kwargs)
 
     def _standardize_kwargs(

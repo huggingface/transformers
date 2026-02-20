@@ -15,13 +15,8 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
-
-if is_torchvision_available():
-    from transformers import DINOv3ViTImageProcessorFast
 
 
 class DINOv3ViTImageProcessingTester:
@@ -90,10 +85,6 @@ class DINOv3ViTImageProcessingTester:
 @require_torch
 @require_vision
 class DINOv3ViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = None
-    fast_image_processing_class = DINOv3ViTImageProcessorFast if is_torchvision_available() else None
-    test_slow_image_processor = False
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = DINOv3ViTImageProcessingTester(self)
@@ -103,7 +94,7 @@ class DINOv3ViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -115,7 +106,7 @@ class DINOv3ViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"shortest_edge": 20})
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})

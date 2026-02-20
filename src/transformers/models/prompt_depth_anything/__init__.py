@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_prompt_depth_anything import PromptDepthAnythingConfig
     from .image_processing_prompt_depth_anything import PromptDepthAnythingImageProcessor
-    from .image_processing_prompt_depth_anything_fast import PromptDepthAnythingImageProcessorFast
+    from .image_processing_pil_prompt_depth_anything import PromptDepthAnythingImageProcessorPil
     from .modeling_prompt_depth_anything import (
         PromptDepthAnythingForDepthEstimation,
         PromptDepthAnythingPreTrainedModel,

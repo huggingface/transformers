@@ -11,25 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for PromptDepthAnything."""
+"""Image processor class for PromptDepthAnything."""
 
 import math
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
+import numpy as np
+
+from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...processing_utils import Unpack
-
-
-if TYPE_CHECKING:
-    from ...modeling_outputs import DepthEstimatorOutput
-import torch
-import torchvision.transforms.v2.functional as tvF
-
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_transforms import PaddingMode
+from ...image_transforms import pad as np_pad
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -37,12 +29,27 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
+    get_image_size,
 )
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
+    is_torch_available,
+    is_torchvision_available,
     requires_backends,
 )
+
+
+if TYPE_CHECKING:
+    from ...modeling_outputs import DepthEstimatorOutput
+
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
+
 from .image_processing_prompt_depth_anything import PromptDepthAnythingImageProcessorKwargs
 
 
@@ -60,13 +67,13 @@ def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
 
 
 def _get_resize_output_image_size(
-    input_image: "torch.Tensor",
+    input_image: np.ndarray,
     output_size: tuple[int, int],
     keep_aspect_ratio: bool,
     multiple: int,
 ) -> tuple[int, int]:
     """Get the output size for resizing an image."""
-    input_height, input_width = input_image.shape[-2:]
+    input_height, input_width = get_image_size(input_image, channel_dim=ChannelDimension.FIRST)
     output_height, output_width = output_size
 
     # determine new height and width
@@ -89,7 +96,7 @@ def _get_resize_output_image_size(
 
 
 @auto_docstring
-class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
+class PromptDepthAnythingImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "prompt_depth"]
 
     resample = PILImageResampling.BICUBIC
@@ -124,23 +131,22 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
     def resize_with_aspect_ratio(
         self,
-        image: "torch.Tensor",
+        image: np.ndarray,
         size: SizeDict,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
-        interpolation: Optional["tvF.InterpolationMode"] = None,
-    ) -> "torch.Tensor":
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+    ) -> np.ndarray:
         """
         Resize an image to target size while optionally maintaining aspect ratio and ensuring dimensions are multiples.
         """
-        # Set default interpolation to BICUBIC to match the slow processor (causes slight numerical differences otherwise)
-        if interpolation is None:
-            interpolation = tvF.InterpolationMode.BICUBIC
+        if resample is None:
+            resample = PILImageResampling.BICUBIC
 
         # Custom resize with aspect ratio preservation and ensure_multiple_of constraint
         output_size = _get_resize_output_image_size(
             image,
-            output_size=(size["height"], size["width"]),
+            output_size=(size.height, size.width),
             keep_aspect_ratio=keep_aspect_ratio,
             multiple=ensure_multiple_of,
         )
@@ -149,14 +155,14 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         return self.resize(
             image=image,
             size=SizeDict(height=output_size[0], width=output_size[1]),
-            interpolation=interpolation,
+            resample=resample,
         )
 
     def pad_image(
         self,
-        image: "torch.Tensor",
+        image: np.ndarray,
         size_divisor: int,
-    ) -> "torch.Tensor":
+    ) -> np.ndarray:
         """
         Center pad an image to be a multiple of size_divisor.
         """
@@ -168,18 +174,22 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
             pad_size_right = pad_size - pad_size_left
             return pad_size_left, pad_size_right
 
-        height, width = image.shape[-2:]
+        height, width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
 
         # Match slow processor and PyTorch convention: width->left/right, height->top/bottom
         pad_size_left, pad_size_right = _get_pad(width, size_divisor)
         pad_size_top, pad_size_bottom = _get_pad(height, size_divisor)
 
-        # Use torchvision padding for fast processing
-        # /!\ NB: torchvision tvF.pad expects (left, top, right, bottom) for the last two dims (W then H)
-        # Source: https://docs.pytorch.org/vision/main/generated/torchvision.transforms.Pad.html
-        # So: (left=width_pad, top=height_pad, right=width_pad, bottom=height_pad)
-        padding = [pad_size_left, pad_size_top, pad_size_right, pad_size_bottom]
-        padded_image = tvF.pad(image, padding=padding)
+        # NumPy padding: ((pad_top, pad_bottom), (pad_left, pad_right))
+        padding = ((pad_size_top, pad_size_bottom), (pad_size_left, pad_size_right))
+        padded_image = np_pad(
+            image,
+            padding,
+            mode=PaddingMode.CONSTANT,
+            constant_values=0,
+            data_format=ChannelDimension.FIRST,
+            input_data_format=ChannelDimension.FIRST,
+        )
 
         return padded_image
 
@@ -187,11 +197,12 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         prompt_depth: ImageInput | None,
+        do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Union[str, "torch.device"] | None = None,
-        prompt_scale_to_meter: float | None = None,
         return_tensors: str | TensorType | None = None,
-        **kwargs: Unpack[PromptDepthAnythingImageProcessorKwargs],
+        prompt_scale_to_meter: float | None = None,
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess image-like inputs, including the main images and optional prompt depth.
@@ -211,7 +222,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
                 images=prompt_depth,
                 do_convert_rgb=False,  # Depth maps should not be converted
                 input_data_format=input_data_format,
-                device=images[0].device if images else device,
+                device=device,
                 expected_ndims=2,
             )
 
@@ -220,6 +231,9 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
                 raise ValueError(
                     f"Number of prompt depth images ({len(processed_prompt_depths)}) does not match number of input images ({len(images)})"
                 )
+
+            if prompt_scale_to_meter is None:
+                prompt_scale_to_meter = self.prompt_scale_to_meter
 
             final_prompt_depths = []
             for depth in processed_prompt_depths:
@@ -230,14 +244,10 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
                     depth[0, 0] = depth[0, 0] + 1e-6  # Add small variation to avoid numerical issues
 
                 if depth.ndim == 2:  # Add channel dimension if needed
-                    depth = depth.unsqueeze(0)  # [H, W] -> [1, H, W] (channels first)
+                    depth = np.expand_dims(depth, 0)  # [H, W] -> [1, H, W] (channels first)
 
-                depth = depth.float()  # Convert to float32 to match slow processor
+                depth = depth.astype(np.float32)  # Convert to float32 to match slow processor
                 final_prompt_depths.append(depth)
-
-            if return_tensors:
-                # Stack while preserving the [H, W, C] format that the slow processor uses
-                final_prompt_depths = torch.stack(final_prompt_depths, dim=0)
 
             data["prompt_depth"] = final_prompt_depths
 
@@ -245,60 +255,42 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        keep_aspect_ratio: bool | None,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         do_pad: bool | None,
-        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        keep_aspect_ratio: bool | None = None,
         ensure_multiple_of: int | None = None,
-        return_tensors: str | TensorType | None = None,
         size_divisor: int | None = None,
         **kwargs,
-    ) -> "torch.Tensor":
+    ) -> list[np.ndarray]:
         """
         Override the base _preprocess method to handle custom PromptDepthAnything parameters.
         """
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-
-        for shape, stacked_images in grouped_images.items():
+        processed_images = []
+        for image in images:
             if do_resize:
-                stacked_images = self.resize_with_aspect_ratio(
-                    image=stacked_images,
+                image = self.resize_with_aspect_ratio(
+                    image=image,
                     size=size,
                     keep_aspect_ratio=keep_aspect_ratio,
                     ensure_multiple_of=ensure_multiple_of,
-                    interpolation=interpolation,
+                    resample=resample,
                 )
-            resized_images_grouped[shape] = stacked_images
-
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-
-        for shape, stacked_images in grouped_images.items():
-            stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
             if do_pad and size_divisor is not None:
-                stacked_images = self.pad_image(stacked_images, size_divisor)
-
-            processed_images_grouped[shape] = stacked_images
-
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-
-        # Only stack tensors if they all have the same shape and return_tensors is specified
-        if return_tensors == "pt":
-            processed_images = torch.stack(processed_images, dim=0)
+                image = self.pad_image(image, size_divisor)
+            processed_images.append(image)
 
         return processed_images
 
@@ -344,4 +336,4 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         return results
 
 
-__all__ = ["PromptDepthAnythingImageProcessorFast"]
+__all__ = ["PromptDepthAnythingImageProcessorPil"]

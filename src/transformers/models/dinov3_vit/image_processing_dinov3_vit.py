@@ -11,30 +11,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for DINOv3."""
+"""Image processor class for DINOv3."""
 
-from typing import Optional
-
-import torch
-import torchvision.transforms.v2.functional as tvF
-
-from transformers.image_processing_base import BatchFeature
-from transformers.image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
-from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, SizeDict
-from transformers.utils import (
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, SizeDict
+from ...utils import (
     TensorType,
     auto_docstring,
+    is_torch_available,
+    is_torchvision_available,
     logging,
 )
-from transformers.utils.import_utils import requires
 
+
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-@requires(backends=("torchvision", "torch"))
-class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
+class DINOv3ViTImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -50,7 +52,7 @@ class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -69,9 +71,7 @@ class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
             if do_rescale:
                 stacked_images = self.rescale(stacked_images, rescale_factor)
             if do_resize:
-                stacked_images = self.resize(
-                    image=stacked_images, size=size, interpolation=interpolation, antialias=True
-                )
+                stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=True)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -91,4 +91,4 @@ class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
-__all__ = ["DINOv3ViTImageProcessorFast"]
+__all__ = ["DINOv3ViTImageProcessor"]
