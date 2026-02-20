@@ -63,8 +63,7 @@ class NemotronHModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=4,
-        layers_block_type=["mamba", "moe", "attention", "moe"],
+        layers_block_type=["mamba", "moe", "mamba", "attention", "moe"],
         num_attention_heads=4,
         num_key_value_heads=2,
         head_dim=32,
@@ -99,8 +98,9 @@ class NemotronHModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
         self.layers_block_type = layers_block_type
+        # num_hidden_layers is now derived from layers_block_type length
+        self.num_hidden_layers = len(layers_block_type)
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.head_dim = head_dim
@@ -152,7 +152,6 @@ class NemotronHModelTester:
         return NemotronHConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
             layers_block_type=self.layers_block_type,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
@@ -611,33 +610,28 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         # Valid list - should work
         config = NemotronHConfig(
-            vocab_size=100, hidden_size=32, num_hidden_layers=4, layers_block_type=["mamba", "moe", "attention", "moe"]
+            vocab_size=100,
+            hidden_size=32,
+            layers_block_type=["mamba", "moe", "attention", "moe"]
         )
         self.assertEqual(len(config.layers_block_type), 4)
-
-        # Invalid list length - should raise error
-        with self.assertRaises(ValueError):
-            NemotronHConfig(
-                vocab_size=100,
-                hidden_size=32,
-                num_hidden_layers=4,
-                layers_block_type=["mamba", "moe", "attention"],  # length 3, but num_hidden_layers=4
-            )
+        self.assertEqual(config.num_hidden_layers, 4)
 
         # Invalid layer type - should raise error
         with self.assertRaises(ValueError):
             NemotronHConfig(
                 vocab_size=100,
                 hidden_size=32,
-                num_hidden_layers=4,
-                layers_block_type=["mamba", "moe", "attention", "invalid"],  # "invalid" is not valid
+                layers_block_type=["mamba", "moe", "attention", "invalid"]  # "invalid" is not valid
             )
 
     def test_layers_block_type(self):
         """Test that layers_block_type works correctly and backward compatibility"""
         # Create config with explicit list
         config = NemotronHConfig(
-            vocab_size=100, hidden_size=32, num_hidden_layers=4, layers_block_type=["mamba", "moe", "attention", "moe"]
+            vocab_size=100,
+            hidden_size=32,
+            layers_block_type=["mamba", "moe", "attention", "moe"]
         )
 
         # Test direct access to layers_block_type
@@ -646,16 +640,20 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.assertEqual(config.layers_block_type[2], "attention")
         self.assertEqual(config.layers_block_type[3], "moe")
 
+        # Test that num_hidden_layers is derived from layers_block_type length
+        self.assertEqual(config.num_hidden_layers, 4)
+
         # Test backward compatibility - hybrid_override_pattern property
         self.assertEqual(config.hybrid_override_pattern, "ME*E")
 
         # Test the model tester config
         config2 = self.model_tester.get_config()
-        self.assertEqual(len(config2.layers_block_type), 4)
+        self.assertEqual(len(config2.layers_block_type), 5)
         self.assertEqual(config2.layers_block_type[0], "mamba")
         self.assertEqual(config2.layers_block_type[1], "moe")
-        self.assertEqual(config2.layers_block_type[2], "attention")
-        self.assertEqual(config2.layers_block_type[3], "moe")
+        self.assertEqual(config2.layers_block_type[2], "mamba")
+        self.assertEqual(config2.layers_block_type[3], "attention")
+        self.assertEqual(config2.layers_block_type[4], "moe")
 
     def test_generate_with_and_without_cache(self):
         """Test that generation with and without cache produces identical outputs"""
@@ -709,6 +707,135 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             torch.equal(output_with_cache, output_without_cache),
             msg=f"Outputs differ:\n  With cache: {output_with_cache}\n  Without cache: {output_without_cache}",
         )
+
+    def test_legacy_hybrid_override_pattern(self):
+        """Test backward compatibility with legacy hybrid_override_pattern"""
+        # Create config using legacy hybrid_override_pattern
+        config = NemotronHConfig(
+            vocab_size=100,
+            hidden_size=32,
+            hybrid_override_pattern="ME*E"
+        )
+
+        # Test that it's converted to layers_block_type
+        self.assertEqual(config.layers_block_type, ["mamba", "moe", "attention", "moe"])
+        self.assertEqual(config.num_hidden_layers, 4)
+        self.assertEqual(config.hybrid_override_pattern, "ME*E")
+
+        # Test with longer pattern
+        config2 = NemotronHConfig(
+            vocab_size=100,
+            hidden_size=32,
+            hybrid_override_pattern="MEME*EME"
+        )
+        self.assertEqual(
+            config2.layers_block_type,
+            ["mamba", "moe", "mamba", "moe", "attention", "moe", "mamba", "moe"]
+        )
+        self.assertEqual(config2.num_hidden_layers, 8)
+
+    def test_num_hidden_layers_deprecated(self):
+        """Test that num_hidden_layers is now derived from layers_block_type length"""
+        # Test that num_hidden_layers is derived from layers_block_type
+        config = NemotronHConfig(
+            layers_block_type=["mamba", "moe", "attention", "moe", "mamba", "attention"]
+        )
+        self.assertEqual(config.num_hidden_layers, 6)
+
+        # Test that num_hidden_layers parameter is ignored when layers_block_type is provided
+        config2 = NemotronHConfig(
+            layers_block_type=["mamba", "moe", "attention"],
+            num_hidden_layers=10  # This should be ignored
+        )
+        # Should use layers_block_type length, not the parameter
+        self.assertEqual(config2.num_hidden_layers, 3)
+
+    def test_legacy_config_json_loading(self):
+        """Test loading legacy config.json with hybrid_override_pattern and num_hidden_layers"""
+        import json
+
+        # Create a legacy config.json
+        legacy_config = {
+            "model_type": "nemotron_3",
+            "vocab_size": 100,
+            "hidden_size": 32,
+            "num_hidden_layers": 6,
+            "hybrid_override_pattern": "MEME*E",
+            "num_attention_heads": 4,
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = f"{tmpdir}/config.json"
+            with open(config_path, "w") as f:
+                json.dump(legacy_config, f)
+
+            # Load the config
+            config = NemotronHConfig.from_json_file(config_path)
+
+            # Verify conversion
+            self.assertEqual(len(config.layers_block_type), 6)
+            self.assertEqual(config.num_hidden_layers, 6)
+            self.assertEqual(
+                config.layers_block_type,
+                ["mamba", "moe", "mamba", "moe", "attention", "moe"]
+            )
+            self.assertEqual(config.hybrid_override_pattern, "MEME*E")
+
+    def test_mtp_backward_compatibility(self):
+        """Test MTP backward compatibility with mtp_hybrid_override_pattern"""
+        config = NemotronHConfig(
+            layers_block_type=["mamba", "moe", "attention", "moe"],
+            num_nextn_predict_layers=2,
+            mtp_hybrid_override_pattern="*E"
+        )
+
+        # Verify conversion
+        self.assertEqual(config.mtp_layers_block_type, ["attention", "moe"])
+        self.assertEqual(config.mtp_hybrid_override_pattern, "*E")
+
+    def test_config_roundtrip_save_load(self):
+        """Test that config can be saved and loaded correctly"""
+        # Create config with new format
+        config1 = NemotronHConfig(
+            vocab_size=100,
+            hidden_size=32,
+            layers_block_type=["mamba", "attention", "moe", "attention"]
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Save
+            config1.save_pretrained(tmpdir)
+
+            # Load
+            config2 = NemotronHConfig.from_pretrained(tmpdir)
+
+            # Verify
+            self.assertEqual(config2.layers_block_type, ["mamba", "attention", "moe", "attention"])
+            self.assertEqual(config2.num_hidden_layers, 4)
+            self.assertEqual(config2.vocab_size, 100)
+            self.assertEqual(config2.hidden_size, 32)
+
+    def test_pattern_conversion_methods(self):
+        """Test the pattern conversion utility methods"""
+        # Test _pattern_to_list
+        pattern = "M*EME*"
+        layers_list = NemotronHConfig._pattern_to_list(pattern)
+        self.assertEqual(
+            layers_list,
+            ["mamba", "attention", "moe", "mamba", "moe", "attention"]
+        )
+
+        # Test _list_to_pattern
+        layers_list = ["mamba", "moe", "attention", "moe"]
+        pattern = NemotronHConfig._list_to_pattern(layers_list)
+        self.assertEqual(pattern, "ME*E")
+
+        # Test roundtrip
+        original_pattern = "ME*ME*E"
+        roundtrip_pattern = NemotronHConfig._list_to_pattern(
+            NemotronHConfig._pattern_to_list(original_pattern)
+        )
+        self.assertEqual(original_pattern, roundtrip_pattern)
 
 
 @require_torch
