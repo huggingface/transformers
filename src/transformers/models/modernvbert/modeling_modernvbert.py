@@ -38,7 +38,6 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_modernvbert import ModernVBertConfig
 
@@ -329,7 +328,6 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         return image_outputs
 
     @merge_with_config_defaults
-    @capture_outputs
     @auto_docstring(
         custom_intro="""
         Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to

@@ -32,7 +32,6 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..modernbert.modeling_modernbert import ModernBertPredictionHead
 from ..smolvlm.modeling_smolvlm import SmolVLMModel, SmolVLMPreTrainedModel
@@ -287,7 +286,6 @@ class ModernVBertModel(SmolVLMModel):
         self.post_init()
 
     @merge_with_config_defaults
-    @capture_outputs
     @auto_docstring(
         custom_intro="""
         Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
