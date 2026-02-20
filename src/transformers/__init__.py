@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.2.0.dev0"
+__version__ = "5.3.0.dev0"
 
 import importlib
 import sys
@@ -258,6 +258,7 @@ _import_structure = {
         "Mxfp4Config",
         "QuantoConfig",
         "QuarkConfig",
+        "SinqConfig",
         "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
@@ -761,6 +762,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import HqqConfig as HqqConfig
     from .utils.quantization_config import QuantoConfig as QuantoConfig
     from .utils.quantization_config import QuarkConfig as QuarkConfig
+    from .utils.quantization_config import SinqConfig as SinqConfig
     from .utils.quantization_config import SpQRConfig as SpQRConfig
     from .utils.quantization_config import TorchAoConfig as TorchAoConfig
     from .utils.quantization_config import VptqConfig as VptqConfig

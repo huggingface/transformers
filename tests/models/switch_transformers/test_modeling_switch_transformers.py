@@ -259,7 +259,7 @@ class SwitchTransformersModelTester:
             output_router_logits=True,
             output_hidden_states=True,
         )
-        self.parent.assertEqual(len(outputs), 13)
+        self.parent.assertEqual(len(outputs), 15)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
 

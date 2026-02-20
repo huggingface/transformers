@@ -291,7 +291,7 @@ class PhimoeTopKRouter(nn.Linear):
         routing_weights, selected_experts = sparsemixer(
             router_logits, jitter_eps=self.router_jitter_noise, training=self.training, top_k=self.top_k
         )
-        return routing_weights, selected_experts
+        return router_logits, routing_weights, selected_experts
 
 
 class PhimoeSparseMoeBlock(nn.Module):
@@ -325,7 +325,7 @@ class PhimoeSparseMoeBlock(nn.Module):
 
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_dim)
-        routing_weights, selected_experts = self.router(hidden_states)
+        _, routing_weights, selected_experts = self.router(hidden_states)
         final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
@@ -343,7 +343,7 @@ class PhimoeDecoderLayer(MixtralDecoderLayer):
 
 class PhimoePreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(PhimoeTopKRouter, layer_name="mlp.router", index=0),
+        "router_logits": OutputRecorder(PhimoeTopKRouter, index=0),
         "hidden_states": PhimoeDecoderLayer,
         "attentions": PhimoeAttention,
     }

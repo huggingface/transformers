@@ -66,7 +66,7 @@ def build_glob_alternation(
                 i += 1
                 body = src.replace("*", r".*")
                 branches.append(f"(?P<{group_name}>{body})")
-                tgt_group_to_glob[group_name] = glob.target_patterns[0]  # we index witht the first target
+                tgt_group_to_glob[group_name] = glob.target_patterns[0]  # we index with the first target
         else:
             group_name = f"g{i}"
             src_group_to_glob[group_name] = glob
@@ -249,9 +249,10 @@ class Transpose(ConversionOps):
     Transposes the given tensor along dim0 and dim1.
     """
 
-    def __init__(self, dim0: int = 0, dim1: int = 1):
+    def __init__(self, dim0: int = 0, dim1: int = 1, check_dims: bool = False):
         self.dim0 = dim0
         self.dim1 = dim1
+        self.check_dims = check_dims
 
     @torch.no_grad
     def convert(
@@ -260,7 +261,18 @@ class Transpose(ConversionOps):
         target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
+        # In this case, always transpose
+        if not self.check_dims:
+            return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
+        # In this case, check the shapes before transposing
+        else:
+            # NOTE: this rely on the first param name, so cannot be used for many-to-one operation
+            expected_shape = kwargs["model"].get_parameter(kwargs["full_layer_name"]).shape
+            # The shapes are the same: do NOT transpose
+            if tensor.shape == expected_shape:
+                return {target_pattern: tensor}
+            else:
+                return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
 
     def get_target_pattern(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
@@ -279,7 +291,7 @@ class Transpose(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return Transpose(dim0=self.dim1, dim1=self.dim0)
+        return Transpose(dim0=self.dim1, dim1=self.dim0, check_dims=self.check_dims)
 
 
 class PermuteForRope(ConversionOps):
@@ -442,7 +454,7 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
 class Force16BytesAlignment(ConversionOps):
     """
     Ensures that the given tensor is 16-bytes aligned in memory and clones it if not.
-    This garantees 16-bytes alignmenet for kernels / implementations that use TMA or SIMD instructions like torch._grouped_mm.
+    This guarantees 16-bytes alignment for kernels / implementations that use TMA or SIMD instructions like torch.nn.functional.grouped_mm.
     """
 
     @torch.no_grad()
@@ -717,7 +729,7 @@ class WeightConverter(WeightTransform):
         loading_info: LoadStateDictInfo | None = None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
-        # attribute during the whole proces
+        # attribute during the whole process
         collected_tensors = self.materialize_tensors()
 
         for op in self.operations:
@@ -726,7 +738,7 @@ class WeightConverter(WeightTransform):
                     collected_tensors,
                     source_patterns=self.source_patterns,
                     target_patterns=self.target_patterns,
-                    # Additional kwargs, ususally not used
+                    # Additional kwargs, usually not used
                     full_layer_name=layer_name,
                     model=model,
                     config=config,
@@ -812,12 +824,17 @@ def spawn_tp_materialize(
 
 
 def dot_natural_key(s: str):
-    parts = s.split(".")
-    for i, p in enumerate(parts):
-        # whole-segment digits -> int; otherwise leave as str
+    """Sort key for state-dict names: split on ``"."`` and sort digits numerically
+    and strings alphabetically. We emit a tuple at each point to sort ints
+    first and strings second to avoid int-string comparison failures.
+    """
+    result = []
+    for p in s.split("."):
         if p.isdigit():
-            parts[i] = int(p)
-    return parts
+            result.append((0, int(p)))
+        else:
+            result.append((1, p))
+    return result
 
 
 @contextmanager
@@ -828,7 +845,7 @@ def log_conversion_errors(
     op: list[ConversionOps] | ConversionOps | None = None,
 ):
     """Catch all exceptions during `convert` calls, and log the errors for later. Re-raise a `SkipParameters` exception
-    that will be catched later to skip the parameters that raised the original Exception."""
+    that will be caught later to skip the parameters that raised the original Exception."""
     try:
         yield
     except Exception as e:
@@ -940,7 +957,7 @@ def rename_source_key(
 ) -> tuple[str, str | None]:
     """
     Rename a source key given all the renaming and weight conversion patterns we have. Also takes care of adding/removing
-    the base model prefix during loading if necesary.
+    the base model prefix during loading if necessary.
     """
     renamed_key = source_key
     # 1. apply all renamings in turns (if multiple match, it's the responsibility of the mappings to make sure they
@@ -956,7 +973,7 @@ def rename_source_key(
         if source_pattern is not None:
             break
 
-    # 3. check if we need to add or remove prefix if necesary (only during loading, not saving)
+    # 3. check if we need to add or remove prefix if necessary (only during loading, not saving)
     if prefix is not None and meta_state_dict is not None:
         if (
             renamed_key.startswith(prefix)
@@ -1223,7 +1240,7 @@ def convert_and_load_state_dict_in_model(
     # Close the pool, independently of whether the code was interrupted or finished successfully
     finally:
         if thread_pool is not None:
-            # `cancel_futures=True` in case the program was interupted, to avoid wasting time on exit
+            # `cancel_futures=True` in case the program was interrupted, to avoid wasting time on exit
             thread_pool.shutdown(wait=False, cancel_futures=True)
 
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
