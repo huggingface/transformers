@@ -415,37 +415,18 @@ class GlmOcrModel(Glm4vModel):
 class GlmOcrForConditionalGeneration(Glm4vForConditionalGeneration):
     def prepare_inputs_for_generation(
         self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        is_first_iteration=False,
+        input_ids=None,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
+        model_inputs = super().prepare_inputs_for_generation(input_ids=input_ids, **kwargs)
+
+        past_key_values = kwargs.get("past_key_values")
+        use_cache = kwargs.get("use_cache", True)
+        is_first_iteration = kwargs.get("is_first_iteration", False)
+        image_grid_thw = kwargs.get("image_grid_thw")
+        video_grid_thw = kwargs.get("video_grid_thw")
 
         if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
@@ -454,9 +435,10 @@ class GlmOcrForConditionalGeneration(Glm4vForConditionalGeneration):
         # Keep behavior consistent between inferred and user-provided 2D `position_ids` in multimodal generation.
         model_position_ids = model_inputs.get("position_ids")
         if model_position_ids is not None and model_position_ids.ndim == 2:
-            past_length = 0
             if past_key_values is not None and hasattr(past_key_values, "get_seq_length"):
                 past_length = past_key_values.get_seq_length()
+            else:
+                past_length = 0
 
             if past_length != 0 and self.model.rope_deltas is not None:
                 rope_deltas = self.model.rope_deltas.view(-1, 1)
