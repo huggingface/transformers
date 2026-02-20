@@ -1406,6 +1406,22 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
         is_first_iteration=False,
         **kwargs,
     ):
+        has_vision_inputs = image_grid_thw is not None or video_grid_thw is not None
+
+        # Keep explicit text-only position ids on the multimodal packed path so it matches inferred generation.
+        if has_vision_inputs and position_ids is not None and position_ids.ndim == 2:
+            past_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+            if past_length == 0:
+                prep_kwargs = {
+                    "input_ids": input_ids,
+                    "attention_mask": attention_mask,
+                    "past_key_values": past_key_values,
+                    "image_grid_thw": image_grid_thw,
+                    "video_grid_thw": video_grid_thw,
+                }
+                position_ids = self._prepare_position_ids_for_generation(input_ids, prep_kwargs)
+            else:
+                position_ids = self._pack_position_ids_with_rope_deltas(position_ids)
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
         model_inputs = super().prepare_inputs_for_generation(
@@ -1610,6 +1626,34 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
+
+    def _pack_position_ids_with_rope_deltas(self, position_ids: torch.LongTensor) -> torch.LongTensor:
+        vision_positions = position_ids.unsqueeze(0).expand(3, -1, -1)
+        if self.model.rope_deltas is not None:
+            vision_positions = vision_positions + self.model.rope_deltas
+        return torch.cat([position_ids.unsqueeze(0), vision_positions], dim=0)
+
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs,
+        model_kwargs: dict,
+        is_encoder_decoder=False,
+        num_new_tokens=1,
+    ):
+        model_kwargs = super()._update_model_kwargs_for_generation(
+            outputs=outputs,
+            model_kwargs=model_kwargs,
+            is_encoder_decoder=is_encoder_decoder,
+            num_new_tokens=num_new_tokens,
+        )
+
+        has_vision_inputs = (
+            model_kwargs.get("image_grid_thw") is not None or model_kwargs.get("video_grid_thw") is not None
+        )
+        position_ids = model_kwargs.get("position_ids")
+        if has_vision_inputs and position_ids is not None and position_ids.ndim == 2:
+            model_kwargs["position_ids"] = self._pack_position_ids_with_rope_deltas(position_ids)
+        return model_kwargs
 
 
 __all__ = [
