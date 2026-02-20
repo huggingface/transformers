@@ -20,7 +20,7 @@ import torch
 from parameterized import parameterized
 
 from transformers import Timesfm2P5Config, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_flash_attn, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION, ModelTesterMixin
@@ -252,9 +252,13 @@ class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
             f"hidden_states max diff: {(hs_eager - hs_fa).abs().max().item():.2e}",
         )
 
+    @require_flash_attn
+    @require_torch_accelerator
     def test_flash_attn_2_inference_equivalence(self):
         self._test_flash_or_flex_attn_inference_equivalence("flash_attention_2")
 
+    @require_flash_attn
+    @require_torch_accelerator
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self._test_flash_or_flex_attn_inference_equivalence("flash_attention_2")
 
