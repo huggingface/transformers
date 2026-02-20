@@ -26,7 +26,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import can_return_tuple
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3NaiveMoe
 from ..glm4.modeling_glm4 import Glm4Attention
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
@@ -48,6 +48,7 @@ from ..glm4v.modeling_glm4v import (
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeCausalLMOutputWithPast,
+    Qwen3VLMoeModelOutputWithPast,
     load_balancing_loss_func,
 )
 
@@ -380,7 +381,7 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Glm4vMoeTextDecoderLayer,
         "attentions": Glm4vMoeTextAttention,
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": Glm4vMoeTextTopkRouter,
     }
 
     def _init_weights(self, module):
@@ -457,7 +458,7 @@ class Glm4vMoeTextModel(Glm4vTextModel):
 
         mask_kwargs = {
             "config": self.config,
-            "input_embeds": inputs_embeds,
+            "inputs_embeds": inputs_embeds,
             "attention_mask": attention_mask,
             "cache_position": cache_position,
             "past_key_values": past_key_values,
@@ -491,9 +492,18 @@ class Glm4vMoeTextModel(Glm4vTextModel):
         )
 
 
+class Glm4vMoeModelOutputWithPast(Qwen3VLMoeModelOutputWithPast):
+    pass
+
+
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_experts = config.text_config.num_local_experts
+        self.num_experts_per_tok = config.text_config.num_experts_per_tok
+
     @auto_docstring
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -554,6 +564,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
+            router_logits=outputs.router_logits,
         )
 
 

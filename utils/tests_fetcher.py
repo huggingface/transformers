@@ -78,6 +78,8 @@ CORE_FILES = (
     ".circleci/create_circleci_config.py",
     "src/transformers/modeling_utils.py",
     "src/transformers/core_model_loading.py",
+    "src/transformers/cache_utils.py",
+    "src/transformers/generation/utils.py",
 )
 
 

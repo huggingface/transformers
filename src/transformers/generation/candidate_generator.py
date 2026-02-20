@@ -303,6 +303,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
             self.assistant_kwargs = _prepare_attention_mask(
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
+            self.assistant_kwargs = _prepare_position_ids(
+                self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+            )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
 
             # This unsets `dynamic_full`, needed to initialize a new cache for the assistant. After the first forward
@@ -1000,6 +1003,9 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             self.assistant_kwargs = _prepare_attention_mask(
                 self.assistant_kwargs, assistant_input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
+            self.assistant_kwargs = _prepare_position_ids(
+                self.assistant_kwargs, assistant_input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+            )
         return super()._update_past_and_masks(assistant_input_ids, num_added_tokens=num_added_tokens)
 
     def _prepare_assistant_input_ids(self, target_input_ids: torch.LongTensor) -> torch.LongTensor:
@@ -1290,6 +1296,31 @@ def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_en
         elif mask_length_diff > 0:
             new_mask = cross_mask[:, -1:, :].repeat(1, mask_length_diff, 1)
             model_kwargs["image_attention_mask"] = torch.cat([cross_mask, new_mask], dim=1)
+
+    return model_kwargs
+
+
+def _prepare_position_ids(model_kwargs: dict[str, Any], new_length: int, is_encoder_decoder: bool) -> dict[str, Any]:
+    """Expands or crops the model's position ids for decoding purposes, to the defined length"""
+
+    position_key = "decoder_position_ids" if is_encoder_decoder else "position_ids"
+    if model_kwargs.get(position_key) is None:
+        return model_kwargs
+
+    positions = model_kwargs[position_key]
+    position_length_diff = new_length - positions.shape[-1]
+
+    if position_length_diff < 0:
+        model_kwargs[position_key] = positions[:, :position_length_diff]
+    elif position_length_diff > 0:
+        # Works for 2D and 3D position tensors
+        max_position_ids = positions[..., -1:] + 1
+        next_position_ids = max_position_ids.repeat((*[1] * (max_position_ids.ndim - 1), position_length_diff))
+        next_position_ranges = (
+            torch.arange(position_length_diff).expand_as(next_position_ids).to(next_position_ids.device)
+        )
+        next_position_ids += next_position_ranges
+        model_kwargs[position_key] = torch.cat([positions, next_position_ids], dim=-1)
 
     return model_kwargs
 

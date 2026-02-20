@@ -12,12 +12,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
 *This model was released on 2025-12-08 and added to Hugging Face Transformers on 2025-12-24.*
-
 
 # GlmAsr
 
@@ -41,7 +39,7 @@ Key capabilities include:
   in Chinese benchmarks (Wenet Meeting, Aishell-1, etc..).
 
 This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb) and [Yuxuan Zhang](https://huggingface.co/ZHANGYUXUAN-zR).
-you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512) for more details and our 
+you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512) for more details and our
 [github repo](https://github.com/zai-org/GLM-ASR).
 
 ## Usage
@@ -65,6 +63,7 @@ outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
 print(decoded_outputs)
 ```
+
 </hfoption>
 </hfoptions>
 

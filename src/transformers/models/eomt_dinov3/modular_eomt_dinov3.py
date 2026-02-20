@@ -28,7 +28,8 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTAttention,
     DINOv3ViTEmbeddings,
@@ -339,7 +340,8 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, EomtForUnive
 
     # We redefine forward here because EoMT-DINOv3 uses DINOv3 backbone components (RoPE embeddings, layers)
     # which require different integration than the base EoMT model that uses a separate encoder.
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

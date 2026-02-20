@@ -63,7 +63,8 @@ from ...utils import (
     torch_compilable_check,
     torch_int,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..ernie4_5.configuration_ernie4_5 import Ernie4_5Config
 from ..ernie4_5.modeling_ernie4_5 import (
     Ernie4_5DecoderLayer,
@@ -801,7 +802,8 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
     def __init__(self, config: PaddleOCRTextConfig):
         super().__init__(config)
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -842,7 +844,7 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -960,6 +962,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(sequence_length, hidden_size)`, *optional*):
@@ -977,7 +980,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         hidden_states = inputs_embeds
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
         split_hids = []
@@ -1003,6 +1006,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
 
         return BaseModelOutput(
@@ -1011,6 +1015,14 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
 
 
 class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
+    config: PaddleOCRVisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = "image"
+    _can_record_outputs = {
+        "hidden_states": PaddleOCRVisionEncoderLayer,
+        "attentions": PaddleOCRVisionAttention,
+    }
+
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__(config)
         self.config = config
@@ -1022,13 +1034,15 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
 
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
         Args:
@@ -1048,6 +1062,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
             cu_seqlens=cu_seqlens,
             attention_mask=attention_mask,
             image_grid_thw=image_grid_thw,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
@@ -1056,8 +1071,6 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=None,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -1065,10 +1078,6 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
     config: PaddleOCRVisionConfig
     main_input_name = "pixel_values"
     input_modalities = "image"
-    _can_record_outputs = {
-        "hidden_states": PaddleOCRVisionEncoderLayer,
-        "attentions": PaddleOCRVisionAttention,
-    }
 
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__(config)
@@ -1078,13 +1087,12 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         cu_seqlens: torch.Tensor,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
         Args:
@@ -1099,6 +1107,7 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
             pixel_values=pixel_values,
             cu_seqlens=cu_seqlens,
             image_grid_thw=image_grid_thw,
+            **kwargs,
         )
 
 
@@ -1224,22 +1233,13 @@ class PaddleOCRVLModel(Qwen2VLModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if position_ids is None:
-            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-            if self.rope_deltas is None or past_key_values_length == 0:
-                position_ids, rope_deltas = self.get_rope_index(
-                    input_ids=input_ids,
-                    image_grid_thw=image_grid_thw,
-                    attention_mask=attention_mask,
-                )
-                self.rope_deltas = rope_deltas
-            # then use the prev pre-calculated rope-deltas to get the correct position ids
-            else:
-                batch_size, seq_length, _ = inputs_embeds.shape
-                position_ids = torch.arange(seq_length, device=inputs_embeds.device)
-                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1)
-                delta = (past_key_values_length + self.rope_deltas).to(inputs_embeds.device)
-                delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
-                position_ids = position_ids + delta.to(position_ids.device)
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+            )
 
         outputs = self.language_model(
             input_ids=None,

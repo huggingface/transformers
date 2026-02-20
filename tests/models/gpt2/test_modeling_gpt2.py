@@ -108,8 +108,8 @@ class GPT2ModelTester(CausalLMModelTester):
     def prepare_config_and_inputs_for_common(self):
         # Overwritten: we want `token_type_ids` as part of the common inputs
         config_and_inputs = self.prepare_config_and_inputs(extra_inputs=True)
-        config, input_ids, _, token_type_ids, _, _, _, _ = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids}
+        config, input_ids, attention_mask, token_type_ids, _, _, _, _ = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "token_type_ids": token_type_ids}
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -185,6 +185,7 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
                     device=torch_device,
                 )
                 inputs_dict["input_ids"] = inputs_dict["labels"]
+                inputs_dict["attention_mask"] = torch.tril(torch.ones_like(inputs_dict["input_ids"]).to(torch_device))
                 inputs_dict["token_type_ids"] = inputs_dict["labels"]
                 inputs_dict["mc_token_ids"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.num_choices),

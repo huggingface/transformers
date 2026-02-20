@@ -15,6 +15,7 @@
 Torch utilities for the Trainer class.
 """
 
+import contextlib
 import copy
 import datetime
 import io
@@ -34,6 +35,7 @@ from typing import Any
 import numpy as np
 import torch
 import torch.distributed as dist
+from packaging import version
 from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
@@ -71,10 +73,7 @@ def get_dataloader_sampler(dataloader):
 
 def atleast_1d(tensor_or_array: torch.Tensor | np.ndarray):
     if isinstance(tensor_or_array, torch.Tensor):
-        if hasattr(torch, "atleast_1d"):
-            tensor_or_array = torch.atleast_1d(tensor_or_array)
-        elif tensor_or_array.ndim < 1:
-            tensor_or_array = tensor_or_array[None]
+        tensor_or_array = torch.atleast_1d(tensor_or_array)
     else:
         tensor_or_array = np.atleast_1d(tensor_or_array)
     return tensor_or_array
@@ -216,6 +215,70 @@ def distributed_concat(tensor: Any, num_total_examples: int | None = None) -> An
         return concat
     except AssertionError:
         raise AssertionError("Not currently using distributed training")
+
+
+def nested_gather(tensors, parallel_mode, name=None):
+    """
+    Gather value of `tensors` (tensor or list/tuple of nested tensors) across processes.
+    """
+    from .training_args import ParallelMode
+
+    if tensors is None:
+        return
+    if is_torch_xla_available():
+        if name is None:
+            name = "nested_gather"
+        tensors = nested_xla_mesh_reduce(tensors, name)
+    elif is_sagemaker_mp_enabled():
+        tensors = smp_gather(tensors)
+    elif parallel_mode == ParallelMode.DISTRIBUTED:
+        tensors = distributed_concat(tensors)
+    return tensors
+
+
+def is_attention_mask_causal(attention_mask):
+    """
+    Check if an attention mask is causal (compatible with causal attention).
+
+    Context parallelism only supports causal attention patterns. This function
+    checks if the provided attention mask is compatible.
+
+    Args:
+        attention_mask (`torch.Tensor`): The attention mask to check.
+
+    Returns:
+        `bool`: True if the mask is causal or compatible with causal attention.
+    """
+    if attention_mask is None:
+        return True  # No mask is considered causal (model uses default causal masking)
+
+    # Handle different mask dimensions
+    if attention_mask.dim() == 2:
+        # (batch_size, seq_len) - standard padding mask, compatible with causal attention
+        return True
+    elif attention_mask.dim() in [3, 4]:
+        # (batch_size, seq_len, seq_len) or (batch_size, num_heads, seq_len, seq_len)
+        # Check if it's lower triangular (causal)
+        seq_len = attention_mask.shape[-1]
+        if seq_len <= 1:
+            return True  # Single token or empty is always causal
+
+        # Take first batch and head (if 4D) for checking pattern
+        if attention_mask.dim() == 4:
+            mask = attention_mask[0, 0]  # First batch, first head
+        else:
+            mask = attention_mask[0]  # First batch
+
+        # Check if upper triangular part is masked (should be 0 or very negative for causal)
+        upper_triangular = torch.triu(mask, diagonal=1)
+
+        # For causal masks, upper triangular should be 0 or very negative (like -inf)
+        # Use a reasonable threshold to handle float precision issues
+        is_causal = torch.all(upper_triangular <= 1e-6) or torch.all(upper_triangular < -1e4)
+        return is_causal.item() if isinstance(is_causal, torch.Tensor) else is_causal
+
+    # For unknown dimensions, be conservative and reject
+    return False
 
 
 def distributed_broadcast_scalars(
@@ -728,34 +791,6 @@ class IterableDatasetShard(IterableDataset):
             return math.ceil(len(self.dataset) / (self.batch_size * self.num_processes)) * self.batch_size
 
 
-# In order to keep `trainer.py` compact and easy to understand, place any secondary PT Trainer
-# helper methods here
-
-
-def _get_learning_rate(self):
-    if self.is_deepspeed_enabled:
-        # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
-        # not run for the first few dozen steps while loss scale is too large, and thus during
-        # that time `get_last_lr` will fail if called during that warm up stage, so work around it:
-        try:
-            last_lr = self.lr_scheduler.get_last_lr()[0]
-        except AssertionError as e:
-            if "need to call step" in str(e):
-                logger.warning("tried to get lr value before scheduler/optimizer started stepping, returning lr=0")
-                last_lr = 0
-            else:
-                raise
-    else:
-        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-            last_lr = self.optimizer.param_groups[0]["lr"]
-        else:
-            last_lr = self.lr_scheduler.get_last_lr()[0]
-
-    if torch.is_tensor(last_lr):
-        last_lr = last_lr.item()
-    return last_lr
-
-
 def _secs2timedelta(secs):
     """
     Convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimal places.
@@ -791,6 +826,7 @@ def metrics_format(metrics: dict[str, float]) -> dict[str, float]:
     return metrics_copy
 
 
+# Trainer helper method: imported into the Trainer class and used as a method (takes `self` as first argument).
 def log_metrics(self, split, metrics):
     """
     Log metrics in a specially formatted way.
@@ -881,6 +917,7 @@ def log_metrics(self, split, metrics):
         print(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
 
 
+# Trainer helper method
 def save_metrics(self, split, metrics, combined=True):
     """
     Save metrics into a json file for that split, e.g. `train_results.json`.
@@ -919,6 +956,7 @@ def save_metrics(self, split, metrics, combined=True):
             json.dump(all_metrics, f, indent=4, sort_keys=True)
 
 
+# Trainer helper method
 def save_state(self):
     """
     Saves the Trainer state, since Trainer.save_model saves only the tokenizer with the model.
@@ -930,6 +968,42 @@ def save_state(self):
 
     path = os.path.join(self.args.output_dir, "trainer_state.json")
     self.state.save_to_json(path)
+
+
+# Trainer helper method
+def get_num_trainable_parameters(self) -> int:
+    """
+    Get the number of trainable parameters.
+    """
+    return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+
+
+# Trainer helper method
+def get_learning_rates(self) -> list[float]:
+    """
+    Returns the learning rate of each parameter from self.optimizer.
+    """
+    if self.optimizer is None:
+        raise ValueError("Trainer optimizer is None, please make sure you have setup the optimizer before.")
+    return [group["lr"] for group in self.optimizer.param_groups]
+
+
+# Trainer helper method
+def get_optimizer_group(self, param: str | torch.nn.parameter.Parameter | None = None):
+    """
+    Returns optimizer group for a parameter if given, else returns all optimizer groups for params.
+
+    Args:
+        param (`str` or `torch.nn.parameter.Parameter`, *optional*):
+            The parameter for which optimizer group needs to be returned.
+    """
+    if self.optimizer is None:
+        raise ValueError("Trainer optimizer is None, please make sure you have setup the optimizer before.")
+    if param is not None:
+        for group in self.optimizer.param_groups:
+            if param in group["params"]:
+                return group
+    return [group["params"] for group in self.optimizer.param_groups]
 
 
 def get_model_param_count(model, trainable_only=False):
@@ -1070,8 +1144,6 @@ class AcceleratorConfig:
             Any of the following (optional) keys are acceptable:
               num_steps (`int`): Will take precedence over [`~.TrainingArguments.gradient_accumulation_steps`] if
                 the latter is set to 1, otherwise an exception will be raised.
-              adjust_scheduler (`bool`): Whether to adjust the scheduler steps to account for [`~.TrainingArguments.gradient_accumulation_steps`].
-                The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`.
               sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch.
                 The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`.
         non_blocking (`bool`, *optional*, defaults to `False`):
@@ -1138,8 +1210,6 @@ class AcceleratorConfig:
             "Any of the following (optional) keys are acceptable: "
             "  num_steps (`int`): Will take precedence over [`~.TrainingArguments.gradient_accumulation_steps`] if "
             "    the latter is set to 1, otherwise an exception will be raised. "
-            "  adjust_scheduler (`bool`): Whether to adjust the scheduler steps to account for [`~.TrainingArguments.gradient_accumulation_steps`]. "
-            "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`. "
             "  sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch. "
             "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`."
         },
@@ -1240,3 +1310,27 @@ def set_rng_state_for_device(device_name, device_module, checkpoint_rng_state, i
     except Exception as e:
         # Log error if setting RNG state fails
         logger.error(err_template.format(backend=device_name, exception=e))
+
+
+def safe_globals():
+    """
+    Context manager to allowlist numpy objects for torch.load with weights_only=True.
+
+    Starting from version 2.4 PyTorch introduces a check for the objects loaded
+    with torch.load(weights_only=True). Starting from 2.6 weights_only=True becomes
+    a default and requires allowlisting of objects being loaded.
+
+    See: https://github.com/pytorch/pytorch/pull/137602
+    See: https://pytorch.org/docs/stable/notes/serialization.html#torch.serialization.add_safe_globals
+    See: https://github.com/huggingface/accelerate/pull/3036
+    """
+    if version.parse(torch.__version__).release < version.parse("2.6").release:
+        return contextlib.nullcontext()
+
+    np_core = np._core if version.parse(np.__version__) >= version.parse("2.0.0") else np.core
+    allowlist = [np_core.multiarray._reconstruct, np.ndarray, np.dtype]
+    # numpy >1.25 defines numpy.dtypes.UInt32DType, but below works for
+    # all versions of numpy
+    allowlist += [type(np.dtype(np.uint32))]
+
+    return torch.serialization.safe_globals(allowlist)
