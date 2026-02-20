@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     cleanup,
     require_torch,
     require_torch_accelerator,
-    run_test_using_subprocess,
     slow,
     torch_device,
 )

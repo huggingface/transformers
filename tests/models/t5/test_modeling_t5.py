@@ -43,7 +43,6 @@ if is_torch_available():
     import torch.nn.functional as F
 
     from transformers import (
-        AutoTokenizer,
         ByT5Tokenizer,
         GenerationConfig,
         T5EncoderModel,

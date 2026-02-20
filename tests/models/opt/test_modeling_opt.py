@@ -546,4 +546,3 @@ class OPTGenerationTest(unittest.TestCase):
             self.assertFalse(
                 torch.isnan(outputs.logits[0]).any().item()
             )  # the first logits could contain NaNs if it fails
-
