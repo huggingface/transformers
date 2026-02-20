@@ -1,5 +1,4 @@
-# coding=utf-8
-# Copyright 2023 The Google AI Language Team Authors and The HuggingFace Inc. team.
+# Copyright 2026 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,1109 +11,376 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for CharacterBert."""
+"""Tokenization classes for CharacterBERT."""
 
+from __future__ import annotations
 
-import collections
-import os
-import unicodedata
-import warnings
-from collections.abc import Mapping, Sized
-from typing import Dict, List, Optional, Tuple, Union
+from collections.abc import Mapping
 
-import numpy as np
-
-from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
-from ...tokenization_utils_base import LARGE_INTEGER, AddedToken, BatchEncoding, EncodedInput, TruncationStrategy
-from ...utils import (
-    PaddingStrategy,
-    TensorType,
-    is_tf_tensor,
-    is_torch_tensor,
-    logging,
-    to_py_obj,
-)
+from ...tokenization_python import AddedToken, PreTrainedTokenizer
+from ...utils import PaddingStrategy, logging
+from ..bert.tokenization_bert_legacy import BasicTokenizer
 
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {
-    "mlm_vocab_file": "mlm_vocab.txt",
-}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "mlm_vocab_file": {
-        "helboukkouri/character-bert-base-uncased": "https://huggingface.co/helboukkouri/character-bert-base-uncased/resolve/main/mlm_vocab.txt",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "helboukkouri/character-bert-base-uncased": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "helboukkouri/character-bert-base-uncased": {"max_word_length": 50, "do_lower_case": True},
-}
+VOCAB_FILES_NAMES = {}
 
 
-def load_vocab(vocab_file):
-    """Loads a vocabulary file into a dictionary."""
-    vocab = collections.OrderedDict()
-    with open(vocab_file, "r", encoding="utf-8") as reader:
-        tokens = reader.readlines()
-    for index, token in enumerate(tokens):
-        token = token.rstrip("\n")
-        vocab[token] = index
-    return vocab
+class _CharacterMapper:
+    beginning_of_sentence_character = 256
+    end_of_sentence_character = 257
+    beginning_of_word_character = 258
+    end_of_word_character = 259
+    padding_character = 260
+    mask_character = 261
 
+    def __init__(
+        self,
+        max_word_length: int,
+        bos_token: str,
+        eos_token: str,
+        pad_token: str,
+        mask_token: str,
+    ):
+        self.max_word_length = max_word_length
+        self.bos_token = bos_token
+        self.eos_token = eos_token
+        self.pad_token = pad_token
+        self.mask_token = mask_token
 
-def whitespace_tokenize(text):
-    """Runs basic whitespace cleaning and splitting on a piece of text."""
-    text = text.strip()
-    if not text:
-        return []
-    tokens = text.split()
-    return tokens
+        self.beginning_of_sentence_characters = self._make_bos_eos(self.beginning_of_sentence_character)
+        self.end_of_sentence_characters = self._make_bos_eos(self.end_of_sentence_character)
+        self.mask_characters = self._make_bos_eos(self.mask_character)
+        self.pad_characters = [-1] * self.max_word_length
 
+    def _make_bos_eos(self, character: int) -> list[int]:
+        char_ids = [self.padding_character] * self.max_word_length
+        char_ids[0] = self.beginning_of_word_character
+        char_ids[1] = character
+        char_ids[2] = self.end_of_word_character
+        return char_ids
 
-def special_token_character_ids(index, bow_character_id, eow_character_id, pad_character_id, max_word_length):
-    """Generates the character id sequence for a special token with a given index."""
-    assert index > 255, "index range 0-255 is reserved for actual characters"
-    character_ids = [pad_character_id] * max_word_length
-    character_ids[0] = bow_character_id
-    character_ids[1] = index
-    character_ids[2] = eow_character_id
-    # NOTE: we shift everything so that the PAD token
-    #       can be assigned the all zeros vector
-    character_ids = [(index + 1) for index in character_ids]
-    return character_ids
+    def convert_word_to_char_ids(self, word: str) -> list[int]:
+        if word == self.bos_token:
+            char_ids = self.beginning_of_sentence_characters
+        elif word == self.eos_token:
+            char_ids = self.end_of_sentence_characters
+        elif word == self.mask_token:
+            char_ids = self.mask_characters
+        elif word == self.pad_token:
+            char_ids = self.pad_characters
+        else:
+            word_encoded = word.encode("utf-8", "ignore")[: self.max_word_length - 2]
+            char_ids = [self.padding_character] * self.max_word_length
+            char_ids[0] = self.beginning_of_word_character
+            for index, byte in enumerate(word_encoded, start=1):
+                char_ids[index] = byte
+            char_ids[len(word_encoded) + 1] = self.end_of_word_character
+
+        # +1 offset to keep 0 as padding value.
+        return [char_id + 1 for char_id in char_ids]
+
+    def convert_char_ids_to_word(self, char_ids: list[int]) -> str:
+        if len(char_ids) != self.max_word_length:
+            raise ValueError(f"Invalid character token length {len(char_ids)}. Expected {self.max_word_length}.")
+
+        if char_ids == self.convert_word_to_char_ids(self.bos_token):
+            return self.bos_token
+        if char_ids == self.convert_word_to_char_ids(self.eos_token):
+            return self.eos_token
+        if char_ids == self.convert_word_to_char_ids(self.mask_token):
+            return self.mask_token
+        if char_ids == self.convert_word_to_char_ids(self.pad_token):
+            return self.pad_token
+
+        restored = [char_id - 1 for char_id in char_ids]
+        if not restored:
+            return ""
+
+        token_bytes = []
+        for char_id in restored[1:]:
+            if char_id in (self.end_of_word_character, self.padding_character):
+                break
+            if 0 <= char_id <= 255:
+                token_bytes.append(char_id)
+
+        if len(token_bytes) == 0:
+            return ""
+        return bytes(token_bytes).decode("utf-8", "ignore")
 
 
 class CharacterBertTokenizer(PreTrainedTokenizer):
     r"""
-    Construct a CHARACTER_BERT tokenizer.
+    Construct a CharacterBERT tokenizer.
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
-    this superclass for more information regarding those methods.
+    This tokenizer performs BERT-style basic tokenization at word level and converts each token into a fixed-length
+    sequence of character IDs that CharacterBERT consumes.
 
     Args:
-        mlm_vocab_file (`str`, *optional*):
-            File containing the vocabulary for Masked Language Modeling.
-        max_word_length (`int`, *optional*, defaults to 50):
-            The maximum token length in characters (or bytes since any non-ascii characters
-            are eventually converted into a sequence of UTF-8 bytes).
         do_lower_case (`bool`, *optional*, defaults to `True`):
-            Whether or not to lowercase the input when tokenizing.
-        do_basic_tokenize (`bool`, *optional*, defaults to `True`):
-            Whether or not to do basic tokenization before WordPiece.
-        never_split (`Iterable`, *optional*):
-            Collection of tokens which will never be split during tokenization. Only has an effect when
-            `do_basic_tokenize=True`
-        cls_character_id (`int`, *optional*, defaults to 256):
-            Id used to generate the character id vector for the `[CLS]` token.
-        sep_character_id (`int`, *optional*, defaults to 257):
-            Id used to generate the character id vector for the `[SEP]` token.
-        bow_character_id (`int`, *optional*, defaults to 258):
-            Id used to delimit the beginning of a token. First element in the character_id vector of the token.
-        eow_character_id (`int`, *optional*, defaults to 259):
-            Id used to delimit the end of a token. Last element in the character_id vector of the token, before padding.
-        pad_character_id (`int`, *optional*, defaults to 260):
-            Id used to delimit pad all character_id vectors to the same length, the maximum token length.
-        mask_character_id (`int`, *optional*, defaults to 261):
-            Id used to generate the character id vector for the `[MASK]` token.
-        bow_token (`int`, *optional*, defaults to `"[BOW]"`):
-            Symbol used to represent the beginning of a token. This is not really a token but is used to have an internal
-            id in the tokenizer object to build character id vectors.
-        eow_token (`int`, *optional*, defaults to `"[EOW]"`):
-            Symbol used to represent the end of a token. This is not really a token but is used to have an internal
-            id in the tokenizer object to build character id vectors.
-        sep_token (`str`, *optional*, defaults to `"[SEP]"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
-            sequence classification or for a text and a question for question answering. It is also used as the last
-            token of a sequence built with special tokens.
-        pad_token (`str`, *optional*, defaults to `"[PAD]"`):
-            The token used for padding, for example when batching sequences of different lengths.
-        cls_token (`str`, *optional*, defaults to `"[CLS]"`):
-            The classifier token which is used when doing sequence classification (classification of the whole sequence
-            instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        mask_token (`str`, *optional*, defaults to `"[MASK]"`):
-            The token used for masking values. This is the token used when training this model with masked language
-            modeling. This is the token which the model will try to predict.
+            Whether or not to lowercase input text.
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.
-
-            This should likely be deactivated for Japanese (see this
-            [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents (`bool`, *optional*):
-            Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original CHARACTER_BERT).
-        additional_special_tokens (`List[str]`, *optional*):
-            Additional special tokens used by the tokenizer.
+            Whether or not to strip accents.
+        max_characters_per_token (`int`, *optional*, defaults to 50):
+            Maximum number of characters represented for each token.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["input_ids", "token_type_ids", "attention_mask"]
 
     def __init__(
         self,
-        mlm_vocab_file=None,
-        max_word_length=50,
-        do_lower_case=True,
-        do_basic_tokenize=True,
-        never_split=None,
-        cls_character_id=256,
-        sep_character_id=257,
-        bow_character_id=258,
-        eow_character_id=259,
-        pad_character_id=260,
-        mask_character_id=261,
-        bow_token="[BOW]",
-        eow_token="[EOW]",
-        sep_token="[SEP]",
-        pad_token="[PAD]",
-        cls_token="[CLS]",
-        mask_token="[MASK]",
-        tokenize_chinese_chars=True,
-        strip_accents=None,
-        additional_special_tokens=None,
+        do_lower_case: bool = True,
+        tokenize_chinese_chars: bool = True,
+        strip_accents: bool | None = None,
+        max_characters_per_token: int = 50,
+        model_max_length: int = 512,
+        unk_token: str = "[UNK]",
+        sep_token: str = "[SEP]",
+        pad_token: str = "[PAD]",
+        cls_token: str = "[CLS]",
+        mask_token: str = "[MASK]",
         **kwargs,
     ):
-        self.vocab = {}
-        if mlm_vocab_file:
-            if not os.path.isfile(mlm_vocab_file):
-                raise ValueError(
-                    f"Can't find a vocabulary file at path '{mlm_vocab_file}'. To load the vocabulary from a pretrained"
-                    " model use `tokenizer = CharacterBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
-                )
-            self.mlm_vocab = load_vocab(mlm_vocab_file)
-        else:
-            self.mlm_vocab = {}
+        if max_characters_per_token < 8:
+            raise ValueError("`max_characters_per_token` must be at least 8.")
 
-        self.mlm_ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.mlm_vocab.items()])
-        self.do_basic_tokenize = do_basic_tokenize
-        if do_basic_tokenize:
-            self.basic_tokenizer = BasicTokenizer(
-                do_lower_case=do_lower_case,
-                never_split=never_split,
-                tokenize_chinese_chars=tokenize_chinese_chars,
-                strip_accents=strip_accents,
-            )
+        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
+        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        self._added_tokens_decoder = {
-            cls_character_id: AddedToken(cls_token, special=True) if isinstance(cls_token, str) else cls_token,
-            sep_character_id: AddedToken(sep_token, special=True) if isinstance(sep_token, str) else sep_token,
-            pad_character_id: AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token,
-            mask_character_id: AddedToken(mask_token, special=True) if isinstance(mask_token, str) else mask_token,
-            # These last two symbols are used to delimit the beginning and end of a token (character id vector)
-            bow_character_id: AddedToken(bow_token, special=True) if isinstance(bow_token, str) else bow_token,
-            eow_character_id: AddedToken(eow_token, special=True) if isinstance(eow_token, str) else eow_token,
+        self.do_lower_case = do_lower_case
+        self.tokenize_chinese_chars = tokenize_chinese_chars
+        self.strip_accents = strip_accents
+        self.max_characters_per_token = max_characters_per_token
+
+        self.basic_tokenizer = BasicTokenizer(
+            do_lower_case=do_lower_case,
+            tokenize_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
+        )
+
+        self._special_token_ids = {
+            str(pad_token): 0,
+            str(unk_token): 1,
+            str(cls_token): 2,
+            str(sep_token): 3,
+            str(mask_token): 4,
         }
+        self._id_to_special_token = {value: key for key, value in self._special_token_ids.items()}
+
+        self._character_mapper = _CharacterMapper(
+            max_word_length=max_characters_per_token,
+            bos_token=str(cls_token),
+            eos_token=str(sep_token),
+            pad_token=str(pad_token),
+            mask_token=str(mask_token),
+        )
+
+        self._pad_character_ids = self._character_mapper.convert_word_to_char_ids(str(pad_token))
+        self._cls_character_ids = self._character_mapper.convert_word_to_char_ids(str(cls_token))
+        self._sep_character_ids = self._character_mapper.convert_word_to_char_ids(str(sep_token))
 
         super().__init__(
-            mlm_vocab_file=None,
-            max_word_length=max_word_length,
             do_lower_case=do_lower_case,
-            do_basic_tokenize=do_basic_tokenize,
-            never_split=never_split,
-            cls_character_id=cls_character_id,
-            sep_character_id=sep_character_id,
-            bow_character_id=bow_character_id,
-            eow_character_id=eow_character_id,
-            pad_character_id=pad_character_id,
-            mask_character_id=mask_character_id,
-            bow_token=bow_token,
-            eow_token=eow_token,
+            tokenize_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
+            max_characters_per_token=max_characters_per_token,
+            unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
-            additional_special_tokens=additional_special_tokens or [bow_token, eow_token],
-            tokenize_chinese_chars=tokenize_chinese_chars,
-            strip_accents=strip_accents,
+            model_max_length=model_max_length,
+            token_type_ids_pattern="bert_style",
+            token_type_ids_include_special_tokens=True,
+            special_tokens_pattern="none",
             **kwargs,
         )
 
-        # Maximum number of characters (utf-8 bytes) per word
-        if max_word_length < 3:
-            raise ValueError("maximum word length has to be at least 3")
-        self.max_word_length = max_word_length
-
-        # Character delimiting the BEGINNING of a TOKEN
-        self.bow_character_id = bow_character_id
-        # Character delimiting the END of a TOKEN
-        self.eow_character_id = eow_character_id
-        # Pads a TOKEN up to the maximum character length
-        self.pad_character_id = pad_character_id
-
-        # Pads a sequence of TOKENS up to a desired length
-        # NOTE: since this is zero, actual characters' ids are assigned
-        # the range 1-256 instead of 0-255. This means that all character
-        # ids are eventually shifted by a +1 so that 0 can be kept for padding.
-        self.pad_character_ids = [0] * max_word_length
-
     @property
-    def do_lower_case(self):
-        return self.basic_tokenizer.do_lower_case
+    def vocab_size(self) -> int:
+        return len(self._special_token_ids)
 
-    @property
-    def vocab_size(self):
-        return len(self.vocab)
+    def get_vocab(self) -> dict[str, int]:
+        vocab = dict(self._special_token_ids)
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
-    @property
-    def mlm_vocab_size(self):
-        return len(self.mlm_vocab)
+    def _tokenize(self, text: str, **kwargs) -> list[str]:
+        return self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens)
 
-    def get_vocab(self):
-        return dict(self.vocab, **self.added_tokens_encoder)
+    def _convert_token_to_id(self, token: str) -> int | list[int]:
+        if token in self._special_token_ids:
+            return self._special_token_ids[token]
+        return self._character_mapper.convert_word_to_char_ids(token)
 
-    def get_mlm_vocab(self):
-        return self.mlm_vocab
+    def _convert_id_to_token(self, index: int) -> str:
+        return self._id_to_special_token.get(index, str(self.unk_token))
 
-    # NOTE: We override this method to dynamically compute special token ids in the form of character id vectors.
-    #       For non-special tokens, we use the _convert_token_to_id method to get the character id sequence.
-    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
-        """
-        Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
-        it with indices starting from length of the current vocabulary. Special tokens are sometimes already in the
-        vocab which is why they have to be handled specifically.
+    def _resolve_placeholder_token(self, token_id: int) -> str | None:
+        token = self._id_to_special_token.get(token_id)
+        if token is not None:
+            return token
 
-        Args:
-            new_tokens (`List[str]`or `List[tokenizers.AddedToken]`):
-                Token(s) to add in vocabulary. A token is counted as added if it's not already in the vocabulary
-                (tested by checking if the tokenizer assign the index of the `unk_token` to them). If a token is part
-                of the vocabulary then we simply mark this token as an `AddedToken` which allows to control the
-                stripping and normalization of this token. This is NOT possible in `tokenizers`.
-            special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the tokens should be added as special tokens.
+        added_token = self.added_tokens_decoder.get(token_id)
+        if added_token is not None:
+            return added_token.content
 
-        Returns:
-            `int`: The number of tokens actually added to the vocabulary.
-        """
-        added_tokens = 0
-        if new_tokens is None:
-            return added_tokens
-        current_vocab = self.get_vocab().copy()
-        new_idx = 256 + len(current_vocab)  # all ids up to 255 are reserved for actual utf-8 bytes/characters
-        for token in new_tokens:
-            if not isinstance(token, (str, AddedToken)):
-                raise TypeError(f"Token {token} is not a string but a {type(token)}.")
-            if str(token) == "":
-                continue
-            if isinstance(token, str):
-                if token in self._added_tokens_encoder:
-                    continue
-                else:
-                    # very important for fast and slow equivalence!
-                    is_special = token in self.all_special_tokens or special_tokens
-                    token = AddedToken(
-                        token, rstrip=False, lstrip=False, normalized=not is_special, special=is_special
-                    )
-            elif special_tokens:
-                # doing token.special=True changes the normalization! will fix in rust
-                # this is important and the only reason why the AddedTokens in each class are normalized by default
-                token.__setstate__({"special": True, "normalized": token.normalized})
-            if token in self._added_tokens_decoder:
-                continue
-            if not token.special and token.normalized and getattr(self, "do_lower_case", False):
-                # Normalize if requested
-                token.content = token.content.lower()
-            if token.content not in current_vocab:
-                token_index = new_idx + added_tokens
-                current_vocab[token.content] = token_index
-                added_tokens += 1
-            else:
-                token_index = current_vocab[token.content]
+        return None
 
-            if token.special and str(token) not in self.all_special_tokens:
-                self._additional_special_tokens.append(token)
-            # the setter automatically updates the reverse map
-            self._added_tokens_decoder[token_index] = token
-            self._added_tokens_encoder[token.content] = token_index
-            if self.verbose:
-                logger.info(f"Adding {token} to the vocabulary")
+    def _normalize_token_id(self, token_id: int | list[int]) -> list[int]:
+        if isinstance(token_id, list):
+            return token_id
 
-        self._update_trie()
-        return added_tokens
-
-    def _tokenize(self, text, split_special_tokens=False):
-        split_tokens = []
-        if self.do_basic_tokenize:
-            for token in self.basic_tokenizer.tokenize(
-                text, never_split=self.all_special_tokens if not split_special_tokens else None
-            ):
-                split_tokens.append(token)
-        else:
-            split_tokens = whitespace_tokenize(text)
-        return split_tokens
-
-    def convert_mlm_token_to_id(self, token):
-        """Converts a token (str) into an id using the MLM vocab."""
-        return self.mlm_vocab.get(token, self.mlm_vocab.get(self.unk_token))
-
-    def convert_mlm_id_to_token(self, index):
-        """Converts an index (integer) into a token (str) using the MLM vocab."""
-        return self.mlm_ids_to_tokens.get(index, self.unk_token)
-
-    # NOTE: the following two methods have misleading names since we are
-    # working with character id lists instead of standard token ids.
-    # Changing these names breaks a lot of things so we keep them for now.
-    def _convert_token_to_id_with_added_voc(self, token):
+        token = self._resolve_placeholder_token(token_id)
         if token is None:
-            return None
-
-        if token in self._added_tokens_encoder:
-            if token == self.pad_token:
-                return self.pad_character_ids
-            return special_token_character_ids(
-                index=self._added_tokens_encoder[token],
-                bow_character_id=self.bow_character_id,
-                eow_character_id=self.eow_character_id,
-                pad_character_id=self.pad_character_id,
-                max_word_length=self.max_word_length,
+            raise ValueError(
+                "CharacterBERT expects token-level character IDs."
+                " Pass raw text or pre-tokenized text instead of pre-indexed integer token IDs."
             )
-        return self._convert_token_to_id(token)
+        return self._character_mapper.convert_word_to_char_ids(token)
 
-    def _convert_token_to_id(self, token):
-        """Converts a token (str) into a list of character ids (integer)."""
-        token_bytes = token.encode("utf-8", "ignore")[: (self.max_word_length - 2)]
-        character_ids = [self.pad_character_id] * self.max_word_length
-        character_ids[0] = self.bow_character_id
-        for k, index in enumerate(token_bytes, start=1):
-            character_ids[k] = index
-        character_ids[len(token_bytes) + 1] = self.eow_character_id
-        # NOTE: we shift everything so that the PAD token
-        #       can be assigned the all zeros vector
-        character_ids = [(index + 1) for index in character_ids]
-        return character_ids
+    def convert_ids_to_tokens(self, ids: int | list[int], skip_special_tokens: bool = False) -> str | list[str]:
+        if isinstance(ids, int):
+            token = self._resolve_placeholder_token(ids)
+            token = token if token is not None else str(self.unk_token)
+            if skip_special_tokens and token in self.all_special_tokens:
+                return ""
+            return token
 
-    def convert_ids_to_tokens(
-        self, ids: Union[List[int], List[List[int]]], skip_special_tokens: bool = False
-    ) -> Union[str, List[str]]:
-        """
-        Converts a single character_ids vector or a sequence of vectors to a token or a sequence of tokens,
-        using the vocabulary and added tokens.
+        if len(ids) > 0 and isinstance(ids[0], list):
+            tokens = []
+            for char_token in ids:
+                token = self._character_mapper.convert_char_ids_to_word(char_token)
+                if skip_special_tokens and token in self.all_special_tokens:
+                    continue
+                tokens.append(token)
+            return tokens
 
-        Args:
-            ids (`List[int]` or `List[List[int]]`):
-                The token vector (or token vectors) to convert to tokens.
-                Each vector is a list of character ids.
-            skip_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not to remove special tokens in the decoding.
+        if len(ids) == self.max_characters_per_token:
+            token = self._character_mapper.convert_char_ids_to_word(ids)
+            if skip_special_tokens and token in self.all_special_tokens:
+                return ""
+            return token
 
-        Returns:
-            `str` or `List[str]`: The decoded token(s).
-        """
-        # NOTE: this condition had to be changed to account for the fact
-        #       that we are working with character id vectors
-
-        if isinstance(ids, list) and isinstance(ids[0], int):
-            index = ids[1] - 1
-            if index in self._added_tokens_decoder:
-                return self._added_tokens_decoder[index].content
-            elif ids == self.pad_character_ids:
-                return self.pad_token
-            else:
-                return self._convert_id_to_token(ids)
         tokens = []
-        for character_ids in ids:
-            if skip_special_tokens and character_ids in self.all_special_ids:
-                continue
-            index = character_ids[1] - 1
-            if index in self._added_tokens_decoder:
-                tokens.append(self._added_tokens_decoder[index].content)
-            elif character_ids == self.pad_character_ids:
-                tokens.append(self.pad_token)
+        for token_id in ids:
+            if isinstance(token_id, list):
+                token = self._character_mapper.convert_char_ids_to_word(token_id)
             else:
-                tokens.append(self._convert_id_to_token(character_ids))
+                token = self._resolve_placeholder_token(token_id)
+                token = token if token is not None else str(self.unk_token)
+            if skip_special_tokens and token in self.all_special_tokens:
+                continue
+            tokens.append(token)
         return tokens
 
-    def _convert_id_to_token(self, character_ids: List[int]):
-        """Converts a list of character ids (integer) intp a token (str)."""
-        assert len(character_ids) == self.max_word_length, (
-            f"Got a character sequence of length {len(character_ids)} while "
-            f"`max_word_length={self.max_word_length}`"
-        )
-        character_ids_ = [(index - 1) for index in character_ids]
-        utf8_codes = list(
-            filter(
-                lambda x: (
-                    (x != self.pad_character_id) and (x != self.bow_character_id) and (x != self.eow_character_id)
-                ),
-                character_ids_,
-            )
-        )
-        return bytes(utf8_codes).decode("utf-8")
-
-    # NOTE: This whole override is due to a minor change due to convert_tokens_to_ids returning character id vectors..
-    # see: https://github.com/huggingface/transformers/blob/v4.38.2/src/transformers/tokenization_utils.py#L1003C62-L1003C118
-    def _decode(
-        self,
-        token_ids: List[int],
-        skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
-        spaces_between_special_tokens: bool = True,
-        **kwargs,
-    ) -> str:
-        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
-
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-        legacy_added_tokens = set(self._added_tokens_encoder.keys()) - set(self.all_special_tokens) | {
-            token for token in self.additional_special_tokens
-        }
-        # To avoid mixing byte-level and unicode for byte-level BPT
-        # we need to build string separately for added tokens and byte-level tokens
-        # cf. https://github.com/huggingface/transformers/issues/1133
-        sub_texts = []
-        current_sub_text = []
-        # TODO @ArthurZ in version 5, special tokens should be handled in convert_tokens_to_string, while _convert_tokens_to_string
-        for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
-                continue
-            if token in legacy_added_tokens:
-                if current_sub_text:
-                    string = self.convert_tokens_to_string(current_sub_text)
-                    if len(string) > 0:
-                        sub_texts.append(string)
-                    current_sub_text = []
-                sub_texts.append(token)
-            else:
-                current_sub_text.append(token)
-        if current_sub_text:
-            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-
-        if spaces_between_special_tokens:
-            text = " ".join(sub_texts)
-        else:
-            text = "".join(sub_texts)
-
-        clean_up_tokenization_spaces = (
-            clean_up_tokenization_spaces
-            if clean_up_tokenization_spaces is not None
-            else self.clean_up_tokenization_spaces
-        )
-        if clean_up_tokenization_spaces:
-            clean_text = self.clean_up_tokenization(text)
-            return clean_text
-        else:
-            return text
-
-    def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (string) in a single string."""
-        out_string = " ".join(tokens).replace(" ##", "").strip()
-        return out_string
+    def convert_tokens_to_string(self, tokens: list[str]) -> str:
+        return " ".join(tokens).strip()
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[List[int]], token_ids_1: Optional[List[List[int]]] = None
-    ) -> List[List[int]]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A CHARACTER_BERT sequence has the following format:
-
-        - single sequence: `[CLS] X [SEP]`
-        - pair of sequences: `[CLS] A [SEP] B [SEP]`
-
-        Args:
-            token_ids_0 (`List[List[int]]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[List[int]]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[List[int]]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
+        self,
+        token_ids_0: list[int | list[int]],
+        token_ids_1: list[int | list[int]] | None = None,
+    ) -> list[list[int]]:
+        first = [self._normalize_token_id(token_id) for token_id in token_ids_0]
         if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
-        cls = [self.cls_token_id]
-        sep = [self.sep_token_id]
-        return cls + token_ids_0 + sep + token_ids_1 + sep
+            return [self._cls_character_ids] + first + [self._sep_character_ids]
+
+        second = [self._normalize_token_id(token_id) for token_id in token_ids_1]
+        return [self._cls_character_ids] + first + [self._sep_character_ids] + second + [self._sep_character_ids]
 
     def get_special_tokens_mask(
         self,
-        token_ids_0: List[List[int]],
-        token_ids_1: Optional[List[List[int]]] = None,
+        token_ids_0: list[int],
+        token_ids_1: list[int] | None = None,
         already_has_special_tokens: bool = False,
-    ) -> List[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` method.
-
-        Args:
-            token_ids_0 (`List[List[int]]`):
-                List of list of character IDs (each token is a list of character ids).
-            token_ids_1 (`List[List[int]]`, *optional*):
-                Optional second list of list of character IDs for sequence pairs.
-            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-
+    ) -> list[int]:
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
-        if token_ids_1 is not None:
-            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
-        return [1] + ([0] * len(token_ids_0)) + [1]
+        if token_ids_1 is None:
+            return [1] + ([0] * len(token_ids_0)) + [1]
+        return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[List[int]], token_ids_1: Optional[List[List[int]]] = None
-    ) -> List[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A CHARACTER_BERT sequence
-        pair mask has the following format:
-
-        ```
-        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-        | first sequence    | second sequence |
-        ```
-
-        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
-
-        Args:
-            token_ids_0 (`List[List[int]]`):
-                List of IDs.
-            token_ids_1 (`List[List[int]]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
+        self,
+        token_ids_0: list[int],
+        token_ids_1: list[int] | None = None,
+    ) -> list[int]:
+        cls = [0]
+        sep = [0]
         if token_ids_1 is None:
-            return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+            return cls + ([0] * len(token_ids_0)) + sep
+        return cls + ([0] * len(token_ids_0)) + sep + ([1] * len(token_ids_1)) + [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        logger.warning("CharacterBERT does not have a token vocabulary. Skipping saving `vocab.txt`.")
-        return ()
-
-    def save_mlm_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        # NOTE: CharacterBERT has no token vocabulary, this is just to allow
-        # saving tokenizer configuration via CharacterBertTokenizer.save_pretrained
-        index = 0
-        if os.path.isdir(save_directory):
-            vocab_file = os.path.join(
-                save_directory,
-                (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["mlm_vocab_file"],
-            )
-        else:
-            vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
-        with open(vocab_file, "w", encoding="utf-8") as writer:
-            for token, token_index in sorted(self.mlm_vocab.items(), key=lambda kv: kv[1]):
-                if index != token_index:
-                    logger.warning(
-                        f"Saving MLM vocabulary to {vocab_file}: vocabulary indices are not consecutive."
-                        " Please check that the vocabulary is not corrupted!"
-                    )
-                    index = token_index
-                writer.write(token + "\n")
-                index += 1
-        return (vocab_file,)
-
-    def _save_pretrained(
+    def _pad(
         self,
-        save_directory: Union[str, os.PathLike],
-        file_names: Tuple[str],
-        legacy_format: Optional[bool] = None,
-        filename_prefix: Optional[str] = None,
-    ):
-        file_names = super()._save_pretrained(
-            save_directory=save_directory,
-            file_names=file_names,
-            legacy_format=legacy_format,
-            filename_prefix=filename_prefix,
-        )
-
-        mlm_vocab_files = self.save_mlm_vocabulary(save_directory, filename_prefix=filename_prefix)
-        return file_names + mlm_vocab_files
-
-    # NOTE: this override is a workaround to make the attention mask computation
-    # rely on the tokens axis (number of tokens in the sequence) rather than the
-    # characters axis (number of characters per word).
-    def pad(
-        self,
-        encoded_inputs: Union[
-            BatchEncoding,
-            List[BatchEncoding],
-            Dict[str, EncodedInput],
-            Dict[str, List[EncodedInput]],
-            List[Dict[str, EncodedInput]],
-        ],
-        padding: Union[bool, str, PaddingStrategy] = True,
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        verbose: bool = True,
-    ) -> BatchEncoding:
-        """
-        Pad a single encoded input or a batch of encoded inputs up to predefined length or to the max sequence length
-        in the batch.
-
-        Padding side (left/right) padding token ids are defined at the tokenizer level (with `self.padding_side`,
-        `self.pad_token_id` and `self.pad_token_type_id`).
-
-        Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to encode the
-        text followed by a call to the `pad` method to get a padded encoding.
-
-        <Tip>
-
-        If the `encoded_inputs` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
-        result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
-        PyTorch tensors, you will lose the specific device of your tensors however.
-
-        </Tip>
-
-        Args:
-            encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `Dict[str, List[int]]`, `Dict[str, List[List[int]]` or `List[Dict[str, List[int]]]`):
-                Tokenized inputs. Can represent one input ([`BatchEncoding`] or `Dict[str, List[int]]`) or a batch of
-                tokenized inputs (list of [`BatchEncoding`], *Dict[str, List[List[int]]]* or *List[Dict[str,
-                List[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
-                collate function.
-
-                Instead of `List[List[int]]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors), see
-                the note above for the return type.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
-                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                 index) among:
-
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            pad_to_multiple_of (`int`, *optional*):
-                If set will pad the sequence to a multiple of the provided value.
-
-                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                `>= 7.5` (Volta).
-            return_attention_mask (`bool`, *optional*):
-                Whether to return the attention mask. If left to the default, will return the attention mask according
-                to the specific tokenizer's default, defined by the `return_outputs` attribute.
-
-                [What are attention masks?](../glossary#attention-mask)
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return Numpy `np.ndarray` objects.
-            verbose (`bool`, *optional*, defaults to `True`):
-                Whether or not to print more information and warnings.
-        """
-        if self.__class__.__name__.endswith("Fast"):
-            if not self.deprecation_warnings.get("Asking-to-pad-a-fast-tokenizer", False):
-                logger.warning_advice(
-                    f"You're using a {self.__class__.__name__} tokenizer. Please note that with a fast tokenizer,"
-                    " using the `__call__` method is faster than using a method to encode the text followed by a call"
-                    " to the `pad` method to get a padded encoding."
-                )
-                self.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = True
-
-        # If we have a list of dicts, let's convert it in a dict of lists
-        # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
-        if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
-            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
-
-        # The model's main input name, usually `input_ids`, has be passed for padding
-        if self.model_input_names[0] not in encoded_inputs:
-            raise ValueError(
-                "You should supply an encoding or a list of encodings to this method "
-                f"that includes {self.model_input_names[0]}, but you provided {list(encoded_inputs.keys())}"
-            )
+        encoded_inputs: dict[str, list[int]] | Mapping,
+        max_length: int | None = None,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_attention_mask: bool | None = None,
+    ) -> dict:
+        if return_attention_mask is None:
+            return_attention_mask = "attention_mask" in self.model_input_names
 
         required_input = encoded_inputs[self.model_input_names[0]]
-
-        if required_input is None or (isinstance(required_input, Sized) and len(required_input) == 0):
-            if return_attention_mask:
-                encoded_inputs["attention_mask"] = []
-            return encoded_inputs
-
-        # If we have PyTorch/TF/NumPy tensors/arrays as inputs, we cast them as python objects
-        # and rebuild them afterwards if no return_tensors is specified
-        # Note that we lose the specific device the tensor may be on for PyTorch
-
-        first_element = required_input[0]
-        if isinstance(first_element, (list, tuple)):
-            # first_element might be an empty list/tuple in some edge cases so we grab the first non empty element.
-            for item in required_input:
-                if len(item) != 0:
-                    first_element = item[0]
-                    break
-        # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
-        if not isinstance(first_element, (int, list, tuple)):
-            if is_tf_tensor(first_element):
-                return_tensors = "tf" if return_tensors is None else return_tensors
-            elif is_torch_tensor(first_element):
-                return_tensors = "pt" if return_tensors is None else return_tensors
-            elif isinstance(first_element, np.ndarray):
-                return_tensors = "np" if return_tensors is None else return_tensors
-            else:
-                raise ValueError(
-                    f"type of {first_element} unknown: {type(first_element)}. "
-                    "Should be one of a python, numpy, pytorch or tensorflow object."
-                )
-
-            for key, value in encoded_inputs.items():
-                encoded_inputs[key] = to_py_obj(value)
-
-        # Convert padding_strategy in PaddingStrategy
-        padding_strategy, _, max_length, _ = self._get_padding_truncation_strategies(
-            padding=padding, max_length=max_length, verbose=verbose
-        )
-
-        required_input = encoded_inputs[self.model_input_names[0]]
-        # NOTE: this condition is the workaround. Previously:
-        # `if required_input and not isinstance(required_input[0], (list, tuple))`
-        if required_input and not (
-            isinstance(required_input[0], (list, tuple)) and isinstance(required_input[0][0], (list, tuple))
-        ):
-            encoded_inputs = self._pad(
-                encoded_inputs,
-                max_length=max_length,
-                padding_strategy=padding_strategy,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-            )
-            return BatchEncoding(encoded_inputs, tensor_type=return_tensors)
-
-        batch_size = len(required_input)
-        assert all(
-            len(v) == batch_size for v in encoded_inputs.values()
-        ), "Some items in the output dictionary have a different batch size than others."
 
         if padding_strategy == PaddingStrategy.LONGEST:
-            max_length = max(len(inputs) for inputs in required_input)
-            padding_strategy = PaddingStrategy.MAX_LENGTH
+            max_length = len(required_input)
 
-        batch_outputs = {}
-        for i in range(batch_size):
-            inputs = {k: v[i] for k, v in encoded_inputs.items()}
-            outputs = self._pad(
-                inputs,
-                max_length=max_length,
-                padding_strategy=padding_strategy,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-            )
+        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
-            for key, value in outputs.items():
-                if key not in batch_outputs:
-                    batch_outputs[key] = []
-                batch_outputs[key].append(value)
+        needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
 
-        return BatchEncoding(batch_outputs, tensor_type=return_tensors)
+        if return_attention_mask and "attention_mask" not in encoded_inputs:
+            encoded_inputs["attention_mask"] = [1] * len(required_input)
 
-    def _get_padding_truncation_strategies(
-        self, padding=False, truncation=None, max_length=None, pad_to_multiple_of=None, verbose=True, **kwargs
-    ):
-        """
-        Find the correct padding/truncation strategy with backward compatibility for old arguments (truncation_strategy
-        and pad_to_max_length) and behaviors.
-        """
-        old_truncation_strategy = kwargs.pop("truncation_strategy", "do_not_truncate")
-        old_pad_to_max_length = kwargs.pop("pad_to_max_length", False)
+        if needs_to_be_padded:
+            difference = max_length - len(required_input)
+            padding_side = padding_side if padding_side is not None else self.padding_side
 
-        # Backward compatibility for previous behavior, maybe we should deprecate it:
-        # If you only set max_length, it activates truncation for max_length
-        if max_length is not None and padding is False and truncation is None:
-            if verbose:
-                if not self.deprecation_warnings.get("Truncation-not-explicitly-activated", False):
-                    logger.warning(
-                        "Truncation was not explicitly activated but `max_length` is provided a specific value, please"
-                        " use `truncation=True` to explicitly truncate examples to max length. Defaulting to"
-                        " 'longest_first' truncation strategy. If you encode pairs of sequences (GLUE-style) with the"
-                        " tokenizer you can select this strategy more precisely by providing a specific strategy to"
-                        " `truncation`."
+            if padding_side == "right":
+                if return_attention_mask:
+                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
+                if "token_type_ids" in encoded_inputs:
+                    encoded_inputs["token_type_ids"] = (
+                        encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
                     )
-                self.deprecation_warnings["Truncation-not-explicitly-activated"] = True
-            truncation = "longest_first"
-
-        # Get padding strategy
-        if padding is False and old_pad_to_max_length:
-            if verbose:
-                warnings.warn(
-                    "The `pad_to_max_length` argument is deprecated and will be removed in a future version, "
-                    "use `padding=True` or `padding='longest'` to pad to the longest sequence in the batch, or "
-                    "use `padding='max_length'` to pad to a max length. In this case, you can give a specific "
-                    "length with `max_length` (e.g. `max_length=45`) or leave max_length to None to pad to the "
-                    "maximal input size of the model (e.g. 512 for Bert).",
-                    FutureWarning,
-                )
-            if max_length is None:
-                padding_strategy = PaddingStrategy.LONGEST
+                if "special_tokens_mask" in encoded_inputs:
+                    encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
+                encoded_inputs[self.model_input_names[0]] = required_input + [self._pad_character_ids] * difference
+            elif padding_side == "left":
+                if return_attention_mask:
+                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
+                if "token_type_ids" in encoded_inputs:
+                    encoded_inputs["token_type_ids"] = [self.pad_token_type_id] * difference + encoded_inputs[
+                        "token_type_ids"
+                    ]
+                if "special_tokens_mask" in encoded_inputs:
+                    encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
+                encoded_inputs[self.model_input_names[0]] = [self._pad_character_ids] * difference + required_input
             else:
-                padding_strategy = PaddingStrategy.MAX_LENGTH
-        elif padding is not False:
-            if padding is True:
-                if verbose:
-                    if max_length is not None and (
-                        truncation is None or truncation is False or truncation == "do_not_truncate"
-                    ):
-                        warnings.warn(
-                            "`max_length` is ignored when `padding`=`True` and there is no truncation strategy. "
-                            "To pad to max length, use `padding='max_length'`."
-                        )
-                    if old_pad_to_max_length is not False:
-                        warnings.warn("Though `pad_to_max_length` = `True`, it is ignored because `padding`=`True`.")
-                padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
-            elif not isinstance(padding, PaddingStrategy):
-                padding_strategy = PaddingStrategy(padding)
-            elif isinstance(padding, PaddingStrategy):
-                padding_strategy = padding
-        else:
-            padding_strategy = PaddingStrategy.DO_NOT_PAD
+                raise ValueError(f"Invalid padding strategy:{padding_side}")
 
-        # Get truncation strategy
-        if truncation is None and old_truncation_strategy != "do_not_truncate":
-            if verbose:
-                warnings.warn(
-                    "The `truncation_strategy` argument is deprecated and will be removed in a future version, use"
-                    " `truncation=True` to truncate examples to a max length. You can give a specific length with"
-                    " `max_length` (e.g. `max_length=45`) or leave max_length to None to truncate to the maximal input"
-                    " size of the model (e.g. 512 for Bert).  If you have pairs of inputs, you can give a specific"
-                    " truncation strategy selected among `truncation='only_first'` (will only truncate the first"
-                    " sentence in the pairs) `truncation='only_second'` (will only truncate the second sentence in the"
-                    " pairs) or `truncation='longest_first'` (will iteratively remove tokens from the longest sentence"
-                    " in the pairs).",
-                    FutureWarning,
-                )
-            truncation_strategy = TruncationStrategy(old_truncation_strategy)
-        elif truncation is not False and truncation is not None:
-            if truncation is True:
-                truncation_strategy = (
-                    TruncationStrategy.LONGEST_FIRST
-                )  # Default to truncate the longest sequences in pairs of inputs
-            elif not isinstance(truncation, TruncationStrategy):
-                truncation_strategy = TruncationStrategy(truncation)
-            elif isinstance(truncation, TruncationStrategy):
-                truncation_strategy = truncation
-        else:
-            truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
+        return encoded_inputs
 
-        # Set max length if needed
-        if max_length is None:
-            if padding_strategy == PaddingStrategy.MAX_LENGTH:
-                if self.model_max_length > LARGE_INTEGER:
-                    if verbose:
-                        if not self.deprecation_warnings.get("Asking-to-pad-to-max_length", False):
-                            logger.warning(
-                                "Asking to pad to max_length but no maximum length is provided and the model has no"
-                                " predefined maximum length. Default to no padding."
-                            )
-                        self.deprecation_warnings["Asking-to-pad-to-max_length"] = True
-                    padding_strategy = PaddingStrategy.DO_NOT_PAD
-                else:
-                    max_length = self.model_max_length
-
-            if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
-                if self.model_max_length > LARGE_INTEGER:
-                    if verbose:
-                        if not self.deprecation_warnings.get("Asking-to-truncate-to-max_length", False):
-                            logger.warning(
-                                "Asking to truncate to max_length but no maximum length is provided and the model has"
-                                " no predefined maximum length. Default to no truncation."
-                            )
-                        self.deprecation_warnings["Asking-to-truncate-to-max_length"] = True
-                    truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
-                else:
-                    max_length = self.model_max_length
-
-        # Test if we have a padding token
-        # NOTE: this is also a workaround because otherwise we check for a negative
-        # `self.pad_token_id` while in this case we have a padding character id list
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (
-            (self.pad_token is None)
-            or ((not isinstance(self.pad_token_id, (list, tuple))) and (self.pad_token_id < 0))
-        ):
-            raise ValueError(
-                "Asking to pad but the tokenizer does not have a padding token. "
-                "Please select a token to use as `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` "
-                "or add a new pad token via `tokenizer.add_special_tokens({'pad_token': '[PAD]'})`."
-            )
-
-        # Check that we will truncate to a multiple of pad_to_multiple_of if both are provided
-        if (
-            truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE
-            and padding_strategy != PaddingStrategy.DO_NOT_PAD
-            and pad_to_multiple_of is not None
-            and max_length is not None
-            and (max_length % pad_to_multiple_of != 0)
-        ):
-            raise ValueError(
-                "Truncation and padding are both activated but "
-                f"truncation length ({max_length}) is not a multiple of pad_to_multiple_of ({pad_to_multiple_of})."
-            )
-
-        return padding_strategy, truncation_strategy, max_length, kwargs
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
+        # CharacterBERT tokenization is algorithmic and does not need an external vocab file.
+        return ()
 
 
-# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
-    """
-    Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
-
-    Args:
-        do_lower_case (`bool`, *optional*, defaults to `True`):
-            Whether or not to lowercase the input when tokenizing.
-        never_split (`Iterable`, *optional*):
-            Collection of tokens which will never be split during tokenization. Only has an effect when
-            `do_basic_tokenize=True`
-        tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
-            Whether or not to tokenize Chinese characters.
-
-            This should likely be deactivated for Japanese (see this
-            [issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents (`bool`, *optional*):
-            Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original BERT).
-        do_split_on_punc (`bool`, *optional*, defaults to `True`):
-            In some instances we want to skip the basic punctuation splitting so that later tokenization can capture
-            the full context of the words, such as contractions.
-    """
-
-    def __init__(
-        self,
-        do_lower_case=True,
-        never_split=None,
-        tokenize_chinese_chars=True,
-        strip_accents=None,
-        do_split_on_punc=True,
-    ):
-        if never_split is None:
-            never_split = []
-        self.do_lower_case = do_lower_case
-        self.never_split = set(never_split)
-        self.tokenize_chinese_chars = tokenize_chinese_chars
-        self.strip_accents = strip_accents
-        self.do_split_on_punc = do_split_on_punc
-
-    def tokenize(self, text, never_split=None):
-        """
-        Basic Tokenization of a piece of text. For sub-word tokenization, see WordPieceTokenizer.
-
-        Args:
-            never_split (`List[str]`, *optional*)
-                Kept for backward compatibility purposes. Now implemented directly at the base class level (see
-                [`PreTrainedTokenizer.tokenize`]) List of token not to split.
-        """
-        # union() returns a new set by concatenating the two sets.
-        never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
-        text = self._clean_text(text)
-
-        # This was added on November 1st, 2018 for the multilingual and Chinese
-        # models. This is also applied to the English models now, but it doesn't
-        # matter since the English models were not trained on any Chinese data
-        # and generally don't have any Chinese data in them (there are Chinese
-        # characters in the vocabulary because Wikipedia does have some Chinese
-        # words in the English Wikipedia.).
-        if self.tokenize_chinese_chars:
-            text = self._tokenize_chinese_chars(text)
-        # prevents treating the same character with different unicode codepoints as different characters
-        unicode_normalized_text = unicodedata.normalize("NFC", text)
-        orig_tokens = whitespace_tokenize(unicode_normalized_text)
-        split_tokens = []
-        for token in orig_tokens:
-            if token not in never_split:
-                if self.do_lower_case:
-                    token = token.lower()
-                    if self.strip_accents is not False:
-                        token = self._run_strip_accents(token)
-                elif self.strip_accents:
-                    token = self._run_strip_accents(token)
-            split_tokens.extend(self._run_split_on_punc(token, never_split))
-
-        output_tokens = whitespace_tokenize(" ".join(split_tokens))
-        return output_tokens
-
-    def _run_strip_accents(self, text):
-        """Strips accents from a piece of text."""
-        text = unicodedata.normalize("NFD", text)
-        output = []
-        for char in text:
-            cat = unicodedata.category(char)
-            if cat == "Mn":
-                continue
-            output.append(char)
-        return "".join(output)
-
-    def _run_split_on_punc(self, text, never_split=None):
-        """Splits punctuation on a piece of text."""
-        if not self.do_split_on_punc or (never_split is not None and text in never_split):
-            return [text]
-        chars = list(text)
-        i = 0
-        start_new_word = True
-        output = []
-        while i < len(chars):
-            char = chars[i]
-            if _is_punctuation(char):
-                output.append([char])
-                start_new_word = True
-            else:
-                if start_new_word:
-                    output.append([])
-                start_new_word = False
-                output[-1].append(char)
-            i += 1
-
-        return ["".join(x) for x in output]
-
-    def _tokenize_chinese_chars(self, text):
-        """Adds whitespace around any CJK character."""
-        output = []
-        for char in text:
-            cp = ord(char)
-            if self._is_chinese_char(cp):
-                output.append(" ")
-                output.append(char)
-                output.append(" ")
-            else:
-                output.append(char)
-        return "".join(output)
-
-    def _is_chinese_char(self, cp):
-        """Checks whether CP is the codepoint of a CJK character."""
-        # This defines a "chinese character" as anything in the CJK Unicode block:
-        #   https://en.wikipedia.org/wiki/CJK_Unified_Ideographs_(Unicode_block)
-        #
-        # Note that the CJK Unicode block is NOT all Japanese and Korean characters,
-        # despite its name. The modern Korean Hangul alphabet is a different block,
-        # as is Japanese Hiragana and Katakana. Those alphabets are used to write
-        # space-separated words, so they are not treated specially and handled
-        # like the all of the other languages.
-        if (
-            (cp >= 0x4E00 and cp <= 0x9FFF)
-            or (cp >= 0x3400 and cp <= 0x4DBF)  #
-            or (cp >= 0x20000 and cp <= 0x2A6DF)  #
-            or (cp >= 0x2A700 and cp <= 0x2B73F)  #
-            or (cp >= 0x2B740 and cp <= 0x2B81F)  #
-            or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
-            or (cp >= 0xF900 and cp <= 0xFAFF)
-            or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
-        ):  #
-            return True
-
-        return False
-
-    def _clean_text(self, text):
-        """Performs invalid character removal and whitespace cleanup on text."""
-        output = []
-        for char in text:
-            cp = ord(char)
-            if cp == 0 or cp == 0xFFFD or _is_control(char):
-                continue
-            if _is_whitespace(char):
-                output.append(" ")
-            else:
-                output.append(char)
-        return "".join(output)
+__all__ = ["CharacterBertTokenizer"]

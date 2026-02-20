@@ -78,8 +78,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bros", "BrosModel"),
         ("camembert", "CamembertModel"),
         ("canine", "CanineModel"),
-        ("character_bert", "CharacterBertModel"),
         ("chameleon", "ChameleonModel"),
+        ("character_bert", "CharacterBertModel"),
         ("chinese_clip", "ChineseCLIPModel"),
         ("chinese_clip_vision_model", "ChineseCLIPVisionModel"),
         ("clap", "ClapModel"),
@@ -489,7 +489,6 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("big_bird", "BigBirdForPreTraining"),
         ("bloom", "BloomForCausalLM"),
         ("camembert", "CamembertForMaskedLM"),
-        ("character_bert", "CharacterBertForPreTraining"),
         ("colpali", "ColPaliForRetrieval"),
         ("colqwen2", "ColQwen2ForRetrieval"),
         ("ctrl", "CTRLLMHeadModel"),
@@ -1515,7 +1514,6 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
     [
         ("bert", "BertForNextSentencePrediction"),
-        ("character_bert", "CharacterBertForNextSentencePrediction"),
         ("ernie", "ErnieForNextSentencePrediction"),
         ("fnet", "FNetForNextSentencePrediction"),
         ("megatron-bert", "MegatronBertForNextSentencePrediction"),
