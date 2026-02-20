@@ -33,7 +33,14 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
     "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
-    "Timesfm2P5Config": ["freq_size", "normalize_inputs", "pad_val", "tolerance", "use_positional_embedding", "use_rotary_embeddings"],  # Inherited from parent TimesFmConfig
+    "Timesfm2P5Config": [
+        "freq_size",
+        "normalize_inputs",
+        "pad_val",
+        "tolerance",
+        "use_positional_embedding",
+        "use_rotary_embeddings",
+    ],  # Inherited from parent TimesFmConfig
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],

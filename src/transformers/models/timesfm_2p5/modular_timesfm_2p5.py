@@ -425,7 +425,6 @@ class Timesfm2P5PreTrainedModel(TimesFmPreTrainedModel):
 
 @auto_docstring
 class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
-
     def __init__(self, config: Timesfm2P5Config):
         super().__init__(config)
         self.config = config
@@ -628,7 +627,6 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
 
 @auto_docstring
 class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
-
     def __init__(self, config: Timesfm2P5Config):
         # Call the parent's __init__ first to get the basic structure
         super().__init__(config)
