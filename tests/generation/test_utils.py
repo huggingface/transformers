@@ -2786,43 +2786,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         finally:
             logger.removeHandler(warningHandler)
 
-    # TODO joao, manuel: remove in v4.62.0
-    @slow
-    def test_diverse_beam_search(self):
-        article = """Justin Timberlake and Jessica Biel, welcome to parenthood.
-        The celebrity couple announced the arrival of their son, Silas Randall Timberlake, in statements to People.
-        "Silas was the middle name of Timberlake's maternal grandfather Bill Bomar, who died in 2012, while Randall is the musician's own middle name, as well as his father's first," People reports.
-        The couple announced the pregnancy in January, with an Instagram post. It is the first baby for both."""
-
-        bart_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
-        bart_model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn").to(torch_device)
-        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        outputs = bart_model.generate(
-            input_ids,
-            num_beams=4,
-            num_return_sequences=2,
-            num_beam_groups=4,
-            diversity_penalty=2.0,
-            remove_invalid_values=True,
-            trust_remote_code=True,
-            custom_generate="transformers-community/group-beam-search",
-        )
-
-        generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-        self.assertListEqual(
-            generated_text,
-            [
-                "The couple announced the birth of their son, Silas Randall Timberlake, in a statement. Silas was the"
-                " middle name of Timberlake's maternal grandfather Bill Bomar. Randall is the musician's own middle"
-                " name, as well as his father's first. It is the first baby for both of them.",
-                "Justin Timberlake and Jessica Biel have a son. The baby is named Silas Randall Timberlake. It is the"
-                " first child for both. The couple announced the pregnancy in January. The name Silas is the middle"
-                " name of Timberlake's maternal grandfather. It's also his own middle name.",
-            ],
-        )
-
     @slow
     def test_beam_search_early_stop_heuristic(self):
         """Regression test for #38778 (early stopping needs to be tracked at a batch level)"""
@@ -2965,42 +2928,6 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
         self.assertEqual(output_sequences.shape, (2, 5))
-
-    # TODO joao, manuel: remove in v4.62.0
-    def test_transition_scores_group_beam_search_encoder_decoder(self):
-        articles = [
-            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
-            "Michael Phelps is arguably the most decorated Olympian of all time.",
-        ]
-        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        model = BartForConditionalGeneration.from_pretrained(
-            "hf-internal-testing/tiny-random-bart",
-            eos_token_id=None,
-        )
-        generation_config = GenerationConfig(
-            max_length=10,
-            num_beams=2,
-            num_beam_groups=2,
-            num_return_sequences=2,
-            diversity_penalty=1.0,
-            return_dict_in_generate=True,
-            output_scores=True,
-            length_penalty=0.0,
-        )
-        model = model.to(torch_device)
-
-        input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
-        outputs = model.generate(
-            input_ids=input_ids,
-            generation_config=generation_config,
-            trust_remote_code=True,
-            custom_generate="transformers-community/group-beam-search",
-        )
-
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
-        transition_scores_sum = transition_scores.sum(-1)
-
-        torch.testing.assert_close(transition_scores_sum, outputs.sequences_scores, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_generate_inputs_embeds_one_token(self):
@@ -3195,41 +3122,6 @@ class GenerationIntegrationTests(unittest.TestCase):
                 'Paris!"\n\n"Paris!"\n\n"Paris!"\n\n'
             ],
         )
-
-    # TODO joao, manuel: remove in v4.62.0
-    @slow
-    def test_constrained_beam_search_example_integration(self):
-        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
-
-        encoder_input_str = "translate English to German: How old are you?"
-        encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
-
-        # lets run beam search using 5 beams
-        num_beams = 5
-        # define decoder start token ids
-        input_ids = torch.ones((1, 1), device=model.device, dtype=torch.long)
-        input_ids = input_ids * model.config.decoder_start_token_id
-
-        # add encoder_outputs to model keyword arguments
-        model_kwargs = {"encoder_outputs": model.get_encoder()(encoder_input_ids, return_dict=True)}
-
-        constraint_str = "sind"
-        constraint_token_ids = tokenizer.encode(constraint_str)[:-1]  # remove eos token
-
-        outputs = model.generate(
-            input_ids,
-            num_beams=num_beams,
-            force_words_ids=[constraint_token_ids],
-            min_length=5,
-            eos_token_id=model.config.eos_token_id,
-            trust_remote_code=True,
-            custom_generate="transformers-community/constrained-beam-search",
-            **model_kwargs,
-        )
-        outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-        self.assertListEqual(outputs, ["Wie alt sind Sie?"])
 
     @slow
     def test_per_row_stopping_criteria(self):
