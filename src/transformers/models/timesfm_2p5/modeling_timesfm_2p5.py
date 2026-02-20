@@ -526,17 +526,8 @@ class Timesfm2P5PreTrainedModel(PreTrainedModel):
             )
 
 
+@auto_docstring
 class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
-    """
-    TimesFM 2.5 model - standalone implementation (not inheriting from TimesFmModel).
-
-    Uses TimesFM 2.5 specific architecture:
-    - Timesfm2P5ResidualBlock for input projection
-    - Timesfm2P5DecoderLayer for transformer layers
-    - No frequency embedding (model adapts automatically)
-    - No positional embedding (uses rotary embeddings)
-    """
-
     def __init__(self, config: Timesfm2P5Config):
         super().__init__(config)
         self.config = config
@@ -618,6 +609,8 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
 
         return new_n, new_mu, new_sigma
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         past_values: torch.Tensor,
@@ -625,7 +618,13 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ):
+    ) -> Timesfm2P5Output:
+        r"""
+        past_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Past values of the time series used as input to the model.
+        past_values_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Padding mask for the input. `1` indicates padded (masked) time steps, `0` indicates valid values.
+        """
         batch_size, seq_len = past_values.shape
         patch_len = self.config.patch_length
 
@@ -729,14 +728,9 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         )
 
 
+@auto_docstring
 class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
-    """
-    TimesFM 2.5 model for quantile and mean prediction.
-
-    Inherits from TimesFmModelForPrediction but uses:
-    - Timesfm2P5Model as the decoder
-    - Separate output projections for point and quantile predictions (matching original TimesFM 2.5)
-    """
+    """Timesfm2P5 model for quantile and mean prediction."""
 
     def __init__(self, config: Timesfm2P5Config):
         super().__init__(config)
