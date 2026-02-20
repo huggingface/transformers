@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import inspect
-import os
 import unittest
 
 import numpy as np
@@ -264,11 +263,9 @@ class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class Timesfm2P5ModelIntegrationTests(unittest.TestCase):
     def test_inference(self):
-        model_path = os.environ.get("TIMESFM_2P5_LOCAL_MODEL_PATH")
-        if model_path is None:
-            self.skipTest("Set TIMESFM_2P5_LOCAL_MODEL_PATH to a locally converted TimesFM 2.5 checkpoint.")
-
-        model = Timesfm2P5ModelForPrediction.from_pretrained(model_path, attn_implementation="sdpa").to(torch_device)
+        model = Timesfm2P5ModelForPrediction.from_pretrained(
+            "google/timesfm-2.5-200m-transformers", attn_implementation="sdpa"
+        ).to(torch_device)
         forecast_input = [
             np.sin(np.linspace(0, 20, 100)),
             np.sin(np.linspace(0, 20, 200)),

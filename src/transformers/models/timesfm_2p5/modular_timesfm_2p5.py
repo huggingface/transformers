@@ -68,7 +68,7 @@ class Timesfm2P5Config(TimesFmConfig):
     """
     Configuration class for TimesFM 2.5 model.
 
-    Example checkpoint: [google/timesfm-2.5-200m-pytorch](https://huggingface.co/google/timesfm-2.5-200m-pytorch).
+    Example checkpoint: [google/timesfm-2.5-200m-transformers](https://huggingface.co/google/timesfm-2.5-200m-transformers).
     """
 
     model_type = "timesfm_2p5"

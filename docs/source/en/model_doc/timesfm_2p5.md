@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-10-14 and added to Hugging Face Transformers on 2026-02-18.*
 
 # TimesFM 2.5
 
@@ -22,8 +23,8 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-TimesFM 2.5 is the PyTorch forecasting checkpoint from Google Research:
-[`google/timesfm-2.5-200m-pytorch`](https://huggingface.co/google/timesfm-2.5-200m-pytorch).
+TimesFM 2.5 is available in Transformers format as:
+[`google/timesfm-2.5-200m-transformers`](https://huggingface.co/google/timesfm-2.5-200m-transformers).
 This Transformers implementation ports the official 2.5 architecture with rotary attention, QK normalization,
 per-dimension attention scaling, and continuous quantile prediction.
 
@@ -45,11 +46,7 @@ from transformers import Timesfm2P5ModelForPrediction
 
 
 model = Timesfm2P5ModelForPrediction.from_pretrained(
-    # First convert from the official source checkpoint:
-    # python src/transformers/models/timesfm_2p5/convert_timesfm_2p5_original_to_hf.py \
-    #   --output_dir /tmp/timesfm_2p5_hf_local \
-    #   --huggingface_repo_id google/timesfm-2.5-200m-pytorch
-    "/tmp/timesfm_2p5_hf_local",
+    "google/timesfm-2.5-200m-transformers",
     attn_implementation="sdpa",
     dtype=torch.float32,
     device_map="auto",
