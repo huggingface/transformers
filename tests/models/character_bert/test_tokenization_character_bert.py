@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import unittest
 from tempfile import TemporaryDirectory
 
 from transformers import CharacterBertTokenizer
+from transformers.testing_utils import slow
 
 
 class CharacterBertTokenizerTest(unittest.TestCase):
@@ -59,6 +61,13 @@ class CharacterBertTokenizerTest(unittest.TestCase):
 
         self.assertEqual(tokens[0], "[ENTITY]")
 
+    def test_mask_token_with_no_special_tokens(self):
+        encoding = self.tokenizer("hello [MASK]", add_special_tokens=False)
+        tokens = self.tokenizer.convert_ids_to_tokens(encoding["input_ids"])
+
+        self.assertEqual(tokens, ["hello", "[MASK]"])
+        self.assertTrue(all(isinstance(token_ids, list) for token_ids in encoding["input_ids"]))
+
     def test_save_and_load_tokenizer(self):
         with TemporaryDirectory() as tmp_dir:
             self.tokenizer.save_pretrained(tmp_dir)
@@ -67,3 +76,54 @@ class CharacterBertTokenizerTest(unittest.TestCase):
             expected = self.tokenizer("Saving and loading should be stable.")["input_ids"]
             actual = reloaded_tokenizer("Saving and loading should be stable.")["input_ids"]
             self.assertEqual(actual, expected)
+
+
+@slow
+class CharacterBertTokenizerIntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        model_id = os.environ.get("CHARACTER_BERT_INTEGRATION_MODEL", "helboukkouri/character-bert-base-uncased")
+        cls.tokenizer = CharacterBertTokenizer.from_pretrained(model_id)
+
+    def _expected_char_ids(self, token: str) -> list[int]:
+        max_characters_per_token = self.tokenizer.max_characters_per_token
+        encoded = token.encode("utf-8", "ignore")[: max_characters_per_token - 2]
+        expected = [261] * max_characters_per_token
+        expected[0] = 259
+        for index, byte in enumerate(encoded, start=1):
+            expected[index] = byte + 1
+        expected[len(encoded) + 1] = 260
+        return expected
+
+    def test_pretrained_tokenizer_uses_utf8_character_ids(self):
+        encoding = self.tokenizer("Hello 你 [MASK]", add_special_tokens=False)
+        tokens = self.tokenizer.convert_ids_to_tokens(encoding["input_ids"])
+        self.assertEqual(tokens, ["hello", "你", "[MASK]"])
+
+        self.assertEqual(encoding["input_ids"][0], self._expected_char_ids("hello"))
+        self.assertEqual(encoding["input_ids"][1], self._expected_char_ids("你"))
+        self.assertEqual(encoding["input_ids"][2][:3], [259, 262, 260])
+        self.assertEqual(encoding["input_ids"][2][3:], [261] * (self.tokenizer.max_characters_per_token - 3))
+
+    def test_pretrained_tokenizer_encodes_mask_token_as_character_ids(self):
+        encoding = self.tokenizer("Hello [MASK]")
+        tokens = self.tokenizer.convert_ids_to_tokens(encoding["input_ids"])
+        mask_index = tokens.index(self.tokenizer.mask_token)
+        mask_char_ids = encoding["input_ids"][mask_index]
+
+        self.assertEqual(
+            tokens,
+            [self.tokenizer.cls_token, "hello", self.tokenizer.mask_token, self.tokenizer.sep_token],
+        )
+        self.assertEqual(mask_char_ids[:3], [259, 262, 260])
+        self.assertEqual(mask_char_ids[3:], [261] * (self.tokenizer.max_characters_per_token - 3))
+
+    def test_pretrained_tokenizer_truncates_long_tokens_to_max_length(self):
+        max_characters_per_token = self.tokenizer.max_characters_per_token
+        token = "a" * (max_characters_per_token * 2)
+        encoding = self.tokenizer(token, add_special_tokens=False)
+        char_ids = encoding["input_ids"][0]
+
+        self.assertEqual(len(char_ids), max_characters_per_token)
+        self.assertEqual(char_ids, self._expected_char_ids("a" * (max_characters_per_token - 2)))
+        self.assertEqual(self.tokenizer.convert_ids_to_tokens(char_ids), "a" * (max_characters_per_token - 2))

@@ -258,6 +258,54 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             )
         return self._character_mapper.convert_word_to_char_ids(token)
 
+    def prepare_for_model(
+        self,
+        ids: list[int | list[int]],
+        pair_ids: list[int | list[int]] | None = None,
+        add_special_tokens: bool = True,
+        padding: bool | str = False,
+        truncation: bool | str = False,
+        max_length: int | None = None,
+        stride: int = 0,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        prepend_batch_axis: bool = False,
+        **kwargs,
+    ):
+        # Keep sequence elements homogeneous so padding cannot misinterpret mixed int/list inputs.
+        normalized_ids = [self._normalize_token_id(token_id) for token_id in ids]
+        normalized_pair_ids = None
+        if pair_ids is not None:
+            normalized_pair_ids = [self._normalize_token_id(token_id) for token_id in pair_ids]
+
+        return super().prepare_for_model(
+            ids=normalized_ids,
+            pair_ids=normalized_pair_ids,
+            add_special_tokens=add_special_tokens,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_length=return_length,
+            verbose=verbose,
+            prepend_batch_axis=prepend_batch_axis,
+            **kwargs,
+        )
+
     def convert_ids_to_tokens(self, ids: int | list[int], skip_special_tokens: bool = False) -> str | list[str]:
         if isinstance(ids, int):
             token = self._resolve_placeholder_token(ids)
