@@ -1836,12 +1836,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     if key in kwargs and kwargs[key]:
                         continue  # User-provided kwargs take precedence
                     if isinstance(value, dict) and key != "extra_special_tokens":
-                        value = AddedToken(**value, special=True)
+                        value = AddedToken(**{**value, "special": value.get("special", True)})
                     elif key == "extra_special_tokens" and isinstance(value, list):
                         # Merge list tokens, converting dicts to AddedToken
                         existing = list(init_kwargs.get("extra_special_tokens") or [])
                         for tok in value:
-                            tok = AddedToken(**tok, special=True) if isinstance(tok, dict) else tok
+                            tok = AddedToken(**{**tok, "special": tok.get("special", True)}) if isinstance(tok, dict) else tok
                             if tok not in existing:
                                 existing.append(tok)
                         value = existing
