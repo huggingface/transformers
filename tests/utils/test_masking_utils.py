@@ -385,3 +385,40 @@ class MaskTest(unittest.TestCase):
 
         self.assertTrue(padded_mask[0] is not None)
         self.assertTrue(padded_mask[1] is not None)
+
+    def test_bidirectional_mask_no_skip_with_dropout(self):
+        """
+        checks that when attention dropout is active, bidirectional mask creation does not skip mask creation.
+        this prevents numerical divergence between eager and compiled modes due to different sdpa backends
+        handling dropout rng differently. [see: https://github.com/huggingface/transformers/issues/44188]
+        """
+        batch_size = 2
+        q_length = 10
+
+        inputs_embeds = torch.ones((batch_size, q_length, 1), dtype=torch.float16)
+
+        # case 1 - with dropout > 0, mask should not be skipped(even with full mask/no padding)
+        config_with_dropout = LlamaConfig()
+        config_with_dropout._attn_implementation = "sdpa"
+        config_with_dropout.attention_dropout = 0.1
+
+        mask_with_dropout = create_bidirectional_mask(
+            config=config_with_dropout,
+            inputs_embeds=inputs_embeds,
+            attention_mask=None,
+        )
+        # mask should be materialized(not None) as dropout is active
+        self.assertTrue(mask_with_dropout is not None)
+
+        # case 2 - with dropout = 0, mask should be skipped(returns None)
+        config_no_dropout = LlamaConfig()
+        config_no_dropout._attn_implementation = "sdpa"
+        config_no_dropout.attention_dropout = 0.0
+
+        mask_no_dropout = create_bidirectional_mask(
+            config=config_no_dropout,
+            inputs_embeds=inputs_embeds,
+            attention_mask=None,
+        )
+        # mask should be skipped(None) as no dropout
+        self.assertTrue(mask_no_dropout is None)

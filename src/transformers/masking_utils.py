@@ -305,6 +305,7 @@ def _ignore_bidirectional_mask_sdpa(
     padding_mask: torch.Tensor | None,
     kv_length: int,
     local_attention_size: int | None = None,
+    dropout: float = 0.0,
 ) -> bool:
     """
     Detects whether the bidirectional mask can be ignored in case PyTorch's SDPA is used.
@@ -314,6 +315,12 @@ def _ignore_bidirectional_mask_sdpa(
     allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is
     passed).
     """
+    # when dropout is used, different sdpa backends handle dropout rng differently;
+    # to ensure consistent numerics between eager and compiled modes, we should not,
+    # skip mask creation when dropout is active. [see: https://github.com/huggingface/transformers/issues/44188]
+    if dropout > 0.0:
+        return False
+
     if _is_torch_xpu_available:
         # XPU devices have special handling for mask skipping:
         # - Skip if no padding and no local attention constraint
@@ -376,6 +383,7 @@ def sdpa_mask(
     allow_is_bidirectional_skip: bool = False,
     allow_torch_fix: bool = True,
     use_vmap: bool = False,
+    dropout: float = 0.0,
     **kwargs,
 ) -> torch.Tensor | None:
     """
@@ -487,7 +495,7 @@ def sdpa_mask(
     #   2. Bidirectional do not need any further processing (no bias)
     if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, kv_offset, local_size):
         return None
-    if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask, kv_length, local_size):
+    if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask, kv_length, local_size, dropout):
         return None
 
     # Potentially add the padding 2D mask
@@ -541,6 +549,7 @@ def eager_mask(
     dtype: torch.dtype = torch.float32,
     allow_is_bidirectional_skip: bool = False,
     use_vmap: bool = False,
+    dropout: float = 0.0,
     **kwargs,
 ) -> torch.Tensor:
     """
@@ -584,6 +593,7 @@ def eager_mask(
         allow_is_bidirectional_skip=allow_is_bidirectional_skip,
         allow_torch_fix=False,
         use_vmap=use_vmap,
+        dropout=dropout,
         **kwargs,
     )
     # only bidirectional masks can be skipped, otherwise we convert bool -> float
@@ -995,6 +1005,12 @@ def create_bidirectional_mask(
 
     # Allow skipping the mask creation except we have additional masking operators (and/or masks)
     allow_is_bidirectional_skip = True
+    # extract attention dropout for sdpa, where different backends handle dropout rng differently
+    attention_dropout = 0.0
+    if config._attn_implementation == "sdpa":
+        attention_dropout = (
+            getattr(config, "attention_probs_dropout_prob", None) or getattr(config, "attention_dropout", 0.0) or 0.0
+        )
     # Defaulting to using non-vmap based mask creations except when detecting
     # users passing custom mask functions (as we cannot guarantee that they
     # are properly index-based as required by our implementation).
@@ -1027,6 +1043,7 @@ def create_bidirectional_mask(
         # Additional kwargs for sdpa
         allow_is_causal_skip=False,
         allow_is_bidirectional_skip=allow_is_bidirectional_skip,
+        dropout=attention_dropout,  # additional kwarg for sdpa/eager to prevent skip when dropout is active
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
         use_vmap=use_vmap,  # Short-circuit to non-vmap expansions for the mask
@@ -1199,6 +1216,13 @@ def create_bidirectional_sliding_window_mask(
 
     use_vmap = False
     allow_is_bidirectional_skip = True
+    # extracts attention dropout from the config (as different models use different attribute names)
+    # only relevant for sdpa, where different backends handle dropout rng differently
+    attention_dropout = 0.0
+    if config._attn_implementation == "sdpa":
+        attention_dropout = (
+            getattr(config, "attention_probs_dropout_prob", None) or getattr(config, "attention_dropout", 0.0) or 0.0
+        )
 
     if or_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
@@ -1222,6 +1246,7 @@ def create_bidirectional_sliding_window_mask(
         attention_mask=attention_mask,
         allow_is_causal_skip=False,
         allow_is_bidirectional_skip=allow_is_bidirectional_skip,
+        dropout=attention_dropout,  # additional kwarg for sdpa/eager to prevent skip when dropout is active
         local_size=sliding_window,  # Additional kwarg for sdpa
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
