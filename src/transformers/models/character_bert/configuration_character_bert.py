@@ -27,19 +27,56 @@ class CharacterBertConfig(BertConfig):
     documentation from [`~PreTrainedConfig`] for more information.
 
     Args:
+        vocab_size (`int`, *optional*, defaults to 30522):
+            Vocabulary size of the model output projection used for masked language modeling.
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and pooler layer.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the feed-forward layer in the Transformer encoder.
+        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
+            Activation function in the encoder and pooler.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+            Dropout probability for all fully connected layers in embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+            Dropout ratio for the attention probabilities.
+        max_position_embeddings (`int`, *optional*, defaults to 512):
+            Maximum sequence length that this model might be used with.
+        type_vocab_size (`int`, *optional*, defaults to 2):
+            Vocabulary size of the `token_type_ids` passed when calling the model.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            Standard deviation of the truncated normal initializer for all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+            Epsilon used by layer normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Token id used for padding.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether the model should return the last key/value attentions when relevant.
+        classifier_dropout (`float`, *optional*):
+            Dropout ratio for classification heads.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to use the model as a decoder.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added when using the model as a decoder.
+        bos_token_id (`int`, *optional*):
+            Beginning-of-sequence token id.
+        eos_token_id (`int`, *optional*):
+            End-of-sequence token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether input and output word embeddings are tied.
         character_embedding_dim (`int`, *optional*, defaults to 16):
             Character embedding dimension used before the convolution stack.
         character_vocab_size (`int`, *optional*, defaults to 262):
-            Number of supported character IDs before applying the +1 offset for masking/padding.
+            Number of supported character IDs before applying the +1 offset for masking and padding.
         max_characters_per_token (`int`, *optional*, defaults to 50):
             Maximum number of characters represented for each token.
-        character_cnn_filters (`tuple[tuple[int, int], ...]`, *optional*):
-            Defaults to `((1, 32), (2, 32), (3, 64), (4, 128), (5, 256), (6, 512), (7, 1024))`.
+        character_cnn_filters (`tuple[tuple[int, int], ...]`, *optional*, defaults to `((1, 32), (2, 32), (3, 64), (4, 128), (5, 256), (6, 512), (7, 1024))`):
             Convolution widths and output channels used in the character CNN.
         num_highway_layers (`int`, *optional*, defaults to 2):
             Number of highway layers applied after the convolution outputs.
-        mlm_vocab_size (`int`, *optional*):
-            Legacy alias for `vocab_size` in original CharacterBERT checkpoints.
 
     Example:
 

@@ -126,6 +126,18 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             Whether or not to strip accents.
         max_characters_per_token (`int`, *optional*, defaults to 50):
             Maximum number of characters represented for each token.
+        model_max_length (`int`, *optional*, defaults to 512):
+            Maximum supported sequence length in tokens.
+        unk_token (`str`, *optional*, defaults to `"[UNK]"`):
+            Unknown token used when a token cannot be represented.
+        sep_token (`str`, *optional*, defaults to `"[SEP]"`):
+            Separator token used when building sequence pairs.
+        pad_token (`str`, *optional*, defaults to `"[PAD]"`):
+            Token used for padding.
+        cls_token (`str`, *optional*, defaults to `"[CLS]"`):
+            Classifier token added to the start of sequences.
+        mask_token (`str`, *optional*, defaults to `"[MASK]"`):
+            Token used for masked language modeling.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
