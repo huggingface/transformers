@@ -53,8 +53,13 @@ class FourOverSixHfQuantizer(HfQuantizer):
     ) -> bool:
         from fouroversix import QuantizedModule
 
-        module, _ = get_module_from_name(model, param_name)
-        return QuantizedModule.is_quantized_module_type(type(module))
+        module, tensor_name = get_module_from_name(model, param_name)
+
+        return (
+            QuantizedModule.is_quantized_module_type(type(module))
+            and hasattr(module, "parameters_to_quantize")
+            and tensor_name in module.parameters_to_quantize
+        )
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for buffers that are created during quantization
@@ -81,7 +86,7 @@ class FourOverSixHfQuantizer(HfQuantizer):
         if self.pre_quantized and not self.quantization_config.keep_master_weights:
             for _, module in model.named_modules():
                 if QuantizedModule.is_quantized_module_type(type(module)):
-                    for parameter_name in module.high_precision_parameter_names:
+                    for parameter_name in module.parameters_to_quantize:
                         delattr(module, parameter_name)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
