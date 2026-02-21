@@ -116,7 +116,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # we extract vocab / merges from the tokenizer file to pass them to __init__
-            processor = TokenizerFast.from_file(fast_tokenizer_file).post_processor
+            _loaded_fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
+            processor = _loaded_fast_tokenizer.post_processor
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
             vocab = tokenizer_json.get("model", {}).get("vocab", None)
@@ -141,6 +142,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
             if processor is not None:
                 local_kwargs["post_processor"] = processor
+
+            # If the tokenizer uses a ByteLevel decoder (e.g., GPT-2-style tokenizers like deepseek-coder
+            # that are tagged as LlamaTokenizerFast), pass the original tokenizer object so its decoder
+            # and pre-tokenizer are preserved. Without this, the class's custom __init__ would replace
+            # them with an incompatible Metaspace-based setup, causing spaces to be dropped on decode.
+            decoder_config = tokenizer_json.get("decoder", {})
+            if isinstance(decoder_config, dict) and decoder_config.get("type") == "ByteLevel":
+                local_kwargs["tokenizer_object"] = _loaded_fast_tokenizer
+
             return local_kwargs
 
         vocab_file = local_kwargs.get("vocab_file")

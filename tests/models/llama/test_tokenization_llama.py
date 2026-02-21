@@ -1,3 +1,6 @@
+import json
+import os
+import tempfile
 import unittest
 
 from tests.test_tokenization_common import TokenizerTesterMixin
@@ -35,3 +38,60 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_tokenizers(self, **kwargs):
         kwargs.setdefault("pad_token", "<PAD>")
         return super().get_tokenizers(**kwargs)
+
+    def test_bytelevel_decoder_preserved_on_load(self):
+        """
+        Regression test for https://github.com/huggingface/transformers/issues/43975
+
+        Some models (e.g. deepseek-ai/deepseek-coder-6.7b-instruct) declare
+        ``tokenizer_class: LlamaTokenizerFast`` in their tokenizer_config.json but use
+        a GPT-2-style ByteLevel decoder rather than the SentencePiece Metaspace decoder
+        that ``LlamaTokenizer.__init__`` normally configures.  When loaded with v5, the
+        custom ``__init__`` was replacing the correct ByteLevel decoder with a Metaspace
+        one, causing all spaces to be silently dropped on decode.
+        """
+        from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
+        from tokenizers.decoders import ByteLevel as ByteLevelDecoder
+
+        # Build a minimal ByteLevel BPE tokenizer (same style as deepseek-coder).
+        tokenizer_backend = Tokenizer(models.BPE(unk_token="<unk>"))
+        tokenizer_backend.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+        tokenizer_backend.decoder = decoders.ByteLevel()
+
+        trainer = trainers.BpeTrainer(
+            vocab_size=500,
+            special_tokens=["<unk>", "<s>", "</s>"],
+        )
+        tokenizer_backend.train_from_iterator(
+            [
+                "simple test sentence",
+                "hello world foo bar baz",
+                "a b c d e f g h i j k l m n o p q r s t u v w x y z",
+            ],
+            trainer=trainer,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer_backend.save(os.path.join(tmp_dir, "tokenizer.json"))
+
+            # Mimic the tokenizer_config.json that deepseek-coder ships with.
+            tokenizer_config = {
+                "tokenizer_class": "LlamaTokenizerFast",
+                "bos_token": "<s>",
+                "eos_token": "</s>",
+                "unk_token": "<unk>",
+                "legacy": True,
+            }
+            with open(os.path.join(tmp_dir, "tokenizer_config.json"), "w") as f:
+                json.dump(tokenizer_config, f)
+
+            loaded = LlamaTokenizer.from_pretrained(tmp_dir)
+
+            # The decoder must still be ByteLevel, not replaced by the Metaspace decoder.
+            self.assertIsInstance(loaded._tokenizer.decoder, ByteLevelDecoder)
+
+            # Spaces must be preserved in an encode → decode round-trip.
+            test_input = "simple test sentence"
+            ids = loaded.encode(test_input, add_special_tokens=False)
+            decoded = loaded.decode(ids, skip_special_tokens=True)
+            self.assertEqual(decoded, test_input)
