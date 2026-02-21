@@ -1353,7 +1353,9 @@ class Trainer:
 
         # When fp16/bf16 full eval is enabled, __init__ skips device placement so that
         # evaluation_loop can cast dtype and move in one step. Move the model now for training.
-        if (args.fp16_full_eval or args.bf16_full_eval) and not self.is_model_parallel and self.model_init is None:
+        if (args.fp16_full_eval or args.bf16_full_eval) and not self.is_model_parallel and not self.is_deepspeed_enabled \
+            and not self.is_fsdp_xla_enabled and not self.is_fsdp_enabled and not is_sagemaker_mp_enabled() \
+            and self.model_init is None:
             self._move_model_to_device(self.model, args.device)
 
         # This might change the seed so needs to run first.
