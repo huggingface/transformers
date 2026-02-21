@@ -168,7 +168,8 @@ def define_sagemaker_information():
 
     sagemaker_params = json.loads(os.getenv("SM_FRAMEWORK_PARAMS", "{}"))
     runs_distributed_training = "sagemaker_distributed_dataparallel_enabled" in sagemaker_params
-    account_id = os.getenv("TRAINING_JOB_ARN").split(":")[4] if "TRAINING_JOB_ARN" in os.environ else None
+    training_job_arn = os.getenv("TRAINING_JOB_ARN")
+    account_id = training_job_arn.split(":")[4] if training_job_arn is not None else None
 
     sagemaker_object = {
         "sm_framework": os.getenv("SM_FRAMEWORK_MODULE", None),
@@ -295,7 +296,7 @@ def cached_files(
     _raise_exceptions_for_connection_errors: bool = True,
     _commit_hash: str | None = None,
     **deprecated_kwargs,
-) -> str | None:
+) -> list[str] | None:
     """
     Tries to locate several files in a local folder and repo, downloads and cache them if necessary.
 
@@ -707,6 +708,10 @@ class PushToHubMixin:
             create_pr=create_pr,
             revision=revision,
         )
+
+    def save_pretrained(self, *args, **kwargs):
+        # explicit contract
+        raise NotImplementedError(f"{self.__class__.__name__} must implement `save_pretrained` to use `push_to_hub`.")
 
     def push_to_hub(
         self,

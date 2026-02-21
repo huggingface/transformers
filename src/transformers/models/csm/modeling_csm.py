@@ -666,9 +666,9 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
 class CsmBackboneModelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.vocab_size), config.hidden_size)
+        self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.codebook_size), config.hidden_size)
         self.register_buffer(
-            "audio_tokens_offsets", torch.arange(config.num_codebooks) * config.vocab_size, persistent=False
+            "audio_tokens_offsets", torch.arange(config.num_codebooks) * config.codebook_size, persistent=False
         )
 
     def forward(self, input_ids):
