@@ -624,9 +624,6 @@ class CharacterBertPreTrainedModel(PreTrainedModel):
             init.zeros_(module.token_type_ids)
         if isinstance(module, CharacterBertCharacterCNN):
             init.zeros_(module._char_embedding_weights)
-        elif isinstance(module, CharacterBertEmbeddings):
-            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-            init.zeros_(module.token_type_ids)
 
 
 @auto_docstring(
@@ -635,7 +632,7 @@ class CharacterBertPreTrainedModel(PreTrainedModel):
     """
 )
 class CharacterBertModel(CharacterBertPreTrainedModel):
-    _no_split_modules = ["CharacterBertEmbeddings", "BertLayer"]
+    _no_split_modules = ["CharacterBertEmbeddings", "CharacterBertLayer"]
 
     def __init__(self, config: CharacterBertConfig, add_pooling_layer: bool = True):
         r"""

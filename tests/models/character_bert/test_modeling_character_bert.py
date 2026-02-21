@@ -326,6 +326,10 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
             token_type_ids,
         )
 
+    def test_character_vocab_size_validation(self):
+        with self.assertRaisesRegex(ValueError, "`character_vocab_size` must be 262"):
+            CharacterBertConfig(character_vocab_size=300)
+
     def test_legacy_checkpoint_config_fields_for_masked_lm(self):
         legacy_config = {
             "model_type": "character_bert",

@@ -70,7 +70,8 @@ class CharacterBertConfig(BertConfig):
         character_embedding_dim (`int`, *optional*, defaults to 16):
             Character embedding dimension used before the convolution stack.
         character_vocab_size (`int`, *optional*, defaults to 262):
-            Number of supported character IDs before applying the +1 offset for masking and padding.
+            CharacterBERT byte-level tokenization expects exactly 262 character IDs before applying the +1 offset
+            for masking and padding (256 byte values + 6 special markers).
         max_characters_per_token (`int`, *optional*, defaults to 50):
             Maximum number of characters represented for each token.
         character_cnn_filters (`tuple[tuple[int, int], ...]`, *optional*, defaults to `((1, 32), (2, 32), (3, 64), (4, 128), (5, 256), (6, 512), (7, 1024))`):
@@ -142,6 +143,12 @@ class CharacterBertConfig(BertConfig):
 
         if legacy_mlm_vocab_size is not None and vocab_size == 30522:
             vocab_size = legacy_mlm_vocab_size
+
+        if character_vocab_size != 262:
+            raise ValueError(
+                "`character_vocab_size` must be 262 for CharacterBERT byte-level tokenization "
+                "(256 bytes + 6 special characters)."
+            )
 
         super().__init__(
             vocab_size=vocab_size,
