@@ -58,8 +58,8 @@ class FourOverSixHfQuantizer(HfQuantizer):
         if not QuantizedModule.is_quantized_module_type(type(module)):
             return False
         
-        if hasattr(module, "high_precision_parameter_names"):
-            return tensor_name in module.high_precision_parameter_names
+        if hasattr(module, "parameters_to_quantize"):
+            return tensor_name in module.parameters_to_quantize
         
         return False
 
@@ -88,7 +88,7 @@ class FourOverSixHfQuantizer(HfQuantizer):
         if self.pre_quantized and not self.quantization_config.keep_master_weights:
             for _, module in model.named_modules():
                 if QuantizedModule.is_quantized_module_type(type(module)):
-                    for parameter_name in module.high_precision_parameter_names:
+                    for parameter_name in module.parameters_to_quantize:
                         delattr(module, parameter_name)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):

@@ -44,10 +44,10 @@ class FourOverSixQuantize(ConversionOps):
 
         # Delete the high-precision parameters from the module after we used them to create
         # the quantized parameters
-        # Cache high_precision_parameter_names to avoid potential race conditions with lazy properties
-        if hasattr(module, "high_precision_parameter_names"):
-            high_precision_params = list(module.high_precision_parameter_names)
-            for param_name in high_precision_params:
+        # Cache parameters_to_quantize to avoid potential race conditions with lazy properties
+        if hasattr(module, "parameters_to_quantize"):
+            parameters_to_quantize = list(module.parameters_to_quantize)
+            for param_name in parameters_to_quantize:
                 if hasattr(module, param_name):
                     delattr(module, param_name)
 
