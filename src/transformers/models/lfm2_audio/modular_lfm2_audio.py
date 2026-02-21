@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+from enum import IntEnum, auto
+from ...audio_utils import AudioInput, make_list_of_audio
+from ...feature_extraction_utils import BatchFeature
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import is_torch_available
 from ..moshi.configuration_moshi import MoshiConfig, MoshiDepthConfig
 from ..moshi.modeling_moshi import (
     MoshiAttention,
@@ -40,8 +47,23 @@ class Lfm2AudioDepthConfig(MoshiDepthConfig):
     pass
 
 
-class Lfm2AudioConfig(MoshiConfig):
-    pass
+class Lfm2AudioProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "use_image_special_tokens": False,
+            "add_special_tokens": False,
+            "padding": False,
+            "is_split_into_words": False,
+        },
+        "audio_kwargs": {
+            "sampling_rate": 16000,
+            "padding": "longest",
+            "return_attention_mask": True,
+        },
+        "common_kwargs": {
+            "return_tensors": "pt",
+        },
+    }
 
 
 class Lfm2AudioProcessor(ProcessorMixin):
@@ -49,6 +71,11 @@ class Lfm2AudioProcessor(ProcessorMixin):
     feature_extractor_class = "ParakeetFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
+    def __init__(self, feature_extractor, tokenizer, chat_template=None, **kwargs):
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
+
+class Lfm2AudioConfig(MoshiConfig):
+    pass
 
 class Lfm2AudioConditionalGenerationGenerateOutput(MoshiConditionalGenerationGenerateOutput):
     pass
