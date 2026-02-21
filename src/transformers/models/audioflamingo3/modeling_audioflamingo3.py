@@ -456,6 +456,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
+        windows_per_sample: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -467,6 +468,11 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
+        windows_per_sample (`torch.LongTensor` of shape `(num_samples,)`, *optional*):
+            Number of audio windows per sample. Required for correct batched inference; when provided the token
+            count per sample is computed with the same formula used by the processor (sum mask values across all
+            windows for a sample, then apply the downsampling formula), preventing embedding misalignment in
+            batches that contain audios of different lengths.
         """
 
         # Encode audio
@@ -475,10 +481,39 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         )
         audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
 
-        # Mask according to avg pooling (which is after attention blocks)
-        post_lengths = (input_features_mask.sum(-1) - 2) // 2 + 1
-        valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
-        audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
+        # Mask according to avg pooling (which is after attention blocks).
+        # When windows_per_sample is provided we apply the same formula as the processor:
+        # sum the mask values across all windows belonging to a sample first, then
+        # downsample once. This avoids the off-by-one accumulation that occurs when the
+        # per-window formula is applied individually and the results are summed.
+        post_lengths_per_window = (input_features_mask.sum(-1) - 2) // 2 + 1
+        if windows_per_sample is not None:
+            all_sample_embeds = []
+            window_idx = 0
+            for n_windows in windows_per_sample.tolist():
+                n_windows = int(n_windows)
+                sample_mask = input_features_mask[window_idx : window_idx + n_windows]
+                # Processor formula: sum mask values across windows, then apply both
+                # downsampling steps in one pass to get the expected token count.
+                total_mask_sum = sample_mask.sum()
+                token_count = int(((((total_mask_sum - 1) // 2 + 1) - 2) // 2 + 1).item())
+                sample_embeds = audio_embeds[window_idx : window_idx + n_windows]
+                sample_post_lengths = post_lengths_per_window[window_idx : window_idx + n_windows]
+                max_len = sample_embeds.shape[1]
+                valid_mask = (
+                    torch.arange(max_len, device=sample_post_lengths.device)[None, :]
+                    < sample_post_lengths[:, None]
+                )
+                sample_flat = sample_embeds[valid_mask][:token_count]
+                all_sample_embeds.append(sample_flat)
+                window_idx += n_windows
+            audio_embeds = torch.cat(all_sample_embeds, dim=0)
+        else:
+            valid_mask = (
+                torch.arange(audio_embeds.shape[1], device=post_lengths_per_window.device)[None, :]
+                < post_lengths_per_window[:, None]
+            )
+            audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
         audio_output.pooler_output = audio_embeds
 
         return audio_output
@@ -490,6 +525,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         input_ids: torch.LongTensor | None = None,
         input_features: torch.FloatTensor | None = None,
         input_features_mask: torch.Tensor | None = None,
+        windows_per_sample: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -567,7 +603,9 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
+            audio_embeds = self.get_audio_features(
+                input_features, input_features_mask, windows_per_sample=windows_per_sample, return_dict=True
+            ).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
@@ -593,6 +631,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
 
         input_features = kwargs.pop("input_features", None)
         input_features_mask = kwargs.pop("input_features_mask", None)
+        windows_per_sample = kwargs.pop("windows_per_sample", None)
         cache_position = kwargs.get("cache_position")
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
@@ -603,6 +642,8 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
                 model_inputs["input_features"] = input_features
             if input_features_mask is not None:
                 model_inputs["input_features_mask"] = input_features_mask
+            if windows_per_sample is not None:
+                model_inputs["windows_per_sample"] = windows_per_sample
 
         return model_inputs
 

@@ -182,6 +182,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 expanded = re.sub(re.escape(self.audio_token), self.audio_token * audio_length, text[i])
                 text[i] = expanded
 
+            audio_inputs["windows_per_sample"] = torch.tensor(per_sample_windows, dtype=torch.long)
+
         # Tokenize
         text_inputs = self.tokenizer(text, **text_kwargs)
 
@@ -198,7 +200,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
     def model_input_names(self) -> list[str]:
         tok_names = self.tokenizer.model_input_names
         fea_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask"]))
+        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask", "windows_per_sample"]))
 
     def apply_transcription_request(
         self,
