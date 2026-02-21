@@ -245,8 +245,19 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             self.id2label = {int(key): value for key, value in self.id2label.items()}
 
         # Parameters for sequence generation saved in the config are popped instead of loading them.
+        # However, for backward compatibility with old model code that reads generation params directly
+        # from the config object (e.g. `config.max_length`), we still set them as attributes when they
+        # were explicitly present in the config JSON / kwargs.
         for parameter_name in GenerationConfig._get_default_generation_params().keys():
-            kwargs.pop(parameter_name, None)
+            if parameter_name in kwargs:
+                logger.warning_once(
+                    f"Setting `{parameter_name}` in the model config is deprecated. "
+                    "Please use `GenerationConfig` for generation parameters. "
+                    f"`{parameter_name}` will be removed from `PretrainedConfig` in a future version."
+                )
+                setattr(self, parameter_name, kwargs.pop(parameter_name))
+            else:
+                kwargs.pop(parameter_name, None)
 
         # Name or path to the pretrained checkpoint
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
