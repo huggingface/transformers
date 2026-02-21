@@ -3260,7 +3260,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if not _hf_peft_config_loaded:
                 model_to_save.config.save_pretrained(save_directory)
             if self.can_generate():
-                model_to_save.generation_config.save_pretrained(save_directory)
+                model_to_save.generation_config.save_pretrained(save_directory, strict=False)
 
             if _hf_peft_config_loaded:
                 logger.info(

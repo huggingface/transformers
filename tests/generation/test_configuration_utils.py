@@ -272,6 +272,30 @@ class GenerationConfigTest(unittest.TestCase):
             self.assertEqual(len(captured_logs.out), 0)
             self.assertEqual(len(os.listdir(tmp_dir)), 1)
 
+    def test_save_with_invalid_config_non_strict(self):
+        """Tests that we can save an invalid generation config when strict=False (used by model.save_pretrained)."""
+        logger = transformers_logging.get_logger("transformers.generation.configuration_utils")
+
+        # An invalid config (top_p set without do_sample=True, as seen in some hub models like GLM-5) should
+        # warn but still save when strict=False.
+        config = GenerationConfig()
+        config.top_p = 0.95  # invalid without do_sample=True
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as captured_logs:
+                config.save_pretrained(tmp_dir, strict=False)
+            # A warning should be issued about the invalid config
+            self.assertIn("invalid", captured_logs.out)
+            # The file should still be saved
+            self.assertEqual(len(os.listdir(tmp_dir)), 1)
+
+        # strict=True (the default) should still raise and not save
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(ValueError):
+                config.save_pretrained(tmp_dir, strict=True)
+            self.assertEqual(len(os.listdir(tmp_dir)), 0)
+
     def test_generation_mode(self):
         """Tests that the `get_generation_mode` method is working as expected."""
         config = GenerationConfig()

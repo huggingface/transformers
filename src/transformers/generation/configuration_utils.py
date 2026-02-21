@@ -757,6 +757,7 @@ class GenerationConfig(PushToHubMixin):
         save_directory: str | os.PathLike,
         config_file_name: str | os.PathLike | None = None,
         push_to_hub: bool = False,
+        strict: bool = True,
         **kwargs,
     ):
         r"""
@@ -772,6 +773,10 @@ class GenerationConfig(PushToHubMixin):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
+            strict (`bool`, *optional*, defaults to `True`):
+                Whether to strictly enforce that the configuration is valid before saving. If `True`, a `ValueError`
+                is raised when the configuration is invalid, and the configuration is not saved. If `False`, invalid
+                configurations are saved with a warning, so they can be fixed at a later time.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -782,7 +787,13 @@ class GenerationConfig(PushToHubMixin):
         try:
             self.validate(strict=True)
         except ValueError as exc:
-            raise ValueError(str(exc) + "\n\nFix these issues to save the configuration.")
+            if strict:
+                raise ValueError(str(exc) + "\n\nFix these issues to save the configuration.")
+            else:
+                logger.warning(
+                    "The generation configuration is invalid -- you should fix it prior to using it with "
+                    f"`model.generate()`. The following issues were found:\n{exc}"
+                )
 
         config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
