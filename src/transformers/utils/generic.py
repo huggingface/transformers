@@ -427,7 +427,9 @@ class ModelOutput(OrderedDict):
             return self.to_tuple()[k]
 
     def __setattr__(self, name, value):
-        if name in self.keys() and value is not None:
+        if value is not None and (
+            name in self.keys() or (is_dataclass(self) and name in {f.name for f in fields(self)})
+        ):
             # Don't call self.__setitem__ to avoid recursion errors
             super().__setitem__(name, value)
         super().__setattr__(name, value)
