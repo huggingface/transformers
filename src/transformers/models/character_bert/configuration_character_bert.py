@@ -81,12 +81,12 @@ class CharacterBertConfig(BertConfig):
         max_characters_per_token=50,
         character_cnn_filters=((1, 32), (2, 32), (3, 64), (4, 128), (5, 256), (6, 512), (7, 1024)),
         num_highway_layers=2,
-        mlm_vocab_size=None,
         **kwargs,
     ):
         legacy_character_embedding_dim = kwargs.pop("character_embeddings_dim", None)
         legacy_character_cnn_filters = kwargs.pop("cnn_filters", None)
         legacy_max_characters_per_token = kwargs.pop("max_word_length", None)
+        legacy_mlm_vocab_size = kwargs.pop("mlm_vocab_size", None)
 
         if legacy_character_embedding_dim is not None and character_embedding_dim == 16:
             character_embedding_dim = legacy_character_embedding_dim
@@ -103,8 +103,8 @@ class CharacterBertConfig(BertConfig):
         if legacy_max_characters_per_token is not None and max_characters_per_token == 50:
             max_characters_per_token = legacy_max_characters_per_token
 
-        if mlm_vocab_size is not None and vocab_size == 30522:
-            vocab_size = mlm_vocab_size
+        if legacy_mlm_vocab_size is not None and vocab_size == 30522:
+            vocab_size = legacy_mlm_vocab_size
 
         super().__init__(
             vocab_size=vocab_size,
@@ -135,7 +135,15 @@ class CharacterBertConfig(BertConfig):
         self.max_characters_per_token = max_characters_per_token
         self.character_cnn_filters = tuple((int(width), int(channels)) for width, channels in character_cnn_filters)
         self.num_highway_layers = num_highway_layers
-        self.mlm_vocab_size = self.vocab_size
+
+    @property
+    def mlm_vocab_size(self) -> int:
+        # Legacy alias kept for backward compatibility with older CharacterBERT checkpoints.
+        return self.vocab_size
+
+    @mlm_vocab_size.setter
+    def mlm_vocab_size(self, value: int) -> None:
+        self.vocab_size = value
 
 
 __all__ = ["CharacterBertConfig"]
