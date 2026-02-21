@@ -73,6 +73,19 @@ def _parse_optim_args(optim_args_str: str | None) -> dict[str, str]:
     return optim_args
 
 
+def _coerce_optim_args(optim_args: dict[str, str]) -> dict[str, Any]:
+    """Coerce optimizer argument string values to their appropriate Python types."""
+    import ast
+
+    coerced = {}
+    for key, value in optim_args.items():
+        try:
+            coerced[key] = ast.literal_eval(value)
+        except (ValueError, SyntaxError):
+            coerced[key] = value
+    return coerced
+
+
 # Type alias for optimizer handler functions
 OptimizerHandler = Callable[[OptimizerContext], tuple[Any, dict[str, Any]]]
 
@@ -314,16 +327,19 @@ def _get_adamw_anyprecision(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]
 
 def _get_sgd(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     """Get SGD optimizer."""
+    ctx.optimizer_kwargs.update(_coerce_optim_args(ctx.optim_args))
     return torch.optim.SGD, ctx.optimizer_kwargs
 
 
 def _get_adagrad(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     """Get Adagrad optimizer."""
+    ctx.optimizer_kwargs.update(_coerce_optim_args(ctx.optim_args))
     return torch.optim.Adagrad, ctx.optimizer_kwargs
 
 
 def _get_rmsprop(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     """Get RMSprop optimizer."""
+    ctx.optimizer_kwargs.update(_coerce_optim_args(ctx.optim_args))
     return torch.optim.RMSprop, ctx.optimizer_kwargs
 
 
