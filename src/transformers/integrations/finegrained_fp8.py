@@ -14,7 +14,7 @@
 
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
-from ..utils import is_kernels_available, is_torch_accelerator_available, is_torch_available, logging
+from ..utils import is_kernels_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -570,43 +570,38 @@ class FP8Linear(nn.Linear):
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         if self.weight.element_size() > 1:
+            # QUESTION: not sure why we would want the fp8 linear to support non-fp8 weights
             return F.linear(input, self.weight, self.bias)
+
+        if isinstance(self.weight, torch.distributed.tensor.DTensor):
+            weight = self.weight._local_tensor.contiguous()
+            scale_inv = self.weight_scale_inv._local_tensor.contiguous()
         else:
-            if isinstance(self.weight, torch.distributed.tensor.DTensor):
-                weight = self.weight._local_tensor.contiguous()
-                scale_inv = self.weight_scale_inv._local_tensor.contiguous()
-            else:
-                weight = self.weight.contiguous()
-                scale_inv = self.weight_scale_inv.contiguous()
-            # Context manager used to switch among the available accelerators
-            device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
-            torch_accelerator_module = getattr(torch, device_type, torch.cuda)
-            with torch_accelerator_module.device(input.device):
-                if self.activation_scheme == "dynamic":
-                    qinput, scale = act_quant(input, self.block_size[1])
-                elif self.activation_scheme == "static":
-                    scale = self.activation_scale.to(torch.float32)
-                    qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(torch.float8_e4m3fn)
+            weight = self.weight.contiguous()
+            scale_inv = self.weight_scale_inv.contiguous()
 
-                else:
-                    raise NotImplementedError("Not supported")
+        if self.activation_scheme == "dynamic":
+            qinput, scale = act_quant(input, self.block_size[1])
+        elif self.activation_scheme == "static":
+            scale = self.activation_scale.to(torch.float32)
+            qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(torch.float8_e4m3fn)
 
-                output = w8a8_block_fp8_matmul(
-                    qinput,
-                    weight,
-                    scale,
-                    scale_inv,
-                    self.block_size,
-                    output_dtype=input.dtype,
-                )
+        else:
+            raise NotImplementedError("Not supported")
 
-            # Blocks the CPU until all accelerator operations on the specified device are complete. It is used to ensure that the results of the
-            # preceding operations are ready before proceeding
-            torch_accelerator_module.synchronize()
-            if self.bias is not None:
-                output = output + self.bias
+        output = w8a8_block_fp8_matmul(
+            qinput,
+            weight,
+            scale,
+            scale_inv,
+            self.block_size,
+            output_dtype=input.dtype,
+        )
 
-            return output.to(dtype=input.dtype)
+        if self.bias is not None:
+            output = output + self.bias
+
+        return output.to(dtype=input.dtype)
 
 
 def _ceil_div(a, b):
@@ -694,25 +689,19 @@ class FP8Expert(nn.Module):
 
     def linear(self, input: torch.Tensor, weight: torch.Tensor, weight_scale_inv: torch.Tensor) -> torch.Tensor:
         if weight.element_size() > 1:
+            # QUESTION: not sure why we would want the fp8 experts to support a fallback to fp16/bf16/fp32
             return F.linear(input, weight, None)
-        else:
-            # Context manager used to switch among the available accelerators
-            device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
-            torch_accelerator_module = getattr(torch, device_type, torch.cuda)
-            with torch_accelerator_module.device(input.device):
-                qinput, scale = act_quant(input, self.block_size[1])
-                output = w8a8_block_fp8_matmul(
-                    qinput,
-                    weight,
-                    scale,
-                    weight_scale_inv,
-                    self.block_size,
-                    output_dtype=input.dtype,
-                )
-            # Blocks the CPU until all accelerator operations on the specified device are complete. It is used to ensure that the results of the
-            # preceding operations are ready before proceeding
-            torch_accelerator_module.synchronize()
-            return output.to(dtype=input.dtype)
+
+        qinput, scale = act_quant(input, self.block_size[1])
+        output = w8a8_block_fp8_matmul(
+            qinput,
+            weight,
+            scale,
+            weight_scale_inv,
+            self.block_size,
+            output_dtype=input.dtype,
+        )
+        return output.to(dtype=input.dtype)
 
 
 def replace_with_fp8_linear(
