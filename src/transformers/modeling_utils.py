@@ -4208,7 +4208,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif checkpoint_files is not None:
                 merged_state_dict = {}
                 for ckpt_file in checkpoint_files:
-                    merged_state_dict.update(load_state_dict(ckpt_file))
+                    merged_state_dict.update(
+                        load_state_dict(ckpt_file, map_location="cpu", weights_only=load_config.weights_only)
+                    )
             else:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
 
