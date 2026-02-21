@@ -224,31 +224,35 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
 Reproducible Usage
 ==================
 
-1) Download the original MusicFlamingo weights from NVIDIA (requires Git LFS):
+1) Download the original MusicFlamingo weights from NVIDIA (requires Git LFS and private repo access):
 
 ```
 git lfs install
-git clone https://huggingface.co/nvidia/music-flamingo
+git clone https://huggingface.co/nvidia/music-flamingo-2601
 ```
 
-This will create a folder `music-flamingo/` containing the original components:
+The source repository (`nvidia/music-flamingo-2601`) is private.
+This will create a folder `music-flamingo-2601/` containing the original components:
 `llm/`, `sound_tower/`, and `sound_mm_projector/`.
+
+Note for integration tests: without access to the private source repository, you cannot recompute
+expected outputs with the original model checkpoint.
 
 2) Convert to the Hugging Face Transformers format (locally):
 
 ```
 python src/transformers/models/musicflamingo/convert_musicflamingo_to_hf.py \
-  --src_dir music-flamingo \
-  --dst_dir music-flamingo-hf
+  --src_dir music-flamingo-2601 \
+  --dst_dir music-flamingo-2601-hf
 ```
 
 3) Convert and push directly to the Hub (requires `huggingface-cli login` or `HF_TOKEN`):
 
 ```
 python src/transformers/models/musicflamingo/convert_musicflamingo_to_hf.py \
-  --src_dir music-flamingo \
-  --dst_dir music-flamingo-hf \
-  --push_to_hub <username-or-org>/music-flamingo-hf
+  --src_dir music-flamingo-2601 \
+  --dst_dir music-flamingo-2601-hf \
+  --push_to_hub <username-or-org>/music-flamingo-2601-hf
 ```
 
 This command uploads both the processor (tokenizer + feature extractor) and the converted
