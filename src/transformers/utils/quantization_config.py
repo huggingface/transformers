@@ -1923,20 +1923,20 @@ class FourOverSixConfig(QuantizationConfigMixin):
         activation_scale_rule (`str`, *optional*):
             Scaling rule to use when selecting a scale for blocks in activation tensors. If not
             provided, `scale_rule` is used.
-        dtype (`str`, default "nvfp4"):
+        dtype (`str`, default "nvfp4", *optional*, defaults to `"nvfp4"`):
             The data type to use for the layer's weights, activations, and tensors. Can be
             `"nvfp4"` or `"mxfp4"`.
         gradient_scale_rule (`str`, *optional*):
             Scaling rule to use when selecting a scale for blocks in gradient tensors. If not
             provided, `scale_rule` is used.
-        keep_master_weights (`bool`, default False):
+        keep_master_weights (`bool`, default False, *optional*, defaults to `False`):
             Whether to keep the master weights. If `True`, high-precision weights are kept at all
             times and weights are quantized online in each forward pass. This is useful for
             quantized training.
         matmul_backend (`str`, *optional*):
             The backend to use for matrix multiplications. Can be `"cutlass"` or `"pytorch"`. If
             not provided, CUTLASS will be used if available and PyTorch will be used otherwise.
-        output_dtype (`str`, *optional*, default "bfloat16"):
+        output_dtype (`str`, *optional*, defaults to `"bfloat16"`):
             The data type to use for the output of the layer. Can be `"bfloat16"` or `"float16"`.
         quantize_backend (`str`, *optional*):
             The backend to use for quantization. Can be `"cuda"`, `"triton"`, or `"pytorch"`. If
@@ -1944,11 +1944,11 @@ class FourOverSixConfig(QuantizationConfigMixin):
             on the options supported by each backend. Typically, `"cuda"` will be used for
             inference, `"triton"` will be used for training, and `"pytorch"` will be used on
             non-CUDA devices.
-        scale_rule (`str`, default "mse"):
+        scale_rule (`str`, default "mse", *optional*, defaults to `"mse"`):
             Rule to use when selecting block scales. Can be `"mse"`, `"mae"`, or `"abs_max"` for
             Four Over Six, `"static_6"` for default NVFP4 quantization, or `"static_4"` to scale
             all blocks to a maximum value of 4.
-        weight_scale_2d (`bool`, default False):
+        weight_scale_2d (`bool`, default False, *optional*, defaults to `False`):
             Whether to compute scale factors on weight tensors in 2D blocks. This should be done
             during training.
         weight_scale_rule (`str`, *optional*):
@@ -1958,7 +1958,7 @@ class FourOverSixConfig(QuantizationConfigMixin):
             A dictionary of module-specific configuration overrides. Keys should be module names, and
             values should be dictionaries containing the quantization configuration for that module.
             This can be used to override the default configuration for specific modules.
-        modules_to_not_convert (`list[str]`, *optional*, default ["lm_head"]):
+        modules_to_not_convert (`list[str]`, *optional*, defaults to `['lm_head']`):
             The list of modules to exclude from quantization. By default, the `lm_head` is excluded.
     """
 
