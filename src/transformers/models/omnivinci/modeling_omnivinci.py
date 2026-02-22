@@ -352,12 +352,30 @@ class VILAPretrainedModel(PreTrainedModel):
             raise RuntimeError("LLM module is not initialized.")
         return self.llm.model.embed_tokens
 
+    def _require_encoder_text_token_ids(self) -> dict[str, list[int]]:
+        encoder_text_token_ids = getattr(self.config, "encoder_text_token_ids", None)
+        if encoder_text_token_ids is None:
+            raise ValueError(
+                "Missing `config.encoder_text_token_ids`. Construct inputs with `OmniVinciProcessor` before calling "
+                "generation so encoder boundary token ids are populated on the config."
+            )
+        return encoder_text_token_ids
+
+    def embed_text_tokens(self, token_text: str | None) -> torch.Tensor | None:
+        if token_text is None:
+            return None
+        token_ids = self._require_encoder_text_token_ids().get(token_text)
+        if token_ids is None:
+            raise ValueError(f"Missing token ids for encoder boundary text: {token_text!r}")
+        token_ids = torch.tensor(token_ids, device=self.llm_model_embed_tokens.weight.device)
+        return self.llm_model_embed_tokens(token_ids)
+
     def _require_media_token_ids(self) -> dict[str, int]:
         media_token_ids = getattr(self.config, "media_token_ids", None)
         if not media_token_ids:
             raise ValueError(
-                "Missing `config.media_token_ids`. Set media token ids in main.py after loading tokenizer, "
-                "then pass that config into `OmniVinciForCausalLM.from_pretrained`."
+                "Missing `config.media_token_ids`. Build inputs with `OmniVinciProcessor` so media token ids are "
+                "populated on the config."
             )
         return media_token_ids
 

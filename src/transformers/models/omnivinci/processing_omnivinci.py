@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import copy
+import json
 import os
 import os.path as osp
 from collections import defaultdict
@@ -33,6 +34,42 @@ from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpa
 
 from .configuration_omnivinci import MEDIA_TOKENS, MM_BOS_EOS_TOKENS
 from .media import Sound, Video, extract_media
+
+
+def _collect_encoder_boundary_tokens(config) -> list[str]:
+    token_keys = {"start_tokens", "end_tokens", "sep_tokens"}
+    collected = []
+    seen = set()
+
+    def _maybe_add(token):
+        if not isinstance(token, str) or token == "None" or token in seen:
+            return
+        seen.add(token)
+        collected.append(token)
+
+    def _visit(node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in token_keys:
+                    _maybe_add(value)
+                _visit(value)
+        elif isinstance(node, (list, tuple)):
+            for item in node:
+                _visit(item)
+
+    # Encoder implementations default `end_tokens` to "\n" when the config omits it.
+    _maybe_add("\n")
+
+    for attr in ("image_encoder", "video_encoder", "sound_encoder"):
+        encoder_config = getattr(config, attr, None)
+        if isinstance(encoder_config, str):
+            try:
+                encoder_config = json.loads(encoder_config)
+            except Exception:
+                continue
+        _visit(encoder_config)
+
+    return collected
 
 
 def _expand2square(pil_img, background_color):
@@ -447,6 +484,11 @@ class OmniVinciProcessor(ProcessorMixin):
                     token_id = tokenized[0]
                 media_token_ids[name] = int(token_id)
             self.config.media_token_ids = media_token_ids
+
+            self.config.encoder_text_token_ids = {
+                token_text: [int(token_id) for token_id in self.tokenizer(token_text).input_ids]
+                for token_text in _collect_encoder_boundary_tokens(self.config)
+            }
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 

@@ -421,6 +421,9 @@ class BaseEncoder(nn.Module):
     def parent(self) -> nn.Module:
         return self._parent[0]
 
+    def embed_tokens(self, tokens: str | None) -> torch.Tensor | None:
+        return self.parent.embed_text_tokens(tokens)
+
 
 class BasicImageEncoder(BaseEncoder):
     def __init__(
@@ -433,13 +436,6 @@ class BasicImageEncoder(BaseEncoder):
         end_tokens = None if end_tokens == "None" else end_tokens
         self.start_tokens = start_tokens
         self.end_tokens = end_tokens
-
-    def embed_tokens(self, tokens: str | None) -> torch.Tensor | None:
-        if tokens is None:
-            return None
-        token_ids = self.parent.tokenizer(tokens).input_ids
-        token_ids = torch.tensor(token_ids, device=self.parent.device)
-        return self.parent.llm_model_embed_tokens(token_ids)
 
     def _process_features(
         self,
@@ -475,13 +471,6 @@ class BasicVideoEncoder(BaseEncoder):
         end_tokens = None if end_tokens == "None" else end_tokens
         self.start_tokens = start_tokens
         self.end_tokens = end_tokens
-
-    def embed_tokens(self, tokens: str | None) -> torch.Tensor | None:
-        if tokens is None:
-            return None
-        token_ids = self.parent.tokenizer(tokens).input_ids
-        token_ids = torch.tensor(token_ids, device=self.parent.device)
-        return self.parent.llm_model_embed_tokens(token_ids)
 
     def _process_features(
         self,
@@ -576,14 +565,6 @@ class BasicSoundEncoder(BaseEncoder):
                 self.time_embed = parent.sound_mm_projector.time_embed
             else:
                 raise ValueError(f"Invalid time_embed_type: {time_embed_type}")
-
-    def embed_tokens(self, tokens: str | None) -> torch.Tensor | None:
-        if tokens is None:
-            return None
-        token_ids = self.parent.tokenizer(tokens).input_ids
-        token_ids = torch.tensor(token_ids, device=self.parent.device)
-        # return self.parent.llm.model.embed_tokens(token_ids)
-        return self.parent.llm_model_embed_tokens(token_ids)
 
     def _process_features(
         self,
