@@ -20,7 +20,6 @@
 # limitations under the License.
 
 import re
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -29,7 +28,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import is_torch_available, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -85,12 +84,10 @@ class MusicFlamingoProcessor(ProcessorMixin):
         audio_token="<sound>",
         audio_bos_token="<|sound_bos|>",
         audio_eos_token="<|sound_eos|>",
-        default_transcription_prompt="Transcribe the input speech.",
         max_audio_len=1200,
     ):
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
-        self.default_transcription_prompt = default_transcription_prompt
         self.max_audio_len = max_audio_len
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
         self.audio_bos_token = audio_bos_token
@@ -213,123 +210,6 @@ class MusicFlamingoProcessor(ProcessorMixin):
         tok_names = self.tokenizer.model_input_names
         fea_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask", "audio_times"]))
-
-    def apply_transcription_request(
-        self,
-        audio: Union[str, list[str], AudioInput],
-        prompt: Optional[Union[str, list[str]]] = None,
-        **kwargs: Unpack[MusicFlamingoProcessorKwargs],
-    ) -> BatchFeature:
-        """
-        Prepare inputs for automatic speech recognition without manually writing the default transcription prompt.
-
-        Args:
-            audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                Audio to transcribe. Strings are interpreted as local paths or URLs and will be loaded automatically by
-                the chat template loader; NumPy arrays and PyTorch tensors are forwarded directly.
-            prompt (`str` or `list[str]`, *optional*):
-                Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
-                each sample uses `"Transcribe the input speech."`.
-            **kwargs:
-                Additional keyword arguments forwarded to [`~MusicFlamingoProcessor.apply_chat_template`] (for example
-                `text_kwargs`, `audio_kwargs`, ...).
-
-        Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to [`MusicFlamingoForConditionalGeneration.generate`].
-
-        """
-
-        if isinstance(audio, str):
-            audio_items: list[Union[str, np.ndarray]] = [audio]
-        elif isinstance(audio, (list, tuple)) and audio and all(isinstance(el, str) for el in audio):
-            audio_items = list(audio)
-        else:
-            audio_items = list(make_list_of_audio(audio))
-            if is_torch_available():
-                audio_items = [el.detach().cpu().numpy() if isinstance(el, torch.Tensor) else el for el in audio_items]
-
-        batch_size = len(audio_items)
-        if batch_size == 0:
-            raise ValueError("`audio` must contain at least one sample.")
-
-        if prompt is None:
-            prompts = [self.default_transcription_prompt] * batch_size
-        elif isinstance(prompt, str):
-            prompts = [prompt] * batch_size
-        elif isinstance(prompt, (list, tuple)):
-            if len(prompt) != batch_size:
-                raise ValueError(
-                    f"Received {len(prompt)} prompt(s) for {batch_size} audio sample(s); counts must match."
-                )
-            prompts = []
-            for item in prompt:
-                if item is None:
-                    prompts.append(self.default_transcription_prompt)
-                elif isinstance(item, str):
-                    prompts.append(item)
-                else:
-                    raise TypeError("Each prompt must be a string or `None`.")
-        else:
-            raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
-
-        conversations = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt_text},
-                        {"type": "audio", "path": audio_item}
-                        if isinstance(audio_item, str)
-                        else {"type": "audio", "audio": audio_item},
-                    ],
-                }
-            ]
-            for prompt_text, audio_item in zip(prompts, audio_items)
-        ]
-
-        return self.apply_chat_template(
-            conversations,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            **kwargs,
-        )
-
-    def batch_decode(self, *args, strip_prefix=False, **kwargs):
-        """
-        Forward arguments to [`~PreTrainedTokenizer.batch_decode`] and optionally remove the assistant framing the model
-        was trained to produce.
-
-        AF3 transcription requests respond with sentences such as `"The spoken content of the audio is \"...\"."`.
-        Setting `strip_prefix=True` trims the fixed prefix for just the transcription text.
-        """
-        decoded = self.tokenizer.batch_decode(*args, **kwargs)
-        if strip_prefix:
-            decoded = [self._strip_assistant_prefix_and_quotes(text) for text in decoded]
-        return decoded
-
-    def _strip_assistant_prefix_and_quotes(self, text: str) -> str:
-        """
-        Remove the assistant prefix and surrounding quotes from a decoded transcription string.
-        """
-
-        stripped = text.strip()
-
-        for prefix in (
-            "The spoken content of the audio is",
-            "The transcription of the audio is",
-        ):
-            if stripped.startswith(prefix):
-                stripped = stripped[len(prefix) :].strip()
-                break
-
-        if stripped.endswith("."):
-            stripped = stripped[:-1].strip()
-
-        if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"'", '"'}:
-            stripped = stripped[1:-1].strip()
-
-        return stripped
 
 
 __all__ = ["MusicFlamingoProcessor"]

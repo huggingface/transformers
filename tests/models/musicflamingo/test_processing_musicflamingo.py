@@ -158,31 +158,10 @@ class MusicFlamingoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     @require_torchaudio
-    def test_apply_transcription_request_single(self):
+    def test_transcription_helpers_not_supported(self):
         processor = AutoProcessor.from_pretrained(self.checkpoint)
-
-        audio_url = "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav"
-        helper_outputs = processor.apply_transcription_request(audio=audio_url)
-
-        conversation = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Transcribe the input speech."},
-                    {"type": "audio", "audio": audio_url},
-                ],
-            }
-        ]
-        manual_outputs = processor.apply_chat_template(
-            conversation,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-        )
-
-        for key in ("input_ids", "attention_mask", "input_features", "input_features_mask"):
-            self.assertIn(key, helper_outputs)
-            self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
+        self.assertFalse(hasattr(processor, "apply_transcription_request"))
+        self.assertFalse(hasattr(processor, "_strip_assistant_prefix_and_quotes"))
 
     # Overwrite to remove skip numpy inputs (still need to keep as many cases as parent)
     @require_librosa

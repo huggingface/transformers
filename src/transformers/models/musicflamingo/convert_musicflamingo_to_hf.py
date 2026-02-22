@@ -182,7 +182,13 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
         rope_theta=1000000.0,
         use_cache=False,
     )
-    config = MusicFlamingoConfig(text_config=text_config, audio_token_id=tok.get_vocab()["<sound>"])
+    vocab = tok.get_vocab()
+    config = MusicFlamingoConfig(
+        text_config=text_config,
+        audio_token_id=vocab["<sound>"],
+        audio_bos_token_id=vocab.get("<|sound_bos|>"),
+        audio_eos_token_id=vocab.get("<|sound_eos|>"),
+    )
     model = MusicFlamingoForConditionalGeneration(config).to(dtype=torch.bfloat16)
 
     # Update state dict to new key names if necessary

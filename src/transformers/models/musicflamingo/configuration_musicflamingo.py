@@ -95,6 +95,10 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
             The config object or dictionary of the text backbone.
         audio_token_id (`int`, *optional*, defaults to 151669):
             The audio token index to encode the audio prompt.
+        audio_bos_token_id (`int`, *optional*):
+            The beginning-of-audio token index used to mark the start of audio spans.
+        audio_eos_token_id (`int`, *optional*):
+            The end-of-audio token index used to mark the end of audio spans.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             Activation function used in the projector.
         projector_bias (`bool`, *optional*, defaults to `True`):
@@ -132,10 +136,15 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
         audio_config=None,
         text_config=None,
         audio_token_id=151669,
+        audio_bos_token_id=None,
+        audio_eos_token_id=None,
         projector_hidden_act="gelu",
         projector_bias=True,
         **kwargs,
     ):
+        self.audio_bos_token_id = audio_bos_token_id
+        self.audio_eos_token_id = audio_eos_token_id
+
         if isinstance(audio_config, dict):
             audio_config["model_type"] = audio_config.get("model_type", "musicflamingo_encoder")
         elif audio_config is None:

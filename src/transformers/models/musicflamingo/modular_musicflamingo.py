@@ -55,7 +55,6 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         audio_token="<sound>",
         audio_bos_token="<|sound_bos|>",
         audio_eos_token="<|sound_eos|>",
-        default_transcription_prompt="Transcribe the input speech.",
         max_audio_len=1200,
     ):
         super().__init__(
@@ -63,9 +62,9 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
             tokenizer,
             chat_template=chat_template,
             audio_token=audio_token,
-            default_transcription_prompt=default_transcription_prompt,
             max_audio_len=max_audio_len,
         )
+        del self.default_transcription_prompt
         self.audio_bos_token = audio_bos_token
         self.audio_eos_token = audio_eos_token
         self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
@@ -161,6 +160,15 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         tok_names = self.tokenizer.model_input_names
         fea_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask", "audio_times"]))
+
+    def apply_transcription_request(self, *args, **kwargs):
+        raise NotImplementedError("Not needed for MusicFlamingo")
+
+    def batch_decode(self, *args, **kwargs):
+        raise NotImplementedError("Not needed for MusicFlamingo")
+
+    def _strip_assistant_prefix_and_quotes(self, *args, **kwargs):
+        raise NotImplementedError("Not needed for MusicFlamingo")
 
 
 # rotary embedding helper functions
