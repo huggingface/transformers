@@ -157,4 +157,10 @@ class GraniteMoeSharedForCausalLM(GraniteMoeForCausalLM):
 class GraniteMoeSharedForSequenceClassification(GenericForSequenceClassification, GraniteMoeSharedPreTrainedModel):
     pass
 
-__all__ = ["GraniteMoeSharedForCausalLM", "GraniteMoeSharedForSequenceClassification", "GraniteMoeSharedModel", "GraniteMoeSharedPreTrainedModel"]
+
+__all__ = [
+    "GraniteMoeSharedForCausalLM",
+    "GraniteMoeSharedForSequenceClassification",
+    "GraniteMoeSharedModel",
+    "GraniteMoeSharedPreTrainedModel",
+]

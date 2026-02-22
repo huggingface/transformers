@@ -327,5 +327,10 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
 class GraniteMoeForSequenceClassification(GenericForSequenceClassification, GraniteMoePreTrainedModel):
     pass
 
-__all__ = ["GraniteMoeForCausalLM", "GraniteMoeForSequenceClassification", "GraniteMoeModel", "GraniteMoePreTrainedModel"]
 
+__all__ = [
+    "GraniteMoeForCausalLM",
+    "GraniteMoeForSequenceClassification",
+    "GraniteMoeModel",
+    "GraniteMoePreTrainedModel",
+]

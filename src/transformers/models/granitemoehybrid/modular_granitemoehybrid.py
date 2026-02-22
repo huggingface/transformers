@@ -364,4 +364,9 @@ class GraniteMoeHybridForSequenceClassification(GenericForSequenceClassification
     pass
 
 
-__all__ = ["GraniteMoeHybridForCausalLM", "GraniteMoeHybridForSequenceClassification", "GraniteMoeHybridModel", "GraniteMoeHybridPreTrainedModel"]
+__all__ = [
+    "GraniteMoeHybridForCausalLM",
+    "GraniteMoeHybridForSequenceClassification",
+    "GraniteMoeHybridModel",
+    "GraniteMoeHybridPreTrainedModel",
+]

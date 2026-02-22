@@ -281,6 +281,4 @@ class GraniteForSequenceClassification(GenericForSequenceClassification, Granite
     pass
 
 
-
 __all__ = ["GraniteForCausalLM", "GraniteForSequenceClassification", "GraniteModel", "GranitePreTrainedModel"]
-
