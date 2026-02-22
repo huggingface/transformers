@@ -21,14 +21,12 @@ import torch.nn as nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...audio_utils import mel_filter_bank
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...models.lasr.feature_extraction_lasr import LasrFeatureExtractor
 from ...models.llama.modeling_llama import LlamaRotaryEmbedding
 from ...models.mistral.modeling_mistral import (
     MistralAttention,
@@ -889,6 +887,5 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
 __all__ = [
     "VoxtralRealtimeForConditionalGeneration",
     "VoxtralRealtimeEncoder",
-    "VoxtralRealtimeFeatureExtractor",
     "VoxtralRealtimePreTrainedModel",
 ]
