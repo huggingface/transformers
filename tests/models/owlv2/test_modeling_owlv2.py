@@ -414,7 +414,6 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    additional_model_inputs = ["pixel_values"]  # NEW: keep pixel_values in sdpa tests
 
     def setUp(self):
         self.model_tester = Owlv2ModelTester(self)
@@ -540,8 +539,6 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
 
-    additional_model_inputs = ["input_ids", "attention_mask"]
-
     def setUp(self):
         self.model_tester = Owlv2ForObjectDetectionTester(self)
 
@@ -551,10 +548,6 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip(reason="Owlv2ObjectDetectionOutput has no top-level hidden_states; SDPA tested in sub-models")
-    def test_eager_matches_sdpa_inference(self):
         pass
 
     @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
