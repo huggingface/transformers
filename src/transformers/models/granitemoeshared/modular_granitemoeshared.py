@@ -19,6 +19,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...modeling_layers import GenericForSequenceClassification
 from ...processing_utils import Unpack
 from ...utils import logging
 from ..granitemoe.modeling_granitemoe import (
@@ -153,4 +154,7 @@ class GraniteMoeSharedForCausalLM(GraniteMoeForCausalLM):
         self.post_init()
 
 
-__all__ = ["GraniteMoeSharedForCausalLM", "GraniteMoeSharedModel", "GraniteMoeSharedPreTrainedModel"]
+class GraniteMoeSharedForSequenceClassification(GenericForSequenceClassification, GraniteMoeSharedPreTrainedModel):
+    pass
+
+__all__ = ["GraniteMoeSharedForCausalLM", "GraniteMoeSharedForSequenceClassification", "GraniteMoeSharedModel", "GraniteMoeSharedPreTrainedModel"]

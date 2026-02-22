@@ -30,7 +30,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -588,4 +588,8 @@ class GraniteForCausalLM(GranitePreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["GraniteForCausalLM", "GraniteModel", "GranitePreTrainedModel"]
+class GraniteForSequenceClassification(GenericForSequenceClassification, GranitePreTrainedModel):
+    pass
+
+
+__all__ = ["GraniteForCausalLM", "GraniteForSequenceClassification", "GraniteModel", "GranitePreTrainedModel"]

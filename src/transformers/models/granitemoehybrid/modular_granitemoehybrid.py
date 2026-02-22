@@ -20,6 +20,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...masking_utils import create_causal_mask
+from ...modeling_layers import GenericForSequenceClassification
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -359,4 +360,8 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
         return model_inputs
 
 
-__all__ = ["GraniteMoeHybridForCausalLM", "GraniteMoeHybridModel", "GraniteMoeHybridPreTrainedModel"]
+class GraniteMoeHybridForSequenceClassification(GenericForSequenceClassification, GraniteMoeHybridPreTrainedModel):
+    pass
+
+
+__all__ = ["GraniteMoeHybridForCausalLM", "GraniteMoeHybridForSequenceClassification", "GraniteMoeHybridModel", "GraniteMoeHybridPreTrainedModel"]

@@ -33,7 +33,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...integrations.hub_kernels import lazy_load_kernel
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1588,4 +1588,13 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
         return model_inputs
 
 
-__all__ = ["GraniteMoeHybridForCausalLM", "GraniteMoeHybridModel", "GraniteMoeHybridPreTrainedModel"]
+class GraniteMoeHybridForSequenceClassification(GenericForSequenceClassification, GraniteMoeHybridPreTrainedModel):
+    pass
+
+
+__all__ = [
+    "GraniteMoeHybridForCausalLM",
+    "GraniteMoeHybridForSequenceClassification",
+    "GraniteMoeHybridModel",
+    "GraniteMoeHybridPreTrainedModel",
+]

@@ -20,6 +20,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
+from ...modeling_layers import GenericForSequenceClassification
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -323,4 +324,8 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
         )
 
 
-__all__ = ["GraniteMoeForCausalLM", "GraniteMoeModel", "GraniteMoePreTrainedModel"]
+class GraniteMoeForSequenceClassification(GenericForSequenceClassification, GraniteMoePreTrainedModel):
+    pass
+
+__all__ = ["GraniteMoeForCausalLM", "GraniteMoeForSequenceClassification", "GraniteMoeModel", "GraniteMoePreTrainedModel"]
+
