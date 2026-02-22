@@ -39,6 +39,58 @@ This model was contributed by [yonigozlan](https://huggingface.co/yonigozlan) an
 
 ## Usage examples with 🤗 Transformers
 
+### Using the Pipeline
+
+The simplest way to use SAM3 is through the `promptable-concept-segmentation` pipeline:
+
+```python
+>>> from transformers import pipeline
+>>> from PIL import Image
+>>> import requests
+
+>>> # Create pipeline
+>>> segmenter = pipeline("promptable-concept-segmentation", model="facebook/sam3")
+
+>>> # Load image
+>>> image_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
+>>> image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+
+>>> # Segment using text prompt
+>>> results = segmenter(image, text="ear", threshold=0.5, mask_threshold=0.5)
+
+>>> print(f"Found {len(results)} objects")
+>>> # Results contain:
+>>> # - score: Confidence score for each instance
+>>> # - label: The text prompt used
+>>> # - box: Bounding box in xyxy format (absolute pixel coordinates)
+>>> # - mask: Binary segmentation mask (resized to original image size)
+
+>>> # You can also use bounding box prompts
+>>> # Box in xyxy format: [x1, y1, x2, y2] in pixel coordinates
+>>> kitchen_url = "http://images.cocodataset.org/val2017/000000136466.jpg"
+>>> kitchen_image = Image.open(requests.get(kitchen_url, stream=True).raw).convert("RGB")
+
+>>> box_xyxy = [59, 144, 76, 163]
+>>> input_boxes = [[box_xyxy]]  # [batch, num_boxes, 4]
+>>> input_boxes_labels = [[1]]  # 1 = positive box
+
+>>> results = segmenter(
+...     kitchen_image,
+...     input_boxes=input_boxes,
+...     input_boxes_labels=input_boxes_labels,
+...     threshold=0.5,
+...     mask_threshold=0.5
+... )
+
+>>> print(f"Found {len(results)} objects matching the visual concept")
+```
+
+<Tip>
+
+**Note:** The pipeline output format differs from using the model and processor manually. The pipeline returns a standardized format (list of dicts with `score`, `label`, `box`, `mask`) to ensure consistency across all transformers pipelines, while the processor's `post_process_instance_segmentation()` returns a dict with `scores`, `boxes`, and `masks` as separate tensors.
+
+</Tip>
+
 ### Text-Only Prompts
 
 ```python

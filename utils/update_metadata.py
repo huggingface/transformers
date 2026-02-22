@@ -74,6 +74,11 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES",
         "AutoModelForZeroShotObjectDetection",
     ),
+    (
+        "promptable-concept-segmentation",
+        "MODEL_FOR_PROMPTABLE_CONCEPT_SEGMENTATION_MAPPING_NAMES",
+        "AutoModelForPromptableConceptSegmentation",
+    ),
     ("question-answering", "MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES", "AutoModelForQuestionAnswering"),
     ("text2text-generation", "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES", "AutoModelForSeq2SeqLM"),
     ("text-classification", "MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES", "AutoModelForSequenceClassification"),

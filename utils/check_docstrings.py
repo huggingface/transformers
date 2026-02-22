@@ -114,6 +114,7 @@ OBJECTS_TO_IGNORE = {
     "SmolLM3Config",
     "Gemma3nVisionConfig",
     "Llama4Processor",
+    "PromptableConceptSegmentationPipeline",
     # Deprecated
     "InputExample",
     "InputFeatures",
