@@ -25,18 +25,18 @@ from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
     TransformersKwargs,
     auto_docstring,
-    can_return_tuple,
     is_vision_available,
     logging,
     torch_int,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
 
 
@@ -380,7 +380,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -412,7 +412,7 @@ class OwlViTAttention(nn.Module):
             )
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
-        self.is_causal = False  # <-- THIS IS REQUIRED
+        self.is_causal = False
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
@@ -422,9 +422,9 @@ class OwlViTAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length, _ = hidden_states.shape
 
         queries = self.q_proj(hidden_states)
@@ -475,7 +475,7 @@ class OwlViTMLP(nn.Module):
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->OwlViT
 class OwlViTEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Union[OwlViTVisionConfig, OwlViTTextConfig]):
+    def __init__(self, config: OwlViTVisionConfig | OwlViTTextConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = OwlViTAttention(config)
@@ -487,26 +487,14 @@ class OwlViTEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        output_attentions: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-                `(config.encoder_attention_heads,)`.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
+    ) -> torch.FloatTensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -526,7 +514,7 @@ class OwlViTPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _supports_sdpa = True
-    _supports_flash_attn = False
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -601,11 +589,8 @@ class OwlViTEncoder(nn.Module):
         self,
         inputs_embeds,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -619,21 +604,12 @@ class OwlViTEncoder(nn.Module):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask,
-                output_attentions=output_attentions,
                 **kwargs,
             )
 
@@ -654,23 +630,24 @@ class OwlViTTextTransformer(OwlViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.Tensor,
+        input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
         """
+        if input_ids is None:
+            raise ValueError("You have to specify input_ids")
 
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
@@ -685,12 +662,9 @@ class OwlViTTextTransformer(OwlViTPreTrainedModel):
         )
 
         kwargs.pop("is_causal", None)
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             is_causal=True,
             **kwargs,
         )
@@ -708,8 +682,6 @@ class OwlViTTextTransformer(OwlViTPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -729,17 +701,13 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.Tensor,
+        input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -760,7 +728,6 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
 
-        # Get embeddings for all text queries in all batch samples
         return self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -771,30 +738,28 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
 class OwlViTVisionTransformer(OwlViTPreTrainedModel):
     def __init__(self, config: OwlViTVisionConfig):
         super().__init__(config)
+        self.config = config
+        embed_dim = config.hidden_size
 
         self.embeddings = OwlViTVisionEmbeddings(config)
-        self.pre_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pre_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = OwlViTEncoder(config)
-        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
+        pixel_values: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool | None = False,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
 
         # Cast the input to the expected `dtype`
         expected_input_dtype = self.embeddings.patch_embedding.weight.dtype
@@ -803,24 +768,18 @@ class OwlViTVisionTransformer(OwlViTPreTrainedModel):
         hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layernorm(hidden_states)
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             **kwargs,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
         pooled_output = last_hidden_state[:, 0, :]
-
         pooled_output = self.post_layernorm(pooled_output)
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -838,17 +797,13 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
         ```python
@@ -869,6 +824,7 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
+
         return self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
@@ -927,11 +883,9 @@ class OwlViTModel(OwlViTPreTrainedModel):
         >>> with torch.inference_mode():
         ...     text_features = model.get_text_features(**inputs)
         ```"""
-        # Get embeddings for all text queries in all batch samples
         text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            return_dict=True,
             **kwargs,
         )
         pooled_output = text_outputs.pooler_output
@@ -967,14 +921,13 @@ class OwlViTModel(OwlViTPreTrainedModel):
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=True,
             **kwargs,
         )
         vision_outputs.pooler_output = self.visual_projection(vision_outputs.pooler_output)
 
         return vision_outputs
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -982,13 +935,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
         pixel_values: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         return_loss: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
         return_base_image_embeds: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | OwlViTOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> OwlViTOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -1013,14 +963,13 @@ class OwlViTModel(OwlViTPreTrainedModel):
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
 
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
         )
 
-        # Get embeddings for all text queries in all batch samples
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             **kwargs,
@@ -1239,12 +1188,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         input_ids: torch.Tensor,
         pixel_values: torch.FloatTensor,
         attention_mask: torch.Tensor,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
-        # Encode text and image
         outputs = self.owlvit(
             pixel_values=pixel_values,
             input_ids=input_ids,
@@ -1252,21 +1198,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
         )
-
-        if outputs is None:
-            raise ValueError("image_text_embedder: OwlViTModel returned None. Ensure inputs are valid.")
-
-        if getattr(outputs, "vision_model_output", None) is None:
-            raise ValueError(
-                "image_text_embedder: outputs.vision_model_output is None. "
-                "Make sure pixel_values were passed to the inner OwlViTModel."
-            )
-
-        if (
-            getattr(outputs, "vision_model_output", None) is not None
-            and getattr(outputs.vision_model_output, "last_hidden_state", None) is None
-        ):
-            raise ValueError("image_text_embedder: vision_model_output.last_hidden_state is None.")
 
         if interpolate_pos_encoding:
             _, _, height, width = pixel_values.shape
@@ -1302,8 +1233,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def image_embedder(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
@@ -1393,10 +1322,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         query_pixel_values: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> OwlViTImageGuidedObjectDetectionOutput:
         r"""
         query_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -1475,22 +1402,17 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             vision_model_output=vision_outputs,
         )
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
+        input_ids: torch.Tensor,
         pixel_values: torch.FloatTensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> OwlViTObjectDetectionOutput:
         r"""
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the last hidden state. See `text_model_last_hidden_state` and
-            `vision_model_last_hidden_state` under returned tensors for more detail.
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
@@ -1531,12 +1453,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         Detected a photo of a cat with confidence 0.717 at location [1.46, 55.26, 315.55, 472.17]
         ```"""
 
-        if pixel_values is None:
-            raise ValueError("OwlViTForObjectDetection.forward: `pixel_values` is None. Must provide image tensor.")
-        if input_ids is None:
-            raise ValueError("OwlViTForObjectDetection.forward: `input_ids` is None. Must provide text queries.")
-
-        # Embed images and text queries
         query_embeds, feature_map, outputs = self.image_text_embedder(
             input_ids=input_ids,
             pixel_values=pixel_values,
