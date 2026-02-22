@@ -22,11 +22,14 @@ from ..utils.import_utils import is_grouped_mm_available, is_torch_available, is
 
 if is_torch_available():
     import torch
+    import triton
+    import triton.language as tl
+
 
 logger = logging.get_logger(__name__)
 
 # Examples of experts class with its eager mm implementation
-# class Experts(nn.Module):
+# class Experts(torch.nn.Module):
 #     """Collection of expert weights stored as 3D tensors."""
 
 #     def __init__(self, config):
@@ -34,8 +37,8 @@ logger = logging.get_logger(__name__)
 #         self.num_experts = config.n_routed_experts
 #         self.hidden_dim = config.hidden_size
 #         self.intermediate_dim = config.moe_intermediate_size
-#         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-#         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+#         self.gate_up_proj = torch.nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+#         self.down_proj = torch.nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
 #         self.act_fn = ACT2FN[config.hidden_act]
 
 #     def forward(
@@ -56,9 +59,9 @@ logger = logging.get_logger(__name__)
 #                 continue
 #             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
 #             current_state = hidden_states[token_idx]
-#             gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+#             gate, up = torch.nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
 #             current_hidden_states = self.act_fn(gate) * up
-#             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+#             current_hidden_states = torch.nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
 #             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
 #             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
@@ -488,3 +491,517 @@ def use_experts_implementation(
         return wrapper(experts_class)
 
     return wrapper
+
+
+@triton.autotune(
+    configs=[
+        triton.Config({}, num_warps=2, num_stages=2),
+        triton.Config({}, num_warps=4, num_stages=2),
+        triton.Config({}, num_warps=8, num_stages=2),
+        triton.Config({}, num_warps=4, num_stages=3),
+        triton.Config({}, num_warps=8, num_stages=3),
+        triton.Config({}, num_warps=4, num_stages=4),
+        triton.Config({}, num_warps=8, num_stages=4),
+    ],
+    key=["N", "K"],
+)
+@triton.jit
+def _w8a8_block_fp8_matmul_batched_fused(
+    # Raw (unquantized) activations — dtype float16 or bfloat16
+    X,
+    B,
+    C,
+    Bs,
+    # Shape (M=1 per batch element)
+    N,
+    K,
+    # Block size for block-wise quantization
+    group_n,
+    group_k,
+    # Per-matrix strides
+    stride_xk,
+    stride_bk,
+    stride_bn,
+    stride_cn,
+    stride_Bs_k,
+    stride_Bs_n,
+    # Batch strides
+    stride_Xb,
+    stride_Bb,
+    stride_Cb,
+    stride_Bsb,
+    # Meta-parameters
+    BLOCK_SIZE_M: tl.constexpr,  # fixed at 128; not autotuned (see wrapper)
+    BLOCK_SIZE_N: tl.constexpr,
+    BLOCK_SIZE_K: tl.constexpr,
+):
+    """Fused variant of ``_w8a8_block_fp8_matmul_batched``.
+
+    Activations are quantized on-the-fly: raw float values are loaded, a
+    per-K-block scale is computed as ``max(|x|) / 448``, and the values are
+    cast to FP8 before the dot product.  This fuses the separate
+    activation-quantization kernel into the matmul, eliminating the
+    global-memory roundtrip for the quantized activations and scales.
+    """
+    pid_n = tl.program_id(axis=0)
+    batch_id = tl.program_id(axis=1)
+
+    # Advance all pointers to the current batch element's slice.
+    X = X + batch_id * stride_Xb
+    B = B + batch_id * stride_Bb
+    C = C + batch_id * stride_Cb
+    Bs = Bs + batch_id * stride_Bsb
+
+    offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
+    offs_k = tl.arange(0, BLOCK_SIZE_K)
+    # M=1: replicate the single activation row across BLOCK_SIZE_M rows so
+    # tl.dot receives the required (BLOCK_SIZE_M, BLOCK_SIZE_K) shape.
+    x_ptrs = X + tl.arange(0, BLOCK_SIZE_M)[:, None] * 0 + offs_k[None, :] * stride_xk
+    b_ptrs = B + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
+
+    offs_bsn = offs_bn // group_n
+    Bs_ptrs = Bs + offs_bsn * stride_Bs_n
+
+    accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
+    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
+        x_raw = tl.load(x_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0).to(tl.float32)
+        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
+
+        # Per-block activation scale (scalar for M=1).
+        a_s = tl.max(tl.abs(x_raw)) / 448.0
+        # Quantize raw activations to FP8 (clamp implicitly via fp8 range).
+        a = (x_raw / tl.maximum(a_s, 1e-12)).to(tl.float8e4nv)
+
+        k_start = k * BLOCK_SIZE_K
+        offs_ks = k_start // group_k
+        b_s = tl.load(Bs_ptrs + offs_ks * stride_Bs_k)
+
+        accumulator += tl.dot(a, b) * a_s * b_s[None, :]
+        x_ptrs += BLOCK_SIZE_K * stride_xk
+        b_ptrs += BLOCK_SIZE_K * stride_bk
+
+    if C.dtype.element_ty == tl.bfloat16:
+        c = accumulator.to(tl.bfloat16)
+    elif C.dtype.element_ty == tl.float16:
+        c = accumulator.to(tl.float16)
+    else:
+        c = accumulator.to(tl.float32)
+
+    # Only write row 0 (M=1); mask keeps the (BLOCK_SIZE_M, BLOCK_SIZE_N) shape.
+    offs_cm = tl.arange(0, BLOCK_SIZE_M)
+    offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+    c_ptrs = C + offs_cm[:, None] * 0 + stride_cn * offs_cn[None, :]
+    c_mask = (offs_cm[:, None] < 1) & (offs_cn[None, :] < N)
+    tl.store(c_ptrs, c, mask=c_mask)
+
+
+@torch.library.triton_op("transformers::fp8_batched_mm_fused", mutates_args={})
+def w8a8_block_fp8_matmul_triton_batched_fused(
+    X: torch.Tensor,
+    B: torch.Tensor,
+    Bs: torch.Tensor,
+    block_n: int,
+    block_k: int,
+) -> torch.Tensor:
+    """Batched block-wise FP8 matrix multiplication with fused activation quantization.
+
+    Quantizes activations on-the-fly inside the Triton kernel (per K-block
+    scale = ``max(|x|) / 448``), eliminating the separate ``act_quant`` launch
+    and global-memory roundtrip.  Decorated with ``@triton_op`` so it is fully
+    composable with ``torch.compile``, AOTInductor, and PyTorch subsystems
+    (FlopCounter, tensor subclasses, CPU fallback).
+
+    Args:
+        X: Raw activations, shape ``(batch, K)``, dtype float16 or bfloat16.
+        B: Quantized weights, shape ``(batch, N, K)``, dtype float8_e4m3fn.
+        Bs: Weight scales, shape ``(batch, N // block_n, K // block_k)``.
+        block_n: Quantization block size along the N dimension.
+        block_k: Quantization block size along the K dimension.
+
+    Returns:
+        Tensor of shape ``(batch, N)``, same dtype as ``X``.
+    """
+    assert X.ndim == 2, "X must be (batch, K)"
+    assert X.is_contiguous()
+    batch, K = X.shape
+    N = B.shape[1]
+
+    assert B.is_contiguous()
+    assert B.shape[-1] == K, "K dimension mismatch"
+    assert Bs.shape[0] == batch
+
+    C = X.new_empty(batch, N)
+
+    # Grid: one program per (N-tile, batch element).  Both BLOCK_SIZE_N and
+    # BLOCK_SIZE_M are fixed (128 each) to match the quantisation block size
+    # and avoid accumulation-order differences in the FP8 WMMA units that appear
+    # when BLOCK_SIZE_M is smaller.
+    grid = (triton.cdiv(N, block_n), batch)
+
+    torch.library.wrap_triton(_w8a8_block_fp8_matmul_batched_fused)[grid](
+        X,
+        B,
+        C,
+        Bs,
+        N,
+        K,
+        block_n,
+        block_k,
+        X.stride(1),  # stride_xk
+        B.stride(2),  # stride_bk
+        B.stride(1),  # stride_bn
+        C.stride(1),  # stride_cn
+        Bs.stride(2),  # stride_Bs_k
+        Bs.stride(1),  # stride_Bs_n
+        X.stride(0),  # stride_Xb
+        B.stride(0),  # stride_Bb
+        C.stride(0),  # stride_Cb
+        Bs.stride(0),  # stride_Bsb
+        BLOCK_SIZE_M=128,
+        BLOCK_SIZE_N=block_n,
+        BLOCK_SIZE_K=block_k,
+    )
+
+    return C
+
+
+@triton.autotune(
+    configs=[
+        triton.Config({}, num_warps=2, num_stages=2),
+        triton.Config({}, num_warps=4, num_stages=2),
+        triton.Config({}, num_warps=8, num_stages=2),
+        triton.Config({}, num_warps=4, num_stages=3),
+        triton.Config({}, num_warps=8, num_stages=3),
+        triton.Config({}, num_warps=4, num_stages=4),
+        triton.Config({}, num_warps=8, num_stages=4),
+    ],
+    key=["N", "K"],
+)
+@triton.jit
+def _w8a8_block_fp8_grouped_mm_fused(
+    # Raw (unquantized) activations sorted by expert — dtype float16 / bfloat16
+    X,  # (S, K)
+    B,  # (E, N, K) quantized weight matrices
+    C,  # (S, N) output
+    Bs,  # (E, N // group_n, K // group_k) weight scales
+    Offsets,  # (E,) int32 — cumulative row-end per expert
+    TileOffsets,  # (E,) int32 — cumulative tile-end per expert
+    # Shape
+    S,
+    N,
+    K,
+    # Block size for block-wise quantization
+    group_n,
+    group_k,
+    # Strides
+    stride_xm,
+    stride_xk,
+    stride_Eb,
+    stride_bk,
+    stride_bn,
+    stride_cm,
+    stride_cn,
+    stride_Esb,
+    stride_Bsk,
+    stride_Bsn,
+    # Meta-parameters
+    NUM_EXPERTS: tl.constexpr,
+    BLOCK_SIZE_M: tl.constexpr,
+    BLOCK_SIZE_N: tl.constexpr,
+    BLOCK_SIZE_K: tl.constexpr,
+):
+    """Fused grouped FP8 block-wise matmul.
+
+    Activation quantization is performed on-the-fly inside the kernel: for each
+    K-tile and each active row, the per-row block scale is computed as
+    ``max(|x|) / 448`` and the values are cast to FP8 before the dot product.
+    This fuses the separate ``act_quant`` kernel into the matmul, eliminating
+    the global-memory roundtrip for quantized activations and their scales.
+    """
+    pid = tl.program_id(axis=0)
+    num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
+    pid_m = pid // num_pid_n
+    pid_n = pid % num_pid_n
+
+    # Exit early for programs beyond the actual tile count.
+    total_tiles = tl.load(TileOffsets + NUM_EXPERTS - 1)
+    if pid_m >= total_tiles:
+        return
+
+    # Scan TileOffsets to find the owning expert.
+    expert_id = 0
+    for e in range(NUM_EXPERTS):
+        tile_end = tl.load(TileOffsets + e)
+        expert_id = tl.where(pid_m >= tile_end, e + 1, expert_id)
+
+    prev_eid = tl.maximum(expert_id - 1, 0)
+
+    expert_start = tl.where(expert_id == 0, 0, tl.load(Offsets + prev_eid))
+    expert_end = tl.load(Offsets + expert_id)
+    M_expert = expert_end - expert_start
+
+    expert_tile_start = tl.where(expert_id == 0, 0, tl.load(TileOffsets + prev_eid))
+    local_tile = pid_m - expert_tile_start
+    m_off = local_tile * BLOCK_SIZE_M
+
+    offs_am = m_off + tl.arange(0, BLOCK_SIZE_M)
+    row_mask = offs_am < M_expert
+    offs_global_m = expert_start + offs_am
+
+    offs_bn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+    offs_bn_safe = offs_bn % N
+    offs_k = tl.arange(0, BLOCK_SIZE_K)
+
+    offs_global_m_safe = offs_global_m % S
+
+    x_ptrs = X + offs_global_m_safe[:, None] * stride_xm + offs_k[None, :] * stride_xk
+    b_ptrs = B + expert_id * stride_Eb + offs_k[:, None] * stride_bk + offs_bn_safe[None, :] * stride_bn
+    offs_bsn_safe = offs_bn_safe // group_n
+    Bs_ptrs = Bs + expert_id * stride_Esb + offs_bsn_safe * stride_Bsn
+
+    accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
+    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
+        x_raw = tl.load(
+            x_ptrs,
+            mask=row_mask[:, None] & (offs_k[None, :] < K - k * BLOCK_SIZE_K),
+            other=0.0,
+        ).to(tl.float32)
+        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
+
+        # Per-row, per-K-block activation scale.
+        a_s = tl.max(tl.abs(x_raw), axis=1) / 448.0  # (BLOCK_SIZE_M,)
+        # Quantize activations to FP8; clamp the denominator so masked
+        # all-zero rows don't produce NaN (their a_s multiplier is 0 anyway).
+        a = (x_raw / tl.maximum(a_s[:, None], 1e-12)).to(tl.float8e4nv)
+
+        k_start = k * BLOCK_SIZE_K
+        offs_ks = k_start // group_k
+        b_s = tl.load(Bs_ptrs + offs_ks * stride_Bsk)
+
+        accumulator += tl.dot(a, b) * a_s[:, None] * b_s[None, :]
+        x_ptrs += BLOCK_SIZE_K * stride_xk
+        b_ptrs += BLOCK_SIZE_K * stride_bk
+
+    if C.dtype.element_ty == tl.bfloat16:
+        c = accumulator.to(tl.bfloat16)
+    elif C.dtype.element_ty == tl.float16:
+        c = accumulator.to(tl.float16)
+    else:
+        c = accumulator.to(tl.float32)
+
+    c_ptrs = C + stride_cm * offs_global_m[:, None] + stride_cn * offs_bn[None, :]
+    c_mask = row_mask[:, None] & (offs_bn[None, :] < N)
+    tl.store(c_ptrs, c, mask=c_mask)
+
+
+@torch.library.triton_op("transformers::fp8_grouped_mm_fused", mutates_args={})
+def w8a8_block_fp8_matmul_triton_grouped_fused(
+    X: torch.Tensor,
+    B: torch.Tensor,
+    Bs: torch.Tensor,
+    offsets: torch.Tensor,
+    tokens_per_expert: torch.Tensor,
+    block_n: int,
+    block_k: int,
+) -> torch.Tensor:
+    """Grouped block-wise FP8 matrix multiplication with fused activation quantization.
+
+    Quantizes activations on-the-fly inside the Triton kernel (per-row
+    per-K-block scale = ``max(|x|, axis=1) / 448``), eliminating the separate
+    ``act_quant`` launch and global-memory roundtrip.  Decorated with
+    ``@triton_op`` so it is fully composable with ``torch.compile``,
+    AOTInductor, and PyTorch subsystems (FlopCounter, tensor subclasses, CPU
+    fallback).
+
+    Args:
+        X: Raw activations sorted by expert, shape ``(S, K)``.
+        B: Quantized weights for every expert, shape ``(E, N, K)``.
+        Bs: Weight scales, shape ``(E, N // block_n, K // block_k)``.
+        offsets: Cumulative token-count end indices per expert, ``(E,)`` int32.
+        tokens_per_expert: Token count per expert, shape ``(E,)``.
+        block_n: Quantization block size along the N dimension.
+        block_k: Quantization block size along the K dimension.
+
+    Returns:
+        Tensor of shape ``(S, N)``, same dtype as ``X``.
+    """
+    S, K = X.shape
+    E, N, _ = B.shape
+
+    assert X.is_contiguous() and B.is_contiguous()
+    assert Bs.is_contiguous()
+    assert offsets.is_contiguous()
+
+    C = X.new_empty(S, N)
+
+    BLOCK_SIZE_M = 128
+    tiles_per_expert = (tokens_per_expert + BLOCK_SIZE_M - 1) // BLOCK_SIZE_M
+    tile_offsets = torch.cumsum(tiles_per_expert, dim=0).to(torch.int32)
+    # Upper bound: sum_e ceil(M_e / BLOCK_M) <= ceil(S / BLOCK_M) + E
+    max_M_tiles = triton.cdiv(S, BLOCK_SIZE_M) + E
+
+    grid = (max_M_tiles * triton.cdiv(N, block_n),)
+
+    torch.library.wrap_triton(_w8a8_block_fp8_grouped_mm_fused)[grid](
+        X,
+        B,
+        C,
+        Bs,
+        offsets,
+        tile_offsets,
+        S,
+        N,
+        K,
+        block_n,
+        block_k,
+        X.stride(0),  # stride_xm
+        X.stride(1),  # stride_xk
+        B.stride(0),  # stride_Eb
+        B.stride(2),  # stride_bk
+        B.stride(1),  # stride_bn
+        C.stride(0),  # stride_cm
+        C.stride(1),  # stride_cn
+        Bs.stride(0),  # stride_Esb
+        Bs.stride(2),  # stride_Bsk
+        Bs.stride(1),  # stride_Bsn
+        NUM_EXPERTS=E,
+        BLOCK_SIZE_M=BLOCK_SIZE_M,
+        BLOCK_SIZE_N=block_n,
+        BLOCK_SIZE_K=block_k,
+        # num_warps / num_stages set by @triton.autotune
+    )
+
+    return C
+
+
+def fp8_batched_mm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    device = hidden_states.device
+    num_top_k = top_k_index.size(-1)
+    num_tokens = hidden_states.size(0)
+    hidden_dim = hidden_states.size(-1)
+
+    # Reshape for easier indexing
+    # S is the number of selected tokens-experts pairs (S = num_tokens * num_top_k)
+    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
+    sample_weights = top_k_weights.reshape(-1)  # (S,)
+    expert_ids = top_k_index.reshape(-1)  # (S,)
+
+    # Get current hidden states for selected samples
+    selected_hidden_states = hidden_states[token_idx]
+
+    # Select expert weights and scales for selected samples
+    selected_gate_up = self.gate_up_proj[expert_ids]
+    selected_gate_up_scale = self.gate_up_proj_scale_inv[expert_ids]
+    selected_down = self.down_proj[expert_ids]
+    selected_down_scale = self.down_proj_scale_inv[expert_ids]
+
+    # --- Up projection per expert (FP8 batched, fused quant) ---
+    # Activation quantization is fused into the matmul kernel; no separate
+    # act_quant launch or intermediate fp8 tensor needed.
+    gate_up_out = torch.ops.transformers.fp8_batched_mm_fused(
+        selected_hidden_states.contiguous(),
+        selected_gate_up,
+        selected_gate_up_scale,
+        self.block_size[0],
+        self.block_size[1],
+    )  # (S, 2 * intermediate_dim)
+
+    # Apply gating
+    gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
+
+    # --- Down projection per expert (FP8 batched, fused quant) ---
+    out_per_sample = torch.ops.transformers.fp8_batched_mm_fused(
+        gated_out.contiguous(),
+        selected_down,
+        selected_down_scale,
+        self.block_size[0],
+        self.block_size[1],
+    )  # (S, hidden_dim)
+
+    # Apply routing weights
+    out_per_sample = out_per_sample * sample_weights.to(out_per_sample.dtype).unsqueeze(-1)  # (S, hidden_dim)
+
+    # Accumulate results using deterministic reshape+sum instead of index_add_
+    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
+    final_hidden_states = out_per_sample.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+
+    return final_hidden_states.to(hidden_states.dtype)
+
+
+def fp8_grouped_mm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    device = hidden_states.device
+    num_top_k = top_k_index.size(-1)
+    num_tokens = hidden_states.size(0)
+    hidden_dim = hidden_states.size(-1)
+
+    # Reshape for easier indexing
+    # S is the number of selected token-expert pairs (S = num_tokens * num_top_k)
+    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
+    sample_weights = top_k_weights.reshape(-1)  # (S,)
+    expert_ids = top_k_index.reshape(-1)  # (S,)
+
+    # Get current hidden states for selected samples
+    selected_hidden_states = hidden_states[token_idx]
+
+    # Sort by expert for grouped processing
+    perm = torch.argsort(expert_ids)
+    inv_perm = torch.argsort(perm)
+    expert_ids_g = expert_ids[perm]
+    sample_weights_g = sample_weights[perm]
+    selected_hidden_states_g = selected_hidden_states[perm]
+
+    # Compute per-expert offsets for w8a8_block_fp8_matmul_triton_grouped
+    # using histc instead of bincount to avoid cuda graph issues
+    # With deterministic algorithms, CPU only supports float input, CUDA only supports int input.
+    histc_input = expert_ids_g.float() if device.type == "cpu" else expert_ids_g.int()
+    tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
+    offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
+
+    # --- Up projection per expert (FP8 grouped, fused quant) ---
+    # Activation quantization is fused into the matmul kernel; no separate
+    # act_quant launch or intermediate fp8 tensor needed.
+    gate_up_out = torch.ops.transformers.fp8_grouped_mm_fused(
+        selected_hidden_states_g,
+        self.gate_up_proj,
+        self.gate_up_proj_scale_inv,
+        offsets,
+        tokens_per_expert,
+        self.block_size[0],
+        self.block_size[1],
+    )  # (S, 2 * intermediate_dim)
+
+    # Apply gating
+    gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
+
+    # --- Down projection per expert (FP8 grouped, fused quant) ---
+    out_per_sample_g = torch.ops.transformers.fp8_grouped_mm_fused(
+        gated_out,
+        self.down_proj,
+        self.down_proj_scale_inv,
+        offsets,
+        tokens_per_expert,
+        self.block_size[0],
+        self.block_size[1],
+    )  # (S, hidden_dim)
+
+    # Apply routing weights
+    out_per_sample_g = out_per_sample_g * sample_weights_g.to(out_per_sample_g.dtype).unsqueeze(-1)  # (S, hidden_dim)
+
+    # Restore original order
+    out_per_sample = out_per_sample_g[inv_perm]
+
+    # Accumulate results using deterministic reshape+sum instead of index_add_
+    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
+    final_hidden_states = out_per_sample.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+
+    return final_hidden_states.to(hidden_states.dtype)
