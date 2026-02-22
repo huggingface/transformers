@@ -147,12 +147,22 @@ class TokenClassificationPipeline(ChunkPipeline):
     def _sanitize_parameters(
         self,
         ignore_labels=None,
+        grouped_entities=None,
         aggregation_strategy: AggregationStrategy | None = None,
         offset_mapping: list[tuple[int, int]] | None = None,
         is_split_into_words: bool = False,
         stride: int | None = None,
         delimiter: str | None = None,
     ):
+        if grouped_entities is not None:
+            warnings.warn(
+                "`grouped_entities` is deprecated and will be removed in a future version. "
+                'Use `aggregation_strategy="simple"` instead.',
+                FutureWarning,
+            )
+            if aggregation_strategy is None:
+                aggregation_strategy = "simple" if grouped_entities else "none"
+
         preprocess_params = {}
         preprocess_params["is_split_into_words"] = is_split_into_words
 
