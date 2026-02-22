@@ -21,8 +21,8 @@ Original repository: https://github.com/facebookresearch/segment-anything-3
 import argparse
 import gc
 import os
+import re
 
-import regex as re
 import torch
 
 from transformers import CLIPTokenizerFast, Sam3Config, Sam3ImageProcessorFast, Sam3Model, Sam3Processor

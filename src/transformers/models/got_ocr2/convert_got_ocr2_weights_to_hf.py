@@ -16,8 +16,8 @@ import argparse
 import gc
 import glob
 import os
+import re
 
-import regex as re
 import torch
 from huggingface_hub import snapshot_download
 from safetensors import safe_open

@@ -15,8 +15,7 @@
 
 import json
 import os
-
-import regex
+import re
 
 from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging, requires_backends
@@ -93,16 +92,16 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
 
     def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
         # expand symbols
-        text = regex.sub(";", ",", text)
-        text = regex.sub(":", ",", text)
-        text = regex.sub("-", " ", text)
-        text = regex.sub("&", "and", text)
+        text = re.sub(";", ",", text)
+        text = re.sub(":", ",", text)
+        text = re.sub("-", " ", text)
+        text = re.sub("&", "and", text)
 
         # strip unnecessary symbols
-        text = regex.sub(r"[\(\)\[\]\<\>\"]+", "", text)
+        text = re.sub(r"[\(\)\[\]\<\>\"]+", "", text)
 
         # strip whitespaces
-        text = regex.sub(r"\s+", " ", text)
+        text = re.sub(r"\s+", " ", text)
 
         text = text.upper()
 
