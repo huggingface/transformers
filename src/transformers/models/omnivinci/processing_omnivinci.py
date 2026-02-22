@@ -447,7 +447,9 @@ class OmniVinciProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class OmniVinciProcessor(ProcessorMixin):
-    attributes = []
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "AutoImageProcessor"
+    tokenizer_class = "AutoTokenizer"
     valid_kwargs = []
 
     def __init__(
@@ -460,6 +462,7 @@ class OmniVinciProcessor(ProcessorMixin):
         self.image_processor = image_processor
         self.tokenizer = tokenizer
         self.padding_side = padding_side
+        self.tokenizer.padding_side = padding_side
 
         # Use <|endoftext|> token as padding token for Qwen models
         self.pad_token_id = self.tokenizer("<|endoftext|>").input_ids[0]

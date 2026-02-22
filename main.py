@@ -3,11 +3,9 @@
 
 import torch
 
-from transformers import AutoImageProcessor
 from transformers.models.omnivinci.configuration_omnivinci import OmniVinciConfig
 from transformers.models.omnivinci.modeling_omnivinci import OmniVinciForCausalLM
 from transformers.models.omnivinci.processing_omnivinci import OmniVinciProcessor
-from transformers.models.qwen2 import Qwen2TokenizerFast
 
 
 @torch.inference_mode()
@@ -21,22 +19,14 @@ def main() -> None:
     config.num_video_frames = 128
     config.audio_chunk_length = "max_3600"
 
-    tokenizer = Qwen2TokenizerFast.from_pretrained(model_path)
-    tokenizer.padding_side = "left"
-    image_processor = AutoImageProcessor.from_pretrained(model_path, use_fast=False, trust_remote_code=True)
-
     model = OmniVinciForCausalLM.from_pretrained(
         model_path,
         config=config,
         dtype=dtype,
         device_map="auto",
-        low_cpu_mem_usage=True,
     ).eval()
-    processor = OmniVinciProcessor(
-        image_processor=image_processor,
-        tokenizer=tokenizer,
-        config=model.config,
-        padding_side=tokenizer.padding_side,
+    processor = OmniVinciProcessor.from_pretrained(
+        model_path, config=model.config, padding_side="left", use_fast=False
     )
 
     conversation = [
