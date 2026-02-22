@@ -42,8 +42,7 @@ def main() -> None:
         }
     ]
 
-    conversation = processor.apply_chat_template(conversation, add_generation_prompt=True)
-    inputs = processor([conversation])
+    inputs = processor.apply_chat_template(conversation, tokenize=True, add_generation_prompt=True, return_dict=True)
 
     inputs.input_ids = inputs.input_ids.to(model.device)
     inputs.attention_mask = inputs.attention_mask.to(model.device)

@@ -592,7 +592,7 @@ class OmniVinciProcessor(ProcessorMixin):
             conversation,
             self.tokenizer,
             mm_use_bos_eos_tokens=self.config.mm_use_bos_eos_tokens,
-            add_generation_prompt=True,
+            add_generation_prompt=kwargs.get("add_generation_prompt", True),
         )
 
         input_ids = inputs.unsqueeze(0)
@@ -654,8 +654,33 @@ class OmniVinciProcessor(ProcessorMixin):
 
         return vila_conv
 
-    def apply_chat_template(self, conversation, add_generation_prompt=True, **kwargs):
-        return self.convert_gpt_conv_to_vila_conv(conversation)
+    def apply_chat_template(
+        self,
+        conversation,
+        add_generation_prompt=True,
+        tokenize=False,
+        return_dict=True,
+        **kwargs,
+    ):
+        is_batched = (
+            isinstance(conversation, (list, tuple))
+            and len(conversation) > 0
+            and isinstance(conversation[0], (list, tuple))
+        )
+        converted = (
+            [self.convert_gpt_conv_to_vila_conv(conv) for conv in conversation]
+            if is_batched
+            else self.convert_gpt_conv_to_vila_conv(conversation)
+        )
+
+        if not tokenize:
+            return converted
+
+        batched_conversations = converted if is_batched else [converted]
+        outputs = self(conversation=batched_conversations, add_generation_prompt=add_generation_prompt, **kwargs)
+        if return_dict:
+            return outputs
+        return outputs["input_ids"]
 
 
 __all__ = [
