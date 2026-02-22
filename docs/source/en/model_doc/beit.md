@@ -13,39 +13,80 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-06-15 and added to Hugging Face Transformers on 2021-08-04.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+       
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # BEiT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[BEiT](https://huggingface.co/papers/2106.08254) is like BERT, but for images! Instead of learning from labeled image data, BEiT learns by predicting missing parts of an image — kind of like solving a visual puzzle. What makes it stand out is that it predicts visual tokens (discrete representations of image patches) rather than raw pixels, using a tokenizer inspired by DALL-E.
 
-## Overview
+This self-supervised pretraining approach made BEiT the first Vision Transformer model where pretraining without labels actually beat traditional supervised training. That's a big deal for learning from unlabeled images!
 
-The BEiT model was proposed in [BEiT: BERT Pre-Training of Image Transformers](https://huggingface.co/papers/2106.08254) by
-Hangbo Bao, Li Dong and Furu Wei. Inspired by BERT, BEiT is the first paper that makes self-supervised pre-training of
-Vision Transformers (ViTs) outperform supervised pre-training. Rather than pre-training the model to predict the class
-of an image (as done in the [original ViT paper](https://huggingface.co/papers/2010.11929)), BEiT models are pre-trained to
-predict visual tokens from the codebook of OpenAI's [DALL-E model](https://huggingface.co/papers/2102.12092) given masked
-patches.
+You can find all the original BEiT checkpoints under the [BEiT](https://huggingface.co/models?search=microsoft/beit) collection.
 
-The abstract from the paper is the following:
+> [!TIP]
+> This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/beit).
+>
+> Click on the BEiT models in the right sidebar for more examples of how to apply BEiT to different image classification and semantic segmentation tasks.
 
-*We introduce a self-supervised vision representation model BEiT, which stands for Bidirectional Encoder representation
-from Image Transformers. Following BERT developed in the natural language processing area, we propose a masked image
-modeling task to pretrain vision Transformers. Specifically, each image has two views in our pre-training, i.e, image
-patches (such as 16x16 pixels), and visual tokens (i.e., discrete tokens). We first "tokenize" the original image into
-visual tokens. Then we randomly mask some image patches and fed them into the backbone Transformer. The pre-training
-objective is to recover the original visual tokens based on the corrupted image patches. After pre-training BEiT, we
-directly fine-tune the model parameters on downstream tasks by appending task layers upon the pretrained encoder.
-Experimental results on image classification and semantic segmentation show that our model achieves competitive results
-with previous pre-training methods. For example, base-size BEiT achieves 83.2% top-1 accuracy on ImageNet-1K,
-significantly outperforming from-scratch DeiT training (81.8%) with the same setup. Moreover, large-size BEiT obtains
-86.3% only using ImageNet-1K, even outperforming ViT-L with supervised pre-training on ImageNet-22K (85.2%).*
+The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/beit).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+import torch
+from transformers import pipeline
+
+classifier = pipeline(
+    task="image-classification",
+    model="microsoft/beit-base-patch16-224-pt22k-ft22k",
+    torch_dtype=torch.float16,
+    device=0,
+)
+classifier("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, BeitForImageClassification
+
+image_processor = AutoImageProcessor.from_pretrained(
+    "microsoft/beit-base-patch16-224-pt22k-ft22k",
+    use_fast=True,
+)
+model = BeitForImageClassification.from_pretrained(
+    "microsoft/beit-base-patch16-224-pt22k-ft22k",
+    torch_dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa",
+)
+
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+inputs = image_processor(image, return_tensors="pt").to(model.device, dtype=torch.float16)
+
+with torch.no_grad():
+    logits = model(**inputs).logits
+
+predicted_class_id = logits.argmax(dim=-1).item()
+print(f"Predicted class: {model.config.id2label[predicted_class_id]}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## Usage tips
 
