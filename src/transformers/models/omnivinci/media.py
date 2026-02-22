@@ -18,6 +18,7 @@ import os
 import random
 import tempfile
 from collections import defaultdict
+from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
 
@@ -39,14 +40,14 @@ from .configuration_omnivinci import MEDIA_TOKENS
 class Media:
     """Base class for media objects."""
 
-    pass
+    __slots__ = ()
 
 
+@dataclass(slots=True)
 class File(Media):
     """File-based media object."""
 
-    def __init__(self, path: str) -> None:
-        self.path = path
+    path: str | BytesIO
 
 
 class Image(File):
@@ -61,17 +62,11 @@ class Video(File):
     pass
 
 
+@dataclass(slots=True)
 class Sound(File):
     """Sound/music audio media object."""
 
-    def __init__(self, path, extension: str | None = None) -> None:
-        self.path = path
-        self.extension = extension
-
-
-def make_list(obj: Any) -> list:
-    """Convert object to list if not already a list."""
-    return obj if isinstance(obj, list) else [obj]
+    extension: str | None = None
 
 
 def _extract_image(image: Image | PIL.Image.Image) -> PIL.Image.Image:
@@ -83,43 +78,50 @@ def _extract_image(image: Image | PIL.Image.Image) -> PIL.Image.Image:
 
 def _load_video_bytesio(
     video_bytesio: BytesIO, *, num_frames: int, config: PretrainedConfig, load_aud: bool = False
-) -> list[PIL.Image.Image]:
+) -> tuple[list[PIL.Image.Image], np.ndarray | None, dict[str, Any]]:
     """Load video from BytesIO object by writing to temporary file."""
     with tempfile.NamedTemporaryFile(delete=True, suffix=".mp4") as temp_video:
+        video_bytesio.seek(0)
         temp_video.write(video_bytesio.read())
         temp_video_name = temp_video.name
         return _load_video(temp_video_name, num_frames=num_frames, load_aud=load_aud, config=config)
 
 
-def get_overlap(inp1, inp2):
-    """Return overlapping [start, end) interval for two [start, end] pairs."""
-    overlap_start = max(inp1[0], inp2[0])
-    overlap_end = min(inp1[1], inp2[1])
-    return (overlap_start, overlap_end) if overlap_start < overlap_end else None
-
-
 def _load_video(
     video_path: str, *, num_frames: int, config: PretrainedConfig, load_aud: bool = False
-) -> list[PIL.Image.Image]:
-    # Load video frames from a directory
+) -> tuple[list[PIL.Image.Image], np.ndarray | None, dict[str, Any]]:
+    """Load video frames (and optionally aligned audio features) from file or frame directory."""
     if os.path.isdir(video_path):
         frame_paths = sorted(glob.glob(os.path.join(video_path, "*")))
+        if not frame_paths:
+            raise ValueError(f"Video frame directory '{video_path}' is empty.")
         indices = np.round(np.linspace(0, len(frame_paths) - 1, num_frames)).astype(int)
-        return [PIL.Image.open(frame_paths[index]) for index in indices]
+        output_frames = []
+        for index in indices:
+            with PIL.Image.open(frame_paths[index]) as frame:
+                output_frames.append(frame.convert("RGB"))
+        output_frame_times = [float(index) for index in indices]
+        video_info = {
+            "video_path": video_path,
+            "has_audio": False,
+            "video_duration": float(len(frame_paths)),
+            "audio_info": None,
+            "video_frame_times": output_frame_times,
+        }
+        return output_frames, None, video_info
 
     vidcap = cv2.VideoCapture(video_path)
     try:
-        # Load audio if available and needed
+        # Load audio if available and needed.
+        aud_feature = None
         audio_info = None
         if load_aud:
             try:
                 aud_feature, audio_info = _load_speech(video_path, config)
             except Exception:
                 aud_feature = None
-        else:
-            aud_feature = None
 
-        # Find the last frame as frame count might not be accurate
+        # Find the last valid frame since cv2 frame_count may be inaccurate.
         frame_count = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
         while frame_count > 0:
             vidcap.set(cv2.CAP_PROP_POS_FRAMES, frame_count - 1)
@@ -129,16 +131,18 @@ def _load_video(
         else:
             raise ValueError(f"Video '{video_path}' has no frames.")
 
-        # Extract frames uniformly
+        # Extract frames uniformly.
         indices = np.round(np.linspace(0, frame_count - 1, num_frames)).astype(int)
 
         fps = vidcap.get(cv2.CAP_PROP_FPS)
+        if fps <= 0:
+            fps = 1.0
         video_duration = frame_count / fps
 
         segment_vis_indices_list = None
         segment_aud_indices_list = None
 
-        # When load_audio_in_video and interleaved_vis_aud_in_video is True, we need to load frames for each video segment
+        # When loading interleaved visual/audio clips, build segment indices for both modalities.
         if config.load_audio_in_video and config.interleaved_vis_aud_in_video and aud_feature is not None:
             segment_duration = config.interleaved_video_segment_duration
             if segment_duration == -1:
@@ -167,7 +171,9 @@ def _load_video(
                 clip_end_sec = min(clip_start_sec + segment_duration, video_duration)
 
                 # get the audio indices for the current clip
-                overlap = get_overlap([clip_start_sec, clip_end_sec], [audio_start_sec, audio_end_sec])
+                overlap_start = max(clip_start_sec, audio_start_sec)
+                overlap_end = min(clip_end_sec, audio_end_sec)
+                overlap = (overlap_start, overlap_end) if overlap_start < overlap_end else None
                 if overlap is not None:
                     aud_sample_end_idx = round((overlap[1] - audio_start_sec) * stft_frames_per_second)
                     segment_aud_indices_list.append([aud_sample_start_idx, aud_sample_end_idx])
@@ -225,7 +231,9 @@ def _load_video(
         vidcap.release()
 
 
-def _extract_video(video: Video, config: PretrainedConfig) -> list[PIL.Image.Image]:
+def _extract_video(
+    video: Video, config: PretrainedConfig
+) -> tuple[list[PIL.Image.Image], dict[str, Any]] | tuple[list[PIL.Image.Image], np.ndarray | None, dict[str, Any]]:
     num_frames = config.num_video_frames
     if getattr(config, "fps") != 0:
         print("Extracting frames from video with specified FPS is not supported yet. Ignored.")
@@ -245,125 +253,111 @@ def _extract_video(video: Video, config: PretrainedConfig) -> list[PIL.Image.Ima
         return frames, video_info
 
 
-def _load_speech(speech, config: PretrainedConfig):
+def _load_speech(speech: str | Sound, config: PretrainedConfig) -> tuple[np.ndarray, dict[str, Any]] | None:
     speech_path = speech if isinstance(speech, str) else speech.path
-
     if speech_path is None:
         return None
 
-    if config.audio_chunk_length and not (
-        isinstance(config.audio_chunk_length, str) and "max" in config.audio_chunk_length
-    ):
+    sampling_rate = config.audio_sampling_rate
+    audio_chunk_length = config.audio_chunk_length
+    load_max_audio = isinstance(audio_chunk_length, str) and "max" in audio_chunk_length
+    if load_max_audio:
+        if "_" in audio_chunk_length:
+            max_audio_chunk_length = int(audio_chunk_length.split("_", maxsplit=1)[1])
+            audio_n_samples_limit = max_audio_chunk_length * sampling_rate
+        else:
+            audio_n_samples_limit = None
+    else:
         try:
-            config.audio_chunk_length = int(config.audio_chunk_length)
-        except Exception as e:
-            print(f"Error setting audio_chunk_length: {e}")
-            raise e
+            audio_n_samples_limit = int(audio_chunk_length) * sampling_rate
+        except Exception as error:
+            raise ValueError(f"Error setting audio_chunk_length: {error}") from error
 
-    audio_n_samples_limit = config.audio_chunk_length * config.audio_sampling_rate
+    def _load_wav(path_or_file: str | BytesIO) -> tuple[np.ndarray, float]:
+        audio, loaded_sampling_rate = librosa.load(path_or_file, sr=sampling_rate)
+        return audio, audio.shape[0] / loaded_sampling_rate
 
-    def load_wav(path_or_file):
-        audio, sample_rate = librosa.load(path_or_file, sr=config.audio_sampling_rate)
-        ori_audio_duration = audio.shape[0] / sample_rate
-        return audio, ori_audio_duration
-
-    def get_audio(audio_data, audio_n_samples):
+    def _slice_audio_window(audio_data: decord.audio_reader.AudioReader | np.ndarray) -> tuple[np.ndarray, int, int]:
         if isinstance(audio_data, decord.audio_reader.AudioReader):
             ori_n_samples = audio_data.shape[1]
         else:
             ori_n_samples = audio_data.shape[0]
 
-        audio_start_sample_id = 0
-        audio_end_sample_id = ori_n_samples
-
-        load_max_audio = isinstance(config.audio_chunk_length, str) and "max" in config.audio_chunk_length
-        if hasattr(config, "random_audio_sample") and not load_max_audio:
-            if ori_n_samples > audio_n_samples:
-                audio_start_sample_id = random.randint(0, ori_n_samples - audio_n_samples)
-                audio_end_sample_id = audio_start_sample_id + audio_n_samples
+        if audio_n_samples_limit is None:
+            target_samples = ori_n_samples
         else:
-            if load_max_audio:
-                if "_" in config.audio_chunk_length:
-                    max_audio_chunk_length = int(config.audio_chunk_length.split("_")[1])
-                    max_audio_n_samples = max_audio_chunk_length * config.audio_sampling_rate
-                    audio_n_samples = min(ori_n_samples, max_audio_n_samples)
-                    audio_end_sample_id = audio_n_samples
-                else:
-                    audio_n_samples = ori_n_samples
-                    audio_end_sample_id = audio_n_samples
-            else:
-                audio_end_sample_id = min(audio_n_samples, ori_n_samples)
+            target_samples = min(audio_n_samples_limit, ori_n_samples)
+
+        audio_start_sample_id = 0
+        if (
+            bool(getattr(config, "random_audio_sample", False))
+            and not load_max_audio
+            and ori_n_samples > target_samples
+        ):
+            audio_start_sample_id = random.randint(0, ori_n_samples - target_samples)
+        audio_end_sample_id = audio_start_sample_id + target_samples
 
         if isinstance(audio_data, decord.audio_reader.AudioReader):
             audio_data = audio_data[audio_start_sample_id:audio_end_sample_id].asnumpy()[0]
         else:
             audio_data = audio_data[audio_start_sample_id:audio_end_sample_id]
-
-        return audio_data, audio_n_samples, audio_start_sample_id, audio_end_sample_id
+        return audio_data, audio_start_sample_id, audio_end_sample_id
 
     if isinstance(speech_path, BytesIO):
         if getattr(speech, "extension", None) != ".wav":
             raise ValueError(f"Unsupported audio extension: {getattr(speech, 'extension', None)}")
-        speech_data, ori_audio_duration = load_wav(speech_path)
-        speech_data, audio_n_samples, audio_start_sample_id, audio_end_sample_id = get_audio(
-            speech_data, audio_n_samples_limit
-        )
-    elif isinstance(speech_path, str) and ".mp4" in speech_path:
-        audio_reader = AudioReader(speech_path, ctx=cpu(0), sample_rate=config.audio_sampling_rate, mono=True)
-        ori_audio_duration = audio_reader.shape[1] / config.audio_sampling_rate
-        speech_data, audio_n_samples, audio_start_sample_id, audio_end_sample_id = get_audio(
-            audio_reader, audio_n_samples_limit
-        )
+        speech_data, ori_audio_duration = _load_wav(speech_path)
+        speech_data, audio_start_sample_id, audio_end_sample_id = _slice_audio_window(speech_data)
+    elif isinstance(speech_path, str) and speech_path.lower().endswith(".mp4"):
+        audio_reader = AudioReader(speech_path, ctx=cpu(0), sample_rate=sampling_rate, mono=True)
+        ori_audio_duration = audio_reader.shape[1] / sampling_rate
+        speech_data, audio_start_sample_id, audio_end_sample_id = _slice_audio_window(audio_reader)
     else:
         if not isinstance(speech_path, str) or not os.path.exists(speech_path):
             raise ValueError(f"File {speech_path} does not exist")
-        speech_data, ori_audio_duration = load_wav(speech_path)
-        speech_data, audio_n_samples, audio_start_sample_id, audio_end_sample_id = get_audio(
-            speech_data, audio_n_samples_limit
-        )
+        speech_data, ori_audio_duration = _load_wav(speech_path)
+        speech_data, audio_start_sample_id, audio_end_sample_id = _slice_audio_window(speech_data)
 
-    speech_data = speech_data.astype(np.float32)
-    audio_n_samples = int(
-        np.ceil(speech_data.shape[0] / (config.audio_sampling_rate * 30)) * (config.audio_sampling_rate * 30)
-    )
-
+    speech_data = speech_data.astype(np.float32, copy=False)
+    audio_n_samples = int(np.ceil(speech_data.shape[0] / (sampling_rate * 30)) * (sampling_rate * 30))
     speech_data = whisper.pad_or_trim(speech_data, length=audio_n_samples)
 
     audio_info = {
-        "new_audio_chunk_length": int(audio_n_samples // config.audio_sampling_rate),
+        "new_audio_chunk_length": int(audio_n_samples // sampling_rate),
         "new_audio_n_samples": audio_n_samples,
         "ori_audio_duration": ori_audio_duration,
-        "audio_start_sec": audio_start_sample_id / config.audio_sampling_rate,
-        "audio_end_sample_sec": audio_end_sample_id / config.audio_sampling_rate,
+        "audio_start_sec": audio_start_sample_id / sampling_rate,
+        "audio_end_sample_sec": audio_end_sample_id / sampling_rate,
     }
-
     return speech_data, audio_info
-
-
-def _extract_sound(sound: Sound, config: PretrainedConfig):
-    frames, audio_info = _load_speech(sound, config)
-    return frames, audio_info
 
 
 def extract_media(
     messages: list[dict[str, Any]],
     config: PretrainedConfig | None = None,
 ) -> dict[str, list[Any]]:
+    if config is None:
+        raise ValueError("`config` must be provided for media extraction.")
+
     media = defaultdict(list)
 
     if not hasattr(config, "load_audio_in_video"):
         print("Warning: load_audio_in_video not in config, set to False")
         config.load_audio_in_video = False
 
+    def _strip_media_tokens(part: str) -> str:
+        for token in MEDIA_TOKENS.values():
+            if token in part:
+                print(f"Media token '{token}' found in text: '{part}'. Removed.")
+                part = part.replace(token, "").strip()
+        return part
+
     for message in messages:
         text = ""
-        for part in make_list(message["value"]):
+        parts = message["value"] if isinstance(message["value"], list) else [message["value"]]
+        for part in parts:
             if isinstance(part, str):
-                for token in MEDIA_TOKENS.values():
-                    if token in part:
-                        print(f"Media token '{token}' found in text: '{part}'. Removed.")
-                        part = part.replace(token, "").strip()
-                text += part
+                text += _strip_media_tokens(part)
             elif isinstance(part, (Image, PIL.Image.Image)):
                 media["image"].append(_extract_image(part))
                 text += MEDIA_TOKENS["image"]
@@ -382,8 +376,9 @@ def extract_media(
                     media["video_info"].append(video_info)
                 text += MEDIA_TOKENS["video"]
             elif isinstance(part, Sound):
-                output, audio_info = _extract_sound(part, config)
-                if output is not None:
+                speech = _load_speech(part, config)
+                if speech is not None:
+                    output, audio_info = speech
                     media["sound"].append(output)
                     media["audio_info"].append(audio_info)
                     text += MEDIA_TOKENS["sound"]
