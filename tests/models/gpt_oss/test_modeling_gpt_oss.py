@@ -33,7 +33,6 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_deterministic_for_xpu,
-    require_flash_attn,
     require_kernels,
     require_torch,
     require_torch_accelerator,
@@ -72,35 +71,44 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = GptOssModelTester
 
     @require_kernels
-    @require_flash_attn
     @pytest.mark.flash_attn_test
     @require_torch_gpu
-    def test_initialization_raises_error_for_flash_attn(self):
+    def test_default_flash_implementation_auto_correction(self):
         """
-        Tests that initializing the model with unsupported Flash Attention implementations raises a ValueError,
-        but allows the specific vllm kernel.
+        Tests that setting attn_implementation="flash_attention_2" during model initialization
+        automatically corrects to the model's `_compatible_flash_implementations`.
         """
+        from kernels import get_kernel
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        kernel_attn = "kernels-community/vllm-flash-attn3"
+        expected_kernel = "kernels-community/vllm-flash-attn3"
+        flash = get_kernel(expected_kernel)
+        if flash is None:
+            self.skipTest(f"{expected_kernel} is not available, skipping auto-correction test.")
 
-        # Checking each via `set_attn_implementation` and manually setting within the config
-        model = GptOssModel(config).to(device=torch_device, dtype=torch.bfloat16)
-        model.set_attn_implementation("kernels-community/vllm-flash-attn3")
-        self.assertTrue(model.config._attn_implementation == kernel_attn)
+        # Option 1: Auto correction on setting config on init
+        config._attn_implementation = "flash_attention_2"
+        tmp_model = GptOssModel(config).to(device=torch_device, dtype=torch.bfloat16)
+        self.assertEqual(tmp_model.config._attn_implementation, expected_kernel)
 
-        config._attn_implementation = kernel_attn
-        self.assertTrue(model.config._attn_implementation == kernel_attn)
+        # Option 2: Auto correction on load time
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            tmp_model.save_pretrained(tmp_dir_name)
+            model = GptOssModel.from_pretrained(tmp_dir_name, attn_implementation="flash_attention_2").to(
+                device=torch_device
+            )
+            self.assertEqual(model.config._attn_implementation, expected_kernel)
 
+        # Option 3: Auto correction on `set_attn_implementation`
+        model.set_attn_implementation("eager")
+        self.assertEqual(model.config._attn_implementation, "eager")
+        model.set_attn_implementation("flash_attention_2")
+        self.assertEqual(model.config._attn_implementation, expected_kernel)
+
+        # Verify model still works
         with torch.no_grad():
             output = model(**inputs_dict)
         self.assertIsNotNone(output)
-
-        with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
-            model.set_attn_implementation("flash_attention_2")
-
-        with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
-            config._attn_implementation = "flash_attention_2"
 
     @unittest.skip("GptOss's forcefully disables sdpa due to Sink")
     def test_sdpa_can_dispatch_non_composite_models(self):

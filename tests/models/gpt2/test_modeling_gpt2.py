@@ -368,48 +368,6 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
 
-    # TODO joao, manuel: remove this in v4.62.0
-    @slow
-    def test_contrastive_search_gpt2(self):
-        article = (
-            "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
-            "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
-        )
-
-        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2-large")
-        gpt2_model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2-large").to(torch_device)
-        input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        outputs = gpt2_model.generate(
-            input_ids,
-            penalty_alpha=0.6,
-            top_k=4,
-            max_length=256,
-            trust_remote_code=True,
-            custom_generate="transformers-community/contrastive-search",
-        )
-
-        generated_text = gpt2_tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-        self.assertListEqual(
-            generated_text,
-            [
-                "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
-                "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, "
-                "United Kingdom\n\nGoogle has a lot of data on its users and uses it to improve its products, such as "
-                "Google Now, which helps users find the information they're looking for on the web. But the company "
-                "is not the only one to collect data on its users. Facebook, for example, has its own facial "
-                "recognition technology, as well as a database of millions of photos that it uses to personalize its "
-                "News Feed.\n\nFacebook's use of data is a hot topic in the tech industry, with privacy advocates "
-                "concerned about the company's ability to keep users' information private. In a blog post last "
-                'year, Facebook CEO Mark Zuckerberg said his company would "do our best to be transparent about our '
-                'data use and how we use it."\n\n"We have made it clear that we do not sell or share your data with '
-                'third parties," Zuckerberg wrote. "If you have questions or concerns, please reach out to us at '
-                'privacy@facebook.com."\n\nGoogle declined to comment on the privacy implications of its use of data, '
-                "but said in a statement to The Associated Press that"
-            ],
-        )
-
     @require_flash_attn
     @require_torch_accelerator
     @pytest.mark.flash_attn_test

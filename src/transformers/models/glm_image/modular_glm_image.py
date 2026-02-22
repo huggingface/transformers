@@ -787,10 +787,11 @@ class GlmImageModel(Glm4vModel):
                 decode_height_list = []
                 decode_width_list = []
 
+                curr_grids_list = curr_grids.tolist()
                 for i in range(1, num_decode_grids + 1):
                     grid_idx = -i
-                    h = curr_grids[grid_idx, 1].item()
-                    w = curr_grids[grid_idx, 2].item()
+                    h = curr_grids_list[grid_idx][1]
+                    w = curr_grids_list[grid_idx][2]
                     total_tokens = h * w
 
                     h_indices = torch.arange(h, device=device).unsqueeze(1).expand(h, w).flatten()
@@ -912,12 +913,12 @@ class GlmImageModel(Glm4vModel):
         """
 
         special_image_mask = input_ids == self.config.image_token_id
-        n_placeholder_tokens = special_image_mask.sum().item()
+        n_placeholder_tokens = special_image_mask.sum()
         n_image_tokens = image_ids.shape[0]
 
         if n_placeholder_tokens != n_image_tokens:
             raise ValueError(
-                f"Number of image placeholder tokens ({n_placeholder_tokens}) does not match "
+                f"Number of image placeholder tokens ({n_placeholder_tokens.item()}) does not match "
                 f"number of image tokens from VQVAE ({n_image_tokens})"
             )
 
@@ -1004,10 +1005,11 @@ class GlmImageModel(Glm4vModel):
                     non_pad_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids)
 
                 source_grids_list = []
+                is_image_end = input_ids == self.config.image_end_token_id
+                is_non_pad = non_pad_mask == 1
+                num_source_per_sample = (is_image_end & is_non_pad).sum(dim=1).tolist()
                 for sample_idx in range(batch_size):
-                    is_image_end = input_ids[sample_idx] == self.config.image_end_token_id
-                    is_non_pad = non_pad_mask[sample_idx] == 1
-                    num_source = (is_image_end & is_non_pad).sum().item()
+                    num_source = num_source_per_sample[sample_idx]
                     if num_source > 0:
                         source_grids_list.append(grids_per_sample[sample_idx][:num_source])
                 if len(source_grids_list) == 0:
@@ -1287,10 +1289,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
                 image_nums = self._get_image_nums(input_ids).tolist()
 
             # Get source image counts per sample from image_end_token_id count
-            source_image_nums = [
-                (input_ids[batch_idx] == self.config.image_end_token_id).sum().item()
-                for batch_idx in range(len(image_nums))
-            ]
+            source_image_nums = (input_ids == self.config.image_end_token_id).sum(dim=1).tolist()
 
             def _repeat_interleave_samples(x, lengths, repeat_times):
                 samples = torch.split(x, lengths)
@@ -1304,14 +1303,15 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
                     if sum(source_image_nums) > 0:
                         # Split grids by sample to compute pixel counts
                         grids_per_sample = torch.split(image_grid_thw, image_nums)
-                        lengths = []
-                        for batch_idx, sample_grids in enumerate(grids_per_sample):
+                        all_pixel_counts = image_grid_thw.prod(dim=1)
+                        pixel_counts_per_sample = torch.split(all_pixel_counts, image_nums)
+                        # Build source mask and compute per-sample source pixel counts in one sync
+                        source_pixel_counts = torch.zeros(len(grids_per_sample), device=image_grid_thw.device)
+                        for batch_idx in range(len(grids_per_sample)):
                             num_source = source_image_nums[batch_idx]
                             if num_source > 0:
-                                source_grids = sample_grids[:num_source]
-                                lengths.append(torch.prod(source_grids, dim=1).sum().item())
-                            else:
-                                lengths.append(0)
+                                source_pixel_counts[batch_idx] = pixel_counts_per_sample[batch_idx][:num_source].sum()
+                        lengths = source_pixel_counts.to(torch.int64).tolist()
 
                         dict_to_expand[key] = _repeat_interleave_samples(
                             dict_to_expand[key], lengths=lengths, repeat_times=expand_size

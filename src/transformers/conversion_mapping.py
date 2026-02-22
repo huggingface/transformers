@@ -141,17 +141,14 @@ def _build_checkpoint_conversion_mapping():
         ],
         "qwen3_vl_moe": [
             WeightConverter(
-                source_patterns=[
-                    "mlp.experts.*.gate_proj.weight",
-                    "mlp.experts.*.up_proj.weight",
-                ],
+                source_patterns="mlp.experts.gate_up_proj",
                 target_patterns="mlp.experts.gate_up_proj",
-                operations=[MergeModulelist(dim=0), Concatenate(dim=1), Transpose(1, 2)],
+                operations=[Transpose(1, 2, check_dims=True), Force16BytesAlignment()],
             ),
             WeightConverter(
-                source_patterns="mlp.experts.*.down_proj.weight",
+                source_patterns="mlp.experts.down_proj",
                 target_patterns="mlp.experts.down_proj",
-                operations=[MergeModulelist(dim=0), Transpose(1, 2)],
+                operations=[Transpose(1, 2, check_dims=True), Force16BytesAlignment()],
             ),
         ],
         "phimoe": [
