@@ -1406,8 +1406,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.Tensor,
         pixel_values: torch.FloatTensor,
+        input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
