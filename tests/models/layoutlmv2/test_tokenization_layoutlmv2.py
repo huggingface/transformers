@@ -2133,6 +2133,82 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     output = tokenizer(words, boxes=boxes, padding=True, return_tensors=return_type)
                     self.assertEqual(output.input_ids.dtype, target_type)
 
+    def test_word_labels_ner_encoding(self):
+        """Test NER token classification with word_labels (issue #44186)."""
+        tokenizer = self.get_tokenizer()
+        
+        # Test case from issue #44186 
+        words = ["Total", "Amount", ":", "$1,234.56"]
+        boxes = [[100, 200, 300, 250], [310, 200, 450, 250], [460, 200, 480, 250], [490, 200, 650, 250]]
+        word_labels = [0, 0, 0, 1]
+        
+        # This should not raise AttributeError on word_ids/sequence_ids access
+        try:
+            encoding = tokenizer(words, boxes=boxes, word_labels=word_labels)
+            
+            # Verify that labels are created
+            self.assertIn("labels", encoding)
+            self.assertIsInstance(encoding["labels"], list)
+            
+            # Verify the labels have proper structure (should include special tokens)
+            # The exact values depend on tokenization, but there should be more labels than input words
+            # due to special tokens and subword tokenization
+            self.assertGreaterEqual(len(encoding["labels"]), len(words))
+            
+            # Verify that pad_token_label (-100) is used for special tokens
+            pad_labels_count = sum(1 for label in encoding["labels"] if label == tokenizer.pad_token_label)
+            self.assertGreater(pad_labels_count, 0, "Should have some pad labels for special tokens")
+            
+        except AttributeError as e:
+            if "word_ids" in str(e) or "sequence_ids" in str(e):
+                self.fail(f"AttributeError on tokenizer encoding methods: {e}")
+            else:
+                raise  # Re-raise if it's a different AttributeError
+                
+    def test_batched_word_labels_encoding(self):
+        """Test batched NER encoding with word_labels."""
+        tokenizer = self.get_tokenizer()
+        
+        # Batched test case
+        batch_words = [
+            ["Total", "Amount"],
+            ["Invoice", "Number", ":", "12345"]
+        ]
+        batch_boxes = [
+            [[100, 200, 300, 250], [310, 200, 450, 250]], 
+            [[50, 100, 200, 150], [210, 100, 350, 150], [360, 100, 380, 150], [390, 100, 550, 150]]
+        ]
+        batch_word_labels = [
+            [0, 0],
+            [1, 1, 0, 2] 
+        ]
+        
+        # This should not raise AttributeError on word_ids/sequence_ids access
+        try:
+            encoding = tokenizer(
+                batch_words, 
+                boxes=batch_boxes, 
+                word_labels=batch_word_labels,
+                padding=True,
+                return_tensors="pt"  # Test with tensor output
+            )
+            
+            # Verify that labels are created for the batch
+            self.assertIn("labels", encoding)
+            
+            # Should have 2 sequences in the batch
+            self.assertEqual(len(encoding["labels"]), 2)
+            
+            # Both sequences should have labels
+            for labels in encoding["labels"]:
+                self.assertIsInstance(labels, (list, type(encoding["labels"][0])))
+                
+        except AttributeError as e:
+            if "word_ids" in str(e) or "sequence_ids" in str(e):
+                self.fail(f"AttributeError on tokenizer encoding methods in batched input: {e}")
+            else:
+                raise  # Re-raise if it's a different AttributeError
+
     def test_integration(self):
         """Integration test with hardcoded expectations for LayoutLMv2."""
         input_words = ["a", "weirdly", "test", "hello", "my", "name", "is", "bob"]

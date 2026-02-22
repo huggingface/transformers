@@ -622,8 +622,8 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
             token_boxes_example = []
             for id, sequence_id, word_id in zip(
                 sanitized_tokens["input_ids"][batch_index],
-                sanitized_encodings[batch_index].sequence_ids,
-                sanitized_encodings[batch_index].word_ids,
+                sanitized_encodings[batch_index].sequence_ids(),
+                sanitized_encodings[batch_index].word_ids(),
             ):
                 if word_id is not None:
                     if is_pair and sequence_id == 0:
@@ -655,7 +655,7 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
                 for id, offset, word_id in zip(
                     sanitized_tokens["input_ids"][batch_index],
                     sanitized_tokens["offset_mapping"][batch_index],
-                    sanitized_encodings[batch_index].word_ids,
+                    sanitized_encodings[batch_index].word_ids(),
                 ):
                     if word_id is not None:
                         if self.only_label_first_subword:
