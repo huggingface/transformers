@@ -798,6 +798,7 @@ class ModelTesterMixin:
             "DPTModelTest": 4,  # `test_modeling_dpt_hybrid.py`: not able to get it work after change `num_hidden_layers` and `neck_hidden_sizes`
             # Nothing we can't do
             "Gemma3nTextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
+            "Gemma3nVision2TextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
         }
@@ -4041,11 +4042,6 @@ class ModelTesterMixin:
             config._attn_implementation = attn_implementation
 
         model = cls(config).to(device=torch_device)
-
-        # torch.nn.functional.grouped_mm still only supports bfloat16 when used with torch.compile
-        # bfloat16 is problematic with precisions so we use an implementation with full precision
-        if model.config._experts_implementation == "grouped_mm":
-            model.set_experts_implementation("batched_mm")
 
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),

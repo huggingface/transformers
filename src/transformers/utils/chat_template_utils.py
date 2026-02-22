@@ -22,14 +22,7 @@ from copy import deepcopy
 from datetime import datetime
 from functools import lru_cache
 from inspect import isfunction
-from typing import (
-    Any,
-    Literal,
-    Union,
-    get_args,
-    get_origin,
-    get_type_hints,
-)
+from typing import Any, Literal, Union, get_args, get_origin, get_type_hints, no_type_check
 
 from packaging import version
 
@@ -41,6 +34,10 @@ logger = logging.get_logger(__name__)
 
 if is_jinja_available():
     import jinja2
+    import jinja2.exceptions
+    import jinja2.ext
+    import jinja2.nodes
+    import jinja2.runtime
     from jinja2.ext import Extension
     from jinja2.sandbox import ImmutableSandboxedEnvironment
 else:
@@ -181,6 +178,7 @@ def _parse_type_hint(hint: str) -> dict:
 def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     type_hints = get_type_hints(func)
     signature = inspect.signature(func)
+    func_name = getattr(func, "__name__", "operation")
     # For methods, we need to ignore the first "self" or "cls" parameter. Here we assume that if the first parameter
     # is named "self" or "cls" and has no type hint, it is an implicit receiver argument.
     first_param_name = next(iter(signature.parameters), None)
@@ -191,13 +189,12 @@ def _convert_type_hints_to_json_schema(func: Callable) -> dict:
         implicit_arg_name = first_param_name
     else:
         implicit_arg_name = None
-
     required = []
     for param_name, param in signature.parameters.items():
         if param_name == implicit_arg_name:
             continue
         if param.annotation == inspect.Parameter.empty:
-            raise TypeHintParsingException(f"Argument {param.name} is missing a type hint in function {func.__name__}")
+            raise TypeHintParsingException(f"Argument {param.name} is missing a type hint in function {func_name}")
         if param.default == inspect.Parameter.empty:
             required.append(param_name)
 
@@ -356,10 +353,10 @@ def get_json_schema(func: Callable) -> dict:
     }
     """
     doc = inspect.getdoc(func)
+    func_name = getattr(func, "__name__", "operation")
+
     if not doc:
-        raise DocstringParsingException(
-            f"Cannot generate JSON schema for {func.__name__} because it has no docstring!"
-        )
+        raise DocstringParsingException(f"Cannot generate JSON schema for {func_name} because it has no docstring!")
     doc = doc.strip()
     main_doc, param_descriptions, return_doc = parse_google_format_docstring(doc)
 
@@ -370,7 +367,7 @@ def get_json_schema(func: Callable) -> dict:
     for arg, schema in json_schema["properties"].items():
         if arg not in param_descriptions:
             raise DocstringParsingException(
-                f"Cannot generate JSON schema for {func.__name__} because the docstring has no description for the argument '{arg}'"
+                f"Cannot generate JSON schema for {func_name} because the docstring has no description for the argument '{arg}'"
             )
         desc = param_descriptions[arg]
         enum_choices = re.search(r"\(choices:\s*(.*?)\)\s*$", desc, flags=re.IGNORECASE)
@@ -379,7 +376,7 @@ def get_json_schema(func: Callable) -> dict:
             desc = enum_choices.string[: enum_choices.start()].strip()
         schema["description"] = desc
 
-    output = {"name": func.__name__, "description": main_doc, "parameters": json_schema}
+    output = {"name": func_name, "description": main_doc, "parameters": json_schema}
     if return_dict is not None:
         output["return"] = return_dict
     return {"type": "function", "function": output}
@@ -405,6 +402,11 @@ def _render_with_assistant_indices(
 
 @lru_cache
 def _compile_jinja_template(chat_template):
+    return _cached_compile_jinja_template(chat_template)
+
+
+@no_type_check
+def _cached_compile_jinja_template(chat_template):
     if not is_jinja_available():
         raise ImportError(
             "apply_chat_template requires jinja2 to be installed. Please install it using `pip install jinja2`."

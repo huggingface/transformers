@@ -38,7 +38,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_grouped_mm_available
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_glm_moe_dsa import GlmMoeDsaConfig
@@ -641,9 +641,8 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
-    _can_compile_fullgraph = (
-        is_grouped_mm_available()
-    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": GlmMoeDsaDecoderLayer,
@@ -654,7 +653,7 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     # NOTE: FP8 quantization uses `_keep_in_fp32_modules` (not `_strict`) to decide which modules to NOT convert.
     # We must keep `indexer.weights_proj` as a plain Linear to match the checkpoint (no `weight_scale_inv`).
     _keep_in_fp32_modules = ["indexer.weights_proj"]
-    _default_flash_implementation = "kernels-community/flash-mla"
+    _compatible_flash_implementations = ["kernels-community/flash-mla"]
 
     @torch.no_grad()
     def _init_weights(self, module):

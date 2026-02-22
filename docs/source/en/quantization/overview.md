@@ -40,7 +40,7 @@ Use the Space below to help you pick a quantization method depending on your har
 | [FBGEMM_FP8](./fbgemm_fp8)                | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🔴              | 8            | 🔴               | 🟢                          | 🟢                      | https://github.com/pytorch/FBGEMM       |
 | [torchao](./torchao)                      | 🟢                   | 🟢               | 🟢        | 🔴        | 🟡 | 🟢              |                 | 4/8          |                  | 🟢🔴                        | 🟢                      | https://github.com/pytorch/ao       |
 | [VPTQ](./vptq)                            | 🔴                   | 🔴              |     🟢     | 🟡        | 🔴                                 | 🔴              | 🟢              | 1/8          | 🔴               | 🟢                          | 🟢                      | https://github.com/microsoft/VPTQ            |
-| [FINEGRAINED_FP8](./finegrained_fp8)      | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🟢              | 🔴              | 8            | 🔴               | 🟢                          | 🟢                      |        |
+| [FINEGRAINED_FP8](./finegrained_fp8)      | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🟢              | 🔴              | 8            | 🔴               | 🟢                          | 🟢                      | Built-in |
 | [SpQR](./spqr)                            | 🔴                     |  🔴   | 🟢        | 🔴              |    🔴    | 🔴         |         🟢              | 3            |              🔴                     | 🟢           | 🟢                      | https://github.com/Vahe1994/SpQR/       |
 | [Quark](./quark)                          | 🔴                     | 🟢 | 🟢      | 🟢      | 🟢                   | 🟢       | ?               | 2/4/6/8/9/16 | 🔴                | 🔴                               | 🟢                       | https://quark.docs.amd.com/latest/                      |
 
@@ -58,4 +58,4 @@ If you are looking for a user-friendly quantization experience, you can use the 
 * [Bitsandbytes Space](https://huggingface.co/spaces/bnb-community/bnb-my-repo)
 * [GGUF Space](https://huggingface.co/spaces/ggml-org/gguf-my-repo)
 * [MLX Space](https://huggingface.co/spaces/mlx-community/mlx-my-repo)
-* [AuoQuant Notebook](https://colab.research.google.com/drive/1b6nqC7UZVt8bx4MksX7s656GXPM-eWw4?usp=sharing#scrollTo=ZC9Nsr9u5WhN)
+* [AutoQuant Notebook](https://colab.research.google.com/drive/1b6nqC7UZVt8bx4MksX7s656GXPM-eWw4?usp=sharing#scrollTo=ZC9Nsr9u5WhN)

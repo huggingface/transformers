@@ -44,6 +44,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import maybe_autocast
+from ...utils.import_utils import resolve_internal_import
 from .configuration_bamba import BambaConfig
 
 
@@ -561,12 +562,26 @@ class BambaMixer(nn.Module):
 
         global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
         mamba_ssm = lazy_load_kernel("mamba-ssm")
-        selective_state_update = getattr(mamba_ssm, "selective_state_update", None)
-        mamba_chunk_scan_combined = getattr(mamba_ssm, "mamba_chunk_scan_combined", None)
-        mamba_split_conv1d_scan_combined = getattr(mamba_ssm, "mamba_split_conv1d_scan_combined", None)
+        selective_state_update = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
+        )
+        mamba_chunk_scan_combined = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.ssd_combined.mamba_chunk_scan_combined"
+        )
+        mamba_split_conv1d_scan_combined = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.ssd_combined.mamba_split_conv1d_scan_combined"
+        )
 
         global is_fast_path_available
-        is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
+        is_fast_path_available = all(
+            (
+                selective_state_update,
+                mamba_chunk_scan_combined,
+                mamba_split_conv1d_scan_combined,
+                causal_conv1d_fn,
+                causal_conv1d_update,
+            )
+        )
 
         if not is_fast_path_available:
             logger.warning_once(

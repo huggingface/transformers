@@ -110,7 +110,6 @@ from .utils import (
     is_env_variable_true,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
-    is_grouped_mm_available,
     is_kernels_available,
     is_torch_flex_attn_available,
     is_torch_mlu_available,
@@ -1145,9 +1144,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _supports_sdpa: bool = False
     _supports_flash_attn: bool = False
     _supports_flex_attn: bool = False
-    _default_flash_implementation: str | None = (
-        None  # Model's preferred flash kernel (e.g., "kernels-community/flash-mla")
-    )
+    # Model's compatible flash kernels (e.g., "kernels-community/flash-mla") defaulting to the first in the list
+    _compatible_flash_implementations: list[str] | None = None
 
     # Tensor-parallelism-related properties
     # A tensor parallel plan of the form `{"model.layer.mlp.param": "colwise"}` to be applied to the model when TP is enabled.
@@ -1733,11 +1731,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if not self._can_set_experts_implementation():
             raise ValueError(f"{self.__class__.__name__} does not support setting experts implementation.")
 
-        if not is_grouped_mm_available():
-            raise ImportError(
-                "PyTorch Grouped MM requirements in Transformers are not met. Please install torch>=2.9.0."
-            )
-
         # If no error raised by this point, we can return `True`
         return True
 
@@ -1788,19 +1781,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
             None to sdpa (to potentially eager).
         """
-        # Auto-correct flash_attention_2/3 to model's default flash implementation if specified
+        # Auto-correct model's default flash implementation if specified
         if attn_implementation is not None:
             is_paged = attn_implementation.startswith("paged|")
-            base_impl = attn_implementation.removeprefix("paged|")
+            base_implementation = attn_implementation.removeprefix("paged|")
 
-            if base_impl in ("flash_attention_2", "flash_attention_3"):
-                default_flash = getattr(self, "_default_flash_implementation", None)
-                if default_flash is not None:
-                    logger.warning_once(
-                        f"This model is optimized for '{default_flash}'. "
-                        f"Automatically using '{default_flash}' instead of '{attn_implementation}'."
-                    )
-                    attn_implementation = f"paged|{default_flash}" if is_paged else default_flash
+            compatible_flash_implementations = getattr(self, "_compatible_flash_implementations", None)
+            if (
+                compatible_flash_implementations
+                and is_flash_attention_requested(requested_attention_implementation=base_implementation)
+                and base_implementation not in compatible_flash_implementations
+            ):
+                default_flash_implementation = (
+                    f"paged|{compatible_flash_implementations[0]}" if is_paged else compatible_flash_implementations[0]
+                )
+
+                logger.warning_once(
+                    f"This model is compatible with the following flash attention implementations: `{compatible_flash_implementations}`. "
+                    f"Automatically falling back to `{default_flash_implementation}` instead of `{attn_implementation}`."
+                )
+                attn_implementation = default_flash_implementation
 
         applicable_attn_implementation = attn_implementation
 
@@ -3767,7 +3767,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 - `"batched_mm"` (using [`torch.bmm`](https://pytorch.org/docs/stable/generated/torch.bmm.html)).
                 - `"grouped_mm"` (using [`torch.nn.functional.grouped_mm`](https://docs.pytorch.org/docs/main/generated/torch.nn.functional.grouped_mm.html)).
 
-                By default, if available, `grouped_mm` will be used for torch>=2.9.0. The default is otherwise the sequential `"eager"` implementation.
+                By default, if the model supports it, `"grouped_mm"` will be used. The default is otherwise the manual `"eager"` implementation.
 
             > Parameters for big model inference
 

@@ -410,7 +410,7 @@ class GptOssPreTrainedModel(PreTrainedModel):
         "attentions": GptOssAttention,
     }
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
-    _default_flash_implementation = "kernels-community/vllm-flash-attn3"
+    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3"]
 
     @torch.no_grad()
     def _init_weights(self, module):
