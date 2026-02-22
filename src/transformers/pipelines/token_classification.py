@@ -147,6 +147,7 @@ class TokenClassificationPipeline(ChunkPipeline):
     def _sanitize_parameters(
         self,
         ignore_labels=None,
+        grouped_entities: bool | None = None,
         aggregation_strategy: AggregationStrategy | None = None,
         offset_mapping: list[tuple[int, int]] | None = None,
         is_split_into_words: bool = False,
@@ -163,6 +164,18 @@ class TokenClassificationPipeline(ChunkPipeline):
             preprocess_params["offset_mapping"] = offset_mapping
 
         postprocess_params = {}
+        if grouped_entities is not None:
+            if aggregation_strategy is not None:
+                raise ValueError(
+                    "`grouped_entities` and `aggregation_strategy` are mutually exclusive. "
+                    "Use `aggregation_strategy` instead of the deprecated `grouped_entities`."
+                )
+            warnings.warn(
+                "`grouped_entities` is deprecated and will be removed in a future version. "
+                'Use `aggregation_strategy="simple"` instead of `grouped_entities=True`.',
+                FutureWarning,
+            )
+            aggregation_strategy = AggregationStrategy.SIMPLE if grouped_entities else AggregationStrategy.NONE
         if aggregation_strategy is not None:
             if isinstance(aggregation_strategy, str):
                 aggregation_strategy = AggregationStrategy[aggregation_strategy.upper()]
