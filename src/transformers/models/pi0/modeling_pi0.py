@@ -28,7 +28,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...integrations import use_kernel_func_from_hub
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, or_masks
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -192,13 +192,15 @@ def compute_layer_complete(
     query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
 
     vlm_layer = language_model.layers[layer_idx]
-    att_output, attn_weights = eager_attention_forward(
+    attn_implementation = vlm_layer.self_attn.config._attn_implementation
+    attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(attn_implementation, eager_attention_forward)
+    att_output, attn_weights = attention_interface(
         vlm_layer.self_attn,
         query_states,
         key_states,
         value_states,
         attention_mask,
-        vlm_layer.self_attn.scaling,
+        scaling=vlm_layer.self_attn.scaling,
     )
 
     batch_size = query_states.shape[0]
@@ -229,7 +231,7 @@ def compute_layer_complete(
 
     suffix_attentions = None
     if output_attentions and attn_weights is not None:
-        suffix_attentions = attn_weights[:, :, prefix_length:, prefix_length:]
+        suffix_attentions = attn_weights
 
     return outputs_embeds, suffix_attentions
 
@@ -403,7 +405,10 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
 
         lang_emb = self.model.embed_language_tokens(input_ids)
         embs.append(lang_emb)
-        pad_masks.append(attention_mask.bool())
+        if attention_mask is None:
+            pad_masks.append(torch.ones(input_ids.shape, dtype=torch.bool, device=input_ids.device))
+        else:
+            pad_masks.append(attention_mask.bool())
 
         return torch.cat(embs, dim=1), torch.cat(pad_masks, dim=1)
 
@@ -467,6 +472,8 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
 
         if noise is None:
             noise = torch.randn_like(actions)
+        elif noise.shape != actions.shape:
+            noise = torch.zeros_like(actions)
         if timestep is None:
             time_beta = sample_beta(
                 self.config.time_sampling_beta_alpha, self.config.time_sampling_beta_beta, batch_size, device
@@ -519,7 +526,8 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
                 output_attentions=output_attentions,
                 prefix_length=prefix_length,
             )
-            inputs_embeds[1] = self.hidden_state_recorders[layer_idx](inputs_embeds[1])
+            combined = self.hidden_state_recorders[layer_idx](torch.cat(inputs_embeds, dim=1))
+            inputs_embeds = [combined[:, :prefix_length], combined[:, prefix_length:]]
             if suffix_attn is not None:
                 _ = self.attention_recorders[layer_idx](suffix_attn)
 

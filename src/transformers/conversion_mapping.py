@@ -296,22 +296,21 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "pi0": [
-            WeightRenaming(r"^paligemma_with_expert\.paligemma\.model\.vision_tower", "model.vision_tower"),
+            WeightRenaming("paligemma_with_expert.paligemma.model.vision_tower", "model.vision_tower"),
             WeightRenaming(
-                r"^paligemma_with_expert\.paligemma\.model\.multi_modal_projector",
+                "paligemma_with_expert.paligemma.model.multi_modal_projector",
                 "model.multi_modal_projector",
             ),
-            WeightRenaming(r"^paligemma_with_expert\.paligemma\.language_model", "model.language_model"),
-            WeightRenaming(r"^paligemma_with_expert\.paligemma\.model\.language_model", "model.language_model"),
-            WeightRenaming(r"^paligemma_with_expert\.paligemma\.lm_head", "model.language_model.embed_tokens"),
-            WeightRenaming(r"^paligemma_with_expert\.gemma_expert\.model", "model.expert"),
-            WeightRenaming(r"^paligemma_with_expert\.gemma_expert\.lm_head", "model.expert.embed_tokens"),
+            WeightRenaming("paligemma_with_expert.paligemma.lm_head", "model.language_model.embed_tokens"),
+            WeightRenaming("paligemma_with_expert.paligemma.model.language_model", "model.language_model"),
+            WeightRenaming("paligemma_with_expert.gemma_expert.lm_head", "model.expert.embed_tokens"),
+            WeightRenaming("paligemma_with_expert.gemma_expert.model", "model.expert"),
         ],
         "pi0_fast": [
-            WeightRenaming(r"^paligemma\.model\.vision_tower", "model.vision_tower"),
-            WeightRenaming(r"^paligemma\.model\.multi_modal_projector", "model.multi_modal_projector"),
-            WeightRenaming(r"^paligemma\.model\.language_model", "model.language_model"),
-            WeightRenaming(r"^paligemma\.lm_head", "model.language_model.embed_tokens"),
+            WeightRenaming("paligemma.model.vision_tower", "model.vision_tower"),
+            WeightRenaming("paligemma.model.multi_modal_projector", "model.multi_modal_projector"),
+            WeightRenaming("paligemma.lm_head", "model.language_model.embed_tokens"),
+            WeightRenaming("paligemma.model.language_model", "model.language_model"),
         ],
         "timm_wrapper": [
             # Simply add the prefix `timm_model`

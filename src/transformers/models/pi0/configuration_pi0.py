@@ -122,6 +122,32 @@ class PI0Config(PreTrainedConfig):
                 "image_size": 224,
                 "vision_use_head": False,
             }
+        if isinstance(text_config, dict):
+            text_vocab_size = text_config.get("vocab_size", 257152)
+        elif text_config is not None:
+            text_vocab_size = text_config.vocab_size
+        else:
+            text_vocab_size = 257152
+
+        if isinstance(expert_config, dict):
+            expert_config["model_type"] = expert_config.get("model_type", "gemma")
+            self.expert_config = AutoConfig.for_model(**expert_config)
+        elif expert_config is None:
+            self.expert_config = AutoConfig.for_model(
+                "gemma",
+                hidden_size=1024,
+                num_hidden_layers=18,
+                intermediate_size=4096,
+                num_attention_heads=8,
+                num_key_value_heads=1,
+                head_dim=256,
+                vocab_size=text_vocab_size,
+            )
+        else:
+            self.expert_config = expert_config
+
+        self.expert_config.is_causal = False
+        self.expert_config.use_bidirectional_attention = True
         self.image_token_index = image_token_index
         self.projection_dim = projection_dim
         self.hidden_size = hidden_size
@@ -179,26 +205,6 @@ class PI0Config(PreTrainedConfig):
         self.time_sampling_offset = time_sampling_offset
         self.min_period = min_period
         self.max_period = max_period
-
-        if isinstance(expert_config, dict):
-            expert_config["model_type"] = expert_config.get("model_type", "gemma")
-            self.expert_config = AutoConfig.for_model(**expert_config)
-        elif expert_config is None:
-            self.expert_config = AutoConfig.for_model(
-                "gemma",
-                hidden_size=1024,
-                num_hidden_layers=18,
-                intermediate_size=4096,
-                num_attention_heads=8,
-                num_key_value_heads=1,
-                head_dim=256,
-                vocab_size=self.text_config.vocab_size,
-            )
-        else:
-            self.expert_config = expert_config
-
-        self.expert_config.is_causal = False
-        self.expert_config.use_bidirectional_attention = True
 
 
 __all__ = ["PI0Config"]
