@@ -69,7 +69,9 @@ class PI0Processor(ProcessorMixin):
         Unlike `PaliGemmaProcessor`, it does not inject `<image>` placeholder tokens because PI0 concatenates image
         embeddings and language embeddings directly in the model.
         """
-        output_kwargs = self._merge_kwargs(PI0ProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(
+            PI0ProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
+        )
 
         if images is None:
             raise ValueError("`images` are expected as arguments to a `PI0Processor` instance.")
@@ -434,7 +436,9 @@ class PI0Model(PI0PreTrainedModel):
         pixel_values = pixel_values.reshape(batch_size * num_cameras, *pixel_values.shape[2:])
         image_outputs = self.vision_tower(pixel_values)
         image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
-        image_features = image_features.reshape(batch_size, num_cameras, image_features.shape[1], image_features.shape[2])
+        image_features = image_features.reshape(
+            batch_size, num_cameras, image_features.shape[1], image_features.shape[2]
+        )
         return image_features.flatten(1, 2)
 
     def embed_language_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
@@ -451,9 +455,7 @@ class PI0Model(PI0PreTrainedModel):
     ) -> tuple[list[torch.Tensor | None], Cache | None]:
         # Prefix-only path (cache the VLM prefix for inference)
         if inputs_embeds[1] is None:
-            bidirectional_mask = create_bidirectional_mask(
-                self.config.text_config, inputs_embeds[0], attention_mask
-            )
+            bidirectional_mask = create_bidirectional_mask(self.config.text_config, inputs_embeds[0], attention_mask)
             prefix_output = self.language_model(
                 inputs_embeds=inputs_embeds[0],
                 attention_mask=bidirectional_mask,
@@ -672,8 +674,11 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
 
         if noise is None:
             noise = torch.randn(
-                batch_size, self.config.chunk_size, self.config.max_action_dim,
-                device=device, dtype=pixel_values.dtype,
+                batch_size,
+                self.config.chunk_size,
+                self.config.max_action_dim,
+                device=device,
+                dtype=pixel_values.dtype,
             )
 
         prefix_embs, prefix_pad_masks = self.embed_prefix(pixel_values, input_ids, attention_mask, image_masks)
