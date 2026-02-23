@@ -349,20 +349,6 @@ class Qwen3ASRThinkerConfig(PreTrainedConfig):
         attn_implementation=None,
         **kwargs,
     ):
-        # super().__init__(
-        #    audio_config=audio_config,
-        #    text_config=text_config,
-        #    audio_token_id=audio_token_id,
-        #    audio_start_token_id=audio_start_token_id,
-        #    user_token_id=user_token_id,
-        #    initializer_range=initializer_range
-        # )
-        # self._attn_implementation = attn_implementation
-        # del self.position_id_per_seconds
-        # del self.tie_word_embeddings
-        # del self.vision_config
-        # del self.image_token_id
-        # del self.video_token_id
         super().__init__(**kwargs)
 
         self.user_token_id = user_token_id
