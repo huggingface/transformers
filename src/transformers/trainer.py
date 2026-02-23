@@ -1407,7 +1407,7 @@ class Trainer:
         if resume_from_checkpoint is not None:
             # Load model checkpoint before accelerator.prepare() for regular models,
             # so that buffers and parameters are on the right device after prepare.
-            # Deepspeed/FSDP models are loaded after prepare in _prepare_model_and_optimizer.
+            # Deepspeed/FSDP models are loaded after prepare in _prepare_for_training.
             if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
                 self._load_from_checkpoint(resume_from_checkpoint)
             state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
@@ -1437,6 +1437,7 @@ class Trainer:
         ignore_keys_for_eval: list[str] | None = None,
     ) -> TrainOutput:
         """Run the actual training loop: forward, backward, optimizer step, logging, and checkpointing."""
+        # reset everything
         self.accelerator.free_memory()
         if args.auto_find_batch_size:
             self._update_auto_batch_size(batch_size)
@@ -1459,9 +1460,7 @@ class Trainer:
         epochs_trained, steps_trained_in_current_epoch = self._init_training_state(
             max_steps, num_update_steps_per_epoch, num_train_epochs, resume_from_checkpoint, trial
         )
-        model, train_dataloader = self._prepare_model_and_optimizer(
-            max_steps, train_dataloader, resume_from_checkpoint
-        )
+        model, train_dataloader = self._prepare_for_training(max_steps, train_dataloader, resume_from_checkpoint)
 
         # Train!
         logger.info("***** Running training *****")
@@ -1553,7 +1552,7 @@ class Trainer:
 
         return epochs_trained, steps_trained_in_current_epoch
 
-    def _prepare_model_and_optimizer(self, max_steps, train_dataloader, resume_from_checkpoint):
+    def _prepare_for_training(self, max_steps, train_dataloader, resume_from_checkpoint):
         """Wrap model, create optimizer and scheduler, and run accelerator.prepare. Returns (model, train_dataloader)."""
         delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled
 
@@ -1750,6 +1749,7 @@ class Trainer:
                 self._track_num_input_tokens(inputs)
 
                 if do_sync_step:
+                    grad_norm = None
                     if self.args.max_grad_norm > 0:
                         grad_norm = self._clip_grad_norm(model)
                     grad_norm = self._get_grad_norm(model, grad_norm=grad_norm)
@@ -1812,14 +1812,10 @@ class Trainer:
             start_time,
             learning_rate=learning_rate,
         )
-        if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
-            xm.master_print(met.metrics_report())
 
     def _finalize_training(self, trial, num_train_samples, start_time):
         """Finalize training: metrics, best-model loading, cleanup. Returns TrainOutput."""
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
-        if self.args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
-            self._load_best_model()
 
         # add remaining tr_loss
         self._total_loss_scalar += self._tr_loss.item()
@@ -1836,15 +1832,14 @@ class Trainer:
         metrics["total_flos"] = self.state.total_flos
         metrics["train_loss"] = train_loss
 
-        self.is_in_train = False
-
         self._memory_tracker.stop_and_update_metrics(metrics)
-
         self.log(metrics)
 
-        run_dir = self._get_output_dir(trial)
+        if self.args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
+            self._load_best_model()
+
         checkpoints_sorted = sort_checkpoints(
-            output_dir=run_dir, best_model_checkpoint=self.state.best_model_checkpoint
+            output_dir=self._get_output_dir(trial), best_model_checkpoint=self.state.best_model_checkpoint
         )
 
         # Delete the last checkpoint when save_total_limit=1 if it's different from the best checkpoint and process allowed to save.
@@ -1863,6 +1858,7 @@ class Trainer:
         # for the embedding layer by removing the forward post hook.
         if self.neftune_noise_alpha is not None:
             deactivate_neftune(self.model, self.neftune_hook_handle, self.accelerator)
+        self.is_in_train = False
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
@@ -2435,8 +2431,6 @@ class Trainer:
 
     def _update_auto_batch_size(self, batch_size):
         """Free memory, reset model wrapping, and update DeepSpeed config for the new batch size when using `auto_find_batch_size`"""
-        # reset everything
-        self.accelerator.free_memory()
         # `_train_batch_size` value might have changed to `auto_find_batch_size`
         self._train_batch_size = batch_size
         # frees the wrapped model and resets it back to the unwrapped base model
