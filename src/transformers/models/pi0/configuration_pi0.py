@@ -62,7 +62,7 @@ class PI0Config(PreTrainedConfig):
             Scale factor for sampled time values.
         time_sampling_offset (`float`, *optional*, defaults to 0.001):
             Offset added to sampled time values.
-        min_period (`float`, *optional*, defaults to 4e-3):
+        min_period (`float`, *optional*, defaults to 0.004):
             Minimum period for sinusoidal time embedding.
         max_period (`float`, *optional*, defaults to 4.0):
             Maximum period for sinusoidal time embedding.
