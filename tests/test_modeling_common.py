@@ -1739,6 +1739,17 @@ class ModelTesterMixin:
         # Scenario - 3 with `use_reentrant=True` (old default behaviour, not recommended)
         self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
 
+    def _set_subconfig_attributes(self, config, attribute_name, value):
+        """Helper function to recursively set a config attr to a given value"""
+        for k in config.sub_configs:
+            if (
+                self._is_composite and attribute_name == "output_attentions" and k == "vision_config"
+            ):  # skip because it's not needed and causes errors e.g with Timm
+                continue
+            if getattr(config, k) is not None:
+                setattr(getattr(config, k), attribute_name, value)
+                self._set_subconfig_attributes(getattr(config, k), attribute_name, value)
+
     def test_attention_outputs(self):
         if not self.has_attentions:
             self.skipTest(reason="Model does not output attentions")
@@ -1773,14 +1784,7 @@ class ModelTesterMixin:
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            for k in config.sub_configs:
-                if (
-                    self._is_composite and k == "vision_config"
-                ):  # skip because it's not needed and causes errors e.g with Timm
-                    continue
-                if getattr(config, k) is not None:
-                    getattr(config, k).output_attentions = True
-
+            self._set_subconfig_attributes(config, "output_attentions", True)
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -1921,28 +1925,16 @@ class ModelTesterMixin:
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
-            for k in config.sub_configs:
-                if getattr(config, k) is not None:
-                    getattr(config, k).output_hidden_states = True
-
+            self._set_subconfig_attributes(config, "output_hidden_states", True)
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self._prepare_config_and_inputs_for_retain_grad_hidden_states_attentions()
-        for k in config.sub_configs:
-            if getattr(config, k) is not None:
-                getattr(config, k).output_hidden_states = True
+        self._set_subconfig_attributes(config, "output_hidden_states", True)
 
         config.output_hidden_states = True
         config.output_attentions = self.has_attentions
-
-        for k in config.sub_configs:
-            if (
-                self._is_composite and k == "vision_config"
-            ):  # skip because it's not needed and causes errors e.g with Timm
-                continue
-            if getattr(config, k) is not None:
-                getattr(config, k).output_attentions = self.has_attentions
+        self._set_subconfig_attributes(config, "output_attentions", self.has_attentions)
 
         # force eager attention to support output attentions
         if self.has_attentions:
@@ -3607,6 +3599,7 @@ class ModelTesterMixin:
                 "jamba",
                 "kosmos-2",
                 "mllama",
+                "lighton_ocr",
                 "pixtral",
                 "sam",
                 "sam_hq",
