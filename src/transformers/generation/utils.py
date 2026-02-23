@@ -363,6 +363,26 @@ class GenerationMixin(ContinuousMixin):
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
 
+    # Type declarations for attributes provided by the host class (PreTrainedModel).
+    # These let the type checker resolve `self.<attr>` accesses inside the mixin.
+    config: Any
+    device: torch.device
+    dtype: torch.dtype
+    main_input_name: str
+    base_model_prefix: str
+    _is_stateful: bool
+    hf_quantizer: Any
+    forward: Callable[..., Any]
+    __call__: Callable[..., Any]
+    can_generate: Callable[..., bool]
+    get_encoder: Callable[..., Any]
+    get_output_embeddings: Callable[..., Any]
+    get_input_embeddings: Callable[..., Any]
+    set_output_embeddings: Callable[..., None]
+    set_input_embeddings: Callable[..., None]
+    get_compiled_call: Callable[..., Any]
+    set_experts_implementation: Callable[..., Any]
+
     # Should be overwritten by models that can generate non-text output
     output_modalities = ("text",)
 

@@ -36,6 +36,8 @@ from ..utils import (
 
 
 if TYPE_CHECKING:
+    import torch
+
     from ..configuration_utils import PreTrainedConfig
     from ..modeling_utils import PreTrainedModel
 
@@ -337,6 +339,18 @@ class GenerationConfig(PushToHubMixin):
     """
 
     extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits")
+
+    # Tensor versions of token IDs, set by _prepare_special_tokens() at generation time
+    _bos_token_tensor: "torch.Tensor | None"
+    _eos_token_tensor: "torch.Tensor | None"
+    _pad_token_tensor: "torch.Tensor | None"
+    _decoder_start_token_tensor: "torch.Tensor | None"
+
+    # Hash to detect whether the instance was modified after loading
+    _original_object_hash: int | None
+
+    # Whisper-specific attribute, set dynamically via kwargs
+    no_timestamps_token_id: int | None
 
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
