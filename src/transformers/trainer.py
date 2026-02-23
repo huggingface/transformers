@@ -378,6 +378,7 @@ class Trainer:
         optimizers: tuple[torch.optim.Optimizer | None, torch.optim.lr_scheduler.LambdaLR | None] = (None, None),
         optimizer_cls_and_kwargs: tuple[type[torch.optim.Optimizer], dict[str, Any]] | None = None,
         preprocess_logits_for_metrics: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] | None = None,
+        data_producer: "DataProducer | None" = None,
     ):
         # Init flow:
         #   1. Args & seed               – defaults, determinism
@@ -535,6 +536,7 @@ class Trainer:
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
+        self.data_producer = data_producer
         self.processing_class = processing_class
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
@@ -564,6 +566,9 @@ class Trainer:
             callbacks, self.model, self.processing_class, self.optimizer, self.lr_scheduler
         )
         self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
+
+        if self.data_producer is not None and isinstance(self.data_producer, TrainerCallback):
+            self.add_callback(self.data_producer)
 
         # ---- 9. Hub & output ---------------------------------------------------------
         self.hub_model_id = None  # Set by init_hf_repo() when push_to_hub is enabled
@@ -675,6 +680,25 @@ class Trainer:
                 "Passing `optimizers` is not allowed if PyTorch FSDP is enabled. "
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
+
+        # --- DataProducer validations ---
+        if self.data_producer is not None:
+            if self.train_dataset is not None:
+                raise ValueError(
+                    "Cannot pass both `data_producer` and `train_dataset`. "
+                    "Use `data_producer` for online data generation or `train_dataset` for static datasets."
+                )
+            if not hasattr(self.data_producer, "produce") or not callable(self.data_producer.produce):
+                raise TypeError(
+                    "`data_producer` must implement the DataProducer protocol (must have a callable `produce` method)."
+                )
+            if not hasattr(self.data_producer, "config"):
+                raise TypeError("`data_producer` must have a `config` attribute (a ProducerConfig instance).")
+            if args.max_steps <= 0 and (self.data_producer.config.max_rollouts is None):
+                raise ValueError(
+                    "`args.max_steps` must be positive or `data_producer.config.max_rollouts` must be set "
+                    "when using a `data_producer`, because there is no dataset length to derive the number of steps."
+                )
 
         # --- Dataset validations ---
         if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
@@ -1428,51 +1452,91 @@ class Trainer:
                 ignore_keys_for_eval=ignore_keys_for_eval,
             )
 
-    def _inner_training_loop(
-        self,
-        batch_size: int | None = None,
-        args: TrainingArguments | None = None,
-        resume_from_checkpoint: str | None = None,
-        trial: "optuna.Trial | dict[str, Any] | None" = None,
-        ignore_keys_for_eval: list[str] | None = None,
-    ) -> TrainOutput:
-        """Run the actual training loop: forward, backward, optimizer step, logging, and checkpointing."""
-        # reset everything
-        self.accelerator.free_memory()
-        if args.auto_find_batch_size:
-            self._update_auto_batch_size(batch_size)
-        # Data loader and number of training steps
-        train_dataloader = self.get_train_dataloader()
-        if self.is_fsdp_xla_v2_enabled:
-            train_dataloader = tpu_spmd_dataloader(train_dataloader)
+    # ---- Epoch-source helpers ---------------------------------------------------
 
-        # Setting up training control variables:
-        (
-            num_train_epochs,
-            num_update_steps_per_epoch,
-            num_examples,
-            num_train_samples,
-            total_train_batch_size,
-            steps_in_epoch,
-            max_steps,
-        ) = self.set_initial_training_values(args, train_dataloader)
+    def _create_epoch_source(self):
+        """Create the appropriate epoch source based on configuration."""
+        if self.data_producer is not None:
+            from .trainer_data_source import _OnlineEpochSource
 
-        epochs_trained, steps_trained_in_current_epoch = self._init_training_state(
-            max_steps, num_update_steps_per_epoch, num_train_epochs, resume_from_checkpoint, trial
+            return _OnlineEpochSource(self.data_producer)
+        else:
+            from .trainer_data_source import _StaticEpochSource
+
+            return _StaticEpochSource()
+
+    def _apply_sp_adapter(self, dataloader, model):
+        """Apply the DeepSpeed Ulysses SP dataloader adapter if needed."""
+        pc = getattr(self.accelerator, "parallelism_config", None)
+        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
+            dataloader = self.accelerator.deepspeed_ulysses_dl_adapter(dataloader, model)
+        return dataloader
+
+    @torch.no_grad()
+    def _produce_data(self, model):
+        """Call the data producer to generate a fresh training dataset.
+
+        Manages eval/train mode switching and CUDA cache clearing around the
+        ``produce()`` call.
+        """
+        producer = self.data_producer
+        config = producer.config
+
+        if hasattr(producer, "on_rollout_begin"):
+            producer.on_rollout_begin(self.state.global_step)
+
+        if config.empty_cache_before_produce and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        was_training = model.training
+        if config.eval_during_produce:
+            model.eval()
+
+        dataset = producer.produce(
+            model=model,
+            global_step=self.state.global_step,
+            processing_class=self.processing_class,
+            accelerator=self.accelerator,
+            args=self.args,
         )
-        model, train_dataloader = self._prepare_for_training(max_steps, train_dataloader, resume_from_checkpoint)
 
-        # Train!
+        if config.eval_during_produce and was_training:
+            model.train()
+
+        if config.empty_cache_after_produce and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        if hasattr(producer, "on_rollout_end"):
+            producer.on_rollout_end(dataset, self.state.global_step)
+
+        return dataset
+
+    def _get_online_dataloader(self, dataset) -> DataLoader:
+        """Create a DataLoader for a dataset produced by a DataProducer.
+
+        Reuses the Trainer's collator, sampler, and ``accelerator.prepare``
+        infrastructure.
+        """
+        return self._get_dataloader(
+            dataset=dataset,
+            description="Online training",
+            batch_size=self._train_batch_size,
+            sampler_fn=self._get_train_sampler,
+            is_training=True,
+        )
+
+    def _log_training_banner(self, plan, epochs_trained, steps_trained_in_current_epoch, model, resume_from_checkpoint):
+        """Log the 'Running training' info block."""
         logger.info("***** Running training *****")
-        logger.info(f"  Num examples = {num_examples:,}")
-        logger.info(f"  Num Epochs = {num_train_epochs:,}")
-        logger.info(f"  Num update steps per epoch = {num_update_steps_per_epoch:,}")
+        logger.info(f"  Num examples = {plan.num_examples:,}")
+        logger.info(f"  Num Epochs = {plan.num_train_epochs:,}")
+        logger.info(f"  Num update steps per epoch = {plan.num_update_steps_per_epoch:,}")
         logger.info(f"  Instantaneous batch size per device = {self.args.per_device_train_batch_size:,}")
         if self.args.per_device_train_batch_size != self._train_batch_size:
             logger.info(f"  Training with DataParallel so batch size has been adjusted to: {self._train_batch_size:,}")
-        logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size:,}")
-        logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
-        logger.info(f"  Total optimization steps = {max_steps:,}")
+        logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {plan.total_train_batch_size:,}")
+        logger.info(f"  Gradient Accumulation steps = {self.args.gradient_accumulation_steps}")
+        logger.info(f"  Total optimization steps = {plan.max_steps:,}")
         logger.info(f"  Number of trainable parameters = {get_model_param_count(model, trainable_only=True):,}")
 
         if resume_from_checkpoint is not None:
@@ -1484,6 +1548,36 @@ class Trainer:
                     f"  Fast-forwarding the dataloader past {epochs_trained} epochs and"
                     f" {steps_trained_in_current_epoch} batches to resume from the exact training state."
                 )
+
+    # ---- Training loop --------------------------------------------------------
+
+    def _inner_training_loop(
+        self,
+        batch_size: int | None = None,
+        args: TrainingArguments | None = None,
+        resume_from_checkpoint: str | None = None,
+        trial: "optuna.Trial | dict[str, Any] | None" = None,
+        ignore_keys_for_eval: list[str] | None = None,
+    ) -> TrainOutput:
+        """Run the actual training loop: forward, backward, optimizer step, logging, and checkpointing."""
+        self.accelerator.free_memory()
+        if args.auto_find_batch_size:
+            self._update_auto_batch_size(batch_size)
+
+        # Build the epoch source and compute the training plan
+        source = self._create_epoch_source()
+        plan = source.compute_plan(self)
+
+        epochs_trained, steps_trained_in_current_epoch = self._init_training_state(
+            plan.max_steps, plan.num_update_steps_per_epoch, plan.num_train_epochs,
+            resume_from_checkpoint, trial,
+        )
+        model, train_dataloader = self._prepare_for_training(
+            plan.max_steps, source.initial_dataloader, resume_from_checkpoint,
+        )
+        source.post_model_setup(self, model, train_dataloader)
+
+        self._log_training_banner(plan, epochs_trained, steps_trained_in_current_epoch, model, resume_from_checkpoint)
 
         start_time = time.time()
         # needed to calculate tokens/s
@@ -1501,25 +1595,21 @@ class Trainer:
         if args.eval_on_start:
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
-        for epoch in range(epochs_trained, num_train_epochs):
+        for spec in source.iter_epochs(
+            self, plan, epochs_trained, steps_trained_in_current_epoch, resume_from_checkpoint,
+        ):
             self.control = self.callback_handler.on_epoch_begin(self.args, self.state, self.control)
             self._run_epoch(
                 model=model,
-                epoch=epoch,
-                train_dataloader=train_dataloader,
-                steps_in_epoch=steps_in_epoch,
-                num_update_steps_per_epoch=num_update_steps_per_epoch,
+                epoch_spec=spec,
                 trial=trial,
                 ignore_keys_for_eval=ignore_keys_for_eval,
                 start_time=start_time,
-                resume_from_checkpoint=resume_from_checkpoint,
-                epochs_trained=epochs_trained,
-                steps_trained_in_current_epoch=steps_trained_in_current_epoch,
             )
             if self.control.should_training_stop:
                 break
 
-        return self._finalize_training(trial, num_train_samples, start_time)
+        return self._finalize_training(trial, plan.num_train_samples, start_time)
 
     def _init_training_state(
         self, max_steps, num_update_steps_per_epoch, num_train_epochs, resume_from_checkpoint, trial
@@ -1624,10 +1714,9 @@ class Trainer:
             if hasattr(self.model, "generate"):
                 dist.fsdp.register_fsdp_forward_method(self.model, "generate")
 
-        # since DataLoader was Accelerate prepared w/o a model arg in the same call, we now have to complete the DL wrapping for ALST/UlyssesSP, after model has been prepared
-        pc = getattr(self.accelerator, "parallelism_config", None)
-        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
-            train_dataloader = self.accelerator.deepspeed_ulysses_dl_adapter(train_dataloader, model)
+        # NOTE: The SP (Sequence Parallelism) dataloader adapter is now applied
+        # by the epoch source via post_model_setup → _apply_sp_adapter, after
+        # this method returns.
 
         # load checkpoint
         if resume_from_checkpoint is not None:
@@ -1651,18 +1740,21 @@ class Trainer:
     def _run_epoch(
         self,
         model,
-        epoch,
-        train_dataloader,
-        steps_in_epoch,
-        num_update_steps_per_epoch,
+        epoch_spec,
         trial,
         ignore_keys_for_eval,
         start_time,
-        resume_from_checkpoint,
-        epochs_trained,
-        steps_trained_in_current_epoch,
     ):
-        """Run one full pass over the dataloader."""
+        """Run one full pass over the dataloader described by *epoch_spec*."""
+        # Unpack the epoch spec into local variables.  The rest of the method
+        # body is intentionally unchanged from the pre-refactor version.
+        epoch = epoch_spec.epoch
+        train_dataloader = epoch_spec.dataloader
+        steps_in_epoch = epoch_spec.steps_in_epoch
+        num_update_steps_per_epoch = epoch_spec.num_update_steps_per_epoch
+        resume_from_checkpoint = epoch_spec.resume_from_checkpoint
+        epochs_trained = epoch_spec.epochs_trained
+        steps_trained_in_current_epoch = epoch_spec.steps_trained_in_current_epoch
 
         step = -1
         grad_norm = None
@@ -1681,7 +1773,7 @@ class Trainer:
                 self._load_rng_state(resume_from_checkpoint)
 
         if hasattr(train_dataloader, "set_epoch"):
-            train_dataloader.set_epoch(epoch)
+            train_dataloader.set_epoch(int(epoch))
         epoch_iterator = iter(train_dataloader)
 
         # We chunkify the epoch iterator into gradient accumulation steps `n` batches

@@ -183,6 +183,13 @@ _import_structure = {
     ],
     "tokenization_utils_fast": [],
     "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
+    "data_producer": [
+        "AsyncDataProducer",
+        "BaseDataProducer",
+        "DataProducer",
+        "DataProducerCallback",
+        "ProducerConfig",
+    ],
     "trainer_callback": [
         "DefaultFlowCallback",
         "EarlyStoppingCallback",
@@ -697,6 +704,13 @@ if TYPE_CHECKING:
     from .tokenization_utils_tokenizers import (
         TokenizersBackend as TokenizersBackend,
     )
+
+    # DataProducer
+    from .data_producer import AsyncDataProducer as AsyncDataProducer
+    from .data_producer import BaseDataProducer as BaseDataProducer
+    from .data_producer import DataProducer as DataProducer
+    from .data_producer import DataProducerCallback as DataProducerCallback
+    from .data_producer import ProducerConfig as ProducerConfig
 
     # Trainer
     from .trainer import Trainer as Trainer
