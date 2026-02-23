@@ -847,6 +847,9 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         # In this continuation setup, rare numerical drift appears on the newest cache slot only.
         # Keep strict checks on earlier slots and use a tolerant check on the newest slot.
         self.assertEqual(len(cache1), len(cache2))
+        rtol = 5e-2
+        atol = 1e-2
+
         for idx in range(len(cache1)):
             keys1 = cache1.layers[idx].keys
             keys2 = cache2.layers[idx].keys
@@ -860,8 +863,8 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
                 torch.testing.assert_close(keys1[..., :-1, :], keys2[..., :-1, :])
                 torch.testing.assert_close(values1[..., :-1, :], values2[..., :-1, :])
 
-            torch.testing.assert_close(keys1[..., -1:, :], keys2[..., -1:, :], rtol=5e-2, atol=1e-2)
-            torch.testing.assert_close(values1[..., -1:, :], values2[..., -1:, :], rtol=5e-2, atol=1e-2)
+            torch.testing.assert_close(keys1[..., -1:, :], keys2[..., -1:, :], rtol=rtol, atol=atol)
+            torch.testing.assert_close(values1[..., -1:, :], values2[..., -1:, :], rtol=rtol, atol=atol)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
