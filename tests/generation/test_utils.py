@@ -2730,7 +2730,6 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
     return torch.tensor(data=values, dtype=torch.float, device=torch_device).view(shape).contiguous()
 
 
-@pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
     def test_generation_config_defaults(self):
