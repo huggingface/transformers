@@ -45,24 +45,30 @@ logger = logging.get_logger(__name__)
 
 
 class MusicFlamingoRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        dim,
-        max_time=7200,
-    ):
+    freqs: torch.Tensor
+
+    def __init__(self, config: MusicFlamingoConfig, device=None):
         super().__init__()
 
-        self.dim = dim
-        self.max_time = max_time
+        self.config = config
+        self.dim = getattr(config, "rotary_dim", 256)
+        self.max_time = getattr(config, "rotary_max_time", 1200.0)
 
-        theta = max_time / (2 * pi) if max_time is not None else 50000
-
-        freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
-
+        freqs = self.compute_default_rote_parameters(config, device=device)
         self.freqs = nn.Parameter(freqs, requires_grad=False)
 
         cached_freqs = self._build_cached_freqs(freqs)
         self.register_buffer("cached_freqs", cached_freqs, persistent=False)
+
+    @staticmethod
+    def compute_default_rote_parameters(config: MusicFlamingoConfig | None = None, device=None):
+        dim = getattr(config, "rotary_dim", 256)
+        max_time = getattr(config, "rotary_max_time", 1200.0)
+        theta = max_time / (2 * pi) if max_time is not None else 50000
+        freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+        if device is not None:
+            freqs = freqs.to(device=device)
+        return freqs
 
     def _build_cached_freqs(self, freqs, device=None, dtype=None):
         if self.max_time is None:
@@ -127,13 +133,7 @@ class MusicFlamingoPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, MusicFlamingoRotaryEmbedding):
             # Reinitialize freqs parameter
-            dim = module.dim
-            max_time = module.max_time
-
-            theta = max_time / (2 * pi) if max_time is not None else 50000
-
-            # Generate freqs
-            freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+            freqs = module.compute_default_rote_parameters(module.config)
 
             module.freqs.data = freqs
 
@@ -422,10 +422,7 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
         self.avg_pooler = nn.AvgPool1d(2, stride=2)
 
         self.gradient_checkpointing = False
-        self.pos_emb = MusicFlamingoRotaryEmbedding(
-            dim=getattr(config, "rotary_dim", 256),
-            max_time=getattr(config, "rotary_max_time", 1200.0),
-        )
+        self.pos_emb = MusicFlamingoRotaryEmbedding(config)
         # Initialize weights and apply final processing
         self.post_init()
 
