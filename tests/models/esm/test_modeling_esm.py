@@ -340,6 +340,10 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
                 torch.testing.assert_close(logits_fa, logits, atol=1e-2, rtol=1e-3)
 
+    @unittest.skip("ESM embeddings are scaled due to token dropout so the test does not apply")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
 
 @slow
 @require_torch

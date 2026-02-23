@@ -639,11 +639,11 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # image = Image.open(requests.get(url, stream=True).raw)
         inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(torch_device, torch.float16)
-        generate_ids = model.generate(**inputs, max_new_tokens=100)
+        generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
         # fmt: off
-        EXPECTED_GENERATION = "Describe the images.\nThe image depicts a black dog sitting on a wooden surface. The dog has a glossy black coat and is looking directly at the camera with a calm and attentive expression. The wooden background consists of horizontal wooden planks, giving the image a rustic and warm feel. The lighting is soft, highlighting the dog's features and creating a cozy atmosphere. The overall composition is simple and focuses on the dog as the main subject."
+        EXPECTED_GENERATION = "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, providing a rustic and warm setting for the photograph.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with snow"
         # fmt: on
         # check that both inputs are handled correctly and generate the same output
         self.assertEqual(output, EXPECTED_GENERATION)

@@ -17,7 +17,7 @@ from functools import wraps
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import is_grouped_mm_available, is_torch_available, is_torchdynamo_compiling
 
 
 if is_torch_available():
@@ -156,52 +156,86 @@ def batched_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
-# We wrap it as a custim op to be able to use it in torch.compile without breaking the graph capture
-@torch.library.custom_op("transformers::grouped_mm_fallback", mutates_args=())
-def _grouped_mm_fallback(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    offs: torch.Tensor,
-) -> torch.Tensor:
+# torch.compiler.disable does not work with fullgraph=True, so we implement a custom operator to opaque this function.
+# This is not "free compilation compatibility" because now inductor won't be able to optimize matmuls inside the loop,
+# but since the matmuls here have dynamic shapes, inductor wouldn't have been able to optimize them anyway.
+def _grouped_mm_fallback(input: torch.Tensor, weight: torch.Tensor, offs: torch.Tensor) -> torch.Tensor:
     """
-    Naive implementation of grouped matrix multiplication that can be used as a fallback when torch.nn.functional.grouped_mm
-    and torch._grouped_mm are not available or not compatible with torch.compile.
+    Fallback grouped matrix multiplication used when `torch.nn.functional.grouped_mm` and `torch._grouped_mm`
+    are unavailable or incompatible with `torch.compile` (e.g. non-bfloat16 weights).
 
     Args:
-        input (`torch.Tensor`):
-            Input tensor of shape (S, input_dim).
-        weight (`torch.Tensor`):
-            Weight tensor of shape (num_experts, input_dim, output_dim).
-        offs (`torch.Tensor`):
-            Offsets tensor indicating the boundaries of each group in the input tensor.
+        input (`torch.Tensor`): Input of shape (S, input_dim), sorted by expert id.
+        weight (`torch.Tensor`): Expert weights of shape (num_experts, input_dim, output_dim).
+        offs (`torch.Tensor`): Cumulative token counts per expert of shape (num_experts,).
     Returns:
-        `torch.Tensor`: Output tensor of shape (S, output_dim).
+        `torch.Tensor`: Output of shape (S, output_dim).
     """
-    output = torch.zeros(input.size(0), weight.size(2), device=input.device, dtype=input.dtype)
-    for i in range(weight.size(0)):
-        start, end = offs[i - 1], offs[i]
-        if start >= end:
+    output = torch.zeros(input.size(0), weight.size(2), device=input.device, dtype=input.dtype)  # (S, output_dim)
+
+    start = 0
+    # single cpu<->gpu sync point here,
+    # avoids multiple syncs inside the loop
+    for i, end in enumerate(offs.tolist()):
+        if start == end:
             continue
-        output[start:end] = torch.matmul(input[start:end], weight[i])
+        torch.mm(input[start:end], weight[i], out=output[start:end])
+        start = end
+
     return output
 
 
-# We register the fallback implementation as a fake op for shape inference during torch.compile graph capture
-@torch.library.register_fake("transformers::grouped_mm_fallback")
-def _grouped_mm_fallback_fake(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    offs: torch.Tensor,
-) -> torch.Tensor:
-    """Fake implementation of grouped matrix multiplication for shape inference during torch.compile graph capture."""
+def _grouped_mm_fallback_fake(input: torch.Tensor, weight: torch.Tensor, offs: torch.Tensor) -> torch.Tensor:
+    """Shape/dtype inference stub for `_grouped_mm_fallback` required by `torch.compile`."""
+    assert input.dim() == 2, f"input must be 2D (S, input_dim), got shape {tuple(input.shape)}"
+    assert weight.dim() == 3, (
+        f"weight must be 3D (num_experts, input_dim, output_dim), got shape {tuple(weight.shape)}"
+    )
+    assert offs.dim() == 1, f"offs must be 1D (num_experts,), got shape {tuple(offs.shape)}"
+    assert offs.size(0) == weight.size(0), f"offs length {offs.size(0)} must match number of experts {weight.size(0)}"
+    assert input.size(1) == weight.size(1), (
+        f"input_dim mismatch: input has {input.size(1)}, weight has {weight.size(1)}"
+    )
+    assert offs.dtype in (torch.int32, torch.int64), f"offs must be an integer tensor, got {offs.dtype}"
     return torch.empty(input.size(0), weight.size(2), device=input.device, dtype=input.dtype)
 
 
-def _can_use_grouped_mm(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    offs: torch.Tensor,
-) -> bool:
+def _grouped_mm_fallback_setup_context(ctx, inputs, output):
+    """Saves input and weight for backward; offs is stored directly as it is a non-differentiable integer tensor."""
+    ctx.save_for_backward(inputs[0], inputs[1])
+    ctx.offs = inputs[2]
+
+
+def _grouped_mm_fallback_backward(ctx, grad_output):
+    """Backward pass for `_grouped_mm_fallback`. Computes grad_input and grad_weight per expert group; offs has no gradient."""
+    input, weight = ctx.saved_tensors
+    grad_input = torch.zeros_like(input)
+    grad_weight = torch.zeros_like(weight)
+
+    start = 0
+    # single cpu<->gpu sync point here,
+    # avoids multiple syncs inside the loop
+    for i, end in enumerate(ctx.offs.tolist()):
+        if start == end:
+            continue
+        torch.mm(grad_output[start:end], weight[i].T, out=grad_input[start:end])
+        torch.mm(input[start:end].T, grad_output[start:end], out=grad_weight[i])
+        start = end
+
+    return grad_input, grad_weight, None
+
+
+if is_torch_available():
+    torch.library.custom_op("transformers::grouped_mm_fallback", _grouped_mm_fallback, mutates_args=())
+    torch.library.register_fake("transformers::grouped_mm_fallback", _grouped_mm_fallback_fake)
+    torch.library.register_autograd(
+        "transformers::grouped_mm_fallback",
+        _grouped_mm_fallback_backward,
+        setup_context=_grouped_mm_fallback_setup_context,
+    )
+
+
+def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.Tensor) -> bool:
     """
     Check if torch.nn.functional.grouped_mm or torch._grouped_mm can be used based on availability and compatibility with torch.compile.
 
@@ -215,11 +249,11 @@ def _can_use_grouped_mm(
     Returns:
         `bool`: True if grouped_mm can be used, False otherwise.
     """
-    if torch.compiler.is_compiling() and weight.dtype != torch.bfloat16:
+    if is_torchdynamo_compiling() and weight.dtype != torch.bfloat16:
         # torch.grouped_mm is not supported in torch.compile with dtypes other than bfloat16
         return False
 
-    return hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm")
+    return is_grouped_mm_available()
 
 
 def _grouped_mm(
@@ -250,7 +284,7 @@ def _grouped_mm(
         elif hasattr(torch, "_grouped_mm"):
             return torch._grouped_mm(input.to(weight.dtype), weight, offs=offs)
 
-    return _grouped_mm_fallback(input, weight, offs)
+    return torch.ops.transformers.grouped_mm_fallback(input, weight, offs=offs)
 
 
 def _grouped_linear(
