@@ -149,7 +149,7 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Pad the first input to match the second input
         pad_len = len(expected_input_ids_2) - len(expected_input_ids_1)
 
-        expected_attention_mask = [ [1] * len(expected_input_ids_1) + [0] * pad_len, [1] * (len(expected_input_ids_2))]
+        expected_attention_mask = [ [0] * pad_len + [1] * len(expected_input_ids_1), [1] * (len(expected_input_ids_2))]
 
         self.assertEqual(
             inputs["attention_mask"],

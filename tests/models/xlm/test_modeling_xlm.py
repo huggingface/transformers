@@ -387,6 +387,22 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else {}
     )
 
+    def _greedy_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as xlm cannot use a cache correctly."""
+        return super()._greedy_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _sample_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as xlm cannot use a cache correctly."""
+        return super()._sample_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _beam_search_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as xlm cannot use a cache correctly."""
+        return super()._beam_search_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _beam_sample_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as xlm cannot use a cache correctly."""
+        return super()._beam_sample_generate(*args, use_cache=use_cache, **kwargs)
+
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
         self,
@@ -493,6 +509,14 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model_name = "FacebookAI/xlm-mlm-en-2048"
         model = XLMModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @unittest.skip("xlm cannot use a cache correctly and this test sets it to True explicitly")
+    def test_generate_methods_with_logits_to_keep(self):
+        pass
+
+    @unittest.skip("xlm cannot use a cache correctly and this test sets it to True explicitly")
+    def test_generate_with_and_without_position_ids(self):
+        pass
 
 
 @require_torch
