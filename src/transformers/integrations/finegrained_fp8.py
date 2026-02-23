@@ -15,6 +15,7 @@
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_kernels_available, is_torch_available, logging
+from .moe import fp8_batched_mm_experts_forward, fp8_grouped_mm_experts_forward
 
 
 if is_torch_available():
@@ -24,37 +25,49 @@ if is_torch_available():
     import triton.language as tl
     from torch.nn import functional as F
 
+    from ..activations import ACT2FN
+
 
 logger = logging.get_logger(__name__)
 
 # Global for the CUTLASS quantization kernel (lazily loaded)
-_quantization_kernel = None
+_cutlass_kernel = None
 
 
-def _get_quantization_kernel():
+def _get_cutlass_kernel():
     """Lazily load the CUTLASS quantization kernel from HuggingFace Hub."""
-    global _quantization_kernel
-    if _quantization_kernel is None:
+    global _cutlass_kernel
+    if _cutlass_kernel is None:
         try:
             from .hub_kernels import get_kernel
 
-            _quantization_kernel = get_kernel("RedHatAI/quantization")
+            _cutlass_kernel = get_kernel("RedHatAI/quantization")
         except Exception as e:
             logger.warning_once(f"Failed to load CUTLASS quantization kernel: {e}. Falling back to Triton.")
-            _quantization_kernel = False  # Mark as unavailable
-    return _quantization_kernel if _quantization_kernel else None
+            _cutlass_kernel = False  # Mark as unavailable to avoid future attempts
+    return _cutlass_kernel if _cutlass_kernel else None
 
 
-def _supports_cutlass(block_size: list[int] | None, output_dtype: torch.dtype) -> bool:
+def _supports_cutlass(
+    A: torch.Tensor,
+    B: torch.Tensor,
+    block_size: list[int] | None,
+    output_dtype: torch.dtype,
+) -> bool:
     """
-    Check if CUTLASS blockwise FP8 matmul is supported for the given block size and output dtype.
+    Check if CUTLASS blockwise FP8 matmul is supported for the given inputs, output dtype, and block size.
 
     CUTLASS blockwise kernels require:
     - SM90+ (Hopper or newer)
     - Block size [128, 128] for weights
     - Block size [1, 128] for activations (handled implicitly)
     - Output dtype bfloat16 or float16
+    - K and N divisible by 16
     """
+
+    if torch.compiler.is_compiling():
+        # the checks after this, using importlib fail during torch.compile :/
+        return False
 
     if not is_torch_available() or not torch.cuda.is_available() or not is_kernels_available():
         return False
@@ -69,12 +82,17 @@ def _supports_cutlass(block_size: list[int] | None, output_dtype: torch.dtype) -
     if len(block_size) != 2 or block_size[0] != 128 or block_size[1] != 128:
         return False
 
+    # CUTLASS requires K and N divisible by 16
+    K, N = A.shape[-1], B.shape[0]
+    if K % 16 != 0 or N % 16 != 0:
+        return False
+
     # Check GPU capability (SM90+)
     capability = torch.cuda.get_device_capability()
     cuda_capability = capability[0] * 10 + capability[1]
 
     # Try to load the kernel and check if blockwise FP8 is supported
-    kernel = _get_quantization_kernel()
+    kernel = _get_cutlass_kernel()
     if kernel is None:
         return False
 
@@ -82,6 +100,45 @@ def _supports_cutlass(block_size: list[int] | None, output_dtype: torch.dtype) -
         return kernel.cutlass_scaled_mm_supports_block_fp8(cuda_capability)
     except Exception:
         return False
+
+
+def w8a8_block_fp8_matmul_cutlass(
+    A: torch.Tensor,
+    B: torch.Tensor,
+    As: torch.Tensor,
+    Bs: torch.Tensor,
+    output_dtype: torch.dtype,
+) -> torch.Tensor:
+    """Call the CUTLASS blockwise FP8 matmul kernel.
+
+    Handles all layout conversions required by CUTLASS:
+      - A:  [M, K]           row-major    float8_e4m3fn
+      - B:  [K, N]           column-major float8_e4m3fn  (our [N, K] transposed)
+      - As: [M,  K//128]     M-major      (stride(0)==1)
+      - Bs: [K//128, N//128] K-major      (stride(0)==1)
+    """
+    kernel = _get_cutlass_kernel()
+
+    original_shape = A.shape
+    M = A.numel() // A.shape[-1]
+    K = A.shape[-1]
+    N = B.shape[0]
+
+    A_2d = A.view(M, K).contiguous()
+    # B is [N, K] row-major; CUTLASS needs [K, N] column-major (stride(0)==1).
+    # .contiguous().t() gives [K, N] with stride=(1, K) — do NOT call .contiguous() after!
+    B_col_major = B.contiguous().t()
+
+    # As: reshape to [M, K//128], then force M-major layout via t().contiguous().t()
+    As_2d = As.view(M, -1).contiguous()
+    As_2d = As_2d.t().contiguous().t()  # [M, K//128] with stride(0)==1
+
+    # Bs: our layout is [N//128, K//128]; CUTLASS needs [K//128, N//128] K-major (stride(0)==1)
+    Bs_km = Bs.contiguous().t()  # [K//128, N//128]
+    Bs_km = Bs_km.t().contiguous().t()  # force K-major (stride(0)==1)
+
+    C = kernel.cutlass_scaled_mm(A_2d, B_col_major, As_2d, Bs_km, output_dtype, None)
+    return C.view(original_shape[:-1] + (N,))
 
 
 _FP8_DTYPE = torch.float8_e4m3fn
@@ -105,19 +162,17 @@ def act_quant_kernel(x_ptr, y_ptr, s_ptr, BLOCK_SIZE: tl.constexpr):
 def act_quant(x: torch.Tensor, block_size: int = 128) -> tuple[torch.Tensor, torch.Tensor]:
     assert x.is_contiguous()
     assert x.shape[-1] % block_size == 0
-    y = torch.empty_like(x, dtype=torch.float8_e4m3fn)
+    y = torch.empty_like(x, dtype=_FP8_DTYPE)
     s = x.new_empty(*x.size()[:-1], x.size(-1) // block_size, dtype=torch.float32)
 
-    def grid(meta):
-        return (triton.cdiv(x.numel(), meta["BLOCK_SIZE"]),)
-
+    grid = (triton.cdiv(x.numel(), block_size),)
     act_quant_kernel[grid](x, y, s, BLOCK_SIZE=block_size)
     return y, s
 
 
 # Adapted from https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/layers/quantization/fp8_kernel.py
 @triton.jit
-def _w8a8_block_fp8_matmul(
+def w8a8_block_fp8_matmul_kernel(
     # Pointers to inputs and output
     A,
     B,
@@ -201,79 +256,6 @@ def _w8a8_block_fp8_matmul(
     tl.store(c_ptrs, c, mask=c_mask)
 
 
-@triton.jit
-def _w8a8_block_fp8_matmul_per_tensor(
-    # Pointers to inputs and output
-    A,
-    B,
-    C,
-    As,
-    Bs,
-    # Shape for matmul
-    M,
-    N,
-    K,
-    # Block size for block-wise quantization
-    group_n,
-    group_k,
-    # Stride for inputs and output
-    stride_am,
-    stride_ak,
-    stride_bk,
-    stride_bn,
-    stride_cm,
-    stride_cn,
-    # Meta-parameters
-    BLOCK_SIZE_M: tl.constexpr,
-    BLOCK_SIZE_N: tl.constexpr,
-    BLOCK_SIZE_K: tl.constexpr,
-    GROUP_SIZE_M: tl.constexpr,
-):
-    """Triton-accelerated function used to perform linear operations (dot
-    product) on input tensors `A` and `B` with per-tensor quantization, and
-    store the result in output tensor `C`.
-    """
-
-    pid = tl.program_id(axis=0)
-    num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
-    num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
-    num_pid_in_group = GROUP_SIZE_M * num_pid_n
-    group_id = pid // num_pid_in_group
-    first_pid_m = group_id * GROUP_SIZE_M
-    group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M)
-    pid_m = first_pid_m + (pid % group_size_m)
-    pid_n = (pid % num_pid_in_group) // group_size_m
-
-    offs_am = (pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)) % M
-    offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
-    offs_k = tl.arange(0, BLOCK_SIZE_K)
-    a_ptrs = A + (offs_am[:, None] * stride_am + offs_k[None, :] * stride_ak)
-    b_ptrs = B + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
-    scale_a = tl.load(As)
-    scale_b = tl.load(Bs)
-    accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
-        a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0)
-        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
-
-        accumulator += tl.dot(a, b) * scale_a * scale_b
-        a_ptrs += BLOCK_SIZE_K * stride_ak
-        b_ptrs += BLOCK_SIZE_K * stride_bk
-
-    if C.dtype.element_ty == tl.bfloat16:
-        c = accumulator.to(tl.bfloat16)
-    elif C.dtype.element_ty == tl.float16:
-        c = accumulator.to(tl.float16)
-    else:
-        c = accumulator.to(tl.float32)
-
-    offs_cm = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
-    offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-    c_ptrs = C + stride_cm * offs_cm[:, None] + stride_cn * offs_cn[None, :]
-    c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
-    tl.store(c_ptrs, c, mask=c_mask)
-
-
 def w8a8_block_fp8_matmul_triton(
     A: torch.Tensor,
     B: torch.Tensor,
@@ -310,15 +292,23 @@ def w8a8_block_fp8_matmul_triton(
 
     assert A.shape[-1] == B.shape[-1]
 
-    if As.numel() != 1:
-        assert A.shape[:-1] == As.shape[:-1] and A.is_contiguous()
-        assert triton.cdiv(A.shape[-1], block_k) == As.shape[-1]
+    assert A.is_contiguous()
 
     M = A.numel() // A.shape[-1]
 
     N, K = B.shape
     assert B.ndim == 2 and B.is_contiguous()
-    if Bs.numel() != 1:
+
+    # For per-tensor scales (scalar), expand to block-scale shape with strides (0, 0).
+    # This is a zero-copy view; all loads inside the kernel hit the same cached value.
+    if As.numel() == 1:
+        As = As.reshape(1, 1).expand(M, triton.cdiv(K, block_k))
+    else:
+        assert A.shape[:-1] == As.shape[:-1]
+        assert triton.cdiv(K, block_k) == As.shape[-1]
+    if Bs.numel() == 1:
+        Bs = Bs.reshape(1, 1).expand(triton.cdiv(N, block_n), triton.cdiv(K, block_k))
+    else:
         assert Bs.ndim == 2
         assert triton.cdiv(N, block_n) == Bs.shape[0], f"{N}, {block_n}, {Bs.shape}"
         assert triton.cdiv(K, block_k) == Bs.shape[1], f"{K}, {block_k}, {Bs.shape}"
@@ -326,67 +316,42 @@ def w8a8_block_fp8_matmul_triton(
     C_shape = A.shape[:-1] + (N,)
     C = A.new_empty(C_shape, dtype=output_dtype)
 
-    BLOCK_SIZE_M = 128
-    if M < BLOCK_SIZE_M:
-        BLOCK_SIZE_M = triton.next_power_of_2(M)
-        BLOCK_SIZE_M = max(BLOCK_SIZE_M, 16)
+    # Adaptive BLOCK_SIZE_M: smallest power-of-2 >= M, floored at 16, capped at 128.
+    # Matches the WGMMA tile to the actual row count — smaller tiles use less
+    # register pressure and a better-matched FP8 WGMMA instruction, improving
+    # both accuracy and performance for small M (decode).
+    BLOCK_SIZE_M = min(max(triton.next_power_of_2(M), 16), 128)
     BLOCK_SIZE_K = block_k
-    assert block_k % BLOCK_SIZE_K == 0
     BLOCK_SIZE_N = block_n
 
-    def grid(META):
-        return (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
+    grid = (triton.cdiv(M, BLOCK_SIZE_M) * triton.cdiv(N, BLOCK_SIZE_N),)
 
-    if As.numel() == 1 and Bs.numel() == 1:
-        _w8a8_block_fp8_matmul_per_tensor[grid](
-            A,
-            B,
-            C,
-            As,
-            Bs,
-            M,
-            N,
-            K,
-            block_n,
-            block_k,
-            A.stride(-2),
-            A.stride(-1),
-            B.stride(1),
-            B.stride(0),
-            C.stride(-2),
-            C.stride(-1),
-            BLOCK_SIZE_M=BLOCK_SIZE_M,
-            BLOCK_SIZE_N=BLOCK_SIZE_N,
-            BLOCK_SIZE_K=BLOCK_SIZE_K,
-            GROUP_SIZE_M=8,
-        )
-    else:
-        _w8a8_block_fp8_matmul[grid](
-            A,
-            B,
-            C,
-            As,
-            Bs,
-            M,
-            N,
-            K,
-            block_n,
-            block_k,
-            A.stride(-2),
-            A.stride(-1),
-            B.stride(1),
-            B.stride(0),
-            C.stride(-2),
-            C.stride(-1),
-            As.stride(-2),
-            As.stride(-1),
-            Bs.stride(1),
-            Bs.stride(0),
-            BLOCK_SIZE_M=BLOCK_SIZE_M,
-            BLOCK_SIZE_N=BLOCK_SIZE_N,
-            BLOCK_SIZE_K=BLOCK_SIZE_K,
-            GROUP_SIZE_M=8,
-        )
+    w8a8_block_fp8_matmul_kernel[grid](
+        A,
+        B,
+        C,
+        As,
+        Bs,
+        M,
+        N,
+        K,
+        block_n,
+        block_k,
+        A.stride(-2),
+        A.stride(-1),
+        B.stride(1),
+        B.stride(0),
+        C.stride(-2),
+        C.stride(-1),
+        As.stride(-2),
+        As.stride(-1),
+        Bs.stride(1),
+        Bs.stride(0),
+        BLOCK_SIZE_M=BLOCK_SIZE_M,
+        BLOCK_SIZE_N=BLOCK_SIZE_N,
+        BLOCK_SIZE_K=BLOCK_SIZE_K,
+        GROUP_SIZE_M=8,
+    )
 
     return C
 
@@ -412,125 +377,191 @@ def w8a8_block_fp8_matmul(
     Otherwise falls back to Triton.
     """
 
-    if _supports_cutlass(block_size, output_dtype):
-        kernel = _get_quantization_kernel()
-        if kernel is not None:
-            try:
-                # CUTLASS expects:
-                # - A: [M, K] row-major, float8_e4m3fn
-                # - B: [K, N] column-major, float8_e4m3fn
-                # - As: [M, K//128] M-major (activation scales)
-                # - Bs: [K//128, N//128] K-major (weight scales)
-
-                # Reshape A to 2D if needed
-                original_shape = A.shape
-                M = A.numel() // A.shape[-1]
-                K = A.shape[-1]
-                N = B.shape[0]
-
-                # CUTLASS requires dimensions divisible by 16
-                if K % 16 != 0 or N % 16 != 0:
-                    raise ValueError(f"CUTLASS requires K ({K}) and N ({N}) divisible by 16")
-
-                A_2d = A.view(M, K).contiguous()
-                # B needs to be column-major for CUTLASS: [K, N] with stride(0)==1
-                # Our B is [N, K] row-major. Make it contiguous first, then transpose.
-                # B.contiguous() gives [N, K] with stride=(K,1)
-                # B.contiguous().t() gives [K, N] with stride=(1,K) which is column-major
-                # Do NOT call .contiguous() after .t() as it would make it row-major!
-                B_col_major = B.contiguous().t()
-
-                # Scales need proper layout for CUTLASS blockwise:
-                # As should be [M, K//128] with M-major layout (stride(0)==1)
-                # Bs should be [K//128, N//128] with K-major layout (stride(0)==1)
-
-                # As: reshape to [M, K//128], then make M-major via t().contiguous().t()
-                As_2d = As.view(M, -1).contiguous()
-                As_2d = As_2d.t().contiguous().t()  # [M, K//128] with stride(0)==1
-
-                # Bs: our input is [N//128, K//128], need [K//128, N//128] with stride(0)==1
-                # Transpose to get [K//128, N//128], then make K-major via t().contiguous().t()
-                Bs_km = Bs.contiguous().t()  # [K//128, N//128]
-                Bs_km = Bs_km.t().contiguous().t()  # Make K-major (stride(0)==1)
-
-                # Call CUTLASS kernel - it returns the output tensor
-                # Signature: cutlass_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias=None) -> Tensor
-                C = kernel.cutlass_scaled_mm(A_2d, B_col_major, As_2d, Bs_km, output_dtype, None)
-                # Reshape output back
-                C_shape = original_shape[:-1] + (N,)
-                return C.view(C_shape)
-            except Exception as e:
-                logger.warning_once(f"CUTLASS kernel failed: {e}. Falling back to Triton.")
+    if _supports_cutlass(A, B, block_size, output_dtype):
+        try:
+            return w8a8_block_fp8_matmul_cutlass(A, B, As, Bs, output_dtype)
+        except Exception as e:
+            global _cutlass_kernel
+            logger.warning_once(f"CUTLASS kernel failed: {e}. Falling back to Triton.")
+            _cutlass_kernel = False  # mark unavailable to avoid future attempts
 
     # Fall back to Triton
     return w8a8_block_fp8_matmul_triton(A, B, As, Bs, block_size, output_dtype)
 
 
-# Python version of the above triton function, it's much slower than the triton version, for testing
-@torch.compile
-def w8a8_block_fp8_matmul_compile(
-    input_q: torch.Tensor,  # [batch, seq_len, hidden_dim]
-    weight_q: torch.Tensor,  # [out_features, hidden_dim]
-    input_scale: torch.Tensor,  # [batch * seq_len, num_input_groups]
-    weight_scale: torch.Tensor,  # [num_weight_blocks_m, num_weight_blocks_n]
-    block_size: tuple[int, int] | None = None,  # (M=128, N=128) for weights for example
+@triton.jit
+def w8a8_block_fp8_matmul_fused_kernel(
+    # Pointers to inputs and output
+    A,
+    B,
+    C,
+    Bs,
+    # Shape for matmul
+    M,
+    N,
+    K,
+    # Block size for block-wise quantization
+    group_n,
+    group_k,
+    # Stride for inputs and output
+    stride_am,
+    stride_ak,
+    stride_bk,
+    stride_bn,
+    stride_cm,
+    stride_cn,
+    stride_Bs_k,
+    stride_Bs_n,
+    # Meta-parameters
+    BLOCK_SIZE_M: tl.constexpr,
+    BLOCK_SIZE_N: tl.constexpr,
+    BLOCK_SIZE_K: tl.constexpr,
+    GROUP_SIZE_M: tl.constexpr,
+):
+    """Fused FP8 block-wise matmul with on-the-fly activation quantization.
+
+    Replaces the two-kernel pattern of ``act_quant`` + ``_w8a8_block_fp8_matmul``
+    with a single kernel.  For each (M-tile, K-block) pair the per-row activation
+    scale is computed as ``max(|a|, axis=1) / 448``, the activations are cast to
+    FP8, and the dot product is accumulated — eliminating the global-memory
+    roundtrip for the intermediate quantised activations and their scales.
+    """
+
+    pid = tl.program_id(axis=0)
+    num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
+    num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
+    num_pid_in_group = GROUP_SIZE_M * num_pid_n
+    group_id = pid // num_pid_in_group
+    first_pid_m = group_id * GROUP_SIZE_M
+    group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M)
+    pid_m = first_pid_m + (pid % group_size_m)
+    pid_n = (pid % num_pid_in_group) // group_size_m
+
+    offs_am = (pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)) % M
+    offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
+    offs_k = tl.arange(0, BLOCK_SIZE_K)
+    a_ptrs = A + (offs_am[:, None] * stride_am + offs_k[None, :] * stride_ak)
+    b_ptrs = B + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
+
+    offs_bsn = offs_bn // group_n
+    Bs_ptrs = Bs + offs_bsn * stride_Bs_n
+
+    accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
+    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
+        # ---- fused act_quant (replaces: a = tl.load(a_ptrs); a_s = tl.load(As_ptrs + offs_ks * stride_As_k)) ----
+        a_raw = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0).to(tl.float32)
+        a_s = tl.max(tl.abs(a_raw), axis=1) / 448.0
+        a_s = tl.maximum(a_s, 1e-12)
+        a = (a_raw / a_s[:, None]).to(tl.float8e4nv)
+        # ---- same as baseline from here ----
+        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
+
+        k_start = k * BLOCK_SIZE_K
+        offs_ks = k_start // group_k
+        b_s = tl.load(Bs_ptrs + offs_ks * stride_Bs_k)
+
+        accumulator += tl.dot(a, b) * a_s[:, None] * b_s[None, :]
+        a_ptrs += BLOCK_SIZE_K * stride_ak
+        b_ptrs += BLOCK_SIZE_K * stride_bk
+
+    if C.dtype.element_ty == tl.bfloat16:
+        c = accumulator.to(tl.bfloat16)
+    elif C.dtype.element_ty == tl.float16:
+        c = accumulator.to(tl.float16)
+    else:
+        c = accumulator.to(tl.float32)
+
+    offs_cm = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
+    offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+    c_ptrs = C + stride_cm * offs_cm[:, None] + stride_cn * offs_cn[None, :]
+    c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
+    tl.store(c_ptrs, c, mask=c_mask)
+
+
+def w8a8_block_fp8_matmul_fused_triton(
+    A: torch.Tensor,
+    B: torch.Tensor,
+    Bs: torch.Tensor,
+    block_size: list[int],
     output_dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
-    """
-    Performs blocked matrix multiplication with FP8 quantized matrices.
+    """Block-wise FP8 matmul with activation quantization fused into the Triton kernel.
+
+    Unlike :func:`w8a8_block_fp8_matmul_triton`, this function accepts raw
+    (unquantized) activations ``A``.  Per-row, per-K-block activation scales are
+    computed on-the-fly inside ``_w8a8_block_fp8_matmul_fused``, eliminating the
+    separate ``act_quant`` kernel launch and the global-memory roundtrip for the
+    intermediate FP8 activations and their scales.
 
     Args:
-        input_q: Quantized input tensor with 1x128 block quantization
-        weight_q: Quantized weight tensor with 128x128 block quantization
-        input_scale: Scaling factors for input blocks
-        weight_scale: Scaling factors for weight blocks
-        block_size: Tuple of (M, N) for weight block dimensions
-        output_dtype: Desired output dtype
+        A: Raw activations, shape ``(..., K)``, dtype float16 or bfloat16.
+        B: Quantized weight matrix, shape ``(N, K)``, dtype float8_e4m3fn.
+        Bs: Weight scales — either a scalar tensor (per-tensor) or shape
+            ``(N // block_n, K // block_k)`` (per-block).
+        block_size: ``[block_n, block_k]`` quantization block sizes, or ``None``
+            to use ``[128, 128]``.
+        output_dtype: Dtype of the returned tensor.
+
+    Returns:
+        Tensor of shape ``A.shape[:-1] + (N,)`` with dtype ``output_dtype``.
     """
-    batch_size, seq_len, hidden_dim = input_q.shape if input_q.ndim == 3 else (1, input_q.shape[0], input_q.shape[1])
-    out_features = weight_q.shape[0]
+    if block_size is None:
+        block_n, block_k = 128, 128
+    else:
+        assert len(block_size) == 2
+        block_n, block_k = block_size[0], block_size[1]
 
-    # Reshape input for batched matmul
-    input_reshaped = input_q.view(-1, hidden_dim)  # [batch*seq_len, hidden_dim]
-    input_scale_reshaped = input_scale.view(input_scale.shape[0], -1)  # [batch*seq_len, 1]
-    # Calculate number of blocks
-    num_weight_blocks_m = out_features // block_size[0]
-    num_weight_blocks_n = hidden_dim // block_size[1]
+    # Per-tensor weight scale: treat like 128×128 blocks for tiling.
+    if block_n == B.shape[-2] and block_k == B.shape[-1]:
+        block_n = 128
+        block_k = 128
 
-    output = torch.zeros((batch_size * seq_len, out_features), dtype=torch.float32, device=input_q.device)
+    assert A.shape[-1] == B.shape[-1], "K-dimension mismatch"
+    assert A.is_contiguous()
 
-    for i in range(num_weight_blocks_m):
-        m_start = i * block_size[0]
-        m_end = m_start + block_size[0]
+    M = A.numel() // A.shape[-1]
+    N, K = B.shape
+    assert B.ndim == 2 and B.is_contiguous()
 
-        for j in range(num_weight_blocks_n):
-            n_start = j * block_size[1]
-            n_end = n_start + block_size[1]
+    # For a per-tensor weight scale (scalar), expand to (N_blocks, K_blocks) with
+    # strides (0, 0).  This is a zero-copy view; the kernel's uniform block-scale
+    # load always reads the same value because stride_Bs_k == stride_Bs_n == 0.
+    if Bs.numel() == 1:
+        Bs = Bs.reshape(1, 1).expand(triton.cdiv(N, block_n), triton.cdiv(K, block_k))
+    else:
+        assert Bs.ndim == 2
+        assert triton.cdiv(N, block_n) == Bs.shape[0], f"{N}, {block_n}, {Bs.shape}"
+        assert triton.cdiv(K, block_k) == Bs.shape[1], f"{K}, {block_k}, {Bs.shape}"
 
-            # Extract current blocks
-            input_block = input_reshaped[:, n_start:n_end]
-            weight_block = weight_q[m_start:m_end, n_start:n_end]
+    C_shape = A.shape[:-1] + (N,)
+    C = A.new_empty(C_shape, dtype=output_dtype)
 
-            # Get corresponding scales
-            curr_input_scale = input_scale_reshaped[:, j : j + 1]  # [batch*seq_len, 1]
-            curr_weight_scale = weight_scale[i, j]  # scalar
-
-            block_result = (
-                torch._scaled_mm(
-                    input_block,
-                    weight_block.t(),
-                    scale_a=torch.tensor(1, dtype=torch.float32, device=input_q.device),
-                    scale_b=curr_weight_scale,
-                    out_dtype=output_dtype,
-                )
-                * curr_input_scale
-            )
-
-            output[:, m_start:m_end] += block_result
-
-    output = output.view(batch_size, seq_len, out_features)
-
-    return output.to(output_dtype)
+    BLOCK_SIZE_M = min(max(triton.next_power_of_2(M), 16), 128)
+    grid = (triton.cdiv(M, BLOCK_SIZE_M) * triton.cdiv(N, block_n),)
+    w8a8_block_fp8_matmul_fused_kernel[grid](
+        A,
+        B,
+        C,
+        Bs,
+        M,
+        N,
+        K,
+        block_n,
+        block_k,
+        A.stride(-2),
+        A.stride(-1),
+        B.stride(1),
+        B.stride(0),
+        C.stride(-2),
+        C.stride(-1),
+        Bs.stride(1),
+        Bs.stride(0),
+        BLOCK_SIZE_M=BLOCK_SIZE_M,
+        BLOCK_SIZE_N=block_n,
+        BLOCK_SIZE_K=block_k,
+        GROUP_SIZE_M=8,
+    )
+    return C
 
 
 class FP8Linear(nn.Linear):
@@ -545,13 +576,13 @@ class FP8Linear(nn.Linear):
     ):
         super().__init__(in_features, out_features)
 
-        # If block size is None, it means that we are doing per-tensor quantization
         self.block_size = block_size
         self.activation_scheme = activation_scheme
 
         self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
 
         if self.block_size is None:
+            # If block size is None, it means that we are doing per-tensor quantization
             self.weight_scale_inv = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
         else:
             scale_out_features = (out_features + self.block_size[0] - 1) // self.block_size[0]
@@ -585,7 +616,6 @@ class FP8Linear(nn.Linear):
         elif self.activation_scheme == "static":
             scale = self.activation_scale.to(torch.float32)
             qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(torch.float8_e4m3fn)
-
         else:
             raise NotImplementedError("Not supported")
 
@@ -604,20 +634,14 @@ class FP8Linear(nn.Linear):
         return output.to(dtype=input.dtype)
 
 
-def _ceil_div(a, b):
-    return (a + b - 1) // b
-
-
 class FP8Expert(nn.Module):
     def __init__(self, config, block_size, dtype=torch.float8_e4m3fn):
         super().__init__()
 
-        from ..activations import ACT2FN
-
+        self.config = config
         self.block_size = block_size
-        # TODO we don't need exact expert count here but only in forward
-        self.num_experts = config.num_local_experts if hasattr(config, "num_local_experts") else config.num_experts
         self.hidden_dim = config.hidden_size
+        self.num_experts = config.num_local_experts if hasattr(config, "num_local_experts") else config.num_experts
         self.intermediate_dim = (
             config.moe_intermediate_size if hasattr(config, "moe_intermediate_size") else config.intermediate_size
         )
@@ -631,15 +655,15 @@ class FP8Expert(nn.Module):
         bo, bi = self.block_size
 
         # gate_up tiles: ceil(Wg_out/bo) x ceil(Wg_in/bi)
-        gu_scale_o = _ceil_div(Wg_out, bo)
-        gu_scale_i = _ceil_div(Wg_in, bi)
+        gu_scale_o = triton.cdiv(Wg_out, bo)
+        gu_scale_i = triton.cdiv(Wg_in, bi)
         self.gate_up_proj_scale_inv = nn.Parameter(
             torch.zeros(self.num_experts, gu_scale_o, gu_scale_i, dtype=torch.float32)
         )
 
         # down tiles: ceil(Wd_out/bo) x ceil(Wd_in/bi)
-        dp_scale_o = _ceil_div(Wd_out, bo)
-        dp_scale_i = _ceil_div(Wd_in, bi)
+        dp_scale_o = triton.cdiv(Wd_out, bo)
+        dp_scale_i = triton.cdiv(Wd_in, bi)
         self.down_proj_scale_inv = nn.Parameter(
             torch.zeros(self.num_experts, dp_scale_o, dp_scale_i, dtype=torch.float32)
         )
@@ -652,6 +676,10 @@ class FP8Expert(nn.Module):
         # Keep a handle here; actual usage happens in forward of your MoE block
         self.act_fn = ACT2FN[config.hidden_act]
 
+    def _apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up_out.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
+
     # We follow the mixtral "eager" moe implementation at
     # https://github.com/huggingface/transformers/blob/457048fbfdba9a7dee8bd03328c62f49e57b95f9/src/transformers/models/mixtral/modular_mixtral.py#L148
     # The core changes in this FP8 version should only relate to how we call the linear projections
@@ -661,7 +689,17 @@ class FP8Expert(nn.Module):
         top_k_index: torch.Tensor,
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
+        if self.config._experts_implementation == "grouped_mm":
+            return fp8_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights)
+        elif self.config._experts_implementation == "batched_mm":
+            return fp8_batched_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights)
+        elif self.config._experts_implementation not in ("eager", "eager_fused"):
+            raise ValueError(f"Unsupported experts implementation: {self.config._experts_implementation}")
+
+        _linear = self.linear_fused if self.config._experts_implementation == "eager_fused" else self.linear
+        # index_add_ will accumulate using the dtype of the tensor we write into
+        # so we use float32 for the accumulation to avoid numerical issues in bf16/fp16
+        final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
         with torch.no_grad():
             expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
@@ -669,15 +707,13 @@ class FP8Expert(nn.Module):
 
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
-            if expert_idx == len(self.gate_up_proj):  # weights will load fine
+            if expert_idx == self.gate_up_proj.size(0):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = self.linear(
-                current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scale_inv[expert_idx]
-            ).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = self.linear(
+            gate_up = _linear(current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scale_inv[expert_idx])
+            current_hidden_states = self._apply_gate(gate_up)
+            current_hidden_states = _linear(
                 current_hidden_states, self.down_proj[expert_idx], self.down_proj_scale_inv[expert_idx]
             )
 
@@ -685,7 +721,7 @@ class FP8Expert(nn.Module):
             current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
-        return final_hidden_states
+        return final_hidden_states.to(hidden_states.dtype)
 
     def linear(self, input: torch.Tensor, weight: torch.Tensor, weight_scale_inv: torch.Tensor) -> torch.Tensor:
         if weight.element_size() > 1:
@@ -697,6 +733,19 @@ class FP8Expert(nn.Module):
             qinput,
             weight,
             scale,
+            weight_scale_inv,
+            self.block_size,
+            output_dtype=input.dtype,
+        )
+        return output.to(dtype=input.dtype)
+
+    def linear_fused(self, input: torch.Tensor, weight: torch.Tensor, weight_scale_inv: torch.Tensor) -> torch.Tensor:
+        if weight.element_size() > 1:
+            return F.linear(input, weight, None)
+
+        output = w8a8_block_fp8_matmul_fused_triton(
+            input,
+            weight,
             weight_scale_inv,
             self.block_size,
             output_dtype=input.dtype,

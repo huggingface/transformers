@@ -140,6 +140,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return False
 
+    @property
+    def is_compileable(self):
+        return True
+
     def get_quantize_ops(self):
         from ..integrations.finegrained_fp8 import Fp8Quantize
 
