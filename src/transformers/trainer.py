@@ -2101,7 +2101,7 @@ class Trainer:
             logs: dict[str, float] = {}
 
             # all_gather + mean() to get average loss over all processes
-            tr_loss_scalar = nested_gather(tr_loss, self.args.parallel_mode).mean().item()
+            tr_loss_scalar = nested_gather(tr_loss, self.args.parallel_mode).nanmean().item()
 
             # reset tr_loss to zero
             tr_loss -= tr_loss
@@ -2794,9 +2794,9 @@ class Trainer:
         metrics = denumpify_detensorize(metrics)
 
         if isinstance(all_losses, list) and all_losses:
-            metrics[f"{metric_key_prefix}_loss"] = np.concatenate(all_losses).mean().item()
+            metrics[f"{metric_key_prefix}_loss"] = np.nanmean(np.concatenate(all_losses)).item()
         elif isinstance(all_losses, np.ndarray):
-            metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
+            metrics[f"{metric_key_prefix}_loss"] = np.nanmean(all_losses).item()
         if hasattr(self, "model_preparation_time"):
             metrics[f"{metric_key_prefix}_model_preparation_time"] = self.model_preparation_time
 
