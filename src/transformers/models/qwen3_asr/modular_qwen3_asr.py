@@ -35,7 +35,9 @@ from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.utils import auto_docstring, can_return_tuple
 from transformers.utils.deprecation import deprecate_kwarg
 from transformers.utils.generic import TransformersKwargs, check_model_inputs
-from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeAudioEncoderConfig, Qwen3OmniMoeTextConfig
+from ..qwen3_omni_moe.configuration_qwen3_omni_moe import (
+    Qwen3OmniMoeAudioEncoderConfig, Qwen3OmniMoeTextConfig, Qwen3OmniMoeThinkerConfig,
+)
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     pass
@@ -204,7 +206,7 @@ class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
         )
 
 
-class Qwen3ASRThinkerConfig(PretrainedConfig):
+class Qwen3ASRThinkerConfig(Qwen3OmniMoeThinkerConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRThinker`]. It is used to instantiate a
     Qwen3-ASR-Thinker model according to the specified arguments, defining the model architecture. Instantiating a
@@ -244,10 +246,6 @@ class Qwen3ASRThinkerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
-    model_type = "qwen3_asr_thinker"
-
-    attribute_map = {}
     sub_configs = {
         "audio_config": Qwen3ASRAudioEncoderConfig,
         "text_config": Qwen3ASRTextConfig,
@@ -264,7 +262,8 @@ class Qwen3ASRThinkerConfig(PretrainedConfig):
         attn_implementation=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        PreTrainedConfig.__init__(**kwargs)
+
         self.user_token_id = user_token_id
         self.audio_start_token_id = audio_start_token_id
         self.initializer_range = initializer_range
@@ -281,8 +280,6 @@ class Qwen3ASRThinkerConfig(PretrainedConfig):
             text_config = Qwen3ASRTextConfig()
         self.text_config = text_config
         self.audio_token_id = audio_token_id
-        self._attn_implementation = attn_implementation
-
 
 class Qwen3ASRConfig(PretrainedConfig):
     """

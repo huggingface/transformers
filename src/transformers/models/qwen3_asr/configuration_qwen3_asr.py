@@ -289,7 +289,7 @@ class Qwen3ASRTextConfig(PreTrainedConfig):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-class Qwen3ASRThinkerConfig(PretrainedConfig):
+class Qwen3ASRThinkerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRThinker`]. It is used to instantiate a
     Qwen3-ASR-Thinker model according to the specified arguments, defining the model architecture. Instantiating a
@@ -331,7 +331,7 @@ class Qwen3ASRThinkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen3_asr_thinker"
-
+    # Override parent's attribute_map as we use audio_token_id directly, not audio_token_index
     attribute_map = {}
     sub_configs = {
         "audio_config": Qwen3ASRAudioEncoderConfig,
@@ -349,7 +349,22 @@ class Qwen3ASRThinkerConfig(PretrainedConfig):
         attn_implementation=None,
         **kwargs,
     ):
+        # super().__init__(
+        #    audio_config=audio_config,
+        #    text_config=text_config,
+        #    audio_token_id=audio_token_id,
+        #    audio_start_token_id=audio_start_token_id,
+        #    user_token_id=user_token_id,
+        #    initializer_range=initializer_range
+        # )
+        # self._attn_implementation = attn_implementation
+        # del self.position_id_per_seconds
+        # del self.tie_word_embeddings
+        # del self.vision_config
+        # del self.image_token_id
+        # del self.video_token_id
         super().__init__(**kwargs)
+
         self.user_token_id = user_token_id
         self.audio_start_token_id = audio_start_token_id
         self.initializer_range = initializer_range
@@ -366,7 +381,6 @@ class Qwen3ASRThinkerConfig(PretrainedConfig):
             text_config = Qwen3ASRTextConfig()
         self.text_config = text_config
         self.audio_token_id = audio_token_id
-        self._attn_implementation = attn_implementation
 
 
 class Qwen3ASRConfig(PretrainedConfig):
