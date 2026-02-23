@@ -799,6 +799,7 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel, Ge
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
         self.register_buffer("final_logits_bias", new_bias)
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -952,6 +953,7 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel, GenerationMixin
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

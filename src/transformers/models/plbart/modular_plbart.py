@@ -217,6 +217,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel, GenerationMixin):
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
         self.register_buffer("final_logits_bias", new_bias)
 
+    @merge_with_config_defaults
     @auto_docstring
     @capture_outputs
     def forward(
@@ -357,6 +358,7 @@ class PLBartForSequenceClassification(BigBirdPegasusForSequenceClassification):
 
 
 class PLBartForCausalLM(BartForCausalLM):
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(**super_kwargs):

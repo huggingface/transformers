@@ -1317,6 +1317,7 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
         """
         return (self.model.encoder.get_position_embeddings(), self.model.decoder.get_position_embeddings())
 
+    @merge_with_config_defaults
     @auto_docstring
     @can_return_tuple
     def forward(

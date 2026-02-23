@@ -713,6 +713,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
+    @merge_with_config_defaults
     @can_return_tuple
     def forward(
         self,

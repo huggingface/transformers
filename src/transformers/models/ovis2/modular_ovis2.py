@@ -291,6 +291,7 @@ class Ovis2Model(LlavaModel):
 
         return image_outputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -376,6 +377,7 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
     ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -275,6 +275,9 @@ class GlmImageVisionBlock(GradientCheckpointingLayer):
         self.attn = GlmImageVisionAttention(config)
         self.mlp = GlmImageVisionMLP(config)
 
+    @merge_with_config_defaults
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -282,10 +285,10 @@ class GlmImageVisionBlock(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
-        cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
-            The cumulative sequence lengths of each image or video feature.
         position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
             The cosine and sine position embeddings for vision attention.
+        cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
+            The cumulative sequence lengths of each image or video feature.
         """
         residual = hidden_states
 

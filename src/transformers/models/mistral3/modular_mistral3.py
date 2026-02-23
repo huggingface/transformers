@@ -160,6 +160,7 @@ class Mistral3Model(LlavaModel):
 
         return image_outputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -230,6 +231,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
             **kwargs,
         )
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

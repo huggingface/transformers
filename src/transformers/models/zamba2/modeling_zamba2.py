@@ -1474,6 +1474,7 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1603,6 +1604,7 @@ class Zamba2ForSequenceClassification(Zamba2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

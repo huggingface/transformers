@@ -36,6 +36,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import merge_with_config_defaults
 from ..auto import AutoModel
 from .configuration_paligemma import PaliGemmaConfig
 
@@ -439,6 +440,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
     def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         return self.model.get_image_features(pixel_values, **kwargs)
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

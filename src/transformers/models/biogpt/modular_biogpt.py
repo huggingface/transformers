@@ -302,6 +302,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.output_projection = new_embeddings
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -369,6 +370,7 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
 
         self.post_init()
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -451,6 +453,7 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

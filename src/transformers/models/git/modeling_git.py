@@ -1071,6 +1071,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.output = new_embeddings
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(

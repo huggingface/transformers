@@ -254,7 +254,15 @@ class GlmOcrTextAttention(Glm4vTextAttention, nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
 
 
+class GlmOcrTextDecoderLayer(Glm4vTextDecoderLayer):
+    pass
+
+
 class GlmOcrPreTrainedModel(Glm4vPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": GlmOcrTextDecoderLayer,
+        "attentions": GlmOcrTextAttention,
+    }
     _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.16.*"]
 
 
@@ -408,10 +416,6 @@ class GlmOcrVisionModel(Glm4vVisionModel):
             last_hidden_state=hidden_states,
             pooler_output=merged_hidden_states,
         )
-
-
-class GlmOcrTextDecoderLayer(Glm4vTextDecoderLayer):
-    pass
 
 
 class GlmOcrTextModel(Glm4vTextModel):

@@ -685,6 +685,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_heads = new_embeddings
 
+    @merge_with_config_defaults
     @auto_docstring
     # Ignore copy
     @capture_outputs
@@ -1421,6 +1422,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         )
         return cls(text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder, config=config)
 
+    @merge_with_config_defaults
     @auto_docstring
     @capture_outputs
     def forward(

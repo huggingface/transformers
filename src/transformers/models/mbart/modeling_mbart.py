@@ -1110,6 +1110,7 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
@@ -1237,6 +1238,7 @@ class MBartForQuestionAnswering(MBartPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     # Copied from transformers.models.bart.modeling_bart.BartForQuestionAnswering.forward
@@ -1371,6 +1373,7 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -1063,6 +1063,7 @@ class ClvpModel(ClvpPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.input_embeds_layer = value
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1222,6 +1223,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
 
         return model_inputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

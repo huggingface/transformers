@@ -1099,6 +1099,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
 
 
 class FalconH1ForCausalLM(LlamaForCausalLM):
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

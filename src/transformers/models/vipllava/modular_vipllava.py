@@ -28,7 +28,7 @@ from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import can_return_tuple
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from .configuration_vipllava import VipLlavaConfig
 
 
@@ -112,6 +112,7 @@ class VipLlavaModel(LlavaModel):
 
         return image_outputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -191,6 +192,9 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
             pixel_values=pixel_values, vision_feature_layers=vision_feature_layers, **kwargs
         )
 
+    @merge_with_config_defaults
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

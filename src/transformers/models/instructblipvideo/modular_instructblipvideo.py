@@ -35,6 +35,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -175,6 +176,7 @@ class InstructBlipVideoForConditionalGenerationModelOutput(InstructBlipForCondit
 
 
 class InstructBlipVideoModel(InstructBlipModel):
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -360,6 +362,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         return special_image_mask
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

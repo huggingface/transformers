@@ -521,6 +521,7 @@ class StableLmForCausalLM(StableLmPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     # Ignore copy
