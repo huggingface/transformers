@@ -539,7 +539,9 @@ class GenerationMixin(ContinuousMixin):
             model_inputs["token_type_ids"] = token_type_ids
 
         # 3. Slice model inputs if it's an input that should have the same length as `input_ids`
-        if kwargs["use_cache"]:
+        # We check `use_cache` below because some stateful models (like `recurrent_gemma`) expect input slicing if
+        # their caching mechanism is used. To define `use_cache`, the user-defined argument takes precedence.
+        if past_key_values is not None or kwargs["use_cache"]:
             for model_input_name in [position_ids_key, "cache_position", "token_type_ids"]:
                 model_input = model_inputs.get(model_input_name)
                 if model_input is not None:
