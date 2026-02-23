@@ -619,6 +619,8 @@ class GenerationMixin(ContinuousMixin):
         """
         This function extracts the model-specific `inputs` for generation.
         """
+        if model_kwargs is None:
+            model_kwargs = {}
         # 1. retrieve all kwargs that are non-None or non-model input related.
         # some encoder-decoder models have different names for model and encoder
         if (
@@ -681,6 +683,8 @@ class GenerationMixin(ContinuousMixin):
         bos_token_id: torch.Tensor | None = None,
         model_kwargs: dict[str, torch.Tensor] | None = None,
     ) -> torch.LongTensor:
+        if model_kwargs is None:
+            model_kwargs = {}
         """Initializes input ids for generation, if necessary."""
         if inputs is not None:
             return inputs
@@ -1080,7 +1084,7 @@ class GenerationMixin(ContinuousMixin):
             generation_config.encoder_repetition_penalty is not None
             and generation_config.encoder_repetition_penalty != 1.0
         ):
-            if len(encoder_input_ids.shape) == 2:
+            if encoder_input_ids is not None and len(encoder_input_ids.shape) == 2:
                 processors.append(
                     EncoderRepetitionPenaltyLogitsProcessor(
                         penalty=generation_config.encoder_repetition_penalty,
@@ -1101,7 +1105,7 @@ class GenerationMixin(ContinuousMixin):
             generation_config.encoder_no_repeat_ngram_size is not None
             and generation_config.encoder_no_repeat_ngram_size > 0
         ):
-            if len(encoder_input_ids.shape) == 2:
+            if encoder_input_ids is not None and len(encoder_input_ids.shape) == 2:
                 processors.append(
                     EncoderNoRepeatNGramLogitsProcessor(
                         generation_config.encoder_no_repeat_ngram_size,
@@ -1430,13 +1434,15 @@ class GenerationMixin(ContinuousMixin):
 
         # 2. reshape scores as [batch_size*vocab_size, # generation steps] with # generation steps being
         # seq_len - input_length
-        scores = torch.stack(scores).reshape(len(scores), -1).transpose(0, 1)
+        stacked_scores: torch.Tensor = torch.stack(scores).reshape(len(scores), -1).transpose(0, 1)
 
         # 3. Optionally normalize the logits (across the vocab dimension)
         if normalize_logits:
-            scores = scores.reshape(-1, self.config.get_text_config().vocab_size, scores.shape[-1])
-            scores = torch.nn.functional.log_softmax(scores, dim=1)
-            scores = scores.reshape(-1, scores.shape[-1])
+            stacked_scores = stacked_scores.reshape(
+                -1, self.config.get_text_config().vocab_size, stacked_scores.shape[-1]
+            )
+            stacked_scores = torch.nn.functional.log_softmax(stacked_scores, dim=1)
+            stacked_scores = stacked_scores.reshape(-1, stacked_scores.shape[-1])
 
         # 4. cut beam_indices to longest beam length
         beam_indices_mask = beam_indices < 0
@@ -1455,7 +1461,7 @@ class GenerationMixin(ContinuousMixin):
         indices = sequences[:, cut_idx:] + beam_sequence_indices
 
         # 8. Compute scores
-        transition_scores = scores.gather(0, indices)
+        transition_scores = stacked_scores.gather(0, indices)
 
         # 9. Mask out transition_scores of beams that stopped early
         transition_scores[beam_indices_mask] = 0

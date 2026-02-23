@@ -15,7 +15,7 @@
 import inspect
 import math
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
@@ -1269,7 +1269,8 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, sequence_bias: list[list[list[int] | float]]):
-        self.sequence_bias = sequence_bias
+        # After _convert_list_arguments_into_dict(), becomes dict[tuple[int, ...], float]
+        self.sequence_bias: Any = sequence_bias
         self._validate_arguments()
         self._convert_list_arguments_into_dict()
 
@@ -2057,9 +2058,9 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         self._no_speech_prob = [0.0]
         self.is_scores_logprobs = scores_is_logprobs
 
-        # overwritten dynamically
-        self.model = None
-        self.inputs = None
+        # overwritten dynamically via set_model()
+        self.model: Any = None
+        self.inputs: dict[str, Any] | None = None
 
     def set_model(self, model):
         self.model = model
