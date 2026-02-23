@@ -62,6 +62,7 @@ class JinaEmbeddingsV3ModelTester:
         type_sequence_label_size=2,
         initializer_range=0.02,
         num_labels=3,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
