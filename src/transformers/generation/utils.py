@@ -1546,7 +1546,7 @@ class GenerationMixin(ContinuousMixin):
     def _validate_generated_length(self, generation_config, input_ids_length, has_default_max_length):
         """Performs validation related to the resulting generated length"""
         # 1. Max length warnings related to poor parameterization
-        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
+        if has_default_max_length and generation_config.max_new_tokens is None:
             # 20 is the default max_length of the generation config
             warnings.warn(
                 f"Using the model-agnostic default `max_length` (={generation_config.max_length}) to control the "
@@ -1614,6 +1614,7 @@ class GenerationMixin(ContinuousMixin):
             model_input_name == "inputs_embeds"
             and input_ids_length != inputs_tensor.shape[1]
             and not self.config.is_encoder_decoder
+            and not has_default_max_length
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
         elif has_default_max_length:  # by default let's always generate 20 new tokens
@@ -2327,11 +2328,15 @@ class GenerationMixin(ContinuousMixin):
         )
 
         # Check length values before updating the config with defaults. We'll use it later to define the final min/max length (# 6)
-        has_default_max_length = kwargs.get("max_length") is None and (
-            generation_config is None or generation_config.max_length is None
+        has_default_max_length = (
+            kwargs.get("max_length") is None
+            and (generation_config is None or generation_config.max_length is None)
+            and self.generation_config.max_length is None
         )
-        has_default_min_length = kwargs.get("min_length") is None and (
-            generation_config is None or generation_config.min_length is None
+        has_default_min_length = (
+            kwargs.get("min_length") is None
+            and (generation_config is None or generation_config.min_length is None)
+            and self.generation_config.min_length is None
         )
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
