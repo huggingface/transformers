@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
-
+*This model was released on 2021-06-15 and added to Hugging Face Transformers on 2021-08-04.*
 # BEiT
 
 [BEiT](https://huggingface.co/papers/2106.08254) is like BERT, but for images! Instead of learning from labeled image data, BEiT learns by predicting missing parts of an image — kind of like solving a visual puzzle. What makes it stand out is that it predicts visual tokens (discrete representations of image patches) rather than raw pixels, using a tokenizer inspired by DALL-E.
