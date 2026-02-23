@@ -317,10 +317,15 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # The seeds produce slightly different values due to different init ordering,
         # but delta=0.3 catches the buggy case (ratio ~0.58, i.e. 42% off).
         ratio = zero3_std / baseline_std
-        self.assertAlmostEqual(ratio, 1.0, delta=0.3, msg=(
-            f"ZeRO-3 from_config() weight init diverges from baseline: "
-            f"baseline_std={baseline_std:.6f}, zero3_std={zero3_std:.6f}, ratio={ratio:.4f}"
-        ))
+        self.assertAlmostEqual(
+            ratio,
+            1.0,
+            delta=0.3,
+            msg=(
+                f"ZeRO-3 from_config() weight init diverges from baseline: "
+                f"baseline_std={baseline_std:.6f}, zero3_std={zero3_std:.6f}, ratio={ratio:.4f}"
+            ),
+        )
 
     def test_init_zero3_missing_params(self):
         # test that zero.Init() for missing parameters works correctly under zero3

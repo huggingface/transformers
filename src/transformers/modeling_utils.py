@@ -1470,7 +1470,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             import deepspeed
 
             init_contexts.extend(
-                [init.no_init_weights(), deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()]
+                [
+                    init.no_init_weights(),
+                    deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
+                    set_zero3_state(),
+                ]
             )
 
         # Instantiate the model
