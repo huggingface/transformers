@@ -869,50 +869,43 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         future_values: torch.Tensor | None = None,
     ) -> TimesFmOutputForPredictionWithCovariates:
         r"""
-        Forecasts time series with external covariates using batched in-context regression.
-
-        This method combines TimesFM's forecasting capabilities with external regression (XReg)
-        on covariates to improve prediction accuracy. It supports both static and dynamic
-        covariates, with numerical and categorical types.
-
-        Args:
-            past_values (`Sequence[torch.Tensor]`):
-                Past values of the time series that serves as input to the model.
-            dynamic_numerical_covariates (`Dict[str, Sequence[Sequence[float]]]`, *optional*):
-                Dictionary mapping covariate names to sequences of numerical values for each
-                time series, covering both context and horizon periods.
-            dynamic_categorical_covariates (`Dict[str, Sequence[Sequence[Union[int, str]]]]`, *optional*):
-                Dictionary mapping covariate names to sequences of categorical values for each
-                time series, covering both context and horizon periods.
-            static_numerical_covariates (`Dict[str, Sequence[float]]`, *optional*):
-                Dictionary mapping covariate names to numerical values for each time series.
-            static_categorical_covariates (`Dict[str, Sequence[Union[int, str]]]`, *optional*):
-                Dictionary mapping covariate names to categorical values for each time series.
-            freq (`Sequence[Union[torch.Tensor, int]]`, *optional*):
-                Frequency indices for the time series data.
-            window_size (`int`, *optional*):
-                Window size of trend + residual decomposition. If None then we do not do decomposition.
-            forecast_context_len (`int`, *optional*):
-                Optional max context length.
-            xreg_mode (`str`, *optional*, defaults to `"xreg + timesfm"`):
-                Mode for combining TimesFM and XReg predictions. Options:
-                - "xreg + timesfm": Fit linear model on targets first, then forecast residuals with TimesFM
-                - "timesfm + xreg": Forecast with TimesFM first, then fit linear model on residuals
-            normalize_xreg_target_per_input (`bool`, *optional*, defaults to `True`):
-                Whether to normalize the XReg targets per input series.
-            ridge (`float`, *optional*, defaults to 0.0):
-                Ridge regularization parameter for the linear regression.
-            truncate_negative (`bool`, *optional*, defaults to `False`):
-                Truncate to only non-negative values if any of the contexts have non-negative values.
-            output_attentions (`bool`, *optional*):
-                Whether to output the attentions.
-            output_hidden_states (`bool`, *optional*):
-                Whether to output the hidden states.
-            return_dict (`bool`, *optional*):
-                Whether to return a dictionary or a tuple.
-            future_values (`torch.Tensor`, *optional*):
-                Optional future time series values to compute a training loss. Shape should be `(batch_size, horizon)`
-                matching the produced horizon from covariates (or model horizon if not provided).
+        past_values (`Sequence[torch.Tensor]`):
+            Past values of the time series that serves as input to the model.
+        dynamic_numerical_covariates (`Dict[str, Sequence[Sequence[float]]]`, *optional*):
+            Dictionary mapping covariate names to sequences of numerical values for each
+            time series, covering both context and horizon periods.
+        dynamic_categorical_covariates (`Dict[str, Sequence[Sequence[Union[int, str]]]]`, *optional*):
+            Dictionary mapping covariate names to sequences of categorical values for each
+            time series, covering both context and horizon periods.
+        static_numerical_covariates (`Dict[str, Sequence[float]]`, *optional*):
+            Dictionary mapping covariate names to numerical values for each time series.
+        static_categorical_covariates (`Dict[str, Sequence[Union[int, str]]]`, *optional*):
+            Dictionary mapping covariate names to categorical values for each time series.
+        freq (`Sequence[Union[torch.Tensor, int]]`, *optional*):
+            Frequency indices for the time series data.
+        window_size (`int`, *optional*):
+            Window size of trend + residual decomposition. If None then we do not do decomposition.
+        forecast_context_len (`int`, *optional*):
+            Optional max context length.
+        xreg_mode (`str`, *optional*, defaults to `"xreg + timesfm"`):
+            Mode for combining TimesFM and XReg predictions. Options:
+            - "xreg + timesfm": Fit linear model on targets first, then forecast residuals with TimesFM
+            - "timesfm + xreg": Forecast with TimesFM first, then fit linear model on residuals
+        normalize_xreg_target_per_input (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the XReg targets per input series.
+        ridge (`float`, *optional*, defaults to 0.0):
+            Ridge regularization parameter for the linear regression.
+        truncate_negative (`bool`, *optional*, defaults to `False`):
+            Truncate to only non-negative values if any of the contexts have non-negative values.
+        output_attentions (`bool`, *optional*):
+            Whether to output the attentions.
+        output_hidden_states (`bool`, *optional*):
+            Whether to output the hidden states.
+        return_dict (`bool`, *optional*):
+            Whether to return a dictionary or a tuple.
+        future_values (`torch.Tensor`, *optional*):
+            Optional future time series values to compute a training loss. Shape should be `(batch_size, horizon)`
+            matching the produced horizon from covariates (or model horizon if not provided).
 
         Returns:
             [`TimesFmOutputForPredictionWithCovariates`]: The output containing both TimesFM
