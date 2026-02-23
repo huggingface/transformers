@@ -55,7 +55,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_sklearn_available, is_torchdynamo_exporting
+from transformers.utils import is_sklearn_available
 from transformers.utils.generic import is_flash_attention_requested
 
 
@@ -90,7 +90,6 @@ if is_torch_available():
         GenerateDecoderOnlyOutput,
         GenerateEncoderDecoderOutput,
         GenerationConfig,
-        GenerationMixin,
         LogitsProcessorList,
         MaxLengthCriteria,
         MinLengthLogitsProcessor,
@@ -907,7 +906,7 @@ class GenerationTesterMixin:
         candidate_generator = PromptLookupCandidateGenerator(
             eos_token_id=eos_token_id, num_output_tokens=4, max_matching_ngram_size=1
         )
-        output_prompt_lookup = candidate_generator.get_candidates(input_ids, is_first_iteration=None)[0]
+        output_prompt_lookup = candidate_generator.get_candidates(input_ids)[0]
 
         # PLD shouldn't propose any new tokens based on eos-match
         self.assertTrue(output_prompt_lookup.shape[-1] == 10)
@@ -1549,11 +1548,6 @@ class GenerationTesterMixin:
             set_model_for_less_flaky_test(model)
             model.eval()  # otherwise `self.training` is `True` -- this flag is used at attn mask creation time
 
-            # On CPU, we don't switch to batched_mm during decoding, so the grouped_mm is what gets compiled.
-            # But since grouped_mm only supports bf16 when compiled, we need to switch to bf16 here.
-            if model.device.type == "cpu" and model.config._experts_implementation == "grouped_mm":
-                model = model.to(torch.bfloat16)
-
             # Some composite models have a custom generate and will call an inner model's generate -> that inner model
             # is the one that gets compiled.
             # (Note for the future: if BLIP starts causing problems, let's stop testing it)
@@ -1677,11 +1671,6 @@ class GenerationTesterMixin:
             if self.has_attentions:
                 config._attn_implementation = "eager"  # can't output attentions otherwise
             model = model_class(config).to(torch_device).eval()
-
-            # On CPU, we don't switch to batched_mm during decoding, so the grouped_mm is what gets compiled.
-            # But since grouped_mm only supports bf16 when compiled, we need to switch to bf16 here.
-            if model.device.type == "cpu" and model.config._experts_implementation == "grouped_mm":
-                model = model.to(torch.bfloat16)
 
             # compilation-specific setup
             torch.compiler.reset()  # prevent cached compilation from being used in the test
@@ -2271,10 +2260,23 @@ class GenerationTesterMixin:
             torch.testing.assert_close(all_logits[:, -1:, :], last_token_logits, rtol=1e-5, atol=1e-5)
 
     def test_generate_with_and_without_position_ids(self):
+        ran_any_model = False
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             model = model_class(config).to(torch_device).eval()
             model_forward_args = inspect.signature(model.forward).parameters
+
+            has_3d_rope_positions = any(
+                hasattr(module, "get_rope_index")
+                for module in (
+                    model,
+                    getattr(model, "model", None),
+                    getattr(model, "language_model", None),
+                    getattr(model, "text_model", None),
+                )
+            )
+            if has_3d_rope_positions:
+                continue
 
             if "position_ids" not in model_forward_args or "input_ids" not in inputs_dict:
                 self.skipTest("This model doesn't use `position_ids`")
@@ -2282,6 +2284,7 @@ class GenerationTesterMixin:
             if config.is_encoder_decoder:
                 self.skipTest("This model doesn't prepare `position_ids` in generate")
 
+            ran_any_model = True
             input_ids = inputs_dict["input_ids"]
             seq_length = input_ids.shape[1]
             # ensure left padding
@@ -2297,14 +2300,10 @@ class GenerationTesterMixin:
             out_wo_positions = model.generate(**inputs_dict, max_new_tokens=5, use_cache=True, do_sample=False)
 
             # infer position ids from attn mask and generate again
-            if "attention_mask" in inputs_dict:
-                attention_mask = inputs_dict["attention_mask"]
-                position_ids = attention_mask.long().cumsum(-1) - 1
-                position_ids = position_ids.masked_fill(attention_mask == 0, 0)
-                position_ids = position_ids[..., -seq_length:].view(-1, seq_length)
-            else:
-                position_ids = torch.arange(0, seq_length, dtype=torch.long, device=torch_device)
-                position_ids = position_ids.unsqueeze(0)
+            attention_mask = inputs_dict["attention_mask"]
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+            position_ids = position_ids[..., -seq_length:].view(-1, seq_length)
 
             out_w_positions = model.generate(
                 **inputs_dict, position_ids=position_ids, max_new_tokens=5, use_cache=True, do_sample=False
@@ -2313,6 +2312,12 @@ class GenerationTesterMixin:
             # The two sets of generated sequences must match, if generate can infer position ids correctly
             # and can continue adding new ids to the already passed position ids
             self.assertListEqual(out_wo_positions.tolist(), out_w_positions.tolist())
+
+        if not ran_any_model:
+            self.skipTest(
+                "All model classes in this test use 3D RoPE positions (`get_rope_index`), for which 2D custom "
+                "`position_ids` may be accepted but are expected to produce invalid outputs."
+            )
 
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
@@ -2687,55 +2692,6 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
 
-    @pytest.mark.torch_export_test
-    def test_cache_dependant_input_preparation_exporting(self):
-        self.assertFalse(
-            is_torchdynamo_exporting()
-        )  # otherwise this test does not compare two different implementation
-        # Case 1
-        input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)[:, :0]
-        inputs_embeds = torch.rand((2, 8), dtype=torch.float32)
-        cache_position = torch.arange(0, 8, dtype=torch.int64)
-        eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
-        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
-            input_ids, inputs_embeds, cache_position
-        )
-        torch.testing.assert_close(eager1, export1)
-        torch.testing.assert_close(eager2, export2)
-
-        # Case 2
-        input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)
-        inputs_embeds = torch.rand((2, 8), dtype=torch.float32)
-        cache_position = torch.arange(0, 8, dtype=torch.int64)
-        eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
-        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
-            input_ids, inputs_embeds, cache_position
-        )
-        torch.testing.assert_close(eager1, export1)
-        torch.testing.assert_close(eager2, export2)
-
-        # Case 3
-        input_ids = torch.randint(0, 16, (2, 12), dtype=torch.int64)
-        inputs_embeds = None
-        cache_position = torch.arange(0, 8, dtype=torch.int64)
-        eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
-        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
-            input_ids, inputs_embeds, cache_position
-        )
-        torch.testing.assert_close(eager1, export1)
-        torch.testing.assert_close(eager2, export2)
-
-        # Case 4
-        input_ids = torch.randint(0, 16, (2, 8), dtype=torch.int64)
-        inputs_embeds = None
-        cache_position = torch.arange(0, 8, dtype=torch.int64)
-        eager1, eager2 = GenerationMixin()._cache_dependant_input_preparation(input_ids, inputs_embeds, cache_position)
-        export1, export2 = GenerationMixin()._cache_dependant_input_preparation_exporting(
-            input_ids, inputs_embeds, cache_position
-        )
-        torch.testing.assert_close(eager1, export1)
-        torch.testing.assert_close(eager2, export2)
-
 
 global_rng = random.Random()
 
@@ -2849,43 +2805,6 @@ class GenerationIntegrationTests(unittest.TestCase):
             self.assertTrue(len(warningHandler.warnings) == 1)
         finally:
             logger.removeHandler(warningHandler)
-
-    # TODO joao, manuel: remove in v4.62.0
-    @slow
-    def test_diverse_beam_search(self):
-        article = """Justin Timberlake and Jessica Biel, welcome to parenthood.
-        The celebrity couple announced the arrival of their son, Silas Randall Timberlake, in statements to People.
-        "Silas was the middle name of Timberlake's maternal grandfather Bill Bomar, who died in 2012, while Randall is the musician's own middle name, as well as his father's first," People reports.
-        The couple announced the pregnancy in January, with an Instagram post. It is the first baby for both."""
-
-        bart_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
-        bart_model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn").to(torch_device)
-        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        outputs = bart_model.generate(
-            input_ids,
-            num_beams=4,
-            num_return_sequences=2,
-            num_beam_groups=4,
-            diversity_penalty=2.0,
-            remove_invalid_values=True,
-            trust_remote_code=True,
-            custom_generate="transformers-community/group-beam-search",
-        )
-
-        generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-        self.assertListEqual(
-            generated_text,
-            [
-                "The couple announced the birth of their son, Silas Randall Timberlake, in a statement. Silas was the"
-                " middle name of Timberlake's maternal grandfather Bill Bomar. Randall is the musician's own middle"
-                " name, as well as his father's first. It is the first baby for both of them.",
-                "Justin Timberlake and Jessica Biel have a son. The baby is named Silas Randall Timberlake. It is the"
-                " first child for both. The couple announced the pregnancy in January. The name Silas is the middle"
-                " name of Timberlake's maternal grandfather. It's also his own middle name.",
-            ],
-        )
 
     @slow
     def test_beam_search_early_stop_heuristic(self):
@@ -3029,42 +2948,6 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
         self.assertEqual(output_sequences.shape, (2, 5))
-
-    # TODO joao, manuel: remove in v4.62.0
-    def test_transition_scores_group_beam_search_encoder_decoder(self):
-        articles = [
-            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
-            "Michael Phelps is arguably the most decorated Olympian of all time.",
-        ]
-        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        model = BartForConditionalGeneration.from_pretrained(
-            "hf-internal-testing/tiny-random-bart",
-            eos_token_id=None,
-        )
-        generation_config = GenerationConfig(
-            max_length=10,
-            num_beams=2,
-            num_beam_groups=2,
-            num_return_sequences=2,
-            diversity_penalty=1.0,
-            return_dict_in_generate=True,
-            output_scores=True,
-            length_penalty=0.0,
-        )
-        model = model.to(torch_device)
-
-        input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
-        outputs = model.generate(
-            input_ids=input_ids,
-            generation_config=generation_config,
-            trust_remote_code=True,
-            custom_generate="transformers-community/group-beam-search",
-        )
-
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
-        transition_scores_sum = transition_scores.sum(-1)
-
-        torch.testing.assert_close(transition_scores_sum, outputs.sequences_scores, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_generate_inputs_embeds_one_token(self):
@@ -3259,41 +3142,6 @@ class GenerationIntegrationTests(unittest.TestCase):
                 'Paris!"\n\n"Paris!"\n\n"Paris!"\n\n'
             ],
         )
-
-    # TODO joao, manuel: remove in v4.62.0
-    @slow
-    def test_constrained_beam_search_example_integration(self):
-        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
-        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
-
-        encoder_input_str = "translate English to German: How old are you?"
-        encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
-
-        # lets run beam search using 5 beams
-        num_beams = 5
-        # define decoder start token ids
-        input_ids = torch.ones((1, 1), device=model.device, dtype=torch.long)
-        input_ids = input_ids * model.config.decoder_start_token_id
-
-        # add encoder_outputs to model keyword arguments
-        model_kwargs = {"encoder_outputs": model.get_encoder()(encoder_input_ids, return_dict=True)}
-
-        constraint_str = "sind"
-        constraint_token_ids = tokenizer.encode(constraint_str)[:-1]  # remove eos token
-
-        outputs = model.generate(
-            input_ids,
-            num_beams=num_beams,
-            force_words_ids=[constraint_token_ids],
-            min_length=5,
-            eos_token_id=model.config.eos_token_id,
-            trust_remote_code=True,
-            custom_generate="transformers-community/constrained-beam-search",
-            **model_kwargs,
-        )
-        outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-        self.assertListEqual(outputs, ["Wie alt sind Sie?"])
 
     @slow
     def test_per_row_stopping_criteria(self):
@@ -4817,16 +4665,16 @@ class GenerationIntegrationTests(unittest.TestCase):
     @pytest.mark.generate
     def test_generate_custom_cache_position(self):
         """
-        Regression test for #39261. Tests that we can continue generating from past key values, returned from a
-        previous `generate` call, without the tokens that correspond to the cached part. This is achieved by passing
-        manually creating `cache_position` -- this tests that it is piped correctly.
+        Test that we can continue generating from past key values, returned from a previous `generate` call, without
+        the tokens that correspond to the cached part IF the `attention_mask` is the mask for the FULL sequence
+        (including previous tokens)
         """
         model = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
         )
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
 
-        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        initial_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
         generate_kwargs = {
             "use_cache": True,
             "do_sample": False,
@@ -4834,73 +4682,55 @@ class GenerationIntegrationTests(unittest.TestCase):
             "output_scores": True,
         }
 
-        # Traditional way to continue generating text using kv cache
-        #                 output2
-        # /~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\
-        #            input2
-        # /~~~~~~~~~~~~~~~~~~~~~~~~\
-        #      output1
-        # /~~~~~~~~~~~~~~~~\
-        #  input1
-        # /~~~~~~\
-        # IIIIIIIIOOOOOOOOOOIIIIIIIIOOOOOOOOOOOOOOOOOO
-        inputs_1a = model_inputs
-        outputs_1a = model.generate(**inputs_1a, **generate_kwargs, max_new_tokens=2)
-        inputs_2a = {**model_inputs}
-        inputs_2a["input_ids"] = torch.cat((outputs_1a.sequences, model_inputs["input_ids"]), dim=1)
-        inputs_2a["attention_mask"] = torch.nn.functional.pad(
-            inputs_1a["attention_mask"],
-            (0, inputs_2a["input_ids"].shape[1] - inputs_1a["input_ids"].shape[1]),
-            mode="constant",
-            value=1,
-        )
-        inputs_2a["past_key_values"] = outputs_1a.past_key_values
-        outputs_2a = model.generate(**inputs_2a, **generate_kwargs, max_new_tokens=2)
-        # Keep only the part of the output related to the second output + last token from the first output, for future
-        # comparison
-        traditional_outputs = copy.deepcopy(outputs_2a)
-        traditional_outputs.sequences = traditional_outputs.sequences[:, outputs_1a.sequences.shape[1] - 1 :]
+        truncated_outputs = model.generate(**initial_inputs, **generate_kwargs, max_new_tokens=2, min_new_tokens=2)
+        full_outputs = model.generate(**initial_inputs, **generate_kwargs, max_new_tokens=4, min_new_tokens=4)
 
-        # Continue generating text using kv cache, but without providing the cached part of the input in the input_ids.
-        #                    cache_position
-        #                   /~~~~~~~\
-        #  inputs2["attention_mask"]
-        # /~~~~~~~~~~~~~~~~~~~~~~~~~\
-        #      output1               output2
-        # /~~~~~~~~~~~~~~~~\/~~~~~~~~~~~~~~~~~~~~~~~~~\
-        #  input1             input2
-        # /~~~~~~\          /~~~~~~~\
-        # IIIIIIIIOOOOOOOOOOIIIIIIIIIOOOOOOOOOOOOOOOOOO
-        #
-        inputs_1b = model_inputs
-        outputs_1b = model.generate(**inputs_1b, **generate_kwargs, max_new_tokens=2)
-        inputs_2b = {**model_inputs}
-        # The last output token isn't cached, so it needs to be included in the new input
-        inputs_2b["input_ids"] = torch.cat((outputs_1b.sequences[:, -1:], model_inputs["input_ids"]), dim=1)
-        inputs_2b["attention_mask"] = torch.nn.functional.pad(
-            inputs_1b["attention_mask"],
-            (0, outputs_1b.sequences.shape[1]),
-            mode="constant",
-            value=1,
+        device = initial_inputs["attention_mask"].device
+        new_full_mask = torch.cat((initial_inputs["attention_mask"], torch.ones(1, 2, device=device)), dim=-1)
+
+        # Check that we can restart from FULL sequence and get the same result
+        full_sequence_inputs = copy.deepcopy(initial_inputs)
+        full_sequence_inputs["input_ids"] = truncated_outputs.sequences
+        full_sequence_inputs["attention_mask"] = new_full_mask
+        full_sequence_inputs["past_key_values"] = copy.deepcopy(truncated_outputs.past_key_values)
+        full_sequence_outputs = model.generate(
+            **full_sequence_inputs, **generate_kwargs, max_new_tokens=2, min_new_tokens=2
         )
-        inputs_2b["past_key_values"] = outputs_1b.past_key_values
-        cache_length_1b = outputs_1b.past_key_values.get_seq_length()
-        inputs_2b["cache_position"] = torch.arange(
-            cache_length_1b,
-            cache_length_1b + inputs_2b["input_ids"].shape[1],
-            dtype=torch.int64,
-            device=model.device,
-        )
-        outputs_2b = model.generate(**inputs_2b, **generate_kwargs, max_new_tokens=2)
-        incremental_outputs = outputs_2b
 
         # The two sets of generated text and past kv should be equal to each other
         if is_moe_model(model.config):
             atol = rtol = 1e-3
         else:
             atol = rtol = 1e-5
-        self.assertTrue(has_similar_generate_outputs(traditional_outputs, incremental_outputs, atol=atol, rtol=rtol))
-        cache1, cache2 = traditional_outputs.past_key_values, incremental_outputs.past_key_values
+
+        self.assertTrue(has_similar_generate_outputs(full_outputs, full_sequence_outputs, atol=atol, rtol=rtol))
+        cache1, cache2 = full_outputs.past_key_values, full_sequence_outputs.past_key_values
+        for idx in range(len(cache1)):
+            if isinstance(cache1, EncoderDecoderCache):
+                for subcache in ["self_attention_cache", "cross_attention_cache"]:
+                    torch.testing.assert_close(
+                        getattr(cache1, subcache).layers[idx].keys, getattr(cache2, subcache).layers[idx].keys
+                    )
+                    torch.testing.assert_close(
+                        getattr(cache1, subcache).layers[idx].values, getattr(cache2, subcache).layers[idx].values
+                    )
+            else:
+                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
+
+        # Now, check that we can do the same while only restarting from last tokens IF we pass the full mask
+        single_token_inputs = copy.deepcopy(initial_inputs)
+        single_token_inputs["input_ids"] = truncated_outputs.sequences[:, -1:]
+        single_token_inputs["attention_mask"] = new_full_mask
+        single_token_inputs["past_key_values"] = copy.deepcopy(truncated_outputs.past_key_values)
+        single_token_outputs = model.generate(
+            **single_token_inputs, **generate_kwargs, max_new_tokens=2, min_new_tokens=2
+        )
+
+        # Of course we get only the new tokens as outputs here, so slice before performing the check
+        full_outputs["sequences"] = full_outputs["sequences"][:, -3:]
+        self.assertTrue(has_similar_generate_outputs(full_outputs, single_token_outputs, atol=atol, rtol=rtol))
+        cache1, cache2 = full_outputs.past_key_values, single_token_outputs.past_key_values
         for idx in range(len(cache1)):
             if isinstance(cache1, EncoderDecoderCache):
                 for subcache in ["self_attention_cache", "cross_attention_cache"]:

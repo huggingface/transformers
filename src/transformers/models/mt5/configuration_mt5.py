@@ -93,7 +93,6 @@ class MT5Config(PreTrainedConfig):
         is_encoder_decoder=True,
         use_cache=True,
         tokenizer_class="T5Tokenizer",
-        tie_word_embeddings=False,
         bos_token_id=None,
         pad_token_id=0,
         eos_token_id=1,
@@ -136,6 +135,7 @@ class MT5Config(PreTrainedConfig):
             self.dense_act_fn = "gelu_new"
 
         # Force because official weights have False serialized, but we have to tie always
+        kwargs.pop("tie_word_embeddings", None)
         self.tie_word_embeddings = True
         self.tokenizer_class = tokenizer_class
         self.bos_token_id = bos_token_id

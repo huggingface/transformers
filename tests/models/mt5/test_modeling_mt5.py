@@ -527,6 +527,11 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_tie_word_embeddings(self):
+        # Force it to True, see https://github.com/huggingface/transformers/pull/43880
+        config = MT5Config(tie_word_embeddings=False)
+        self.assertTrue(config.tie_word_embeddings)
+
     def test_shift_right(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)

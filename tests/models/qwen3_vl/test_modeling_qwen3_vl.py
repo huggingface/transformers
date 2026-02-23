@@ -37,6 +37,11 @@ from ...test_modeling_common import (
 
 
 if is_torch_available():
+    from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig
+    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLTextModel
+
+
+if is_torch_available():
     import torch
 
 
@@ -296,3 +301,103 @@ class Qwen3VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 video_grid_thw=video_grid_thw,
             )
             self.assertIsNotNone(outputs)
+
+
+@require_torch
+class Qwen3VLTextModelPositionIdsTest(unittest.TestCase):
+    """Regression tests for text_position_ids extraction (PR #44158)."""
+
+    def get_text_config(self):
+        return Qwen3VLTextConfig(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=37,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=8,
+            hidden_act="silu",
+            max_position_embeddings=512,
+            rope_parameters={"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
+        )
+
+    def _make_vision_position_ids(self, batch_size, seq_len):
+        """Create 3D vision position_ids (temporal=0, height=arange, width=arange)."""
+        pos = torch.zeros(3, batch_size, seq_len, dtype=torch.long, device=torch_device)
+        pos[1] = torch.arange(seq_len, device=torch_device).unsqueeze(0).expand(batch_size, -1)
+        pos[2] = torch.arange(seq_len, device=torch_device).unsqueeze(0).expand(batch_size, -1)
+        return pos
+
+    def test_3d_vision_position_ids_no_cache(self):
+        config = self.get_text_config()
+        model = Qwen3VLTextModel(config).to(torch_device).eval()
+
+        batch_size, seq_len = 2, 10
+        input_ids = ids_tensor([batch_size, seq_len], config.vocab_size).to(torch_device)
+        vision_position_ids = self._make_vision_position_ids(batch_size, seq_len)
+
+        with torch.no_grad():
+            output = model(input_ids=input_ids, position_ids=vision_position_ids, use_cache=False)
+        self.assertEqual(output.last_hidden_state.shape, (batch_size, seq_len, config.hidden_size))
+
+    def test_3d_vision_position_ids_produce_finite_output(self):
+        config = self.get_text_config()
+        model = Qwen3VLTextModel(config).to(torch_device).eval()
+
+        batch_size, seq_len = 2, 8
+        input_ids = ids_tensor([batch_size, seq_len], config.vocab_size).to(torch_device)
+        vision_position_ids = self._make_vision_position_ids(batch_size, seq_len)
+
+        with torch.no_grad():
+            output_3d = model(input_ids=input_ids, position_ids=vision_position_ids, use_cache=False)
+            output_none = model(input_ids=input_ids, position_ids=None, use_cache=False)
+
+        self.assertTrue(torch.isfinite(output_3d.last_hidden_state).all())
+        self.assertTrue(torch.isfinite(output_none.last_hidden_state).all())
+
+    def test_4d_position_ids_forward(self):
+        config = self.get_text_config()
+        model = Qwen3VLTextModel(config).to(torch_device).eval()
+
+        batch_size, seq_len = 2, 8
+        input_ids = ids_tensor([batch_size, seq_len], config.vocab_size).to(torch_device)
+
+        text_pos = torch.arange(seq_len, device=torch_device).unsqueeze(0).expand(batch_size, -1)
+        spatial_pos = torch.arange(seq_len, device=torch_device).unsqueeze(0).expand(batch_size, -1)
+        zero_pos = torch.zeros(batch_size, seq_len, dtype=torch.long, device=torch_device)
+        position_ids_4d = torch.stack([text_pos, zero_pos, spatial_pos, spatial_pos], dim=0)
+
+        with torch.no_grad():
+            output = model(input_ids=input_ids, position_ids=position_ids_4d, use_cache=False)
+        self.assertEqual(output.last_hidden_state.shape, (batch_size, seq_len, config.hidden_size))
+        self.assertTrue(torch.isfinite(output.last_hidden_state).all())
+
+    def test_use_cache_true_vs_false_with_vision_position_ids(self):
+        """use_cache should not affect output when 3D vision position_ids are provided."""
+        config = self.get_text_config()
+        model = Qwen3VLTextModel(config).to(torch_device).eval()
+
+        batch_size, seq_len = 1, 12
+        input_ids = ids_tensor([batch_size, seq_len], config.vocab_size).to(torch_device)
+        vision_position_ids = self._make_vision_position_ids(batch_size, seq_len)
+
+        with torch.no_grad():
+            output_cached = model(input_ids=input_ids, position_ids=vision_position_ids.clone(), use_cache=True)
+            output_no_cache = model(input_ids=input_ids, position_ids=vision_position_ids.clone(), use_cache=False)
+
+        torch.testing.assert_close(
+            output_cached.last_hidden_state, output_no_cache.last_hidden_state, atol=1e-5, rtol=1e-5
+        )
+
+    def test_2d_position_ids_forward(self):
+        config = self.get_text_config()
+        model = Qwen3VLTextModel(config).to(torch_device).eval()
+
+        batch_size, seq_len = 2, 8
+        input_ids = ids_tensor([batch_size, seq_len], config.vocab_size).to(torch_device)
+        position_ids_2d = torch.arange(seq_len, device=torch_device).unsqueeze(0).expand(batch_size, -1)
+
+        with torch.no_grad():
+            output = model(input_ids=input_ids, position_ids=position_ids_2d, use_cache=False)
+        self.assertEqual(output.last_hidden_state.shape, (batch_size, seq_len, config.hidden_size))
+        self.assertTrue(torch.isfinite(output.last_hidden_state).all())

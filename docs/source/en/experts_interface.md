@@ -81,11 +81,12 @@ model = AutoModelForCausalLM.from_pretrained(
 
 All three backends (`"eager"`, `"batched_mm"`, `"grouped_mm"`) are compatible with `torch.compile` to certain extents. The following table summarizes compatibility:
 
-| Implementation | compilation modes                    | dtypes                           | `fullgraph=True` |
-| -------------- | ------------------------------------ | -------------------------------- | ---------------- |
-| `grouped_mm`   | `None`, `max-autotune-no-cudagraphs` | `bfloat16`                       | Yes              |
-| `batched_mm`   | all                                  | `bfloat16`, `float16`, `float32` | Yes              |
-| `eager`        | all                                  | `bfloat16`, `float16`, `float32` | No               |
+| Implementation          | compilation modes                    | dtypes                           | `fullgraph=True` |
+| ----------------------- | ------------------------------------ | -------------------------------- | ---------------- |
+| `grouped_mm`            | `None`, `max-autotune-no-cudagraphs` | `bfloat16`                       | Yes              |
+| `grouped_mm` (fallback) | `None`, `max-autotune-no-cudagraphs` | `bfloat16`, `float16`, `float32` | Yes              |
+| `batched_mm`            | all                                  | `bfloat16`, `float16`, `float32` | Yes              |
+| `eager`                 | all                                  | `bfloat16`, `float16`, `float32` | No               |
 
 Notes:
 
