@@ -23,6 +23,7 @@ from datasets import Audio, load_dataset
 from pytest import mark
 
 from transformers import AutoFeatureExtractor, MimiConfig, set_seed
+from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
     is_flaky,
     is_torch_available,
@@ -504,5 +505,61 @@ class MimiIntegrationTest(unittest.TestCase):
 
                 # make sure audios are more or less equal
                 # the RMSE of two random gaussian noise vectors with ~N(0, 1) is around 1.0
+                rmse = compute_rmse(arr, arr_enc_dec)
+                self.assertTrue(np.abs(rmse - expected_rmse) < 1e-5)
+
+    def test_integration_longform(self):
+        """
+        Test Mimi on a longer audio (~45s) that exceeds the sliding window context (250 frames = 20s).
+        reproducer: https://gist.github.com/eustlb/34f79f34d423ccf8983c2c6c8dab2bcc
+        """
+
+        expected_rmses = {
+            "8": 0.00067151,
+            "32": 0.00049521,
+        }
+        expected_codesums = {
+            "8": 4621433,
+            "32": 18446927,
+        }
+
+        model_id = "kyutai/mimi"
+
+        processor = AutoFeatureExtractor.from_pretrained(model_id)
+        audio_sample = load_audio(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3",
+            processor.sampling_rate,
+        )
+
+        inputs = processor(
+            raw_audio=audio_sample,
+            sampling_rate=processor.sampling_rate,
+            return_tensors="pt",
+        ).to(torch_device)
+
+        for use_cache in [False, True]:
+            model = MimiModel.from_pretrained(model_id, use_cache=use_cache).to(torch_device)
+            for num_codebooks, expected_rmse in expected_rmses.items():
+                with torch.no_grad():
+                    encoder_outputs = model.encode(inputs["input_values"], num_quantizers=int(num_codebooks))
+
+                    audio_code_sums = encoder_outputs[0].sum().item()
+
+                    self.assertTrue(
+                        np.abs(audio_code_sums - expected_codesums[num_codebooks]) <= (3e-3 * audio_code_sums)
+                    )
+
+                    input_values_dec = model.decode(encoder_outputs[0], padding_mask=inputs["padding_mask"])[0]
+                    input_values_enc_dec = model(
+                        inputs["input_values"], inputs["padding_mask"], num_quantizers=int(num_codebooks)
+                    )[1]
+
+                torch.testing.assert_close(input_values_dec, input_values_enc_dec)
+
+                self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
+
+                arr = inputs["input_values"][0].cpu().numpy()
+                arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
+
                 rmse = compute_rmse(arr, arr_enc_dec)
                 self.assertTrue(np.abs(rmse - expected_rmse) < 1e-5)

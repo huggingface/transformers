@@ -137,7 +137,9 @@ class UMT5Config(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
         self.decoder_start_token_id = decoder_start_token_id
-        self.tie_word_embeddings = True  # force it for T5 family
+        # Force tie_word_embeddings to `True` for T5 family
+        kwargs.pop("tie_word_embeddings", None)
+        self.tie_word_embeddings = True
 
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,

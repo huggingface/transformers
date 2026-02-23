@@ -210,21 +210,25 @@ class AttentionMaskVisualizer:
         model.train()
 
         batch_size, seq_length = attention_mask.shape
-        input_embeds = torch.zeros((batch_size, seq_length, model.config.hidden_size), dtype=self.model.dtype)
+        inputs_embeds = torch.zeros((batch_size, seq_length, model.config.hidden_size), dtype=self.model.dtype)
         cache_position = torch.arange(seq_length)
 
         causal_mask = create_causal_mask(
             config=model.config,
-            input_embeds=input_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=None,
         )
 
-        if causal_mask is not None:
-            attention_mask = ~causal_mask.bool()
-        else:
+        if causal_mask is None:
+            # attention_mask must be a tensor here
             attention_mask = attention_mask.unsqueeze(1).unsqueeze(1).expand(batch_size, 1, seq_length, seq_length)
+        elif isinstance(causal_mask, torch.Tensor):
+            attention_mask = ~causal_mask.to(dtype=torch.bool)
+        else:
+            attention_mask = ~causal_mask
+
         top_bottom_border = "##" * (
             len(f"Attention visualization for {self.config.model_type} | {self.mapped_cls}") + 4
         )  # Box width adjusted to text length

@@ -460,7 +460,7 @@ class Glm46VImageProcessor(BaseImageProcessor):
         """
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
-        size = images_kwargs.get("size", {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000})
+        size = images_kwargs.get("size", self.size)
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(

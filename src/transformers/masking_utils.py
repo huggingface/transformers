@@ -20,6 +20,7 @@ import torch.nn.functional as F
 from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_xpu_available, logging
+from .utils.deprecation import deprecate_kwarg
 from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_tracing
 
@@ -737,9 +738,10 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor | N
     return packed_sequence_mask
 
 
+@deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
 def _preprocess_mask_arguments(
     config: PreTrainedConfig,
-    input_embeds: torch.Tensor,
+    inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | BlockMask | None,
     cache_position: torch.Tensor,
     past_key_values: Cache | None,
@@ -753,7 +755,7 @@ def _preprocess_mask_arguments(
     Args:
         config (`PreTrainedConfig`):
             The model config.
-        input_embeds (`torch.Tensor`):
+        inputs_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
             batch size, query length and dtype.
         attention_mask (`torch.Tensor`, optional):
@@ -805,7 +807,7 @@ def _preprocess_mask_arguments(
     else:
         # 1. Rely on input directly
         if attention_mask is None:
-            kv_length, kv_offset = input_embeds.shape[1], 0
+            kv_length, kv_offset = inputs_embeds.shape[1], 0
         # 2. Rely on the mask instead - needed for special cases like prefix tuning in PEFT
         #
         # This is a very unique and special case where an encoder utilizes a cache and expects its length
@@ -819,7 +821,7 @@ def _preprocess_mask_arguments(
     # and we don't have past_key_values, i.e. generally a training setup)
     packed_sequence_mask = None
     if position_ids is not None and attention_mask is None and past_key_values is None:
-        batch_size = input_embeds.shape[0]
+        batch_size = inputs_embeds.shape[0]
         # The position ids are sometimes just unsqueezed, without being expanded
         if batch_size != position_ids.shape[0]:
             position_ids = position_ids.expand(batch_size, -1)
@@ -828,9 +830,10 @@ def _preprocess_mask_arguments(
     return False, attention_mask, packed_sequence_mask, kv_length, kv_offset
 
 
+@deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
 def create_causal_mask(
     config: PreTrainedConfig,
-    input_embeds: torch.Tensor,
+    inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
     cache_position: torch.Tensor,
     past_key_values: Cache | None,
@@ -846,7 +849,7 @@ def create_causal_mask(
     Args:
         config (`PreTrainedConfig`):
             The model config.
-        input_embeds (`torch.Tensor`):
+        inputs_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
             batch size, query length and dtype.
         attention_mask (`torch.Tensor`, optional):
@@ -870,7 +873,7 @@ def create_causal_mask(
     if not getattr(config, "is_causal", True):
         return create_bidirectional_mask(
             config,
-            input_embeds,
+            inputs_embeds,
             attention_mask,
             or_mask_function=or_mask_function,
             and_mask_function=and_mask_function,
@@ -883,12 +886,12 @@ def create_causal_mask(
         layer_idx = 0
 
     early_exit, attention_mask, packed_sequence_mask, kv_length, kv_offset = _preprocess_mask_arguments(
-        config, input_embeds, attention_mask, cache_position, past_key_values, position_ids, layer_idx
+        config, inputs_embeds, attention_mask, cache_position, past_key_values, position_ids, layer_idx
     )
     if early_exit:
         return attention_mask
 
-    batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
+    batch_size, dtype = inputs_embeds.shape[0], inputs_embeds.dtype
     mask_factory_function = causal_mask_function
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
@@ -942,9 +945,10 @@ def create_causal_mask(
     return causal_mask
 
 
+@deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
 def create_bidirectional_mask(
     config: PreTrainedConfig,
-    input_embeds: torch.Tensor,
+    inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
     encoder_hidden_states: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
@@ -956,7 +960,7 @@ def create_bidirectional_mask(
     Args:
         config (`PreTrainedConfig`):
             The model config.
-        input_embeds (`torch.Tensor`):
+        inputs_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is only used to infer metadata
             such as the batch size, query length, dtype, and device.
         attention_mask (`torch.Tensor`, optional):
@@ -965,7 +969,7 @@ def create_bidirectional_mask(
             in which case it is returned as-is.
         encoder_hidden_states (`torch.Tensor`, optional):
             The input embeddings of shape (batch_size, kv_length, hidden_dim). If provided, it is used instead of
-            `input_embeds` to infer the batch size, kv length and dtype.
+            `inputs_embeds` to infer the batch size, kv length and dtype.
         or_mask_function (`Callable`, optional):
             An optional mask function to combine with the base mask function (by doing the union of both). This is
             useful to easily overlay another mask on top, for example for image tokens handling.
@@ -975,9 +979,9 @@ def create_bidirectional_mask(
     """
     # Due to the logic surrounding `cache_position` in inferring query-related information, we
     # construct a dummy tensor imitating initial positions
-    cache_position = torch.arange(input_embeds.shape[1], device=input_embeds.device, dtype=torch.long)
+    cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device, dtype=torch.long)
 
-    embeds = encoder_hidden_states if encoder_hidden_states is not None else input_embeds
+    embeds = encoder_hidden_states if encoder_hidden_states is not None else inputs_embeds
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, kv_length, kv_offset = _preprocess_mask_arguments(
         config, embeds, attention_mask, cache_position, None, None, 0
@@ -1030,9 +1034,10 @@ def create_bidirectional_mask(
     return attention_mask
 
 
+@deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
 def create_sliding_window_causal_mask(
     config: PreTrainedConfig,
-    input_embeds: torch.Tensor,
+    inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
     cache_position: torch.Tensor,
     past_key_values: Cache | None,
@@ -1049,7 +1054,7 @@ def create_sliding_window_causal_mask(
     Args:
         config (`PreTrainedConfig`):
             The model config.
-        input_embeds (`torch.Tensor`):
+        inputs_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
             batch size, query length and dtype.
         attention_mask (`torch.Tensor`, optional):
@@ -1073,7 +1078,7 @@ def create_sliding_window_causal_mask(
     if not getattr(config, "is_causal", True):
         return create_bidirectional_sliding_window_mask(
             config,
-            input_embeds,
+            inputs_embeds,
             attention_mask,
             or_mask_function=or_mask_function,
             and_mask_function=and_mask_function,
@@ -1086,7 +1091,7 @@ def create_sliding_window_causal_mask(
         layer_idx = 0
 
     early_exit, attention_mask, packed_sequence_mask, kv_length, kv_offset = _preprocess_mask_arguments(
-        config, input_embeds, attention_mask, cache_position, past_key_values, position_ids, layer_idx
+        config, inputs_embeds, attention_mask, cache_position, past_key_values, position_ids, layer_idx
     )
     if early_exit:
         return attention_mask
@@ -1095,7 +1100,7 @@ def create_sliding_window_causal_mask(
     if sliding_window is None:
         raise ValueError("Could not find a `sliding_window` argument in the config, or it is not set")
 
-    batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
+    batch_size, dtype = inputs_embeds.shape[0], inputs_embeds.dtype
     mask_factory_function = sliding_window_causal_mask_function(sliding_window)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
@@ -1145,9 +1150,10 @@ def create_sliding_window_causal_mask(
     return causal_mask
 
 
+@deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
 def create_bidirectional_sliding_window_mask(
     config: PreTrainedConfig,
-    input_embeds: torch.Tensor,
+    inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
@@ -1158,7 +1164,7 @@ def create_bidirectional_sliding_window_mask(
     Args:
         config (`PreTrainedConfig`):
             The model config.
-        input_embeds (`torch.Tensor`):
+        inputs_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is only used to infer metadata
             such as the batch size, query length, dtype, and device.
         attention_mask (`torch.Tensor`, optional):
@@ -1174,11 +1180,11 @@ def create_bidirectional_sliding_window_mask(
     """
     # Due to the logic surrounding `cache_position` in inferring query-related information, we
     # construct a dummy tensor imitating initial positions
-    cache_position = torch.arange(input_embeds.shape[1], device=input_embeds.device, dtype=torch.long)
+    cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device, dtype=torch.long)
 
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, kv_length, kv_offset = _preprocess_mask_arguments(
-        config, input_embeds, attention_mask, cache_position, None, None, 0
+        config, inputs_embeds, attention_mask, cache_position, None, None, 0
     )
     if early_exit:
         return attention_mask
@@ -1187,7 +1193,7 @@ def create_bidirectional_sliding_window_mask(
     if sliding_window is None:
         raise ValueError("Could not find a `sliding_window` argument in the config, or it is not set")
 
-    batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
+    batch_size, dtype = inputs_embeds.shape[0], inputs_embeds.dtype
     mask_factory_function = sliding_window_bidirectional_mask_function(sliding_window)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
@@ -1224,9 +1230,10 @@ def create_bidirectional_sliding_window_mask(
     return attention_mask
 
 
+@deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
 def create_chunked_causal_mask(
     config: PreTrainedConfig,
-    input_embeds: torch.Tensor,
+    inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
     cache_position: torch.Tensor,
     past_key_values: Cache | None,
@@ -1243,7 +1250,7 @@ def create_chunked_causal_mask(
     Args:
         config (`PreTrainedConfig`):
             The model config.
-        input_embeds (`torch.Tensor`):
+        inputs_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
             batch size, query length and dtype.
         attention_mask (`torch.Tensor`, optional):
@@ -1269,7 +1276,7 @@ def create_chunked_causal_mask(
         layer_idx = 0
 
     early_exit, attention_mask, packed_sequence_mask, kv_length, kv_offset = _preprocess_mask_arguments(
-        config, input_embeds, attention_mask, cache_position, past_key_values, position_ids, layer_idx
+        config, inputs_embeds, attention_mask, cache_position, past_key_values, position_ids, layer_idx
     )
     if early_exit:
         return attention_mask
@@ -1285,7 +1292,7 @@ def create_chunked_causal_mask(
             "chunked pattern cannot be respected. You should use another `attn_implementation` when instantiating the model"
         )
 
-    batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
+    batch_size, dtype = inputs_embeds.shape[0], inputs_embeds.dtype
     # For chunked attention and batched inputs, we need to take the number of left padding tokens into account
     # to start the chunk from the actual start of the sequence for the padded sequence
     if attention_mask is not None:
@@ -1349,9 +1356,10 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
 }
 
 
+@deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
 def create_masks_for_generate(
     config: PreTrainedConfig,
-    input_embeds: torch.Tensor,
+    inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
     cache_position: torch.Tensor,
     past_key_values: Cache | None,
@@ -1367,7 +1375,7 @@ def create_masks_for_generate(
     Args:
         config (`PreTrainedConfig`):
             The model config.
-        input_embeds (`torch.Tensor`):
+        inputs_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
             batch size, query length and dtype.
         attention_mask (`torch.Tensor`, optional):
@@ -1391,7 +1399,7 @@ def create_masks_for_generate(
     # Prepare the mask args
     mask_kwargs = {
         "config": effective_config,
-        "input_embeds": input_embeds,
+        "inputs_embeds": inputs_embeds,
         "attention_mask": attention_mask,
         "cache_position": cache_position,
         "past_key_values": past_key_values,
