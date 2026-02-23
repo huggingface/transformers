@@ -79,7 +79,7 @@ pip install transformers[sentencepiece]
 ```
 o
 ```bash
-pip install transformers stentencepiece
+pip install transformers sentencepiece
 ```
 #### 3. L'architettura delle repo è stato aggiornata in modo che ogni modello abbia la propria cartella
 

@@ -17,7 +17,7 @@ from collections import deque
 
 from ...utils.metrics import attach_tracer, traced
 from .cache import PagedAttentionCache
-from .requests import RequestState, RequestStatus, logger
+from .requests import FutureRequestState, RequestState, RequestStatus, logger
 
 
 class Scheduler(ABC):
@@ -55,7 +55,7 @@ class Scheduler(ABC):
         self.waiting_requests_order.append(state.request_id)
 
     @abstractmethod
-    def schedule_batch(self, token_budget: int, cache_budget: int) -> list[RequestState] | None:
+    def schedule_batch(self, token_budget: int, cache_budget: int) -> list[FutureRequestState] | None:
         """Schedules requests for the next batch based on available token and cache budgets. This method selects which
         requests should be processed in the current batch, considering the budgets and the scheduler's prioritization
         rules. The token_budget is the maximum number of tokens that can be processed in a batch, and the cache_budget
@@ -131,25 +131,24 @@ class Scheduler(ABC):
         pending, this is where we look for a prefix match and split the request if found."""
         # If prefix sharing is enabled, we look for a prefix match and split the request if found
         if self.cache.use_prefix_sharing and state.status == RequestStatus.PENDING:
-            prefill_length = self.cache.search_prefix_match(state.request_id, state.tokens_to_process)
+            prefill_length = self.cache.search_prefix_match(state.request_id, state.remaining_prefill_tokens)
             if prefill_length > 0:
                 self.active_requests[state.request_id] = state
                 request_ids_to_remove_from_waiting.add(state.request_id)
-                state.status = RequestStatus.SPLIT_PENDING_REMAINDER
+                state.status = RequestStatus.PREFILLING
                 # We keep track of the number of allocated blocks to avoid double allocation
                 state.allocated_blocks += prefill_length // self.cache.block_size
                 # Even if we match the whole request, we keep at least 1 token to start decoding
-                prefill_length = min(prefill_length, len(state.tokens_to_process) - 1)
-                state.remaining_prefill_tokens = state.tokens_to_process[prefill_length:]
-                state.tokens_to_process = state.tokens_to_process[prefill_length:]
+                prefill_length = min(prefill_length, len(state.remaining_prefill_tokens) - 1)
+                state.remaining_prefill_tokens = state.remaining_prefill_tokens[prefill_length:]
                 state.position_offset += prefill_length
 
-        # If the request has a split prefill, the tokens to process are the remaining prompt ids
-        if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
-            request_tokens = state.remaining_prefill_tokens
-        # Otherwise, the tokens to process are the prompt ids, which are the full prompt or the last predicted tokens
-        else:
+        # If the request is decoding, the tokens to process are already set
+        if state.status == RequestStatus.DECODING:
             request_tokens = state.tokens_to_process
+        # Otherwise, the tokens to process are the remaining prefill tokens
+        else:
+            request_tokens = state.remaining_prefill_tokens
         return request_tokens
 
     def _schedule_request(
@@ -173,21 +172,20 @@ class Scheduler(ABC):
         if len(request_tokens) < token_budget:
             if state.status == RequestStatus.PENDING:
                 self.active_requests[state.request_id] = state
-                state.status = RequestStatus.PREFILLING
                 request_ids_to_remove_from_waiting.add(state.request_id)
-            elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
-                state.status = RequestStatus.PREFILLING
+            if state.status <= RequestStatus.PREFILLING:
                 state.tokens_to_process = state.remaining_prefill_tokens
                 state.remaining_prefill_tokens = []
+                # Although prefill will only be done after the batch being scheduled now, we set the status to DECODING
+                # to stay coherent when using asynchronous batching
+                state.status = RequestStatus.DECODING
 
         # Otherwise: we need to split the request
         else:
             if state.status == RequestStatus.PENDING:
                 self.active_requests[state.request_id] = state
-                state.status = RequestStatus.PREFILLING_SPLIT
+                state.status = RequestStatus.PREFILLING
                 request_ids_to_remove_from_waiting.add(state.request_id)
-            elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
-                state.status = RequestStatus.PREFILLING_SPLIT
             state.remaining_prefill_tokens = request_tokens[token_budget:]
             state.tokens_to_process = request_tokens[:token_budget]
 
@@ -198,7 +196,7 @@ class Scheduler(ABC):
         cache_budget: int,
         request_ids_to_remove_from_waiting: set[str],
         safety_margin: float = 0.0,
-    ) -> tuple[list[RequestState], bool]:
+    ) -> tuple[list[FutureRequestState], bool]:
         """Schedules candidate requests for the current batch.
 
         This method contains the common logic shared by all schedulers: it checks token and cache budgets, allocates
@@ -247,7 +245,6 @@ class Scheduler(ABC):
             # If this point is reached, it means we can safely schedule the request
             self._schedule_request(state, request_tokens, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.tokens_to_process)  # it may change after scheduling
-            scheduled_requests.append(state)
 
             # Update the token and cache budgets
             token_budget -= request_len
@@ -258,7 +255,12 @@ class Scheduler(ABC):
                 tokens_in_current_block = state.current_len() % self.cache.block_size
                 tokens_after_forward = tokens_in_current_block + request_len
                 complete_blocks = tokens_after_forward // self.cache.block_size
-                self.cache.blocks_to_complete[state.request_id] = complete_blocks
+            else:
+                complete_blocks = 0
+
+            # Store the future request state
+            has_new_token = not state.remaining_prefill_tokens
+            scheduled_requests.append(FutureRequestState(state, has_new_token, complete_blocks))
 
             # Remove the request from the waiting queue and mark it as removed
             req_id = state.request_id
@@ -295,14 +297,14 @@ class FIFOScheduler(Scheduler):
         self.safety_margin = safety_margin
 
     @traced
-    def schedule_batch(self, token_budget: int, cache_budget: int) -> list[RequestState] | None:
+    def schedule_batch(self, token_budget: int, cache_budget: int) -> list[FutureRequestState] | None:
         priority_states: list[RequestState] = []
         second_priority_states: list[RequestState] = []
 
         for state in self.active_requests.values():
             if state.status == RequestStatus.DECODING:
                 priority_states.append(state)
-            if state.status in [RequestStatus.SPLIT_PENDING_REMAINDER, RequestStatus.PREFILLING_SPLIT]:
+            elif state.status == RequestStatus.PREFILLING:
                 second_priority_states.append(state)
 
         # Add waiting requests to second priority
@@ -339,13 +341,13 @@ class PrefillFirstScheduler(Scheduler):
     decoding requests."""
 
     @traced
-    def schedule_batch(self, token_budget: int, cache_budget: int) -> list[RequestState] | None:
+    def schedule_batch(self, token_budget: int, cache_budget: int) -> list[FutureRequestState] | None:
         priority_states: list[RequestState] = []
         second_priority_states: list[RequestState] = []
 
         for state in self.active_requests.values():
             # XXX: when cache is full, state can stay on `PREFILLING_SPLIT` so we need to take those into account
-            if state.status in [RequestStatus.PREFILLING_SPLIT, RequestStatus.SPLIT_PENDING_REMAINDER]:
+            if state.status == RequestStatus.PREFILLING:
                 priority_states.append(state)
             elif state.status == RequestStatus.DECODING:
                 second_priority_states.append(state)
