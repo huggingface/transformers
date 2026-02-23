@@ -162,6 +162,39 @@ def get_transformer_block_classes(model):
                 block_classes.add(type(module))
                 break
 
+    # Filter out nested block classes (e.g. SparseMoeBlock inside DecoderLayer).
+    # We only want to FSDP-wrap the outermost block classes. If a class like
+    # MoeBlock only ever appears inside a DecoderLayer, we skip it.
+    if len(block_classes) > 1:
+        # Collect the dotted module paths for each candidate class.
+        # i.e: {DecoderLayer: ["layers.0", "layers.1"],
+        #        MoeBlock: ["layers.0.moe", "layers.1.moe"]}
+        paths_by_class = {}
+        for name, module in model.named_modules():
+            cls = type(module)
+            if cls in block_classes:
+                paths_by_class.setdefault(cls, []).append(name)
+
+        def _is_nested_inside_other_class(cls):
+            # A class is "inner" if every one of its instances lives under
+            # an instance of a different candidate class in the module tree.
+            paths = paths_by_class.get(cls, [])
+            if not paths:
+                return False
+            for path in paths:
+                has_parent = any(
+                    path.startswith(parent_path + ".")
+                    for other_cls, parent_paths in paths_by_class.items()
+                    if other_cls is not cls
+                    for parent_path in parent_paths
+                )
+                if not has_parent:
+                    return False
+            return True
+
+        # Keep only the outer (non-nested) classes.
+        block_classes = {cls for cls in block_classes if not _is_nested_inside_other_class(cls)}
+
     return block_classes
 
 
