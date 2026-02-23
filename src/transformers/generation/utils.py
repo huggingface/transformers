@@ -620,6 +620,8 @@ class GenerationMixin(ContinuousMixin):
         """
         This function extracts the model-specific `inputs` for generation.
         """
+        if model_kwargs is None:
+            model_kwargs = {}
         # 1. retrieve all kwargs that are non-None or non-model input related.
         # some encoder-decoder models have different names for model and encoder
         if (
@@ -682,6 +684,8 @@ class GenerationMixin(ContinuousMixin):
         bos_token_id: torch.Tensor | None,
         model_kwargs: dict[str, torch.Tensor],
     ) -> torch.LongTensor:
+        if model_kwargs is None:
+            model_kwargs = {}
         """Initializes input ids for generation, if necessary."""
         if inputs is not None:
             return inputs
