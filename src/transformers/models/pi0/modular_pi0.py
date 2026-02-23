@@ -30,7 +30,7 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoConfig, AutoModel
-from ..gemma.modeling_gemma import apply_rotary_pos_emb, eager_attention_forward
+from ..gemma.modeling_gemma import GemmaAttention, GemmaDecoderLayer, apply_rotary_pos_emb, eager_attention_forward
 from ..paligemma.configuration_paligemma import PaliGemmaConfig
 from ..paligemma.modeling_paligemma import PaliGemmaMultiModalProjector
 from ..siglip import SiglipVisionConfig
@@ -378,9 +378,7 @@ def compute_layer_complete(
     position_ids: torch.Tensor,
     language_model: nn.Module,
     expert_model: nn.Module,
-    output_attentions: bool = False,
-    prefix_length: int = 0,
-) -> tuple[list[torch.Tensor], torch.Tensor | None]:
+) -> list[torch.Tensor]:
     """Compute one merged attention layer across VLM language model and action expert."""
     models = [language_model, expert_model]
     query_states = []
@@ -438,24 +436,34 @@ def compute_layer_complete(
         current_att = att_output[:, start_pos:end_pos]
         if current_att.dtype != layer.self_attn.o_proj.weight.dtype:
             current_att = current_att.to(layer.self_attn.o_proj.weight.dtype)
-        attn_output = layer.self_attn.o_proj(current_att)
-        hidden_states = hidden_states + attn_output
+        precomputed_attn_output = layer.self_attn.o_proj(current_att)
 
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = layer.post_attention_layernorm(hidden_states)
-        if layer.mlp.up_proj.weight.dtype == torch.bfloat16:
-            hidden_states = hidden_states.to(dtype=torch.bfloat16)
-        hidden_states = layer.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-        outputs_embeds.append(hidden_states)
+        if i > 0:
+            # Expert: call GemmaDecoderLayer.forward() so _can_record_outputs hooks fire naturally.
+            # Inject the joint-attention result by hooking self_attn before the layer call.
+            # super hacky, Arthur wdyt?
+            def make_attn_hook(attn_out, weights):
+                def hook(module, args, output):
+                    return (attn_out, weights)
+
+                return hook
+
+            handle = layer.self_attn.register_forward_hook(
+                make_attn_hook(precomputed_attn_output, attn_weights), prepend=True
+            )
+            outputs_embeds.append(layer(hidden_states))
+            handle.remove()
+        else:
+            # Language model: manual residual + MLP (no recording needed).
+            hidden_states = hidden_states + precomputed_attn_output
+            residual = hidden_states
+            hidden_states = layer.post_attention_layernorm(hidden_states)
+            hidden_states = layer.mlp(hidden_states)
+            outputs_embeds.append(residual + hidden_states)
+
         start_pos = end_pos
 
-    suffix_attentions = None
-    if output_attentions and attn_weights is not None:
-        suffix_attentions = attn_weights
-
-    return outputs_embeds, suffix_attentions
+    return outputs_embeds
 
 
 class PI0Model(PI0PreTrainedModel):
@@ -543,8 +551,8 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     """PI0 model with action projection heads and flow matching."""
 
     _can_record_outputs = {
-        "hidden_states": OutputRecorder(target_class=nn.Identity, layer_name="hidden_state_recorders"),
-        "attentions": OutputRecorder(target_class=nn.Identity, layer_name="attention_recorders"),
+        "hidden_states": GemmaDecoderLayer,
+        "attentions": GemmaAttention,
     }
     main_input_name = "pixel_values"
 
@@ -560,10 +568,6 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         self.state_proj = nn.Linear(config.max_state_dim, expert_hidden_size)
         self.action_time_mlp_in = nn.Linear(2 * expert_hidden_size, expert_hidden_size)
         self.action_time_mlp_out = nn.Linear(expert_hidden_size, expert_hidden_size)
-        self.hidden_state_recorders = nn.ModuleList(
-            [nn.Identity() for _ in range(config.text_config.num_hidden_layers)]
-        )
-        self.attention_recorders = nn.ModuleList([nn.Identity() for _ in range(config.text_config.num_hidden_layers)])
 
         self.post_init()
 
@@ -618,7 +622,6 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         """Embed suffix: state + action-time fusion."""
         expert_hidden_size = self.action_in_proj.out_features
 
-        # TODO: remove dtype handling once proper input casting is in place
         state_emb = self.state_proj(state)
         batch_size = state_emb.shape[0]
         device = state_emb.device
@@ -661,11 +664,6 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             raise ValueError("actions must be provided for training. Use sample_actions for inference.")
         del labels  # Unused; accepted for compatibility with generic testing utilities.
         del return_dict  # Handled by `capture_outputs`.
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
 
         if noise is None:
             noise = torch.randn_like(actions)
@@ -713,20 +711,14 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         inputs_embeds = [prefix_embs, suffix_embs]
         num_layers = self.config.text_config.num_hidden_layers
         for layer_idx in range(num_layers):
-            inputs_embeds, suffix_attn = compute_layer_complete(
+            inputs_embeds = compute_layer_complete(
                 layer_idx,
                 inputs_embeds,
                 attention_mask_4d,
                 position_ids,
                 language_model=self.model.language_model,
                 expert_model=self.model.expert,
-                output_attentions=output_attentions,
-                prefix_length=prefix_length,
             )
-            combined = self.hidden_state_recorders[layer_idx](torch.cat(inputs_embeds, dim=1))
-            inputs_embeds = [combined[:, :prefix_length], combined[:, prefix_length:]]
-            if suffix_attn is not None:
-                _ = self.attention_recorders[layer_idx](suffix_attn)
 
         suffix_out = self.model.expert.norm(inputs_embeds[1])
 

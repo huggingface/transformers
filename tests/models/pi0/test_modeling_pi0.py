@@ -182,13 +182,22 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.float32).eval()
         tokenizer = AutoTokenizer.from_pretrained("google/paligemma-3b-pt-224")
 
+        tokenized = tokenizer(
+            ["Pick up the object\n"], padding="max_length", truncation=True, max_length=48, return_tensors="pt"
+        )
+        input_ids = tokenized["input_ids"]
+        attention_mask = tokenized["attention_mask"]
+
         torch.manual_seed(42)
+        pixel_values = torch.randn(1, 1, 3, 224, 224)
+        image_masks = torch.tensor([[True]])
         state = torch.randn(1, 32)
-        noisy_actions = torch.randn(1, 50, 32)
+        actions = torch.randn(1, 50, 32)
+        noise = torch.randn(1, 50, 32)
         timestep = torch.tensor([0.5], dtype=torch.float32)
 
         with torch.no_grad():
-            suffix_embs, suffix_masks = model.embed_suffix(state, noisy_actions, timestep)
+            suffix_embs, suffix_masks = model.embed_suffix(state, noise, timestep)
         self.assertEqual(suffix_embs.shape, (1, 51, 1024))
         self.assertEqual(suffix_masks.shape, (1, 51))
         # Aggregate mean shows small (~1e-3) drift across envs; keep token-level checks stricter below.
@@ -199,14 +208,6 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             suffix_embs[0, -1, :4], torch.tensor([1.3611, -1.9470, 1.2340, -1.8429]), atol=1e-3, rtol=1e-3
         )
-
-        tokenized = tokenizer(
-            ["Pick up the object\n"], padding="max_length", truncation=True, max_length=48, return_tensors="pt"
-        )
-        input_ids = tokenized["input_ids"]
-        attention_mask = tokenized["attention_mask"]
-        pixel_values = torch.randn(1, 1, 3, 224, 224)
-        image_masks = torch.tensor([[True]])
 
         with torch.no_grad():
             prefix_embs, prefix_masks = model.embed_prefix(pixel_values, input_ids, attention_mask, image_masks)
@@ -220,8 +221,6 @@ class PI0ModelIntegrationTest(unittest.TestCase):
             prefix_embs[0, -1, :4], torch.tensor([-8.9272, -0.7623, 0.4806, -1.4695]), atol=1e-3, rtol=1e-3
         )
 
-        actions = torch.randn(1, 50, 32)
-        noise = torch.randn(1, 50, 32)
         with torch.no_grad():
             outputs = model(
                 pixel_values=pixel_values,
@@ -236,6 +235,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.loss_per_sample.shape, (1, 50, 32))
         self.assertAlmostEqual(outputs.loss.item(), 3.8787, places=3)
 
+        torch.manual_seed(99)
         with torch.no_grad():
             sampled = model.sample_actions(
                 pixel_values=pixel_values,
