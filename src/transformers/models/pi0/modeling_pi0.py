@@ -239,11 +239,6 @@ class PI0Model(PI0PreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     def get_image_features(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
-        if pixel_values.ndim != 5:
-            raise ValueError(
-                "`pixel_values` must have shape (batch_size, num_cameras, channels, height, width) for PI0."
-            )
-
         batch_size, num_cameras = pixel_values.shape[:2]
         pixel_values = pixel_values.reshape(batch_size * num_cameras, *pixel_values.shape[2:])
         image_outputs = self.vision_tower(pixel_values)

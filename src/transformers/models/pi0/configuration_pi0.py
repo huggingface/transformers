@@ -36,6 +36,16 @@ class PI0Config(PreTrainedConfig):
             Configuration for the language model (GemmaModel).
         expert_config (`dict`, *optional*):
             Configuration for the action expert (GemmaModel). Defaults to a Gemma 300M variant.
+        image_token_index (`int`, *optional*, defaults to 256000):
+            The image token index to encode the image prompt.
+        vocab_size (`int`, *optional*, defaults to 257152):
+            Vocabulary size of the PI0 language backbone.
+        projection_dim (`int`, *optional*, defaults to 2048):
+            Dimension of the multimodal projection space.
+        hidden_size (`int`, *optional*, defaults to 2048):
+            Dimension of the hidden layer of the language model.
+        tie_word_embeddings (`bool | None`, *optional*, defaults to `True`):
+            Whether to tie word embeddings.
         chunk_size (`int`, *optional*, defaults to 50):
             Number of action steps to predict per chunk.
         max_state_dim (`int`, *optional*, defaults to 32):
