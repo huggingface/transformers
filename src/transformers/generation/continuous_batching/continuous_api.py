@@ -97,7 +97,7 @@ class ContinuousBatchProcessor:
         q_padding_interval_size: int,
         kv_padding_interval_size: int,
         max_cached_graphs: int,
-        use_async: bool,
+        use_async_batching: bool,
     ) -> None:
         """Initialize the continuous batch processor.
 
@@ -147,8 +147,8 @@ class ContinuousBatchProcessor:
         self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
 
         # Setup inputs and outputs
-        self.use_async = use_async
-        if self.use_async:
+        self.use_async_batching = use_async_batching
+        if self.use_async_batching:
             # Since in async there are 2 IO pairs, there are also 2 graph buffers: we divide the max_cached_graphs by 2
             max_cached_graphs = ceil(max_cached_graphs / 2)
             self.inputs_and_outputs = ContinuousBatchingAsyncIOs(
@@ -278,14 +278,13 @@ class ContinuousBatchProcessor:
     @traced
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
-        self.cache.finalize_block_uninitialization()
         requests_in_batch, new_tokens = self.inputs_and_outputs.prepare_batch_update()
         current_logits_index = 0
         for future_state in requests_in_batch:
             state = future_state.state
             # Early return if the request is finished
             if state.status == RequestStatus.FINISHED:
-                if self.use_async:
+                if self.use_async_batching:
                     # Skip this request, but still consume its token from new_tokens if it had one
                     if future_state.has_new_token:
                         current_logits_index += 1
@@ -504,7 +503,7 @@ class ContinuousBatchingManager:
         kv_padding_interval_size: int = 0,
         max_cached_graphs: int = 0,
         allow_block_sharing: bool = True,
-        use_async: bool | None = None,
+        use_async_batching: bool | None = None,
     ) -> None:
         """Initialize the continuous batching manager.
 
@@ -516,7 +515,7 @@ class ContinuousBatchingManager:
             kv_padding_interval_size: (optional) Padding granularity for KV cache in tokens. 0 uses default.
             max_cached_graphs: (optional) Maximum number of cached CUDA graphs. 0 uses default.
             allow_block_sharing: (optional) Whether to allow block sharing if the model has some full attention layers
-            use_async: Whether to use async API or not. If None, will be automatically detected.
+            use_async_batching: Whether to use async API or not. If None, will be automatically detected.
         """
         # Reload paged version of the attention implementation if necessary
         if "paged|" not in model.config._attn_implementation:
@@ -553,11 +552,13 @@ class ContinuousBatchingManager:
             user_specified_param=bool(q_padding_interval_size or kv_padding_interval_size or max_cached_graphs),
             compile_config=getattr(generation_config, "compile_config", None),
         )
-        # If no behavior is given for the async API, it's turned on if cuda graphs are on and there is no attention mask
-        if use_async is not None:
-            self.use_async = use_async
+        # If the user specifies to use async or not, no need to decide ourselves
+        if use_async_batching is not None:
+            self.use_async_batching = use_async_batching
+        # Otherwise, we enable async batching if there are no attn masks, because they add a lot of host-to-device
+        # transfers, and if CUDA graphs are not turned off, because that would mean we are trying to save memory
         else:
-            self.use_async = self.use_cuda_graph and not attn_mask_is_needed(self.model.config)
+            self.use_async_batching = self.use_cuda_graph and not attn_mask_is_needed(self.model.config)
 
         # Padding interval sizes for Q and KV (0 means use defaults)
         self.q_padding_interval_size = (
@@ -802,7 +803,6 @@ class ContinuousBatchingManager:
                 self.model.dtype,
                 tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
                 allow_block_sharing=self._allow_block_sharing,
-                use_async=self.use_async,
             )
             self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
             logger.debug(f"PagedAttentionCache created in {perf_counter() - t0} seconds")
@@ -833,14 +833,14 @@ class ContinuousBatchingManager:
                 q_padding_interval_size=self.q_padding_interval_size,
                 kv_padding_interval_size=self.kv_padding_interval_size,
                 max_cached_graphs=self.max_cached_graphs,
-                use_async=self.use_async,
+                use_async_batching=self.use_async_batching,
             )
             self.batch_processor = batch_processor
             self.current_batch = 0
             logger.debug(f"batch_processor created in {perf_counter() - t1} seconds")
 
             # If using the async API, we bootstrap the first batch w/out update
-            if self.batch_processor.use_async:
+            if self.batch_processor.use_async_batching:
                 if not batch_processor.prepare_next_batch():
                     raise RuntimeError("Failed to bootstrap the first batch.")
                 self._generation_step()
@@ -914,7 +914,7 @@ class ContinuousMixin:
         allow_block_sharing: bool = True,
         block: bool = True,
         timeout: float | None = None,
-        use_async: bool | None = None,  # leave to None for automatic detection
+        use_async_batching: bool | None = None,  # leave to None for automatic detection
         max_cached_graphs: int = 0,
     ) -> Generator[ContinuousBatchingManager]:
         manager = self.init_continuous_batching(
@@ -925,7 +925,7 @@ class ContinuousMixin:
             kv_padding_interval_size=kv_padding_interval_size,
             max_cached_graphs=max_cached_graphs,
             allow_block_sharing=allow_block_sharing,
-            use_async=use_async,
+            use_async_batching=use_async_batching,
         )
         manager.start()
         try:
@@ -945,7 +945,7 @@ class ContinuousMixin:
         q_padding_interval_size: int = 0,
         kv_padding_interval_size: int = 0,
         allow_block_sharing: bool = True,
-        use_async: bool | None = None,
+        use_async_batching: bool | None = None,
         max_cached_graphs: int = 0,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
@@ -957,7 +957,7 @@ class ContinuousMixin:
             q_padding_interval_size: Padding granularity for queries in tokens. 0 uses default.
             kv_padding_interval_size: Padding granularity for KV cache in tokens. 0 uses default.
             allow_block_sharing: A flag to allow block sharing if the model has some full attention layers
-            use_async: Whether to use async API or not. If None, will be automatically detected.
+            use_async_batching: Whether to use async API or not. If None, will be automatically detected.
             max_cached_graphs: Maximum number of cached CUDA graphs. 0 uses default.
         Returns:
             `ContinuousBatchingManager`: The manager instance to add requests and retrieve results.
@@ -982,7 +982,7 @@ class ContinuousMixin:
             q_padding_interval_size=q_padding_interval_size,
             kv_padding_interval_size=kv_padding_interval_size,
             allow_block_sharing=allow_block_sharing,
-            use_async=use_async,
+            use_async_batching=use_async_batching,
             max_cached_graphs=max_cached_graphs,
         )
 
@@ -998,7 +998,7 @@ class ContinuousMixin:
         allow_block_sharing: bool = True,
         record_timestamps: bool = False,
         progress_bar: bool = True,
-        use_async: bool | None = None,
+        use_async_batching: bool | None = None,
         max_cached_graphs: int = 0,
         **kwargs,
     ) -> dict[str, GenerationOutput]:
@@ -1012,6 +1012,7 @@ class ContinuousMixin:
             allow_block_sharing: A flag to allow block sharing if the model has some full attention layers
             record_timestamps: If set to true, the requests will have a timestamp for each token generated
             progress_bar: If set to true, a progress bar will be displayed
+            use_async_batching: Whether to use async double buffering or not. If None, will be automatically detected.
             max_cached_graphs: Maximum number of cached CUDA graphs. 0 uses default.
             **kwargs: Additional generation parameters
 
@@ -1037,7 +1038,7 @@ class ContinuousMixin:
             allow_block_sharing=allow_block_sharing,
             block=True,
             timeout=5,
-            use_async=use_async,
+            use_async_batching=use_async_batching,
         )
         logging_cm = logging_redirect_tqdm([logger])
         pbar_cm = tqdm(

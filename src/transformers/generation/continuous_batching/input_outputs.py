@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from contextlib import nullcontext
 from dataclasses import dataclass
 from functools import partial
 from itertools import count
@@ -126,8 +125,8 @@ class ContinuousBatchingIOs:
         repeated allocations and enable CUDA graphs. All tensors are allocated with maximum possible sizes.
         The allocated tensors are:
 
-        - `input_ids` and `position_ids`: Query token information
-        - `cumulative_seqlens_q` and `cumulative_seqlens_k`: Sequence length tracking for FlashAttention-style batching
+        - `_bulk_input_tensor`: Storage for all the small inputs: `input_ids`, `position_ids`, `cumulative_seqlens_q`,
+          `logits_indices`, `cumulative_seqlens_k`, `carry_over_ids`.
         - `attention_mask`: Optional attention masks (only for eager/SDPA implementations)
         - `write_index` and `read_index` storage: Cache indexing tensors for each attention group
         - `output_ids`: Storage for generated token IDs
@@ -137,7 +136,8 @@ class ContinuousBatchingIOs:
         num_pages = self.cache.num_blocks * self.cache.block_size
         pin_memory = self.device.type == "cpu"
 
-        # Small inputs are allocated as slices in a larget tensor to reduce D2H times (32 * 4b = 128 bytes aligned)
+        # Small inputs are allocated as slices in a larget tensor aligned to 128 bytes (32 * 4b). This reduces the
+        # reduces fragmentation, so it lowers the number of D2H transfers and speeds up transfers.
         bulk_size = aligned_divide(max_batch_tokens + 1, 1, 32)
         self._bulk_input_tensor = torch.empty(
             (7, bulk_size), dtype=torch.int32, device=self.device, pin_memory=pin_memory
@@ -191,7 +191,7 @@ class ContinuousBatchingIOs:
         # For read index, the +T is because there are -1 for seqlen_q when model uses a sliding window
 
     def _transfer_inputs(
-        self, other: "ContinuousBatchingIOs", stream: torch.cuda.Stream | None = None, non_blocking: bool = False
+        self, other: "ContinuousBatchingIOs", stream: torch.cuda.Stream, non_blocking: bool = False
     ) -> None:
         # Transfer accumulators
         other.actual_query_length = self.actual_query_length
@@ -204,9 +204,8 @@ class ContinuousBatchingIOs:
         other.max_seqlen_q = self.max_seqlen_q
         other.max_seqlen_k = dict(self.max_seqlen_k.items())
         # Transfer static tensors
-        context = torch.cuda.stream(stream) if stream is not None else nullcontext()
-        with context:
-            other._bulk_input_tensor.copy_(self._bulk_input_tensor, non_blocking=non_blocking)
+        with torch.cuda.stream(stream):
+            other._bulk_input_tensor.copy_(self._bulk_input_tensor, non_blocking=non_blocking)  # fast bulk transfer
             other.write_index_storage.copy_(self.write_index_storage, non_blocking=non_blocking)
             other.read_index_storage.copy_(self.read_index_storage, non_blocking=non_blocking)
             if self.attention_mask is not None and other.attention_mask is not None:
@@ -453,6 +452,7 @@ class HostDeviceIOPair:
         model_dtype: torch.dtype,
         max_graphs: int = 32,
     ) -> None:
+        # The host IO has automatic pinned memory because it is created on the CPU
         self.host_io = ContinuousBatchingIOs(cache, config, torch.device("cpu"), model_dtype, max_graphs)
         self.device_io = ContinuousBatchingIOs(cache, config, device, model_dtype, max_graphs)
         self.h2d_over = torch.cuda.Event()
@@ -480,9 +480,12 @@ class ContinuousBatchingAsyncIOs:
                       └──────────┘ ◄──────── └────────────┘
                                     outputs
 
-    Each pair is separate from the other. This means that each pairs has its own CUDA graphs set. But the CUDA streams
-    orchestrating the transfer from host to device (H2D) and device to host (D2H) are the same for both pairs. Same for
-    the compute stream.
+    Each pair is separate from the other. This means that each pairs has its own CUDA graphs set, because CUDA graphs
+    need to have static adresses for input tensors. To have a unique set of CUDA graph, we would need to copy the input
+    tensors to a third device-side buffer. This could limit the memory cost of CUDA graphs but would slow down the
+    forward pass.
+    But the CUDA streams orchestrating the transfer from host to device (H2D) and device to host (D2H) are the same for
+    both pairs. Same for the compute stream.
     The order of steps in async batching looks like this (for 3 batches of compute):
 
          │ ┌────┬────┐                  ┌────┬────┐     ┌────┬────┐       ┌────┐          ┌────┐
@@ -547,6 +550,10 @@ class ContinuousBatchingAsyncIOs:
         io_pair.host_io.carry_over_ids.copy_(self.infer_carry_over_ids())
 
     def infer_carry_over_ids(self) -> torch.Tensor:
+        """Infers the ids of the tokens to carry over from batch N to batch N+1. In asynchronous batching mode, we can
+        schedule a request for batch N+1 without knowing the token predicted for that request in batch N. For that
+        reason, we might need to carry over tokens just predicted in batch N before launching the forwar pass of batch
+        N+1. This method computes the ids of the tokens to carry over."""
         next_req_id_to_new_token_position = self.io_pairs[self.current_pair].host_io.req_id_to_new_token_position
         prev_req_id_to_new_token_position = self.io_pairs[1 - self.current_pair].host_io.req_id_to_new_token_position
         carry_over_ids = [-1 for _ in range(self.max_batch_tokens)]
@@ -570,6 +577,9 @@ class ContinuousBatchingAsyncIOs:
         return io_pair.device_io.get_model_kwargs(padded_q_size, padded_kv_cache_size)
 
     def carry_over_tokens(self, input_ids: torch.Tensor) -> None:
+        """As explained in the infer_carry_over_ids method, we might need to carry over tokens just predicted in batch N
+        before launching the forwar pass of batch N+1. This method performs the carry over, and is recorded in CUDA
+        graphs if they are enabled."""
         # Retrieve previous batch output ids
         prev_output_ids = self.io_pairs[1 - self.current_pair].device_io.output_ids
         # Retrieve the carry over ids and mask

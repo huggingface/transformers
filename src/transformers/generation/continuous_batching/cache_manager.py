@@ -71,7 +71,7 @@ class BlockManager:
     it is in use.
     """
 
-    def __init__(self, num_blocks: int, block_size: int, use_async: bool) -> None:
+    def __init__(self, num_blocks: int, block_size: int) -> None:
         """Initializes the block manager with a given number of blocks (num_blocks) of size (block_size)."""
         self.num_blocks = num_blocks
         self.block_size = block_size
@@ -79,9 +79,6 @@ class BlockManager:
         self._init_block_ids: dict[int, None] = {}  # effectively act as an ordered set
         self._hash_to_id: dict[int, int] = {}
         self._id_to_block: dict[int, Block] = {}
-        # If async is used, there is a one batch period of waiting needed before uninitializing them
-        self._use_async = use_async
-        self._blocks_to_uninit = [] if use_async else self._uninit_block_ids
 
     @property
     def num_free_blocks(self) -> int:
@@ -217,13 +214,7 @@ class BlockManager:
         if block.ref_count > 1:
             raise RuntimeError(f"Block {block_id} has more than one reference: {block.ref_count = }")
         # Add the block to the uninitialized blocks queue
-        self._blocks_to_uninit.append(block_id)
-
-    def finalize_block_uninitialization(self) -> None:
-        """Flushes the buffer of blocks to uninitialize in async mode. No-op in sync mode."""
-        if self._use_async:
-            self._uninit_block_ids.extend(self._blocks_to_uninit)
-            self._blocks_to_uninit = []
+        self._uninit_block_ids.append(block_id)
 
     def mark_shareable_blocks_as_complete(
         self, num_complete_blocks: int, allocated_blocks: list[int], prompt_ids: list[int]

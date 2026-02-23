@@ -122,7 +122,6 @@ class PagedAttentionCache:
         dtype: torch.dtype = torch.float16,
         tp_size: int | None = None,
         allow_block_sharing: bool = True,
-        use_async: bool = False,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -139,7 +138,6 @@ class PagedAttentionCache:
         self.config = config
         self.dtype = dtype
         self.device = device
-        self.use_async = use_async
 
         # Extract model dimensions
         kv_heads = getattr(config, "num_key_value_heads", None)
@@ -244,12 +242,8 @@ class PagedAttentionCache:
 
         # We only use prefix sharing if the whole model has only full attention layers and block sharing is allowed
         self.use_prefix_sharing = allow_block_sharing and group_types == ["full_attention"]
-        self._block_manager = BlockManager(num_blocks, self.block_size, use_async=use_async)
+        self._block_manager = BlockManager(num_blocks, self.block_size)
         self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
-
-    def finalize_block_uninitialization(self) -> None:
-        if self._block_manager is not None:
-            self._block_manager.finalize_block_uninitialization()
 
     def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> bool:
         """Returns a boolean indicating if the allocation of (num_requested_blocks) blocks will be successful. The
