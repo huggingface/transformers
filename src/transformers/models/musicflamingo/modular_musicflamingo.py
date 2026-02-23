@@ -121,6 +121,12 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
             The beginning-of-audio token index used to mark the start of audio spans.
         audio_eos_token_id (`int`, *optional*, defaults to 151671):
             The end-of-audio token index used to mark the end of audio spans.
+        rotary_dim (`int`, *optional*, defaults to 256):
+            Rotary embedding dimension used per axis in [`MusicFlamingoRotaryEmbedding`]. Since the rotary embedding is
+            applied on two axes (batch and time), the rotated hidden size is `2 * rotary_dim`, which must be less than
+            or equal to `audio_config.hidden_size`.
+        rotary_max_time (`float`, *optional*, defaults to 1200.0):
+            Maximum time in seconds used by the rotary cache. This should match the processor `max_audio_len`.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             Activation function used in the projector.
         projector_bias (`bool`, *optional*, defaults to `True`):
@@ -160,14 +166,22 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
         audio_token_id=151669,
         audio_bos_token_id=151670,
         audio_eos_token_id=151671,
+        rotary_dim=256,
+        rotary_max_time=1200.0,
         projector_hidden_act="gelu",
         projector_bias=True,
         **kwargs,
     ):
         if isinstance(audio_config, dict):
             audio_config["model_type"] = audio_config.get("model_type", "musicflamingo_encoder")
+            audio_config.setdefault("rotary_dim", rotary_dim)
+            audio_config.setdefault("rotary_max_time", rotary_max_time)
         elif audio_config is None:
-            audio_config = {"model_type": "musicflamingo_encoder"}
+            audio_config = {
+                "model_type": "musicflamingo_encoder",
+                "rotary_dim": rotary_dim,
+                "rotary_max_time": rotary_max_time,
+            }
 
         super().__init__(
             audio_config=audio_config,
@@ -178,8 +192,15 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
             **kwargs,
         )
 
+        if not hasattr(self.audio_config, "rotary_dim"):
+            self.audio_config.rotary_dim = rotary_dim
+        if not hasattr(self.audio_config, "rotary_max_time"):
+            self.audio_config.rotary_max_time = rotary_max_time
+
         self.audio_bos_token_id = audio_bos_token_id
         self.audio_eos_token_id = audio_eos_token_id
+        self.rotary_dim = self.audio_config.rotary_dim
+        self.rotary_max_time = self.audio_config.rotary_max_time
 
 
 class MusicFlamingoProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...
@@ -244,7 +265,15 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
 
             per_sample_windows: list[int] = []
             flat_chunks: list[np.ndarray] = []
-            audio_times_list: list[torch.Tensor] = []
+            num_audio_time_steps = int(
+                self._get_audio_token_length(
+                    torch.tensor([self.feature_extractor.nb_max_frames], dtype=torch.long)
+                ).item()
+            )
+            audio_time_step = self.feature_extractor.chunk_length / num_audio_time_steps
+            audio_time_offsets = torch.arange(num_audio_time_steps, dtype=torch.float32) * audio_time_step
+
+            chunk_start_times: list[float] = []
 
             for audio_el in audio:
                 n_samples = int(audio_el.shape[0])
@@ -263,13 +292,14 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
                     flat_chunks.append(audio_el[start:end])
 
                     start_sec = start / audio_kwargs["sampling_rate"]
-                    chunk_times = torch.arange(750).float() * 0.04 + start_sec
-                    audio_times_list.append(chunk_times)
+                    chunk_start_times.append(start_sec)
 
             audio_inputs = self.feature_extractor(flat_chunks, **audio_kwargs)
             padding_mask = audio_inputs.pop("attention_mask")
             audio_inputs["input_features_mask"] = padding_mask
-            audio_inputs["audio_times"] = torch.stack(audio_times_list).to(dtype=torch.float32)
+            audio_inputs["audio_times"] = (
+                torch.as_tensor(chunk_start_times, dtype=torch.float32).unsqueeze(1) + audio_time_offsets
+            )
 
             audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
             audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
@@ -442,7 +472,10 @@ class MusicFlamingoEncoder(AudioFlamingo3Encoder):
 
     def __init__(self, config: MusicFlamingoConfig):
         super().__init__(config)
-        self.pos_emb = MusicFlamingoRotaryEmbedding(dim=256, max_time=1200.0)
+        self.pos_emb = MusicFlamingoRotaryEmbedding(
+            dim=getattr(config, "rotary_dim", 256),
+            max_time=getattr(config, "rotary_max_time", 1200.0),
+        )
 
     @can_return_tuple
     def forward(

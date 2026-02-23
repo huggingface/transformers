@@ -422,7 +422,10 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
         self.avg_pooler = nn.AvgPool1d(2, stride=2)
 
         self.gradient_checkpointing = False
-        self.pos_emb = MusicFlamingoRotaryEmbedding(dim=256, max_time=1200.0)
+        self.pos_emb = MusicFlamingoRotaryEmbedding(
+            dim=getattr(config, "rotary_dim", 256),
+            max_time=getattr(config, "rotary_max_time", 1200.0),
+        )
         # Initialize weights and apply final processing
         self.post_init()
 
