@@ -25,9 +25,10 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, or_masks
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoConfig, AutoModel
 from ..gemma.modeling_gemma import apply_rotary_pos_emb, eager_attention_forward
 from ..paligemma.configuration_paligemma import PaliGemmaConfig
@@ -117,9 +118,9 @@ class PI0Processor(ProcessorMixin):
         padded_pixel_values = []
 
         for sample_images in batched_images:
-            processed = self.image_processor(sample_images, return_tensors="pt", **output_kwargs["images_kwargs"])[
-                "pixel_values"
-            ]
+            image_kwargs = dict(output_kwargs["images_kwargs"])
+            image_kwargs.pop("return_tensors", None)
+            processed = self.image_processor(sample_images, return_tensors="pt", **image_kwargs)["pixel_values"]
             num_cameras = processed.shape[0]
 
             sample_mask = torch.zeros(max_num_cameras, dtype=torch.bool)
@@ -142,6 +143,14 @@ class PI0Processor(ProcessorMixin):
         return_data = {**tokenized, "pixel_values": pixel_values, "image_masks": image_masks}
         return BatchFeature(data=return_data, tensor_type=return_tensors)
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        vision_data = {}
+        if image_sizes is not None:
+            num_image_tokens = [self.image_seq_length] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
+
     @property
     def model_input_names(self):
         tokenizer_input_names = list(self.tokenizer.model_input_names)
@@ -160,6 +169,9 @@ class PI0Config(PaliGemmaConfig):
 
     PI0 is a robot action prediction model that combines a PaliGemma VLM backbone
     with an action expert Gemma model. It uses flow matching for continuous action generation.
+
+    This model inherits from [`PaliGemmaConfig`]. See the superclass documentation for more details.
+    Example checkpoint: [lerobot/pi0_base](https://huggingface.co/lerobot/pi0_base).
 
     Args:
         vision_config (`dict`, *optional*):
@@ -257,6 +269,7 @@ class PI0Config(PaliGemmaConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+        self.vocab_size = self.text_config.vocab_size
 
         self.chunk_size = chunk_size
         self.max_state_dim = max_state_dim
@@ -298,10 +311,16 @@ class PI0Output(ModelOutput):
         Flow matching MSE loss, returned when `actions` is provided.
     loss_per_sample (`torch.FloatTensor` of shape `(batch_size, chunk_size, max_action_dim)`, *optional*):
         Per-element MSE loss before reduction, returned when `actions` is provided.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Hidden states of the action expert suffix sequence when `output_hidden_states=True`.
+    attentions (`tuple(torch.FloatTensor)`, *optional*):
+        Attention maps of the action expert suffix sequence when `output_attentions=True`.
     """
 
     loss: torch.FloatTensor | None = None
     loss_per_sample: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 def create_sinusoidal_pos_embedding(
@@ -352,7 +371,9 @@ def compute_layer_complete(
     position_ids: torch.Tensor,
     language_model: nn.Module,
     expert_model: nn.Module,
-) -> list[torch.Tensor]:
+    output_attentions: bool = False,
+    prefix_length: int = 0,
+) -> tuple[list[torch.Tensor], torch.Tensor | None]:
     """Compute one merged attention layer across VLM language model and action expert."""
     models = [language_model, expert_model]
     query_states = []
@@ -386,7 +407,7 @@ def compute_layer_complete(
     query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
 
     vlm_layer = language_model.layers[layer_idx]
-    att_output, _ = eager_attention_forward(
+    att_output, attn_weights = eager_attention_forward(
         vlm_layer.self_attn,
         query_states,
         key_states,
@@ -421,7 +442,11 @@ def compute_layer_complete(
         outputs_embeds.append(hidden_states)
         start_pos = end_pos
 
-    return outputs_embeds
+    suffix_attentions = None
+    if output_attentions and attn_weights is not None:
+        suffix_attentions = attn_weights[:, :, prefix_length:, prefix_length:]
+
+    return outputs_embeds, suffix_attentions
 
 
 class PI0Model(PI0PreTrainedModel):
@@ -508,9 +533,16 @@ class PI0Model(PI0PreTrainedModel):
 class PI0ForConditionalGeneration(PI0PreTrainedModel):
     """PI0 model with action projection heads and flow matching."""
 
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(target_class=nn.Identity, layer_name="hidden_state_recorders"),
+        "attentions": OutputRecorder(target_class=nn.Identity, layer_name="attention_recorders"),
+    }
+    main_input_name = "pixel_values"
+
     def __init__(self, config: PI0Config):
         super().__init__(config)
         self.model = PI0Model(config)
+        self.vocab_size = config.vocab_size
 
         expert_hidden_size = config.expert_config.hidden_size
 
@@ -519,6 +551,10 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         self.state_proj = nn.Linear(config.max_state_dim, expert_hidden_size)
         self.action_time_mlp_in = nn.Linear(2 * expert_hidden_size, expert_hidden_size)
         self.action_time_mlp_out = nn.Linear(expert_hidden_size, expert_hidden_size)
+        self.hidden_state_recorders = nn.ModuleList(
+            [nn.Identity() for _ in range(config.text_config.num_hidden_layers)]
+        )
+        self.attention_recorders = nn.ModuleList([nn.Identity() for _ in range(config.text_config.num_hidden_layers)])
 
         self.post_init()
 
@@ -589,6 +625,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
 
         return embs, pad_masks
 
+    @capture_outputs
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -599,6 +636,10 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         image_masks: torch.BoolTensor | None = None,
         noise: torch.FloatTensor | None = None,
         timestep: torch.FloatTensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
     ) -> PI0Output:
         """Training forward pass with flow matching loss."""
         batch_size = input_ids.shape[0]
@@ -606,6 +647,13 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
 
         if actions is None:
             raise ValueError("actions must be provided for training. Use sample_actions for inference.")
+        del labels  # Unused; accepted for compatibility with generic testing utilities.
+        del return_dict  # Handled by `capture_outputs`.
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if noise is None:
             noise = torch.randn_like(actions)
@@ -648,13 +696,24 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             or_mask_function=or_masks(prefix_bidirectional, suffix_bidirectional),
         )
 
-        (_, suffix_out), _ = self.model(
-            attention_mask=attention_mask_4d,
-            position_ids=position_ids,
-            past_key_values=None,
-            inputs_embeds=[prefix_embs, suffix_embs],
-            use_cache=False,
-        )
+        inputs_embeds = [prefix_embs, suffix_embs]
+        num_layers = self.config.text_config.num_hidden_layers
+        for layer_idx in range(num_layers):
+            inputs_embeds, suffix_attn = compute_layer_complete(
+                layer_idx,
+                inputs_embeds,
+                attention_mask_4d,
+                position_ids,
+                language_model=self.model.language_model,
+                expert_model=self.model.expert,
+                output_attentions=output_attentions,
+                prefix_length=prefix_length,
+            )
+            inputs_embeds[1] = self.hidden_state_recorders[layer_idx](inputs_embeds[1])
+            if suffix_attn is not None:
+                _ = self.attention_recorders[layer_idx](suffix_attn)
+
+        suffix_out = self.model.expert.norm(inputs_embeds[1])
 
         suffix_out = suffix_out[:, -self.config.chunk_size :]
         predicted_velocity = self.action_out_proj(suffix_out)
@@ -739,7 +798,5 @@ __all__ = [
     "PI0PreTrainedModel",
     "PI0Model",
     "PI0ForConditionalGeneration",
-    "PI0MultiModalProjector",
     "PI0Processor",
-    "PI0ProcessorKwargs",
 ]

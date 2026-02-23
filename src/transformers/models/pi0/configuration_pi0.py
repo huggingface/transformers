@@ -29,6 +29,9 @@ class PI0Config(PreTrainedConfig):
     PI0 is a robot action prediction model that combines a PaliGemma VLM backbone
     with an action expert Gemma model. It uses flow matching for continuous action generation.
 
+    This model inherits from [`PaliGemmaConfig`]. See the superclass documentation for more details.
+    Example checkpoint: [lerobot/pi0_base](https://huggingface.co/lerobot/pi0_base).
+
     Args:
         vision_config (`dict`, *optional*):
             Configuration for the vision encoder (SiglipVisionModel).
@@ -164,6 +167,7 @@ class PI0Config(PreTrainedConfig):
         self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
         self.vision_config.projection_dim = projection_dim
         super().__init__(**kwargs)
+        self.vocab_size = self.text_config.vocab_size
 
         self.chunk_size = chunk_size
         self.max_state_dim = max_state_dim

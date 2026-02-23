@@ -22,7 +22,7 @@ import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 
@@ -109,9 +109,9 @@ class PI0Processor(ProcessorMixin):
         padded_pixel_values = []
 
         for sample_images in batched_images:
-            processed = self.image_processor(sample_images, return_tensors="pt", **output_kwargs["images_kwargs"])[
-                "pixel_values"
-            ]
+            image_kwargs = dict(output_kwargs["images_kwargs"])
+            image_kwargs.pop("return_tensors", None)
+            processed = self.image_processor(sample_images, return_tensors="pt", **image_kwargs)["pixel_values"]
             num_cameras = processed.shape[0]
 
             sample_mask = torch.zeros(max_num_cameras, dtype=torch.bool)
@@ -134,6 +134,14 @@ class PI0Processor(ProcessorMixin):
         return_data = {**tokenized, "pixel_values": pixel_values, "image_masks": image_masks}
         return BatchFeature(data=return_data, tensor_type=return_tensors)
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        vision_data = {}
+        if image_sizes is not None:
+            num_image_tokens = [self.image_seq_length] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
+
     @property
     def model_input_names(self):
         tokenizer_input_names = list(self.tokenizer.model_input_names)
@@ -146,4 +154,4 @@ class PI0Processor(ProcessorMixin):
         return names
 
 
-__all__ = ["PI0Processor", "PI0ProcessorKwargs"]
+__all__ = ["PI0Processor"]
