@@ -539,12 +539,13 @@ class GenerationMixin(ContinuousMixin):
             model_inputs["token_type_ids"] = token_type_ids
 
         # 3. Slice model inputs if it's an input that should have the same length as `input_ids`
-        for model_input_name in [position_ids_key, "cache_position", "token_type_ids"]:
-            model_input = model_inputs.get(model_input_name)
-            if model_input is not None and model_input.shape[-1] != sequence_length:
-                # Input can be 2D or 3D, and we always slice on `seq-length` (last dim)
-                model_input = model_input[..., -sequence_length:].clone(memory_format=torch.contiguous_format)
-                model_inputs[model_input_name] = model_input
+        if kwargs["use_cache"]:
+            for model_input_name in [position_ids_key, "cache_position", "token_type_ids"]:
+                model_input = model_inputs.get(model_input_name)
+                if model_input is not None:
+                    # Input can be 2D or 3D, and we always slice on `seq-length` (last dim)
+                    model_input = model_input[..., -sequence_length:].clone(memory_format=torch.contiguous_format)
+                    model_inputs[model_input_name] = model_input
 
         # 4. Create 4D attention mask is we are using a compilable cache (important for performant compiled forward
         # pass)
@@ -2729,7 +2730,7 @@ class GenerationMixin(ContinuousMixin):
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
-                next_sequence_length = 1 if model_kwargs.get("use_cache", True) else None
+                next_sequence_length = 1 if model_kwargs["use_cache"] else None
                 model_inputs = self.prepare_inputs_for_generation(
                     input_ids, next_sequence_length=next_sequence_length, **model_kwargs
                 )
@@ -3219,7 +3220,7 @@ class GenerationMixin(ContinuousMixin):
             if prefill_consumed:
                 # a. Forward current tokens, obtain the logits
                 flat_running_sequences = self._flatten_beam_dim(running_sequences[:, :, :cur_len])
-                next_sequence_length = 1 if model_kwargs.get("use_cache", True) else None
+                next_sequence_length = 1 if model_kwargs["use_cache"] else None
                 model_inputs = self.prepare_inputs_for_generation(
                     flat_running_sequences, next_sequence_length=next_sequence_length, **model_kwargs
                 )
