@@ -6,10 +6,15 @@ export PYTHONPATH = src
 check_dirs := examples tests src utils scripts benchmark benchmark_v2
 exclude_folders :=  ""
 
+ty_check_dirs := \
+	src/transformers/utils \
+	src/transformers/generation
+
 # Helper to find all Python files in directories (ty doesn't recursively scan directories)
 define get_py_files
 $(shell find $(1) -name "*.py" -type f 2>/dev/null)
 endef
+ty_py_files := $(foreach dir,$(ty_check_dirs),$(call get_py_files,$(dir)))
 
 
 # this runs all linting/formatting scripts, most notably ruff
@@ -18,14 +23,14 @@ style:
 	ruff format $(check_dirs) setup.py conftest.py --exclude $(exclude_folders)
 	python utils/custom_init_isort.py
 	python utils/sort_auto_mappings.py
-
+	ty check $(ty_py_files) --force-exclude --exclude '**/*_pb2*.py'
 
 # Check that the repo is in a good state (both style and consistency CI checks)
 # Note: each line is run in its own shell, and doing `-` before the command ignores the errors if any, continuing with next command
 check-repo:
 	ruff check $(check_dirs) setup.py conftest.py
 	ruff format --check $(check_dirs) setup.py conftest.py
-	ty check $(call get_py_files,src/transformers/utils) --force-exclude --exclude '**/*_pb2*.py'
+	ty check $(ty_py_files) --force-exclude --exclude '**/*_pb2*.py'
 	-python utils/custom_init_isort.py --check_only
 	-python utils/sort_auto_mappings.py --check_only
 	-python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
