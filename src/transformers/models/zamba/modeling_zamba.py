@@ -30,6 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -37,24 +38,8 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast,
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
+from ...utils.import_utils import resolve_internal_import
 from .configuration_zamba import ZambaConfig
-
-
-if is_mamba_ssm_available():
-    from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-else:
-    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
-
-is_fast_path_available = all(
-    (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
-)
 
 
 logger = logging.get_logger(__name__)
@@ -211,8 +196,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -358,6 +342,24 @@ class ZambaMambaMixer(nn.Module):
         self.A_log = nn.Parameter(torch.log(A).reshape(self.n_mamba_heads, self.mamba_head_dim, -1))
         self.D = nn.Parameter(torch.ones(self.n_mamba_heads, self.mamba_head_dim))
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=self.use_bias)
+
+        global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+
+        global mamba_ssm, selective_state_update, selective_scan_fn, mamba_inner_fn
+        mamba_ssm = lazy_load_kernel("mamba-ssm")
+        selective_state_update = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
+        )
+        selective_scan_fn = getattr(mamba_ssm, "selective_scan_fn", None)
+        mamba_inner_fn = getattr(mamba_ssm, "mamba_inner_fn", None)
+
+        global is_fast_path_available
+        is_fast_path_available = all(
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+        )
 
         if not is_fast_path_available:
             logger.warning_once(
@@ -557,6 +559,10 @@ class ZambaMambaMixer(nn.Module):
         return contextualized_states
 
     def forward(self, hidden_states, cache_params: ZambaHybridDynamicCache = None, attention_mask=None):
+        is_fast_path_available = all(
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+        )
+
         if self.use_fast_kernels:
             if not is_fast_path_available or "cuda" not in self.x_proj_weight.device.type:
                 raise ValueError(
@@ -919,7 +925,7 @@ class ZambaModel(ZambaPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

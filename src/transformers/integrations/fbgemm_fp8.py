@@ -310,12 +310,6 @@ def replace_with_fbgemm_fp8_linear(
         if new_module is None:
             continue
 
-        if hasattr(new_module, "input_scale_ub"):
-            new_module.input_scale_ub = torch.tensor(
-                [quantization_config.activation_scale_ub],
-                dtype=torch.float,
-            )
-
         model.set_submodule(module_name, new_module)
         has_been_replaced = True
 

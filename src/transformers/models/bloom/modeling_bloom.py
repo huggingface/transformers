@@ -274,9 +274,8 @@ class BloomAttention(nn.Module):
 
         # change view to [batch_size, num_heads, q_length, kv_length]
         attn_weights = attention_scores.view(batch_size, self.num_heads, q_length, -1)
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_layer.shape[-1]]
-            attn_weights = attn_weights + causal_mask
+        if attention_mask is not None:
+            attn_weights = attn_weights + attention_mask
 
         # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype
         attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_layer.dtype)
@@ -513,7 +512,7 @@ class BloomModel(BloomPreTrainedModel):
         alibi = self.build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

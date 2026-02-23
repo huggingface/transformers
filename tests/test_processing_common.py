@@ -1883,3 +1883,31 @@ class ProcessorTesterMixin:
         text_is_same = assistant_text == processor.decode(assistant_ids, clean_up_tokenization_spaces=True)
         ids_is_same = processor.tokenizer.encode(assistant_text, add_special_tokens=False), assistant_ids.tolist()
         self.assertTrue(text_is_same or ids_is_same)
+
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        processor = self.get_processor()
+
+        if not hasattr(processor, "_get_num_multimodal_tokens"):
+            self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
+
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+        image_inputs = []
+        for h, w in image_sizes:
+            image_inputs.append(np.random.randint(255, size=(h, w, 3), dtype=np.uint8))
+
+        text = [f"This is an image {getattr(self, 'image_token', '')}"] * len(image_inputs)
+        inputs = processor(
+            text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+        )
+
+        if "mm_token_type_ids" not in inputs:
+            self.skipTest("Processor doesn't support `mm_token_type_ids`")
+
+        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+        self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])

@@ -118,9 +118,8 @@ class GPTNeoSelfAttention(nn.Module):
         mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
         attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-            attn_weights = attn_weights + causal_mask
+        if attention_mask is not None:
+            attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
         attn_weights = attn_weights.to(value.dtype)
@@ -209,9 +208,6 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
 
         attn_dropout = self.config.attention_dropout if self.training else 0.0
 
-        if attention_mask is not None:  # no matter the length, we just slice it
-            attention_mask = attention_mask[:, :, :, : key.shape[-2]]
-
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in the correct dtype just to be sure everything works as expected.
@@ -220,7 +216,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
 
         device_type = query.device.type if query.device.type != "mps" else "cpu"
         if query.dtype == torch.float32:
-            if torch.is_autocast_enabled():
+            if torch.is_autocast_enabled(device_type):
                 target_dtype = torch.get_autocast_dtype(device_type)
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_is_quantized"):
@@ -465,7 +461,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -589,6 +585,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = transformer_outputs[0]
