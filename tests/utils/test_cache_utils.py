@@ -166,7 +166,6 @@ class CacheIntegrationTest(unittest.TestCase):
         self.assertIsInstance(gen_out.past_key_values, Cache)
         # Confirm that the output matches expectations
         decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
-        print(decoded)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
