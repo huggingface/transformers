@@ -45,6 +45,7 @@ class JinaEmbeddingsV3ModelTester:
         parent,
         batch_size=13,
         seq_length=7,
+        is_training=True,
         use_input_mask=True,
         use_token_type_ids=True,
         use_labels=True,
@@ -65,6 +66,7 @@ class JinaEmbeddingsV3ModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
+        self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
