@@ -170,3 +170,12 @@ class WhisperGenerationConfigLike(Protocol):
     """Protocol for Whisper-specific generation config fields accessed in generation internals."""
 
     no_timestamps_token_id: int
+
+
+class TypedDictSchema(Protocol):
+    """Protocol for TypedDict classes that expose their mutable keys."""
+
+    __mutable_keys__: set[str]
+
+
+RequestSchema: TypeAlias = type[TypedDictSchema]

@@ -23,18 +23,19 @@ import tempfile
 import threading
 import time
 import uuid
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Generator, Iterable, Set
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from io import BytesIO
 from threading import Thread
-from typing import TYPE_CHECKING, Annotated, Optional, TypedDict, Union
+from typing import TYPE_CHECKING, Annotated, Any, Optional, Union, cast
 
 import typer
 from huggingface_hub import scan_cache_dir
 from tokenizers.decoders import DecodeStream
 from tqdm import tqdm
 from tqdm.auto import tqdm as base_tqdm
+from typing_extensions import NotRequired
 
 import transformers
 from transformers import AutoTokenizer, BitsAndBytesConfig, GenerationConfig, PreTrainedTokenizerBase
@@ -52,6 +53,8 @@ from transformers.utils.import_utils import (
     is_vision_available,
 )
 
+from .._typing import RequestSchema
+from ..tokenization_utils_base import BatchEncoding
 
 if TYPE_CHECKING:
     from transformers import (
@@ -74,7 +77,7 @@ serve_dependencies_available = (
 )
 if serve_dependencies_available:
     import uvicorn
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, UploadFile
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse, StreamingResponse
     from openai.types.audio.transcription import Transcription
@@ -109,7 +112,29 @@ if serve_dependencies_available:
         ResponseTextDoneEvent,
     )
     from openai.types.responses.response_create_params import ResponseCreateParamsStreaming
+    from openai.types.responses.response_output_text import Annotation
     from pydantic import BaseModel, TypeAdapter, ValidationError
+
+    def make_response_output_text(text: str) -> ResponseOutputText:
+        return ResponseOutputText(
+            type="output_text",
+            text=text,
+            annotations=cast(list[Annotation], []),
+        )
+
+    def make_completed_response_output_message(
+        message_id: str, content: list[ResponseOutputText]
+    ) -> ResponseOutputMessage:
+        return ResponseOutputMessage.model_validate(
+            {
+                "id": message_id,
+                "type": "message",
+                "status": "completed",
+                "role": "assistant",
+                "content": content,
+                "annotations": [],
+            }
+        )
 
     # Expand OpenAI's request input types with an optional `generation_config` field
     class TransformersResponseCreateParamsStreaming(ResponseCreateParamsStreaming, total=False):
@@ -133,7 +158,7 @@ if serve_dependencies_available:
 
         file: bytes  # Overwritten -- pydantic isn't happy with `typing.IO[bytes]`, present in the original type
         generation_config: str
-        stream: bool = False
+        stream: NotRequired[bool]
 
     # Contrarily to OpenAI's output types, input types are `TypedDict`, which don't have built-in validation.
     response_validator = TypeAdapter(TransformersResponseCreateParamsStreaming)
@@ -230,6 +255,12 @@ class Modality(enum.Enum):
     VLM = "VLM"
     STT = "STT"
     TTS = "TTS"
+
+
+def require_batch_encoding(obj: object) -> BatchEncoding:
+    if not isinstance(obj, BatchEncoding):
+        raise TypeError("Expected BatchEncoding from `apply_chat_template` with `return_dict=True`")
+    return obj
 
 
 def create_generation_config_from_req(
@@ -664,6 +695,8 @@ class Serve:
         self.input_validation = input_validation
         self.force_model = force_model
         self.non_blocking = non_blocking
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._thread: threading.Thread | None = None
 
         # Continuous batching configuration arguments
         self.cb_block_size = cb_block_size
@@ -765,14 +798,20 @@ class Serve:
         async def audio_transcriptions(request: Request):
             # Parses the multipart/form-data request into the request format used by other endpoints
             async with request.form() as form:
+                file_field = form["file"]
+                if not isinstance(file_field, UploadFile):
+                    raise TypeError("Expected uploaded file")
+                model_field = form["model"]
+                if not isinstance(model_field, str):
+                    raise TypeError("Expected model name")
                 parsed_request = TransformersTranscriptionCreateParams(
-                    file=await form["file"].read(),
-                    model=form["model"],
+                    file=await file_field.read(),
+                    model=model_field,
                     # TODO: add other fields
                 )
                 logger.debug(
-                    f"Received file: {form['file'].filename}; MIME type: {form['file'].content_type}; "
-                    f"size: {form['file'].size / 1024:.2f} KiB"
+                    f"Received file: {file_field.filename}; MIME type: {file_field.content_type}; "
+                    f"size: {file_field.size / 1024:.2f} KiB"
                 )
             self.validate_transcription_request(request=parsed_request)
 
@@ -930,9 +969,9 @@ class Serve:
     def _validate_request(
         self,
         request: dict,
-        schema: TypedDict,
+        schema: RequestSchema,
         validator: "TypeAdapter",
-        unused_fields: set,
+        unused_fields: Set[str],
     ):
         """
         Validates the request against the schema, and checks for unexpected keys.
@@ -940,11 +979,11 @@ class Serve:
         Args:
             request (`dict`):
                 The request to validate.
-            schema (`TypedDict`):
-                The schema of the request to validate. It is a `TypedDict` definition.
+            schema (`RequestSchema`):
+                The `TypedDict` class used as the request schema.
             validator (`TypeAdapter`):
                 The validator to use to validate the request. Built from `schema`.
-            unused_fields (`set`):
+            unused_fields (`Set[str]`):
                 Fields accepted by `schema`, but not used in `transformers serve`.
 
         Raises:
@@ -1080,7 +1119,7 @@ class Serve:
 
     @staticmethod
     @lru_cache
-    def get_gen_models(cache_dir: str | None = None) -> list[dict[str, any]]:
+    def get_gen_models(cache_dir: str | None = None) -> list[dict[str, Any]]:
         """
         List LLMs and VLMs in the cache.
         """
@@ -1198,19 +1237,25 @@ class Serve:
                 self.running_continuous_batching_manager.logit_processor = LogitsProcessorList()
                 self.running_continuous_batching_manager.start()
 
+        cb_manager = self.running_continuous_batching_manager
+        if cb_manager is None:
+            raise RuntimeError("Continuous batching manager failed to initialize")
+
         # TODO (Joao, Lysandre): this should also work with tool support
         modality = self.get_model_modality(model, processor=processor)
         processor_inputs = self.get_processor_inputs_from_inbound_messages(req["messages"], modality)
 
-        inputs = processor.apply_chat_template(
-            processor_inputs,
-            add_generation_prompt=True,
-            tools=req.get("tools"),
-            return_tensors="pt",
-            return_dict=True,
-            tokenize=True,
+        chat_inputs = require_batch_encoding(
+            processor.apply_chat_template(
+                processor_inputs,
+                add_generation_prompt=True,
+                tools=req.get("tools"),
+                return_tensors="pt",
+                return_dict=True,
+                tokenize=True,
+            )
         )
-        inputs = inputs["input_ids"][0].to(model.device)
+        inputs = chat_inputs.to(model.device)["input_ids"][0]
 
         def stream_chat_completion(request_id, decode_stream):
             from ..generation.continuous_batching import RequestStatus
@@ -1221,7 +1266,7 @@ class Serve:
                 yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
 
                 n_tokens_generated = 0
-                for result in self.running_continuous_batching_manager.request_id_iter(request_id):
+                for result in cb_manager.request_id_iter(request_id):
                     n_tokens_generated += 1
 
                     # Always yield the token content (even for the final FINISHED token)
@@ -1257,17 +1302,16 @@ class Serve:
 
             except Exception as e:
                 logger.error(str(e))
-                self.running_continuous_batching_manager.cancel_request(request_id)
+                cb_manager.cancel_request(request_id)
                 yield f'data: {{"error": "{str(e)}"}}'
 
         def buffer_chat_completion(_request_id):
             result = None
-            while self.running_continuous_batching_manager.is_running() and result is None:
-                result = self.running_continuous_batching_manager.get_result(request_id=_request_id, timeout=1)
+            while cb_manager.is_running() and result is None:
+                result = cb_manager.get_result(request_id=_request_id, timeout=1)
 
             if result is None:
                 raise RuntimeError(f"Request {_request_id} failed: generation loop stopped before producing a result.")
-
             content = tokenizer.decode(result.generated_tokens)
 
             chat_completion_result = ChatCompletion(
@@ -1297,7 +1341,7 @@ class Serve:
                     yield self.chunk_to_sse_element(_chunk)
                     await asyncio.sleep(0)
             except asyncio.CancelledError:
-                self.running_continuous_batching_manager.cancel_request(_request_id)
+                cb_manager.cancel_request(_request_id)
                 logger.warning(f"Request {_request_id} was cancelled.")
 
         def cancellation_wrapper_buffer(_request_id):
@@ -1305,14 +1349,15 @@ class Serve:
             try:
                 return buffer_chat_completion(_request_id)
             except asyncio.CancelledError:
-                self.running_continuous_batching_manager.cancel_request(_request_id)
+                cb_manager.cancel_request(_request_id)
                 logger.warning(f"Request {_request_id} was cancelled.")
 
-        request_id = self.running_continuous_batching_manager.add_request(
-            inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens, streaming=req.get("stream")
+        stream = req.get("stream", False)
+        request_id = cb_manager.add_request(
+            inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens, streaming=stream
         )
 
-        if req.get("stream"):
+        if stream:
             return StreamingResponse(cancellation_wrapper_stream(request_id), media_type="text/event-stream")
         else:
             chunk = cancellation_wrapper_buffer(request_id)
@@ -1428,13 +1473,15 @@ class Serve:
         # 2. force generation to pick from that tool's arguments
         # ====== END OF TOOL PREPROCESSING LOGIC ======
 
-        inputs = processor.apply_chat_template(
-            processor_inputs,
-            add_generation_prompt=True,
-            tools=req.get("tools"),
-            return_tensors="pt",
-            return_dict=True,
-            tokenize=True,
+        inputs = require_batch_encoding(
+            processor.apply_chat_template(
+                processor_inputs,
+                add_generation_prompt=True,
+                tools=req.get("tools"),
+                return_tensors="pt",
+                return_dict=True,
+                tokenize=True,
+            )
         )
         inputs = inputs.to(model.device)
         request_id = req.get("request_id", "req_0")
@@ -1451,8 +1498,11 @@ class Serve:
         )
 
         if self.is_continuation(req) and not must_discard_cache:
+            if self.last_kv_cache is None:
+                raise RuntimeError("Expected last_kv_cache for continuation request")
             seq_len = self.last_kv_cache.get_seq_length()
-            if inputs["input_ids"].shape[-1] > seq_len:
+            input_ids = inputs["input_ids"]
+            if input_ids.shape[-1] > seq_len:
                 last_kv_cache = self.last_kv_cache
             else:
                 last_kv_cache = None
@@ -1616,7 +1666,8 @@ class Serve:
             finally:
                 thread.join()
 
-        if req.get("stream"):
+        stream = req.get("stream", False)
+        if stream:
             return StreamingResponse(
                 map(self.chunk_to_sse_element, stream_chat_completion(generation_streamer, request_id)),
                 media_type="text/event-stream",
@@ -1692,8 +1743,10 @@ class Serve:
         else:
             raise TypeError("inputs should be a list, dict, or str")
 
-        inputs = processor.apply_chat_template(inputs, tokenize=True, add_generation_prompt=True, return_tensors="pt")
-        inputs = inputs.to(model.device)
+        chat_inputs = processor.apply_chat_template(inputs, tokenize=True, add_generation_prompt=True, return_tensors="pt")
+        if not hasattr(chat_inputs, "to"):
+            raise TypeError("Expected tensor-like output from apply_chat_template")
+        inputs = chat_inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
         # Temporary hack for GPT-OSS 1: don't filter special tokens
@@ -1710,6 +1763,8 @@ class Serve:
 
         last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
+            if self.last_kv_cache is None:
+                raise RuntimeError("Expected last_kv_cache for continuation request")
             seq_len = self.last_kv_cache.get_seq_length()
             if inputs.shape[-1] > seq_len:
                 last_kv_cache = self.last_kv_cache
@@ -1810,7 +1865,7 @@ class Serve:
                     sequence_number=sequence_number,
                     output_index=output_index,
                     content_index=content_index,
-                    part=ResponseOutputText(type="output_text", text="", annotations=[]),
+                    part=make_response_output_text(""),
                 )
                 sequence_number += 1
                 yield self.chunk_to_sse_element(response_content_part_added)
@@ -1876,7 +1931,7 @@ class Serve:
                     sequence_number=sequence_number,
                     output_index=output_index,
                     content_index=content_index,
-                    part=ResponseOutputText(type="output_text", text=response_output_text_done.text, annotations=[]),
+                    part=make_response_output_text(response_output_text_done.text),
                 )
                 sequence_number += 1
                 content_index += 1
@@ -1887,13 +1942,9 @@ class Serve:
                     type="response.output_item.done",
                     sequence_number=sequence_number,
                     output_index=output_index,
-                    item=ResponseOutputMessage(
-                        id=f"msg_{request_id}",
-                        type="message",
-                        status="completed",
-                        role="assistant",
+                    item=make_completed_response_output_message(
+                        message_id=f"msg_{request_id}",
                         content=[response_content_part_done.part],
-                        annotations=[],
                     ),
                 )
                 sequence_number += 1
@@ -1996,10 +2047,10 @@ class Serve:
         else:
             raise ValueError("inputs should be a list, dict, or str")
 
-        inputs = processor.apply_chat_template(
-            inputs, add_generation_prompt=True, return_tensors="pt", return_dict=True
-        )["input_ids"]
-        inputs = inputs.to(model.device)
+        chat_result = require_batch_encoding(
+            processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt", return_dict=True)
+        )
+        input_ids = chat_result.to(model.device)["input_ids"]
         request_id = req.get("previous_response_id", "req_0")
 
         # Temporary hack for GPTOSS 1: don't filter special tokens
@@ -2011,13 +2062,15 @@ class Serve:
 
         last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
+            if self.last_kv_cache is None:
+                raise RuntimeError("Expected last_kv_cache for continuation request")
             seq_len = self.last_kv_cache.get_seq_length()
-            if inputs.shape[-1] > seq_len:
+            if input_ids.shape[-1] > seq_len:
                 last_kv_cache = self.last_kv_cache
 
         generate_output = model.generate(
-            inputs=inputs,
-            attention_mask=torch_ones_like(inputs),
+            inputs=input_ids,
+            attention_mask=torch_ones_like(input_ids),
             generation_config=generation_config,
             return_dict_in_generate=True,
             past_key_values=last_kv_cache,
@@ -2029,13 +2082,9 @@ class Serve:
         full_text = processor.batch_decode(generate_output.sequences, skip_special_tokens=skip_special_tokens)[0]
 
         created_at = time.time()
-        response_output_item = ResponseOutputMessage(
-            id=f"msg_{request_id}",
-            type="message",
-            status="completed",
-            role="assistant",
-            content=[ResponseOutputText(type="output_text", text=full_text, annotations=[])],
-            annotations=[],
+        response_output_item = make_completed_response_output_message(
+            message_id=f"msg_{request_id}",
+            content=[make_response_output_text(full_text)],
         )
         response_completed = Response(
             id=f"resp_{request_id}",
@@ -2072,7 +2121,9 @@ class Serve:
         audio_model, audio_processor = self.load_audio_model_and_processor(model_id_and_revision)
 
         generation_streamer = TextIteratorStreamer(
-            audio_processor.tokenizer, skip_special_tokens=True, skip_prompt=True
+            audio_processor.tokenizer,
+            skip_special_tokens=True,
+            skip_prompt=True,
         )
         generation_config = create_generation_config_from_req(
             req, model_generation_config=audio_model.generation_config

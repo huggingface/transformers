@@ -19,7 +19,7 @@ import textwrap
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import typer
 
@@ -57,10 +57,11 @@ if is_libcst_available():
                 body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])]
             )
             if not self.is_in_class and m.matches(node, simple_top_level_assign_structure):
-                assigned_variable = node.body[0].targets[0].target.value
+                stmt = cast(cst.Assign, node.body[0])
+                assigned_variable = cast(cst.Name, stmt.targets[0].target).value
                 if assigned_variable == "__all__":
-                    elements = node.body[0].value.elements
-                    self.public_classes = [element.value.value for element in elements]
+                    elements = cast(cst.Tuple, stmt.value).elements
+                    self.public_classes = [cast(cst.SimpleString, element.value).value for element in elements]
 
 
 CURRENT_YEAR = date.today().year
@@ -316,7 +317,10 @@ def insert_model_in_doc_toc(
     with open(toc_file, "r") as f:
         content = f.read()
 
-    old_model_toc = re.search(rf"- local: model_doc/{old_lowercase_name}\n {{8}}title: .*?\n", content).group(0)
+    old_model_toc_match = re.search(rf"- local: model_doc/{old_lowercase_name}\n {{8}}title: .*?\n", content)
+    if old_model_toc_match is None:
+        raise ValueError(f"Could not find toc entry for {old_lowercase_name}")
+    old_model_toc = old_model_toc_match.group(0)
     new_toc = f"      - local: model_doc/{new_lowercase_name}\n        title: {new_model_paper_name}\n"
     add_content_to_file(
         repo_path / "docs" / "source" / "en" / "_toctree.yml", new_content=new_toc, add_after=old_model_toc
@@ -392,7 +396,7 @@ def find_modular_structure(
             The new cased model name.
     """
     all_classes, public_classes = find_all_classes_from_file(module_name)
-    import_location = ".".join(module_name.parts[-2:]).replace(".py", "")
+    import_location = ".".join(Path(module_name).parts[-2:]).replace(".py", "")
     old_cased_name = old_model_infos.camelcase_name
     imports = f"from ..{import_location} import {', '.join(class_ for class_ in all_classes)}"
     modular_classes = "\n\n".join(

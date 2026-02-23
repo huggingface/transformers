@@ -580,6 +580,14 @@ class ProcessorMixin(PushToHubMixin):
     _auto_class = None
     valid_processor_kwargs = ProcessingKwargs
 
+    # Dynamically set sub-processor attributes. Not every processor has all of these;
+    # they are populated via setattr in __init__ based on each subclass's `attributes`.
+    tokenizer: Any
+    feature_extractor: Any
+    image_processor: Any
+    video_processor: Any
+    chat_template: str | dict[str, str] | None
+
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
         # First, extract chat template from kwargs. It can never be a positional arg

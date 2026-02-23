@@ -29,11 +29,12 @@ from collections import OrderedDict, UserDict
 from collections.abc import Callable, Collection, Mapping, Sequence, Sized
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple, Union
+from typing import TYPE_CHECKING, Any, Generic, NamedTuple, Union, overload
 
 import numpy as np
 from huggingface_hub import create_repo, is_offline_mode, list_repo_files
 from packaging import version
+from typing_extensions import TypeVar
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
@@ -188,7 +189,10 @@ class TokenSpan(NamedTuple):
     end: int
 
 
-class BatchEncoding(UserDict):
+_V = TypeVar("_V", default=Any)
+
+
+class BatchEncoding(UserDict, Generic[_V]):
     """
     Holds the output of the [`~tokenization_utils_base.PreTrainedTokenizerBase.__call__`],
     [`~tokenization_utils_base.PreTrainedTokenizerBase.encode_plus`] and
@@ -248,7 +252,16 @@ class BatchEncoding(UserDict):
         """
         return self._n_sequences
 
-    def __getitem__(self, item: int | str) -> Any | EncodingFast:
+    @overload
+    def __getitem__(self, item: str) -> _V: ...
+
+    @overload
+    def __getitem__(self, item: int) -> EncodingFast: ...
+
+    @overload
+    def __getitem__(self, item: slice) -> dict[str, _V]: ...
+
+    def __getitem__(self, item: int | str | slice) -> _V | EncodingFast | dict[str, _V]:
         """
         If the key is a string, returns the value of the dict associated to `key` ('input_ids', 'attention_mask',
         etc.).
@@ -753,7 +766,7 @@ class BatchEncoding(UserDict):
 
         return self
 
-    def to(self, device: str | torch.device, *, non_blocking: bool = False) -> BatchEncoding:
+    def to(self, device: str | torch.device, *, non_blocking: bool = False) -> BatchEncoding[torch.Tensor]:
         """
         Send all values to device by calling `v.to(device, non_blocking=non_blocking)` (PyTorch only).
 
@@ -1291,7 +1304,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         if key not in self.__dict__:
             raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
-        return super().__getattr__(key)
+        return self.__dict__[key]
 
     def get_special_tokens_mask(
         self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
@@ -2003,7 +2016,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
@@ -2628,6 +2641,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         ):
             # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
+
+        if isinstance(encoded_inputs, (list, tuple)):
+            raise TypeError("encoded_inputs should be a mapping or a list of mappings")
 
         # The model's main input name, usually `input_ids`, has been passed for padding
         if self.model_input_names[0] not in encoded_inputs:
