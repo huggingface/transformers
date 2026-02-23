@@ -369,10 +369,16 @@ class ImageProcessingMixin(PushToHubMixin):
         image_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
         image_processor = cls(**image_processor_dict)
 
-        # Remove kwargs that are used to initialize the image processor attributes
-        for key in list(kwargs):
-            if hasattr(image_processor, key):
-                kwargs.pop(key)
+        # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)
+        to_remove = []
+        for key, value in kwargs.items():
+            # Set on instance if attribute exists and not in valid_kwargs
+            if hasattr(image_processor, key) and key not in cls.valid_kwargs.__annotations__:
+                setattr(image_processor, key, value)
+                to_remove.append(key)
+        # Don't return consumed kwargs as unused when return_unused_kwargs=True
+        for key in to_remove:
+            kwargs.pop(key, None)
 
         logger.info(f"Image processor {image_processor}")
         if return_unused_kwargs:
