@@ -219,7 +219,7 @@ class CsmGenerationMixin(GenerationMixin):
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
-                next_sequence_length = 1 if model_kwargs.get("use_cache", True) else None
+                next_sequence_length = 1 if model_kwargs["use_cache"] else None
                 model_inputs = self.prepare_inputs_for_generation(
                     input_ids, next_sequence_length=next_sequence_length, **model_kwargs
                 )
