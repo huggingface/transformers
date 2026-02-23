@@ -586,6 +586,7 @@ class GenerationMixin(ContinuousMixin):
 
         # 6. Remove unexpected `generate` inputs (TODO @joao: fix trainer and examples)
         model_inputs.pop("labels", None)
+        model_inputs.pop("next_sequence_length", None)  # if the method is overriden, usually it becomes a kwarg
 
         return model_inputs
 
@@ -3737,11 +3738,11 @@ class GenerationMixin(ContinuousMixin):
         # FULL sequence (because otherwise we may lose some early padding tokens information). So slice inputs
         # according to that if needed
         next_sequence_length = None
+        inputs_embeds = model_kwargs.get("inputs_embeds")
+        current_input_length = input_ids.shape[1] if inputs_embeds is None else inputs_embeds.shape[1]
         if (cache := model_kwargs.get("past_key_values")) is not None:
             attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
             attention_mask = model_kwargs.get(attention_mask_key)
-            inputs_embeds = model_kwargs.get("inputs_embeds")
-            current_input_length = input_ids.shape[1] if inputs_embeds is None else inputs_embeds.shape[1]
             # In this case we need to slice - if it's smaller than the mask, only the new inputs were passed -> no need to do anything
             if attention_mask is not None and current_input_length == attention_mask.shape[1]:
                 past_length = cache.get_seq_length()
@@ -3750,7 +3751,9 @@ class GenerationMixin(ContinuousMixin):
 
         # Usual prefill
         if generation_config.prefill_chunk_size is None:
-            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+            # The cache is already taken into account in `_get_initial_cache_position`, so the length is only the new tokens if we slice
+            effective_input_length = next_sequence_length if next_sequence_length is not None else current_input_length
+            model_kwargs = self._get_initial_cache_position(effective_input_length, input_ids.device, model_kwargs)
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids,
                 next_sequence_length=next_sequence_length,
@@ -3778,11 +3781,14 @@ class GenerationMixin(ContinuousMixin):
             )
 
             attention_mask = model_kwargs.pop("attention_mask", None)
+            position_ids = model_kwargs.pop("position_ids", None)
             past_length = 0
             for input_chunk in input_chunks:
                 current_length = past_length + input_chunk.shape[-1]
                 if attention_mask is not None:
                     model_kwargs["attention_mask"] = attention_mask[:, :current_length]
+                if position_ids is not None:
+                    model_kwargs["position_ids"] = position_ids[:, past_length:current_length]
                 model_kwargs["cache_position"] = torch.arange(
                     past_length, current_length, dtype=torch.long, device=input_chunk.device
                 )
@@ -3798,7 +3804,7 @@ class GenerationMixin(ContinuousMixin):
             model_kwargs["cache_position"] = torch.arange(
                 input_ids.shape[1], dtype=torch.long, device=input_ids.device
             )
-            model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(input_ids, model_kwargs)
+            model_kwargs["position_ids"] = position_ids
 
             # Latest outputs contain next token logits
             return outputs
