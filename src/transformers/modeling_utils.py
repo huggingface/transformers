@@ -4647,7 +4647,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         ):
             return module.get_extra_state()
 
-        raise AttributeError(f"`{target}` is neither a parameter, buffer, nor extra state.")
+        def __recursive_getattr(object, attribute, *args):
+            """Recurse through a parameter name that is '.' seperated to get the attribute"""
+            def __getattr(object, attribute):
+                return getattr(object, attribute, *args)
+            return functools.reduce(__getattr, [object] + attribute.split('.'))
+
+        try:
+            # get the actual tensor parameter from a possible nested list
+            return __recursive_getattr(module, param_name)
+        except AttributeError:
+            raise AttributeError(f"`{target}` is neither a parameter, buffer, nor extra state.")
 
     def named_non_persistent_buffers(
         self, recurse: bool = True, remove_duplicate: bool = True

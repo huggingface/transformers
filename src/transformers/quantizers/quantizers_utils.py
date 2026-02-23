@@ -12,14 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import Any
+from torch.nn import Module
 
-
-def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
-    if "." in tensor_name:
-        module_name, tensor_name = tensor_name.rsplit(".", 1)
-        module = module.get_submodule(module_name)
-    return module, tensor_name
+def get_module_from_name(module: Module, tensor_name: str) -> tuple[Module, str]:
+    """Split the tensor name into the module its from and the name itself."""
+    possible_modules = tensor_name.split(".")
+    current_module = module
+    
+    # Iterate through the list of possible modules,
+    # checking that the next possible sub-module is an attribute of the current module
+    for i, part in enumerate(possible_modules):
+        # Check if the next segment exists and is a Module
+        next_attribute = getattr(current_module, part, None)
+        
+        if isinstance(next_attribute, Module):
+            current_module = next_attribute
+        else:
+            # We hit a non-module (Parameter, Buffer, or nested attribute)
+            # Everything from this point forward is the parameter name
+            param_name = ".".join(possible_modules[i:])
+            return current_module, param_name
+    
+    return current_module, ""
 
 
 def should_convert_module(full_name, patterns: list[str] | None = None):
