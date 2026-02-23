@@ -450,7 +450,8 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    additional_model_inputs = ["pixel_values"]  # NEW: keep pixel_values in sdpa tests
+    additional_model_inputs = ["pixel_values"]
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = OwlViTModelTester(self)
