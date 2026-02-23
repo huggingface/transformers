@@ -539,15 +539,12 @@ class GenerationMixin(ContinuousMixin):
             model_inputs["token_type_ids"] = token_type_ids
 
         # 3. Slice model inputs if it's an input that should have the same length as `input_ids`
-        # We check `use_cache` below because some stateful models (like `recurrent_gemma`) expect input slicing if
-        # their caching mechanism is used. To define `use_cache`, the user-defined argument takes precedence.
-        if past_key_values is not None or kwargs["use_cache"]:
-            for model_input_name in [position_ids_key, "cache_position", "token_type_ids"]:
-                model_input = model_inputs.get(model_input_name)
-                if model_input is not None:
-                    # Input can be 2D or 3D, and we always slice on `seq-length` (last dim)
-                    model_input = model_input[..., -sequence_length:].clone(memory_format=torch.contiguous_format)
-                    model_inputs[model_input_name] = model_input
+        for model_input_name in [position_ids_key, "cache_position", "token_type_ids"]:
+            model_input = model_inputs.get(model_input_name)
+            if model_input is not None and model_input.shape[-1] != sequence_length:
+                # Input can be 2D or 3D, and we always slice on `seq-length` (last dim)
+                model_input = model_input[..., -sequence_length:].clone(memory_format=torch.contiguous_format)
+                model_inputs[model_input_name] = model_input
 
         # 4. Create 4D attention mask is we are using a compilable cache (important for performant compiled forward
         # pass)
