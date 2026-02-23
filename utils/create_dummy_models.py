@@ -1138,6 +1138,7 @@ def build(config_class, models_to_create, output_dir):
     try:
         tiny_config = get_tiny_config(config_class)
     except Exception as e:
+        # breakpoint()
         error = f"Failed to get tiny config for {config_class.__name__}: {e}"
         trace = traceback.format_exc()
         fill_result_with_error(result, error, trace, models_to_create)

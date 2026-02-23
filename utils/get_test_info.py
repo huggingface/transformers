@@ -114,8 +114,17 @@ def get_model_classes(test_file):
     """Get all model classes that appear in `all_model_classes` attributes in a model test file."""
     test_classes = get_test_classes(test_file)
     model_classes = set()
+    # breakpoint()
     for test_class in test_classes:
-        model_classes.update(test_class.all_model_classes)
+
+        all_model_classes = test_class.all_model_classes
+        if all_model_classes is None:
+            o = test_class()
+            o.setUp()
+            # breakpoint()
+            all_model_classes = o.all_model_classes
+
+        model_classes.update(all_model_classes)
 
     # sort with class names
     return sorted(model_classes, key=lambda x: x.__name__)
@@ -141,8 +150,16 @@ def get_test_classes_for_model(test_file, model_class):
     test_classes = get_test_classes(test_file)
 
     target_test_classes = []
+
     for test_class in test_classes:
-        if model_class in test_class.all_model_classes:
+
+        all_model_classes = test_class.all_model_classes
+        if all_model_classes is None:
+            o = test_class()
+            o.setUp()
+            all_model_classes = o.all_model_classes
+
+        if model_class in all_model_classes:
             target_test_classes.append(test_class)
 
     # sort with class names
