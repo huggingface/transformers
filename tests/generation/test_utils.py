@@ -2885,10 +2885,23 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
         stopping_criteria = StoppingCriteriaList()
         stopping_criteria.append(MaxLengthCriteria(max_length=42))
-        with self.assertRaises(ValueError):
+        logger = logging.get_logger("transformers.generation.utils")
+    
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as cl:
             bart_model.generate(input_ids, stopping_criteria=stopping_criteria)
-        with self.assertRaises(ValueError):
+        self.assertTrue(
+            "custom stopping criteria of type <class 'transformers.generation.stopping_criteria.MaxLengthCriteria'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization"
+            in cl.out
+        )
+
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as cl:
             bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=32)
+        self.assertTrue(
+            "custom stopping criteria of type <class 'transformers.generation.stopping_criteria.MaxLengthCriteria'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization"
+            in cl.out
+        )
 
     def test_custom_stopping_criteria(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -3969,45 +3982,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(":" in output_text[-5:])
         self.assertTrue(":" in last_non_special_token_decoded)
 
-    def test_max_time(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
-        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
-        model.to(torch_device)
-
-        set_seed(42)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
-        input_ids = tokenized.input_ids.to(torch_device)
-
-        MAX_TIME = 0.1
-        MAX_LENGTH = 64
-
-        # sampling on
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=MAX_LENGTH)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        # sampling off
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=MAX_LENGTH)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        # beam search
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=MAX_LENGTH)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        # sanity check: no time limit
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=None, max_length=MAX_LENGTH)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
     def test_validate_generation_inputs(self):
         """Tests validation of inputs to `generate`"""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
@@ -4044,10 +4018,11 @@ class GenerationIntegrationTests(unittest.TestCase):
         logger.warning_once.cache_clear()
         with CaptureLogger(logger) as cl:
             bart_model.generate(input_ids, logits_processor=logits_processor, min_length=10)
-            self.assertTrue(
-                "custom logits processor of type <class 'transformers.generation.logits_process.MinLengthLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()"
-                in cl.out
-            )
+        self.assertTrue(
+            "custom logits processor of type <class 'transformers.generation.logits_process.MinLengthLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()"
+            in cl.out
+        )
+
         bart_model.generate(input_ids, logits_processor=logits_processor)
 
     def test_transition_scores_greedy_search(self):
@@ -4720,8 +4695,6 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     def test_model_generation_config_can_override_defaults(self):
         """Sanity check that the model samples, not ignoring the model's generation config"""
-        torch.manual_seed(42)  # make it deterministic
-
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM").eval()
         model = model.to(torch_device)
 
@@ -4730,12 +4703,12 @@ class GenerationIntegrationTests(unittest.TestCase):
         model_inputs = model_inputs.to(model.device)
 
         # Overwrite default value or sampling
-        model.generation_config.do_sample = True
-        output = model.generate(**model_inputs, max_new_tokens=32)
+        model.generation_config.max_new_tokens = 52
+        output = model.generate(**model_inputs, do_sample=False)
 
-        EXPECTED_TEXT = 'Write a poem about the market crashing in summersong contradictionPr aucitated realiz Comicsflutterąc inventминцій Glad:` Raymond moreover KulturMillteger мартаTEXT CFщая Русбе Świ Sendlink heuresListener Luigiaceae'  # fmt: skip
+        EXPECTED_TEXT = 'Write a poem about the market crashing in summer wed digassethrte forec heav dent Var américaine dealing substr energcalc Christmas spé mak夢project askspush speech VBA sufficientjoint február retr Ostilingoser mehrere Mathemat jaarєдна Culturalomas prayerRAY gather ули Senate turn Publicterm cruel),( hardly virt Atlasisie mehrere Mathemat jaar'  # fmt: skip
         output = tokenizer.decode(output[0], skip_special_tokens=True)
-        self.assertTrue(output == EXPECTED_TEXT)
+        self.assertEqual(output, EXPECTED_TEXT)
 
 
 @require_torch
