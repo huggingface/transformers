@@ -966,7 +966,7 @@ class TrainingArguments:
         default="steps",
         metadata={"help": "The logging strategy to adopt during training. Options: 'no', 'epoch', 'steps'."},
     )
-    logging_steps: float = field(
+    logging_steps: int | float = field(
         default=500,
         metadata={
             "help": (
