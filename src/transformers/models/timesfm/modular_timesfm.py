@@ -31,7 +31,7 @@ from ...utils import auto_docstring, can_return_tuple, logging
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..phi4_multimodal.modeling_phi4_multimodal import simple_eager_attention_forward
 from .configuration_timesfm import TimesFmConfig
-from .xreg_utils import BatchedInContextXRegLinear, _normalize
+from .xreg_utils import BatchedInContextXRegLinear, normalize
 
 
 logger = logging.get_logger(__name__)
@@ -1026,7 +1026,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             # Normalize if requested
             per_instance_stats = None
             if normalize_xreg_target_per_input:
-                targets, per_instance_stats = _normalize(targets)
+                targets, per_instance_stats = normalize(targets)
 
         else:  # "xreg + timesfm"
             # First fit XReg on targets, then forecast residuals with TimesFM
@@ -1035,7 +1035,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             # Normalize if requested
             per_instance_stats = None
             if normalize_xreg_target_per_input:
-                targets, per_instance_stats = _normalize(targets)
+                targets, per_instance_stats = normalize(targets)
 
         # Fit XReg model
         xreg_model = BatchedInContextXRegLinear(

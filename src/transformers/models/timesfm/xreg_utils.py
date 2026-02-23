@@ -15,15 +15,14 @@
 
 import itertools
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 import torch
 from sklearn import preprocessing
 
 
-Category = int | str
-XRegMode = Literal["timesfm + xreg", "xreg + timesfm"]
+_Category = int | str
 
 _TOL = 1e-6
 
@@ -38,15 +37,15 @@ def _repeat(elements: Sequence[Any], counts: Sequence[int]) -> np.ndarray:
     return np.array(list(itertools.chain.from_iterable(map(itertools.repeat, elements, counts))))
 
 
-def _normalize(targets: list[np.ndarray], eps: float = _TOL) -> tuple[list[np.ndarray], list[tuple[float, float]]]:
+def normalize(targets: list[np.ndarray], eps: float = _TOL) -> tuple[list[np.ndarray], list[tuple[float, float]]]:
     """Normalize each target series independently.
 
     Args:
-        targets: List of target arrays to normalize
-        eps: Small value for numerical stability
+        targets: List of target arrays to normalize.
+        eps: Small value for numerical stability.
 
     Returns:
-        Normalized targets and their statistics (mean, std) for denormalization
+        Normalized targets and their statistics (mean, std) for denormalization.
     """
     normalized = []
     stats = []
@@ -63,38 +62,11 @@ def _normalize(targets: list[np.ndarray], eps: float = _TOL) -> tuple[list[np.nd
     return normalized, stats
 
 
-def _renormalize(predictions: list[np.ndarray], stats: list[tuple[float, float]]) -> list[np.ndarray]:
-    """Denormalize predictions using saved statistics.
-
-    Args:
-        predictions: List of normalized predictions
-        stats: List of (mean, std) tuples from normalization
-
-    Returns:
-        Denormalized predictions
-    """
-    denormalized = []
-    for pred, (mean, std) in zip(predictions, stats):
-        denormalized.append(pred * std + mean)
-    return denormalized
-
-
-class BatchedInContextXRegBase:
+class _BatchedInContextXRegBase:
     """Base class for in-context regression with covariates.
 
-    This class handles the formatting and validation of covariates for
-    batched in-context regression used with TimesFM.
-
-    Attributes:
-        targets: List of target values for regression
-        train_lens: List of context lengths for each series
-        test_lens: List of horizon lengths for each series
-        train_dynamic_numerical_covariates: Dict of dynamic numerical covariates for context
-        train_dynamic_categorical_covariates: Dict of dynamic categorical covariates for context
-        test_dynamic_numerical_covariates: Dict of dynamic numerical covariates for horizon
-        test_dynamic_categorical_covariates: Dict of dynamic categorical covariates for horizon
-        static_numerical_covariates: Dict of static numerical covariates per series
-        static_categorical_covariates: Dict of static categorical covariates per series
+    Handles the formatting and validation of covariates for batched
+    in-context regression used with TimesFM.
     """
 
     def __init__(
@@ -103,30 +75,16 @@ class BatchedInContextXRegBase:
         train_lens: Sequence[int],
         test_lens: Sequence[int],
         train_dynamic_numerical_covariates: Mapping[str, Sequence[Sequence[float]]] | None = None,
-        train_dynamic_categorical_covariates: Mapping[str, Sequence[Sequence[Category]]] | None = None,
+        train_dynamic_categorical_covariates: Mapping[str, Sequence[Sequence[_Category]]] | None = None,
         test_dynamic_numerical_covariates: Mapping[str, Sequence[Sequence[float]]] | None = None,
-        test_dynamic_categorical_covariates: Mapping[str, Sequence[Sequence[Category]]] | None = None,
+        test_dynamic_categorical_covariates: Mapping[str, Sequence[Sequence[_Category]]] | None = None,
         static_numerical_covariates: Mapping[str, Sequence[float]] | None = None,
-        static_categorical_covariates: Mapping[str, Sequence[Category]] | None = None,
+        static_categorical_covariates: Mapping[str, Sequence[_Category]] | None = None,
     ) -> None:
-        """Initialize with exogenous covariate inputs.
-
-        Args:
-            targets: Target values for each series in the batch
-            train_lens: Length of context for each series
-            test_lens: Length of horizon for each series
-            train_dynamic_numerical_covariates: Dynamic numerical features for context
-            train_dynamic_categorical_covariates: Dynamic categorical features for context
-            test_dynamic_numerical_covariates: Dynamic numerical features for horizon
-            test_dynamic_categorical_covariates: Dynamic categorical features for horizon
-            static_numerical_covariates: Static numerical features per series
-            static_categorical_covariates: Static categorical features per series
-        """
         self.targets = targets
         self.train_lens = train_lens
         self.test_lens = test_lens
 
-        # Initialize covariate dictionaries
         self.train_dynamic_numerical_covariates = train_dynamic_numerical_covariates or {}
         self.train_dynamic_categorical_covariates = train_dynamic_categorical_covariates or {}
         self.test_dynamic_numerical_covariates = test_dynamic_numerical_covariates or {}
@@ -135,14 +93,7 @@ class BatchedInContextXRegBase:
         self.static_categorical_covariates = static_categorical_covariates or {}
 
     def _assert_covariates(self, assert_covariate_shapes: bool = False) -> None:
-        """Validate covariate consistency and shapes.
-
-        Args:
-            assert_covariate_shapes: Whether to validate detailed shapes
-
-        Raises:
-            ValueError: If covariates are inconsistent or have wrong shapes
-        """
+        """Validate covariate consistency and shapes."""
         # Check that train and test dynamic covariates are paired
         if (self.train_dynamic_numerical_covariates and not self.test_dynamic_numerical_covariates) or (
             not self.train_dynamic_numerical_covariates and self.test_dynamic_numerical_covariates
@@ -180,53 +131,51 @@ class BatchedInContextXRegBase:
             if w := set(dict_b.keys()) - set(dict_a.keys()):
                 raise ValueError(f"{dict_b_name} has keys not present in {dict_a_name}: {w}")
 
-        # Detailed shape checking
-        if assert_covariate_shapes:
-            if len(self.targets) != len(self.train_lens):
-                raise ValueError("targets and train_lens must have the same number of elements.")
+        if not assert_covariate_shapes:
+            return
 
-            if len(self.train_lens) != len(self.test_lens):
-                raise ValueError("train_lens and test_lens must have the same number of elements.")
+        if len(self.targets) != len(self.train_lens):
+            raise ValueError("targets and train_lens must have the same number of elements.")
 
-            # Check target lengths match train_lens
-            for i, (target, train_len) in enumerate(zip(self.targets, self.train_lens)):
-                if len(target) != train_len:
-                    raise ValueError(f"targets[{i}] has length {len(target)} != expected {train_len}.")
+        if len(self.train_lens) != len(self.test_lens):
+            raise ValueError("train_lens and test_lens must have the same number of elements.")
 
-            # Check static covariates have correct batch size
-            for key, values in self.static_numerical_covariates.items():
-                if len(values) != len(self.train_lens):
+        for i, (target, train_len) in enumerate(zip(self.targets, self.train_lens)):
+            if len(target) != train_len:
+                raise ValueError(f"targets[{i}] has length {len(target)} != expected {train_len}.")
+
+        for key, values in self.static_numerical_covariates.items():
+            if len(values) != len(self.train_lens):
+                raise ValueError(
+                    f"static_numerical_covariates['{key}'] has {len(values)} examples "
+                    f"!= expected {len(self.train_lens)}."
+                )
+
+        for key, values in self.static_categorical_covariates.items():
+            if len(values) != len(self.train_lens):
+                raise ValueError(
+                    f"static_categorical_covariates['{key}'] has {len(values)} examples "
+                    f"!= expected {len(self.train_lens)}."
+                )
+
+        for lens, dict_cov, dict_cov_name in [
+            (self.train_lens, self.train_dynamic_numerical_covariates, "train_dynamic_numerical_covariates"),
+            (self.train_lens, self.train_dynamic_categorical_covariates, "train_dynamic_categorical_covariates"),
+            (self.test_lens, self.test_dynamic_numerical_covariates, "test_dynamic_numerical_covariates"),
+            (self.test_lens, self.test_dynamic_categorical_covariates, "test_dynamic_categorical_covariates"),
+        ]:
+            for key, cov_values in dict_cov.items():
+                if len(cov_values) != len(lens):
                     raise ValueError(
-                        f"static_numerical_covariates['{key}'] has {len(values)} examples "
-                        f"!= expected {len(self.train_lens)}."
+                        f"{dict_cov_name}['{key}'] has {len(cov_values)} examples != expected {len(lens)}."
                     )
-
-            for key, values in self.static_categorical_covariates.items():
-                if len(values) != len(self.train_lens):
-                    raise ValueError(
-                        f"static_categorical_covariates['{key}'] has {len(values)} examples "
-                        f"!= expected {len(self.train_lens)}."
-                    )
-
-            # Check dynamic covariates have correct lengths
-            for lens, dict_cov, dict_cov_name in [
-                (self.train_lens, self.train_dynamic_numerical_covariates, "train_dynamic_numerical_covariates"),
-                (self.train_lens, self.train_dynamic_categorical_covariates, "train_dynamic_categorical_covariates"),
-                (self.test_lens, self.test_dynamic_numerical_covariates, "test_dynamic_numerical_covariates"),
-                (self.test_lens, self.test_dynamic_categorical_covariates, "test_dynamic_categorical_covariates"),
-            ]:
-                for key, cov_values in dict_cov.items():
-                    if len(cov_values) != len(lens):
+                for i, cov_value in enumerate(cov_values):
+                    if len(cov_value) != lens[i]:
                         raise ValueError(
-                            f"{dict_cov_name}['{key}'] has {len(cov_values)} examples != expected {len(lens)}."
+                            f"{dict_cov_name}['{key}'][{i}] has length {len(cov_value)} != expected {lens[i]}."
                         )
-                    for i, cov_value in enumerate(cov_values):
-                        if len(cov_value) != lens[i]:
-                            raise ValueError(
-                                f"{dict_cov_name}['{key}'][{i}] has length {len(cov_value)} != expected {lens[i]}."
-                            )
 
-    def create_covariate_matrix(
+    def _create_covariate_matrix(
         self,
         one_hot_encoder_drop: str | None = "first",
         use_intercept: bool = True,
@@ -235,14 +184,8 @@ class BatchedInContextXRegBase:
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Create target vector and covariate matrices for regression.
 
-        Args:
-            one_hot_encoder_drop: Strategy for dropping columns in one-hot encoding
-            use_intercept: Whether to add an intercept column
-            assert_covariates: Whether to validate covariates
-            assert_covariate_shapes: Whether to validate covariate shapes
-
         Returns:
-            Tuple of (target_vector, train_covariate_matrix, test_covariate_matrix)
+            Tuple of (target_vector, train_covariate_matrix, test_covariate_matrix).
         """
         if assert_covariates:
             self._assert_covariates(assert_covariate_shapes)
@@ -264,7 +207,6 @@ class BatchedInContextXRegBase:
             x_train = np.concatenate(x_train, axis=1)
             x_test = np.concatenate(x_test, axis=1)
 
-            # Normalize for numerical stability
             x_mean = np.mean(x_train, axis=0, keepdims=True)
             x_std = np.where((w := np.std(x_train, axis=0, keepdims=True)) > _TOL, w, 1.0)
             x_train = [(x_train - x_mean) / x_std]
@@ -300,16 +242,12 @@ class BatchedInContextXRegBase:
 
         return _unnest(self.targets), x_train, x_test
 
-    def fit(self) -> Any:
-        """Fit the model. To be implemented by subclasses."""
-        raise NotImplementedError("fit() must be implemented by subclasses.")
 
-
-class BatchedInContextXRegLinear(BatchedInContextXRegBase):
+class BatchedInContextXRegLinear(_BatchedInContextXRegBase):
     """Linear regression model for in-context covariates.
 
-    This class implements a batched linear regression model that can be used
-    with TimesFM for incorporating covariates into forecasts.
+    Implements batched ridge regression that can be used with TimesFM for
+    incorporating covariates into forecasts.
     """
 
     def fit(
@@ -317,7 +255,6 @@ class BatchedInContextXRegLinear(BatchedInContextXRegBase):
         ridge: float = 0.0,
         one_hot_encoder_drop: str | None = "first",
         use_intercept: bool = True,
-        force_on_cpu: bool = False,
         max_rows_per_col: int = 0,
         max_rows_per_col_sample_seed: int = 42,
         debug_info: bool = False,
@@ -328,45 +265,37 @@ class BatchedInContextXRegLinear(BatchedInContextXRegBase):
         """Fit a linear regression model with optional ridge regularization.
 
         Args:
-            ridge: Ridge regularization parameter (L2 penalty)
-            one_hot_encoder_drop: Strategy for dropping columns in one-hot encoding
-            use_intercept: Whether to add an intercept term
-            force_on_cpu: Whether to force computation on CPU
-            max_rows_per_col: Maximum ratio of rows to columns for stability (0 for no limit)
-            max_rows_per_col_sample_seed: Random seed for sampling rows
-            debug_info: Whether to return debug information
-            assert_covariates: Whether to validate covariates
-            assert_covariate_shapes: Whether to validate covariate shapes
-            device: PyTorch device to use for computation
+            ridge: Ridge regularization parameter (L2 penalty).
+            one_hot_encoder_drop: Strategy for dropping columns in one-hot encoding.
+            use_intercept: Whether to add an intercept term.
+            max_rows_per_col: Maximum ratio of rows to columns for stability (0 for no limit).
+            max_rows_per_col_sample_seed: Random seed for sampling rows.
+            debug_info: Whether to return predictions on context and debug tensors.
+            assert_covariates: Whether to validate covariates.
+            assert_covariate_shapes: Whether to validate covariate shapes.
+            device: PyTorch device to use for computation.
 
         Returns:
-            If debug_info is False: List of predictions for each series
+            If debug_info is False: List of predictions for each series.
             If debug_info is True: Tuple of (predictions, predictions_on_context,
-                                            coeff_matrix, train_matrix, test_matrix)
+                                            coefficients, train_matrix, test_matrix).
         """
-        # Create covariate matrices
-        y, x_train, x_test = self.create_covariate_matrix(
+        y, x_train, x_test = self._create_covariate_matrix(
             one_hot_encoder_drop=one_hot_encoder_drop,
             use_intercept=use_intercept,
             assert_covariates=assert_covariates,
             assert_covariate_shapes=assert_covariate_shapes,
         )
 
-        # Determine device
         if device is None:
-            if force_on_cpu:
-                device = torch.device("cpu")
-            else:
-                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Convert to PyTorch tensors
         y_tensor = torch.tensor(y, dtype=torch.float32, device=device)
         x_train_tensor = torch.tensor(x_train, dtype=torch.float32, device=device)
         x_test_tensor = torch.tensor(x_test, dtype=torch.float32, device=device)
 
-        # Handle max_rows_per_col constraint
+        # Subsample rows if the matrix is too tall relative to its width
         if max_rows_per_col > 0 and x_train.shape[0] > max_rows_per_col * x_train.shape[1]:
-            # Sample rows to maintain stability
             np.random.seed(max_rows_per_col_sample_seed)
             n_samples = max_rows_per_col * x_train.shape[1]
             indices = np.random.choice(x_train.shape[0], n_samples, replace=False)
@@ -374,37 +303,29 @@ class BatchedInContextXRegLinear(BatchedInContextXRegBase):
             x_train_tensor = x_train_tensor[indices_tensor]
             y_tensor = y_tensor[indices_tensor]
 
-        # Solve linear regression with ridge regularization
+        # Solve linear regression
         if x_train_tensor.shape[1] == 0:
-            # No covariates, predict zeros
             predictions_flat = torch.zeros(x_test_tensor.shape[0], device=device)
             predictions_on_context_flat = torch.zeros(len(y), device=device)
             coeffs = torch.zeros(0, device=device)
         else:
-            # Compute (X^T X + ridge * I)
             xtx = x_train_tensor.T @ x_train_tensor
             if ridge > 0:
                 xtx = xtx + ridge * torch.eye(xtx.shape[0], device=device)
 
-            # Compute X^T y
             xty = x_train_tensor.T @ y_tensor
 
-            # Solve for coefficients
             try:
                 coeffs = torch.linalg.solve(xtx, xty)
             except torch.linalg.LinAlgError:
-                # Fallback to least squares if solve fails
                 result = torch.linalg.lstsq(x_train_tensor, y_tensor, rcond=None)
-                coeffs = result.solution[: x_train_tensor.shape[1]]  # Trim to correct size
+                coeffs = result.solution[: x_train_tensor.shape[1]]
 
-            # Make predictions
             predictions_flat = x_test_tensor @ coeffs
 
-            # Reconstruct predictions on training data for debug
             x_train_full = torch.tensor(x_train, dtype=torch.float32, device=device)
             predictions_on_context_flat = x_train_full @ coeffs
 
-        # Convert back to numpy and reshape to original batch structure
         predictions_flat = predictions_flat.cpu().numpy()
         predictions_on_context_flat = predictions_on_context_flat.cpu().numpy()
 
@@ -428,5 +349,4 @@ class BatchedInContextXRegLinear(BatchedInContextXRegBase):
                 x_train_tensor.cpu(),
                 x_test_tensor.cpu(),
             )
-        else:
-            return predictions
+        return predictions
