@@ -21,6 +21,7 @@ class Param2MoEConfig(PreTrainedConfig):
         output_dropout=0.0,
         initializer_range=0.02,
         max_position_embeddings=32768,
+        partial_rotary_factor=1.0,
         rope_theta=600000.0,
         use_cache=True,
         max_window_layers=20,
@@ -63,6 +64,7 @@ class Param2MoEConfig(PreTrainedConfig):
         self.rope_theta = rope_theta
         self.use_cache = use_cache
         self.max_window_layers = max_window_layers
+        self.partial_rotary_factor = partial_rotary_factor
         self.head_dim = head_dim or self.hidden_size // self.num_attention_heads
         self.rope_scaling = rope_scaling
         self.use_qk_norm = use_qk_norm

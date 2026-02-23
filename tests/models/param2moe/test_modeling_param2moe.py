@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,9 @@
 
 import unittest
 
-from transformers import Param2MoEConfig, is_torch_available
+from transformers import is_torch_available
+from transformers.models.param2moe.configuration_param2moe import Param2MoEConfig
+from transformers.models.param2moe.modeling_param2moe import Param2MoEForCausalLM, Param2MoEModel
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -25,13 +26,13 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_torch_available():
-    import torch
+# if is_torch_available():
+#     import torch
 
-    from transformers import (
-        Param2MoEForCausalLM,
-        Param2MoEModel,
-    )
+#     from transformers import (
+#         Param2MoEForCausalLM,
+#         Param2MoEModel,
+#     )
 
 
 class Param2MoEModelTester:
@@ -332,7 +333,6 @@ class Param2MoEIntegrationTest(unittest.TestCase):
     def test_model_param2moe_logits(self):
         # Test with a small model to verify output shapes and basic functionality
         input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])
-        
         config = Param2MoEConfig(
             vocab_size=32000,
             hidden_size=256,
@@ -343,13 +343,10 @@ class Param2MoEIntegrationTest(unittest.TestCase):
             num_experts=8,
             num_experts_per_tok=2,
         )
-        
         model = Param2MoEForCausalLM(config)
         model.eval()
-        
         with torch.no_grad():
             outputs = model(input_ids)
-        
         # Check output shape
         expected_shape = (1, 8, 32000)
         self.assertEqual(outputs.logits.shape, expected_shape)
@@ -358,7 +355,6 @@ class Param2MoEIntegrationTest(unittest.TestCase):
     def test_model_param2moe_with_router_logits(self):
         # Test router logits output
         input_ids = torch.tensor([[1, 2, 3, 4, 5]])
-        
         config = Param2MoEConfig(
             vocab_size=32000,
             hidden_size=128,
@@ -371,13 +367,10 @@ class Param2MoEIntegrationTest(unittest.TestCase):
             first_k_dense_replace=1,
             output_router_logits=True,
         )
-        
         model = Param2MoEForCausalLM(config)
         model.eval()
-        
         with torch.no_grad():
             outputs = model(input_ids, output_router_logits=True)
-        
         # Check that router logits are returned
         self.assertIsNotNone(outputs.router_logits)
         # Should have router logits for all layers except first_k_dense_replace
@@ -388,7 +381,6 @@ class Param2MoEIntegrationTest(unittest.TestCase):
     def test_model_param2moe_generation(self):
         # Test generation capability
         input_ids = torch.tensor([[1, 2, 3]])
-        
         config = Param2MoEConfig(
             vocab_size=32000,
             hidden_size=128,
@@ -399,14 +391,11 @@ class Param2MoEIntegrationTest(unittest.TestCase):
             num_experts=4,
             num_experts_per_tok=2,
         )
-        
         model = Param2MoEForCausalLM(config)
         model.eval()
-        
         # Test generation
         with torch.no_grad():
             generated = model.generate(input_ids, max_new_tokens=5, do_sample=False)
-        
         # Check that generation extended the sequence
         self.assertEqual(generated.shape[1], input_ids.shape[1] + 5)
 
@@ -415,7 +404,6 @@ class Param2MoEIntegrationTest(unittest.TestCase):
         # Test Multi-Token Prediction functionality
         input_ids = torch.tensor([[1, 2, 3, 4, 5]])
         labels = torch.tensor([[2, 3, 4, 5, 6]])
-        
         config = Param2MoEConfig(
             vocab_size=32000,
             hidden_size=128,
@@ -428,13 +416,10 @@ class Param2MoEIntegrationTest(unittest.TestCase):
             num_nextn_predict_layers=1,
             mtp_loss_scaling_factor=0.1,
         )
-        
         model = Param2MoEForCausalLM(config)
         model.eval()
-        
         with torch.no_grad():
             outputs = model(input_ids, labels=labels)
-        
         # Check that MTP loss is computed
         self.assertIsNotNone(outputs.mtp_loss)
         # Check that MTP logits are returned
