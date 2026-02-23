@@ -9,7 +9,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-*This model was released on 2024-09-16 and added to Hugging Face Transformers on 2026-02-18.*
+*This model was released on 2024-09-16 and added to Hugging Face Transformers on 2026-02-23.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 # JinaEmbeddingsV3
 
-The [Jina-Embeddings-v3](https://huggingface.co/papers/2409.10173) is a multilingual, multi-task text embedding model designed for a variety of NLP applications. Based on the XLM-RoBERTa architecture this model supports **Rotary Position Embeddings (RoPE)** replacing absolute position embeddings to support long input sequences up to 8192 tokens. Additionally, it features 5 built-in **Task-Specific LoRA Adapters:** that allow the model to generate task-specific embeddings (e.g., for retrieval vs. classification) without increasing inference latency significantly.
+The [Jina-Embeddings-v3](https://huggingface.co/papers/2409.10173) is a multilingual, multi-task text embedding model designed for a variety of NLP applications. Based on the XLM-RoBERTa architecture, this model supports **Rotary Position Embeddings (RoPE)** replacing absolute position embeddings to support long input sequences up to 8192 tokens. Additionally, it features 5 built-in **Task-Specific LoRA Adapters:** that allow the model to generate task-specific embeddings (e.g., for retrieval vs. classification) without increasing inference latency significantly.
 
 
 You can find the original Jina Embeddings v3 checkpoints under the [Jina AI](https://huggingface.co/jinaai) organization.
@@ -29,25 +29,23 @@ You can find the original Jina Embeddings v3 checkpoints under the [Jina AI](htt
 > [!TIP]
 > Click on the Jina Embeddings v3 models in the right sidebar for more examples of how to apply the model to different language tasks.
 
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
-
+The example below demonstrates how to extract features (embeddings) with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
-
 <hfoption id="Pipeline">
-
 
 ```py
 import torch
 from transformers import pipeline
 
 pipeline = pipeline(
-    task="fill-mask",
+    task="feature-extraction",
     model="jinaai/jina-embeddings-v3",
     dtype=torch.float16,
     device="cuda" if torch.cuda.is_available() else "cpu"
 )
-pipeline("Plants create energy through a process known as [MASK].", top_k=5)
+# Returns a list of lists containing the embeddings for each token
+embeddings = pipeline("Jina Embeddings V3 is great for semantic search.")
 ```
 
 
@@ -56,34 +54,87 @@ pipeline("Plants create energy through a process known as [MASK].", top_k=5)
 
 
 ```py
-
 import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer
+from transformers import AutoModel, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("jinaai/jina-embeddings-v3")
-model = AutoModelForMaskedLM.from_pretrained(
+model = AutoModel.from_pretrained(
     "jinaai/jina-embeddings-v3",
     dtype=torch.float16,
-    attn_implementation="sdpa",
     device_map="auto"
 )
 
-prompt = "Plants create energy through a process known as [MASK]."
+prompt = "Jina Embeddings V3 is great for semantic search."
 inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
-    mask_token_index = torch.where(inputs["input_ids"] == tokenizer.mask_token_id)[1]
-    predictions = outputs.logits[0, mask_token_index]
+    # The base AutoModel returns the raw hidden states for all tokens
+    last_hidden_states = outputs.last_hidden_state
 
-top_k = torch.topk(predictions, k=5).indices.tolist()
-for token_id in top_k[0]:
-    print(f"Prediction: {tokenizer.decode([token_id])}")
+print(f"Features shape: {last_hidden_states.shape}")
 ```
 
+</hfoptions>
+</hfoptions>
+
+## Task-Specific LoRA Adapters
+
+A key feature of `JinaEmbeddingsV3` is its built-in LoRA adapters, which allow you to tailor the output embeddings to specific use cases without the overhead of loading entirely different models. You can control this behavior by passing an `adapter_mask` to the model.
+
+The following tasks are supported:
+
+* **`retrieval.query`**: Used for query embeddings in asymmetric retrieval tasks (e.g., search queries).
+* **`retrieval.passage`**: Used for passage embeddings in asymmetric retrieval tasks (e.g., the documents being searched).
+* **`separation`**: Used for embeddings in clustering and re-ranking applications.
+* **`classification`**: Used for embeddings in classification tasks.
+* **`text-matching`**: Used for embeddings in tasks that quantify similarity between two texts, such as Semantic Textual Similarity (STS) or symmetric retrieval tasks.
 
 
+To generate high-quality sentence or paragraph embeddings, you need to apply **mean pooling** to the model's token embeddings. Mean pooling takes all token embeddings from the model's output and averages them, masking out the padding tokens.
 
+Here is how you can generate sentence embeddings tailored for a retrieval query task using the `AutoModel` API.
+
+```python
+import torch
+import torch.nn.functional as F
+from transformers import AutoTokenizer, AutoModel
+
+def mean_pooling(model_output, attention_mask):
+    # First element of model_output contains all token embeddings
+    token_embeddings = model_output[0]
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    
+    # Sum the embeddings and divide by the number of non-padding tokens
+    sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1)
+    sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+    return sum_embeddings / sum_mask
+
+
+sentences = [
+    "How is the weather today?", 
+    "What is the current weather like today?"
+]
+
+tokenizer = AutoTokenizer.from_pretrained("jinaai/jina-embeddings-v3")
+model = AutoModel.from_pretrained("jinaai/jina-embeddings-v3")
+
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors="pt")
+
+# Set up the adapter mask for your specific task
+task = 'retrieval.query'  # Can be any of (retrieval.passage, separation, classification, text-matching) depending on the use-case.
+task_id = model._adaptation_map[task]
+adapter_mask = torch.full((len(sentences),), task_id, dtype=torch.int32).to(model.device)
+
+with torch.no_grad():
+    model_output = model(**encoded_input, adapter_mask=adapter_mask)
+
+embeddings = mean_pooling(model_output, encoded_input["attention_mask"])
+embeddings = F.normalize(embeddings, p=2, dim=1)
+
+print(embeddings.shape)
+# Output: torch.Size([2, 1024])
+```
 
 
 ## JinaEmbeddingsV3Config 
@@ -94,7 +145,6 @@ for token_id in top_k[0]:
 
 [[autodoc]] JinaEmbeddingsV3Model
     - forward
-
 
 ## JinaEmbeddingsV3ForMaskedLM 
 
@@ -115,4 +165,3 @@ for token_id in top_k[0]:
 
 [[autodoc]] JinaEmbeddingsV3ForQuestionAnswering
     - forward
-
