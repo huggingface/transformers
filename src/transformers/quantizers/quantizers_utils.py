@@ -12,19 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
+
 from torch.nn import Module
+
 
 def get_module_from_name(module: Module, tensor_name: str) -> tuple[Module, str]:
     """Split the tensor name into the module its from and the name itself."""
     possible_modules = tensor_name.split(".")
     current_module = module
-    
+
     # Iterate through the list of possible modules,
     # checking that the next possible sub-module is an attribute of the current module
     for i, part in enumerate(possible_modules):
         # Check if the next segment exists and is a Module
         next_attribute = getattr(current_module, part, None)
-        
+
         if isinstance(next_attribute, Module):
             current_module = next_attribute
         else:
@@ -32,7 +34,7 @@ def get_module_from_name(module: Module, tensor_name: str) -> tuple[Module, str]
             # Everything from this point forward is the parameter name
             param_name = ".".join(possible_modules[i:])
             return current_module, param_name
-    
+
     return current_module, ""
 
 

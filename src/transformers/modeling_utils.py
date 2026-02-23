@@ -4649,9 +4649,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         def __recursive_getattr(object, attribute, *args):
             """Recurse through a parameter name that is '.' seperated to get the attribute"""
+
             def __getattr(object, attribute):
                 return getattr(object, attribute, *args)
-            return functools.reduce(__getattr, [object] + attribute.split('.'))
+
+            return functools.reduce(__getattr, [object] + attribute.split("."))
 
         try:
             # get the actual tensor parameter from a possible nested list
