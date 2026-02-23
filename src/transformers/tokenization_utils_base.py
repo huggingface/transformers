@@ -2136,6 +2136,27 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         return file_names + vocab_files + (added_tokens_file,)
 
+    def clean_up_tokenization(self, text: str) -> str:
+        """
+        Clean up tokenization spaces in a given text.
+        This method is mostly for remote code support.
+
+        """
+
+        text = (
+            text.replace(" .", ".")
+            .replace(" ?", "?")
+            .replace(" !", "!")
+            .replace(" ,", ",")
+            .replace(" ' ", "'")
+            .replace(" n't", "n't")
+            .replace(" 'm", "'m")
+            .replace(" 's", "'s")
+            .replace(" 've", "'ve")
+            .replace(" 're", "'re")
+        )
+        return text
+
     def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str, ...]:
         """
         Save only the vocabulary of the tokenizer (vocabulary + added tokens).
