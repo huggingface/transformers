@@ -349,6 +349,9 @@ class GenerationConfig(PushToHubMixin):
     # Hash to detect whether the instance was modified after loading
     _original_object_hash: int | None
 
+    # Whisper-specific attribute, set dynamically via kwargs
+    no_timestamps_token_id: int | None
+
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
         self.max_length = kwargs.pop("max_length", None)

@@ -128,7 +128,7 @@ class WatermarkDetector:
         ignore_repeated_ngrams: bool = False,
         max_cache_size: int = 128,
     ):
-        if not isinstance(watermarking_config, dict):
+        if watermarking_config is not None and not isinstance(watermarking_config, dict):
             watermarking_config = watermarking_config.to_dict()
 
         self.bos_token_id = (

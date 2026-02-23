@@ -591,8 +591,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self, input_ids: torch.LongTensor, assistant_sequences: torch.LongTensor
     ) -> torch.LongTensor:
         """Processes assistant outputs to obtain target input IDs."""
-        prev_assistant_ids = cast(torch.LongTensor, self.prev_assistant_ids)
-        num_prev_assistant = prev_assistant_ids.shape[1]
+        assert self.prev_assistant_ids is not None
+        num_prev_assistant = self.prev_assistant_ids.shape[1]
         start_assistant_look_index = num_prev_assistant - self.assistant_lookbehind
 
         new_target_ids_from_window = self.convert_source_tokens_to_target_tokens(
@@ -722,7 +722,8 @@ class AssistantToTargetTranslator:
         self.assistant_prune_lm_head = assistant_prune_lm_head and assistant_model is not None
         if len(self._suppress_input_ids) > 0:
             # the assistant vocab is not a subset of the target vocab
-            if self.assistant_prune_lm_head and assistant_model is not None:
+            if self.assistant_prune_lm_head:
+                assert assistant_model is not None
                 self.assistant_overlap_token_ids = torch.tensor(
                     list(self.target_to_assistant_input_ids.values()),
                     dtype=torch.long,
