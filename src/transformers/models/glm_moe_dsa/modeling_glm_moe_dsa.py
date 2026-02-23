@@ -653,7 +653,7 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     # NOTE: FP8 quantization uses `_keep_in_fp32_modules` (not `_strict`) to decide which modules to NOT convert.
     # We must keep `indexer.weights_proj` as a plain Linear to match the checkpoint (no `weight_scale_inv`).
     _keep_in_fp32_modules = ["indexer.weights_proj"]
-    _default_flash_implementation = "kernels-community/flash-mla"
+    _compatible_flash_implementations = ["kernels-community/flash-mla"]
 
     @torch.no_grad()
     def _init_weights(self, module):

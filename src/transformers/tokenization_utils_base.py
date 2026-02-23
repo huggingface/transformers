@@ -1404,12 +1404,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     def __repr__(self) -> str:
         added_tokens_decoder_rep = "\n\t".join([f"{k}: {v.__repr__()}," for k, v in self.added_tokens_decoder.items()])
+        if added_tokens_decoder_rep:
+            added_tokens_decoder_rep = f"\n\t{added_tokens_decoder_rep}\n"
         return (
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
             f" special_tokens={self.special_tokens_map},"
-            " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}\n)"
+            f" added_tokens_decoder={{{added_tokens_decoder_rep}}})"
         )
 
     def __len__(self) -> int:
@@ -2133,6 +2135,27 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
 
         return file_names + vocab_files + (added_tokens_file,)
+
+    def clean_up_tokenization(self, text: str) -> str:
+        """
+        Clean up tokenization spaces in a given text.
+        This method is mostly for remote code support.
+
+        """
+
+        text = (
+            text.replace(" .", ".")
+            .replace(" ?", "?")
+            .replace(" !", "!")
+            .replace(" ,", ",")
+            .replace(" ' ", "'")
+            .replace(" n't", "n't")
+            .replace(" 'm", "'m")
+            .replace(" 's", "'s")
+            .replace(" 've", "'ve")
+            .replace(" 're", "'re")
+        )
+        return text
 
     def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str, ...]:
         """

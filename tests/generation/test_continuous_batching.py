@@ -29,13 +29,13 @@ from transformers import (
     LogitsProcessorList,
 )
 from transformers.generation.continuous_batching.cache import (
-    FullAttentionCacheAllocator,
     PagedAttentionCache,
     SlidingAttentionCacheAllocator,
     group_layers_by_attn_type,
 )
+from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
 from transformers.generation.continuous_batching.continuous_api import ContinuousBatchProcessor
-from transformers.generation.continuous_batching.input_ouputs import build_attention_mask
+from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
@@ -255,6 +255,90 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
             f"Expected {expected_result}, got {result}",
         )
 
+    @parameterized.expand(
+        [
+            # (block_size, block_table, past_length, query_length, expected_indices)
+            # Basic cases
+            (32, [0, 1, 2], 0, 16, list(range(16))),
+            (32, [0, 1, 2], 0, 32, list(range(32))),
+            (32, [0, 1, 2], 0, 64, list(range(64))),
+            # Non-contiguous blocks
+            (32, [0, 3, 6], 0, 64, list(range(32)) + list(range(96, 128))),
+            (32, [2, 5, 8], 0, 32, list(range(64, 96))),
+            # With past_length (read still starts from 0)
+            (32, [0, 1, 2], 16, 16, list(range(32))),
+            (32, [0, 1, 2], 31, 2, list(range(33))),
+            # Partial last block
+            (32, [0, 1, 2], 0, 50, list(range(32)) + list(range(32, 50))),
+            # Different block sizes
+            (16, [0, 1, 2, 3], 0, 48, list(range(48))),
+            (64, [0, 1], 0, 100, list(range(100))),
+        ]
+    )
+    def test_full_attention_get_read_indices(
+        self,
+        block_size: int,
+        block_table: list[int],
+        past_length: int,
+        query_length: int,
+        expected_indices: list[int],
+    ) -> None:
+        """Test FullAttentionCacheAllocator.get_read_indices returns correct physical indices."""
+        allocator = FullAttentionCacheAllocator(index=0, block_size=block_size, allow_block_sharing=False)
+        request_id = "test_request"
+        allocator.block_table[request_id] = block_table
+
+        result = allocator.get_read_indices(request_id, past_length, query_length)
+        self.assertEqual(
+            result,
+            expected_indices,
+            f"Failed for {block_size=}, {block_table=}, {past_length=}, {query_length=}",
+        )
+
+    @parameterized.expand(
+        [
+            # (block_size, block_table, past_length, query_length, expected_indices)
+            # Start of sequence
+            (32, [0, 1, 2], 0, 16, list(range(16))),
+            (32, [0, 1, 2], 0, 32, list(range(32))),
+            # Continue in same block
+            (32, [0, 1, 2], 16, 16, list(range(16, 32))),
+            # Cross block boundary
+            (32, [0, 1, 2], 30, 4, list(range(30, 34))),
+            (32, [0, 1, 2], 31, 2, [31, 32]),
+            # Non-contiguous blocks
+            (32, [0, 3, 6], 30, 4, [30, 31, 96, 97]),
+            (32, [2, 5, 8], 60, 10, list(range(188, 192)) + list(range(256, 262))),
+            # Decode step (single token)
+            (32, [0, 1, 2], 0, 1, [0]),
+            (32, [0, 1, 2], 31, 1, [31]),
+            (32, [0, 1, 2], 32, 1, [32]),
+            (32, [0, 1, 2], 63, 1, [63]),
+            # Different block sizes
+            (16, [0, 1, 2, 3], 14, 4, [14, 15, 16, 17]),
+            (64, [0, 1], 60, 10, list(range(60, 70))),
+        ]
+    )
+    def test_full_attention_get_write_indices(
+        self,
+        block_size: int,
+        block_table: list[int],
+        past_length: int,
+        query_length: int,
+        expected_indices: list[int],
+    ) -> None:
+        """Test FullAttentionCacheAllocator.get_write_indices returns correct physical indices."""
+        allocator = FullAttentionCacheAllocator(index=0, block_size=block_size, allow_block_sharing=False)
+        request_id = "test_request"
+        allocator.block_table[request_id] = block_table
+
+        result = allocator.get_write_indices(request_id, past_length, query_length)
+        self.assertEqual(
+            result,
+            expected_indices,
+            f"Failed for {block_size=}, {block_table=}, {past_length=}, {query_length=}",
+        )
+
 
 @require_torch_accelerator
 class ContinuousBatchingGenerationTest(unittest.TestCase):
@@ -269,6 +353,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         attn_implementation: str,
         use_cuda_graph: bool,
         use_compile: bool,
+        use_async: bool,
         max_new_tokens: int = 20,
         num_blocks: int | None = None,
         num_repeat_prompts: int = 1,
@@ -284,7 +369,8 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         # Prepare continuous batching inputs
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
-        tokenizer.pad_token = tokenizer.eos_token
+        if hasattr(tokenizer, "eos_token"):
+            tokenizer.pad_token = tokenizer.eos_token
         user_messages = [
             "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?",
             "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
@@ -319,7 +405,10 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         # Generation with continuous batching
         continuous_batching_outputs = model.generate_batch(
-            inputs=input_ids, generation_config=model.generation_config, allow_block_sharing=allow_block_sharing
+            inputs=input_ids,
+            generation_config=model.generation_config,
+            allow_block_sharing=allow_block_sharing,
+            use_async=use_async,
         )
 
         # Prepare non-continuous batching inputs
@@ -392,7 +481,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
     ) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self._test_continuous_batching_parity(
-            model_id, allow_block_sharing, attn_implementation, use_cuda_graph, use_compile
+            model_id, allow_block_sharing, attn_implementation, use_cuda_graph, use_compile, use_async=False
         )
 
     # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
@@ -410,17 +499,34 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
     @slow
     def test_continuous_batching_diverse_models(self, model_id: str, use_cuda_graph: bool, use_compile: bool) -> None:
         try:
-            self._test_continuous_batching_parity(model_id, True, "flash_attention_2", use_cuda_graph, use_compile)
+            self._test_continuous_batching_parity(
+                model_id, True, "flash_attention_2", use_cuda_graph, use_compile, use_async=False
+            )
         finally:
             flush_memory(flush_compile=use_compile)
 
     def test_continuous_batching_fast(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        self._test_continuous_batching_parity(model_id, False, "sdpa", False, False)
+        self._test_continuous_batching_parity(
+            model_id,
+            allow_block_sharing=False,
+            attn_implementation="sdpa",
+            use_cuda_graph=False,
+            use_compile=False,
+            use_async=False,
+        )
 
     def test_continuous_batching_long_generate(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        self._test_continuous_batching_parity(model_id, True, "flash_attention_2", True, True, max_new_tokens=80)
+        self._test_continuous_batching_parity(
+            model_id,
+            allow_block_sharing=True,
+            attn_implementation="flash_attention_2",
+            use_cuda_graph=True,
+            use_compile=True,
+            use_async=False,
+            max_new_tokens=80,
+        )
 
     def test_continuous_batching_few_blocks(self) -> None:
         """This test verifies that generation works with a very small number of blocks, ie. small enough that we need to
@@ -434,9 +540,40 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             ContinuousBatchProcessor, "soft_reset_one_request", autospec=True, side_effect=original_soft_reset
         ) as mock_soft_reset:
             self._test_continuous_batching_parity(
-                model_id, True, "sdpa", True, False, num_blocks=4, num_repeat_prompts=4
+                model_id=model_id,
+                allow_block_sharing=True,
+                attn_implementation="sdpa",
+                use_cuda_graph=True,
+                use_compile=False,
+                use_async=False,
+                max_new_tokens=30,
+                num_blocks=4,
+                num_repeat_prompts=4,
             )
             self.assertTrue(mock_soft_reset.called, "Soft reset method was not called.")
+
+    @parameterized.expand(
+        list(
+            itertools.product(
+                ["sdpa", "flash_attention_2"],
+                [False, True],
+                [False, True],
+            )
+        )
+    )
+    @slow
+    def test_continuous_batching_async(
+        self, attn_implementation: str, use_cuda_graph: bool, use_compile: bool
+    ) -> None:
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        self._test_continuous_batching_parity(
+            model_id,
+            allow_block_sharing=True,
+            attn_implementation=attn_implementation,
+            use_cuda_graph=use_cuda_graph,
+            use_compile=use_compile,
+            use_async=True,
+        )
 
     # ---------------------------------------Streaming tests--------------------------------------- #
     #           Ensures the requests have the right behavior with and without streaming             #
