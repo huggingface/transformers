@@ -278,6 +278,10 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         pass
 
+    @unittest.skip("ColModernVBert can't process text+image inputs at the same time")
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        pass
+
     @unittest.skip("ColModernVBert does not have a chat template")
     def test_chat_template_save_loading(self):
         pass
