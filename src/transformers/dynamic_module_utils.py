@@ -792,7 +792,7 @@ def check_python_requirements(path_or_repo_id, requirements_file="requirements.t
                 continue
 
             if delimiter is not None and version_number is not None:
-                is_satisfied = VersionComparison.from_string(delimiter)(
+                is_satisfied = VersionComparison.from_string(delimiter).value(
                     version.parse(local_package_version), version.parse(version_number)
                 )
             else:

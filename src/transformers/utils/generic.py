@@ -463,7 +463,7 @@ if _is_torch_available:
     def _model_output_unflatten(
         values: Iterable[Any],
         context: _torch_pytree.Context,
-        output_type=None,
+        output_type: type[ModelOutput] | None = None,
     ) -> ModelOutput:
         return output_type(**dict(zip(context, values)))
 

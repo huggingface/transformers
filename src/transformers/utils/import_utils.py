@@ -45,7 +45,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
 
 
-def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[bool, str] | bool:
+def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[bool, str]:
     """Check if `pkg_name` exist, and optionally try to get its version"""
     spec = importlib.util.find_spec(pkg_name)
     package_exists = spec is not None
@@ -71,10 +71,41 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
             package = importlib.import_module(pkg_name)
             package_version = getattr(package, "__version__", "N/A")
         logger.debug(f"Detected {pkg_name} version: {package_version}")
+
     if return_version:
         return package_exists, package_version
     else:
-        return package_exists
+        return package_exists, None
+
+
+def resolve_internal_import(module: ModuleType | None, chained_path: str) -> Callable | ModuleType | None:
+    """
+    Check if a given `module` has an internal import path as defined by the `chained_path`.
+    This can either be the full path (not exposed in `__init__`) OR the last part of the chain (exposed in `__init__`).
+
+    This is an important helper function for kernels based modules to apply the import from the module
+    itself, i.e. stay compatible with original libraries in certain cases.
+
+    Example:
+        Module: `mamba_ssm`
+        Chained Path: `ops.triton.selective_state_update.selective_state_update`
+        Resulting import attempt at:
+            - `mamba_ssm.selective_state_update`
+            - `mamba_ssm.ops.triton.selective_state_update.selective_state_update`
+    """
+    if not module:
+        return None
+
+    if final_module := getattr(module, chained_path.split(".")[-1], None):
+        return final_module
+
+    final_module = module
+    for path in chained_path.split("."):
+        final_module = getattr(final_module, path, None)
+        if not final_module:
+            return None
+
+    return final_module
 
 
 def is_env_variable_true(env_variable: str) -> bool:
@@ -221,7 +252,7 @@ def is_torch_mps_available(min_version: str | None = None) -> bool:
 @lru_cache
 def is_torch_npu_available(check_device=False) -> bool:
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
-    if not is_torch_available() or not _is_package_available("torch_npu"):
+    if not is_torch_available() or not _is_package_available("torch_npu")[0]:
         return False
 
     import torch
@@ -230,8 +261,10 @@ def is_torch_npu_available(check_device=False) -> bool:
     if check_device:
         try:
             # Will raise a RuntimeError if no NPU is found
-            _ = torch.npu.device_count()
-            return torch.npu.is_available()
+            if hasattr(torch, "npu"):
+                _ = torch.npu.device_count()
+                return torch.npu.is_available()
+            return False
         except RuntimeError:
             return False
     return hasattr(torch, "npu") and torch.npu.is_available()
@@ -268,7 +301,7 @@ def is_torch_mlu_available() -> bool:
     Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
     uninitialized.
     """
-    if not is_torch_available() or not _is_package_available("torch_mlu"):
+    if not is_torch_available() or not _is_package_available("torch_mlu")[0]:
         return False
 
     import torch
@@ -277,7 +310,7 @@ def is_torch_mlu_available() -> bool:
     pytorch_cndev_based_mlu_check_previous_value = os.environ.get("PYTORCH_CNDEV_BASED_MLU_CHECK")
     try:
         os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = str(1)
-        available = torch.mlu.is_available()
+        available = torch.mlu.is_available() if hasattr(torch, "mlu") else False
     finally:
         if pytorch_cndev_based_mlu_check_previous_value:
             os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = pytorch_cndev_based_mlu_check_previous_value
@@ -290,7 +323,7 @@ def is_torch_mlu_available() -> bool:
 @lru_cache
 def is_torch_musa_available(check_device=False) -> bool:
     "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
-    if not is_torch_available() or not _is_package_available("torch_musa"):
+    if not is_torch_available() or not _is_package_available("torch_musa")[0]:
         return False
 
     import torch
@@ -304,8 +337,10 @@ def is_torch_musa_available(check_device=False) -> bool:
     if check_device:
         try:
             # Will raise a RuntimeError if no MUSA is found
-            _ = torch.musa.device_count()
-            return torch.musa.is_available()
+            if hasattr(torch, "musa"):
+                _ = torch.musa.device_count()
+                return torch.musa.is_available()
+            return False
         except RuntimeError:
             return False
     return hasattr(torch, "musa") and torch.musa.is_available()
@@ -319,7 +354,7 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False) -> bool:
     """
     assert not (check_is_tpu and check_is_gpu), "The check_is_tpu and check_is_gpu cannot both be true."
 
-    torch_xla_available = USE_TORCH_XLA in ENV_VARS_TRUE_VALUES and _is_package_available("torch_xla")
+    torch_xla_available = USE_TORCH_XLA in ENV_VARS_TRUE_VALUES and _is_package_available("torch_xla")[0]
     if not torch_xla_available:
         return False
 
@@ -338,8 +373,8 @@ def is_torch_hpu_available() -> bool:
     "Checks if `torch.hpu` is available and potentially if a HPU is in the environment"
     if (
         not is_torch_available()
-        or not _is_package_available("habana_frameworks")
-        or not _is_package_available("habana_frameworks.torch")
+        or not _is_package_available("habana_frameworks")[0]
+        or not _is_package_available("habana_frameworks.torch")[0]
     ):
         return False
 
@@ -443,12 +478,12 @@ def is_torch_bf16_gpu_available() -> bool:
     if is_torch_hpu_available():
         return True
     if is_torch_npu_available():
-        return torch.npu.is_bf16_supported()
+        return torch.npu.is_bf16_supported() if hasattr(torch, "npu") else False
     if is_torch_mps_available():
         # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
         return torch.backends.mps.is_macos_or_newer(14, 0)
     if is_torch_musa_available():
-        return torch.musa.is_bf16_supported()
+        return torch.musa.is_bf16_supported() if hasattr(torch, "musa") else False
     return False
 
 
@@ -508,9 +543,10 @@ def is_torch_tf32_available() -> bool:
     import torch
 
     if is_torch_musa_available():
-        device_info = torch.musa.get_device_properties(torch.musa.current_device())
-        if f"{device_info.major}{device_info.minor}" >= "22":
-            return True
+        if hasattr(torch, "musa"):
+            device_info = torch.musa.get_device_properties(torch.musa.current_device())
+            if f"{device_info.major}{device_info.minor}" >= "22":
+                return True
         return False
     if not torch.cuda.is_available() or torch.version.cuda is None:
         return False
@@ -533,10 +569,12 @@ def enable_tf32(enable: bool) -> None:
     pytorch_version = version.parse(get_torch_version())
     if pytorch_version >= version.parse("2.9.0"):
         precision_mode = "tf32" if enable else "ieee"
-        torch.backends.fp32_precision = precision_mode
+        if hasattr(torch.backends, "fp32_precision"):
+            torch.backends.fp32_precision = precision_mode
     else:
         if is_torch_musa_available():
-            torch.backends.mudnn.allow_tf32 = enable
+            if hasattr(torch.backends, "mudnn"):
+                torch.backends.mudnn.allow_tf32 = enable
         else:
             torch.backends.cuda.matmul.allow_tf32 = enable
             torch.backends.cudnn.allow_tf32 = enable
@@ -554,7 +592,7 @@ def is_grouped_mm_available() -> bool:
 
 @lru_cache
 def is_kenlm_available() -> bool:
-    return _is_package_available("kenlm")
+    return _is_package_available("kenlm")[0]
 
 
 @lru_cache
@@ -565,17 +603,17 @@ def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION) -> bool:
 
 @lru_cache
 def is_cv2_available() -> bool:
-    return _is_package_available("cv2")
+    return _is_package_available("cv2")[0]
 
 
 @lru_cache
 def is_yt_dlp_available() -> bool:
-    return _is_package_available("yt_dlp")
+    return _is_package_available("yt_dlp")[0]
 
 
 @lru_cache
 def is_libcst_available() -> bool:
-    return _is_package_available("libcst")
+    return _is_package_available("libcst")[0]
 
 
 @lru_cache
@@ -592,7 +630,7 @@ def is_triton_available(min_version: str = TRITON_MIN_VERSION) -> bool:
 
 @lru_cache
 def is_hadamard_available() -> bool:
-    return _is_package_available("fast_hadamard_transform")
+    return _is_package_available("fast_hadamard_transform")[0]
 
 
 @lru_cache
@@ -603,12 +641,12 @@ def is_hqq_available(min_version: str = HQQ_MIN_VERSION) -> bool:
 
 @lru_cache
 def is_pygments_available() -> bool:
-    return _is_package_available("pygments")
+    return _is_package_available("pygments")[0]
 
 
 @lru_cache
 def is_torchvision_available() -> bool:
-    return _is_package_available("torchvision")
+    return _is_package_available("torchvision")[0]
 
 
 @lru_cache
@@ -618,27 +656,27 @@ def is_torchvision_v2_available() -> bool:
 
 @lru_cache
 def is_galore_torch_available() -> bool:
-    return _is_package_available("galore_torch")
+    return _is_package_available("galore_torch")[0]
 
 
 @lru_cache
 def is_apollo_torch_available() -> bool:
-    return _is_package_available("apollo_torch")
+    return _is_package_available("apollo_torch")[0]
 
 
 @lru_cache
 def is_torch_optimi_available() -> bool:
-    return _is_package_available("optimi")
+    return _is_package_available("optimi")[0]
 
 
 @lru_cache
 def is_lomo_available() -> bool:
-    return _is_package_available("lomo_optim")
+    return _is_package_available("lomo_optim")[0]
 
 
 @lru_cache
 def is_grokadamw_available() -> bool:
-    return _is_package_available("grokadamw")
+    return _is_package_available("grokadamw")[0]
 
 
 @lru_cache
@@ -649,47 +687,47 @@ def is_schedulefree_available(min_version: str = SCHEDULEFREE_MIN_VERSION) -> bo
 
 @lru_cache
 def is_pyctcdecode_available() -> bool:
-    return _is_package_available("pyctcdecode")
+    return _is_package_available("pyctcdecode")[0]
 
 
 @lru_cache
 def is_librosa_available() -> bool:
-    return _is_package_available("librosa")
+    return _is_package_available("librosa")[0]
 
 
 @lru_cache
 def is_essentia_available() -> bool:
-    return _is_package_available("essentia")
+    return _is_package_available("essentia")[0]
 
 
 @lru_cache
 def is_pydantic_available() -> bool:
-    return _is_package_available("pydantic")
+    return _is_package_available("pydantic")[0]
 
 
 @lru_cache
 def is_fastapi_available() -> bool:
-    return _is_package_available("fastapi")
+    return _is_package_available("fastapi")[0]
 
 
 @lru_cache
 def is_uvicorn_available() -> bool:
-    return _is_package_available("uvicorn")
+    return _is_package_available("uvicorn")[0]
 
 
 @lru_cache
 def is_openai_available() -> bool:
-    return _is_package_available("openai")
+    return _is_package_available("openai")[0]
 
 
 @lru_cache
 def is_pretty_midi_available() -> bool:
-    return _is_package_available("pretty_midi")
+    return _is_package_available("pretty_midi")[0]
 
 
 @lru_cache
 def is_mamba_ssm_available() -> bool:
-    return is_torch_cuda_available() and _is_package_available("mamba_ssm")
+    return is_torch_cuda_available() and _is_package_available("mamba_ssm")[0]
 
 
 @lru_cache
@@ -706,37 +744,37 @@ def is_flash_linear_attention_available():
 
 @lru_cache
 def is_causal_conv1d_available() -> bool:
-    return is_torch_cuda_available() and _is_package_available("causal_conv1d")
+    return is_torch_cuda_available() and _is_package_available("causal_conv1d")[0]
 
 
 @lru_cache
 def is_xlstm_available() -> bool:
-    return is_torch_available() and _is_package_available("xlstm")
+    return is_torch_available() and _is_package_available("xlstm")[0]
 
 
 @lru_cache
 def is_mambapy_available() -> bool:
-    return is_torch_available() and _is_package_available("mambapy")
+    return is_torch_available() and _is_package_available("mambapy")[0]
 
 
 @lru_cache
 def is_peft_available() -> bool:
-    return _is_package_available("peft")
+    return _is_package_available("peft")[0]
 
 
 @lru_cache
 def is_bs4_available() -> bool:
-    return _is_package_available("bs4")
+    return _is_package_available("bs4")[0]
 
 
 @lru_cache
 def is_coloredlogs_available() -> bool:
-    return _is_package_available("coloredlogs")
+    return _is_package_available("coloredlogs")[0]
 
 
 @lru_cache
 def is_onnx_available() -> bool:
-    return _is_package_available("onnx")
+    return _is_package_available("onnx")[0]
 
 
 @lru_cache
@@ -747,22 +785,22 @@ def is_flute_available() -> bool:
 
 @lru_cache
 def is_g2p_en_available() -> bool:
-    return _is_package_available("g2p_en")
+    return _is_package_available("g2p_en")[0]
 
 
 @lru_cache
 def is_torch_neuroncore_available(check_device=True) -> bool:
-    return is_torch_xla_available() and _is_package_available("torch_neuronx")
+    return is_torch_xla_available() and _is_package_available("torch_neuronx")[0]
 
 
 @lru_cache
 def is_torch_tensorrt_fx_available() -> bool:
-    return _is_package_available("torch_tensorrt") and _is_package_available("torch_tensorrt.fx")
+    return _is_package_available("torch_tensorrt")[0] and _is_package_available("torch_tensorrt.fx")[0]
 
 
 @lru_cache
 def is_datasets_available() -> bool:
-    return _is_package_available("datasets")
+    return _is_package_available("datasets")[0]
 
 
 @lru_cache
@@ -780,32 +818,32 @@ def is_detectron2_available() -> bool:
 
 @lru_cache
 def is_rjieba_available() -> bool:
-    return _is_package_available("rjieba")
+    return _is_package_available("rjieba")[0]
 
 
 @lru_cache
 def is_psutil_available() -> bool:
-    return _is_package_available("psutil")
+    return _is_package_available("psutil")[0]
 
 
 @lru_cache
 def is_py3nvml_available() -> bool:
-    return _is_package_available("py3nvml")
+    return _is_package_available("py3nvml")[0]
 
 
 @lru_cache
 def is_sacremoses_available() -> bool:
-    return _is_package_available("sacremoses")
+    return _is_package_available("sacremoses")[0]
 
 
 @lru_cache
 def is_apex_available() -> bool:
-    return _is_package_available("apex")
+    return _is_package_available("apex")[0]
 
 
 @lru_cache
 def is_aqlm_available() -> bool:
-    return _is_package_available("aqlm")
+    return _is_package_available("aqlm")[0]
 
 
 @lru_cache
@@ -816,17 +854,17 @@ def is_vptq_available(min_version: str = VPTQ_MIN_VERSION) -> bool:
 
 @lru_cache
 def is_av_available() -> bool:
-    return _is_package_available("av")
+    return _is_package_available("av")[0]
 
 
 @lru_cache
 def is_decord_available() -> bool:
-    return _is_package_available("decord")
+    return _is_package_available("decord")[0]
 
 
 @lru_cache
 def is_torchcodec_available() -> bool:
-    return _is_package_available("torchcodec")
+    return _is_package_available("torchcodec")[0]
 
 
 @lru_cache
@@ -873,7 +911,7 @@ def is_flash_attn_2_available() -> bool:
 
 @lru_cache
 def is_flash_attn_3_available() -> bool:
-    return is_torch_cuda_available() and _is_package_available("flash_attn_3")
+    return is_torch_cuda_available() and _is_package_available("flash_attn_3")[0]
 
 
 @lru_cache
@@ -924,32 +962,32 @@ def is_quanto_greater(library_version: str, accept_dev: bool = False) -> bool:
 
 @lru_cache
 def is_torchdistx_available():
-    return _is_package_available("torchdistx")
+    return _is_package_available("torchdistx")[0]
 
 
 @lru_cache
 def is_faiss_available() -> bool:
-    return _is_package_available("faiss")
+    return _is_package_available("faiss")[0]
 
 
 @lru_cache
 def is_scipy_available() -> bool:
-    return _is_package_available("scipy")
+    return _is_package_available("scipy")[0]
 
 
 @lru_cache
 def is_sklearn_available() -> bool:
-    return _is_package_available("sklearn")
+    return _is_package_available("sklearn")[0]
 
 
 @lru_cache
 def is_sentencepiece_available() -> bool:
-    return _is_package_available("sentencepiece")
+    return _is_package_available("sentencepiece")[0]
 
 
 @lru_cache
 def is_seqio_available() -> bool:
-    return _is_package_available("seqio")
+    return _is_package_available("seqio")[0]
 
 
 @lru_cache
@@ -960,7 +998,7 @@ def is_gguf_available(min_version: str = GGUF_MIN_VERSION) -> bool:
 
 @lru_cache
 def is_protobuf_available() -> bool:
-    return _is_package_available("google") and _is_package_available("google.protobuf")
+    return _is_package_available("google")[0] and _is_package_available("google.protobuf")[0]
 
 
 @lru_cache
@@ -970,12 +1008,12 @@ def is_fsdp_available(min_version: str = FSDP_MIN_VERSION) -> bool:
 
 @lru_cache
 def is_optimum_available() -> bool:
-    return _is_package_available("optimum")
+    return _is_package_available("optimum")[0]
 
 
 @lru_cache
 def is_llm_awq_available() -> bool:
-    return _is_package_available("awq")
+    return _is_package_available("awq")[0]
 
 
 @lru_cache
@@ -986,12 +1024,12 @@ def is_auto_round_available(min_version: str = AUTOROUND_MIN_VERSION) -> bool:
 
 @lru_cache
 def is_optimum_quanto_available():
-    return is_optimum_available() and _is_package_available("optimum.quanto")
+    return is_optimum_available() and _is_package_available("optimum.quanto")[0]
 
 
 @lru_cache
 def is_quark_available() -> bool:
-    return _is_package_available("quark")
+    return _is_package_available("quark")[0]
 
 
 @lru_cache
@@ -1008,7 +1046,7 @@ def is_qutlass_available():
 
 @lru_cache
 def is_compressed_tensors_available() -> bool:
-    return _is_package_available("compressed_tensors")
+    return _is_package_available("compressed_tensors")[0]
 
 
 @lru_cache
@@ -1018,87 +1056,87 @@ def is_sinq_available() -> bool:
 
 @lru_cache
 def is_gptqmodel_available() -> bool:
-    return _is_package_available("gptqmodel")
+    return _is_package_available("gptqmodel")[0]
 
 
 @lru_cache
 def is_fbgemm_gpu_available() -> bool:
-    return _is_package_available("fbgemm_gpu")
+    return _is_package_available("fbgemm_gpu")[0]
 
 
 @lru_cache
 def is_levenshtein_available() -> bool:
-    return _is_package_available("Levenshtein")
+    return _is_package_available("Levenshtein")[0]
 
 
 @lru_cache
 def is_optimum_neuron_available() -> bool:
-    return is_optimum_available() and _is_package_available("optimum.neuron")
+    return is_optimum_available() and _is_package_available("optimum.neuron")[0]
 
 
 @lru_cache
 def is_tokenizers_available() -> bool:
-    return _is_package_available("tokenizers")
+    return _is_package_available("tokenizers")[0]
 
 
 @lru_cache
 def is_vision_available() -> bool:
-    return _is_package_available("PIL")
+    return _is_package_available("PIL")[0]
 
 
 @lru_cache
 def is_pytesseract_available() -> bool:
-    return _is_package_available("pytesseract")
+    return _is_package_available("pytesseract")[0]
 
 
 @lru_cache
 def is_pytest_available() -> bool:
-    return _is_package_available("pytest")
+    return _is_package_available("pytest")[0]
 
 
 @lru_cache
 def is_pytest_order_available() -> bool:
-    return is_pytest_available() and _is_package_available("pytest_order")
+    return is_pytest_available() and _is_package_available("pytest_order")[0]
 
 
 @lru_cache
 def is_spacy_available() -> bool:
-    return _is_package_available("spacy")
+    return _is_package_available("spacy")[0]
 
 
 @lru_cache
 def is_pytorch_quantization_available() -> bool:
-    return _is_package_available("pytorch_quantization")
+    return _is_package_available("pytorch_quantization")[0]
 
 
 @lru_cache
 def is_pandas_available() -> bool:
-    return _is_package_available("pandas")
+    return _is_package_available("pandas")[0]
 
 
 @lru_cache
 def is_soundfile_available() -> bool:
-    return _is_package_available("soundfile")
+    return _is_package_available("soundfile")[0]
 
 
 @lru_cache
 def is_timm_available() -> bool:
-    return _is_package_available("timm")
+    return _is_package_available("timm")[0]
 
 
 @lru_cache
 def is_natten_available() -> bool:
-    return _is_package_available("natten")
+    return _is_package_available("natten")[0]
 
 
 @lru_cache
 def is_nltk_available() -> bool:
-    return _is_package_available("nltk")
+    return _is_package_available("nltk")[0]
 
 
 @lru_cache
 def is_numba_available() -> bool:
-    is_available = _is_package_available("numba")
+    is_available = _is_package_available("numba")[0]
     if not is_available:
         return False
 
@@ -1108,7 +1146,7 @@ def is_numba_available() -> bool:
 
 @lru_cache
 def is_torchaudio_available() -> bool:
-    return _is_package_available("torchaudio")
+    return _is_package_available("torchaudio")[0]
 
 
 @lru_cache
@@ -1125,22 +1163,22 @@ def is_speech_available() -> bool:
 
 @lru_cache
 def is_spqr_available() -> bool:
-    return _is_package_available("spqr_quant")
+    return _is_package_available("spqr_quant")[0]
 
 
 @lru_cache
 def is_phonemizer_available() -> bool:
-    return _is_package_available("phonemizer")
+    return _is_package_available("phonemizer")[0]
 
 
 @lru_cache
 def is_uroman_available() -> bool:
-    return _is_package_available("uroman")
+    return _is_package_available("uroman")[0]
 
 
 @lru_cache
 def is_sudachi_available() -> bool:
-    return _is_package_available("sudachipy")
+    return _is_package_available("sudachipy")[0]
 
 
 @lru_cache
@@ -1151,37 +1189,39 @@ def is_sudachi_projection_available() -> bool:
 
 @lru_cache
 def is_jumanpp_available() -> bool:
-    return _is_package_available("rhoknp") and shutil.which("jumanpp") is not None
+    return _is_package_available("rhoknp")[0] and shutil.which("jumanpp") is not None
 
 
 @lru_cache
 def is_cython_available() -> bool:
-    return _is_package_available("pyximport")
+    return _is_package_available("pyximport")[0]
 
 
 @lru_cache
 def is_jinja_available() -> bool:
-    return _is_package_available("jinja2")
+    return _is_package_available("jinja2")[0]
 
 
 @lru_cache
 def is_jmespath_available() -> bool:
-    return _is_package_available("jmespath")
+    return _is_package_available("jmespath")[0]
 
 
 @lru_cache
 def is_mlx_available() -> bool:
-    return _is_package_available("mlx")
+    return _is_package_available("mlx")[0]
 
 
 @lru_cache
 def is_num2words_available() -> bool:
-    return _is_package_available("num2words")
+    return _is_package_available("num2words")[0]
 
 
 @lru_cache
-def is_tiktoken_available() -> bool:
-    return _is_package_available("tiktoken") and _is_package_available("blobfile")
+def is_tiktoken_available(with_blobfile: bool = True) -> bool:
+    if not _is_package_available("tiktoken")[0]:
+        return False
+    return with_blobfile and _is_package_available("blobfile")[0] or True
 
 
 @lru_cache
@@ -1192,27 +1232,32 @@ def is_liger_kernel_available() -> bool:
 
 @lru_cache
 def is_rich_available() -> bool:
-    return _is_package_available("rich")
+    return _is_package_available("rich")[0]
 
 
 @lru_cache
 def is_matplotlib_available() -> bool:
-    return _is_package_available("matplotlib")
+    return _is_package_available("matplotlib")[0]
 
 
 @lru_cache
 def is_mistral_common_available() -> bool:
-    return _is_package_available("mistral_common")
+    return _is_package_available("mistral_common")[0]
 
 
 @lru_cache
 def is_opentelemetry_available() -> bool:
     try:
-        return _is_package_available("opentelemetry") and version.parse(
+        return _is_package_available("opentelemetry")[0] and version.parse(
             importlib.metadata.version("opentelemetry-api")
         ) >= version.parse("1.30.0")
     except Exception as _:
         return False
+
+
+@lru_cache
+def is_pynvml_available() -> bool:
+    return _is_package_available("pynvml")[0]
 
 
 def check_torch_load_is_safe() -> None:
@@ -1429,7 +1474,7 @@ def is_sagemaker_dp_enabled() -> bool:
     except json.JSONDecodeError:
         return False
     # Lastly, check if the `smdistributed` module is present.
-    return _is_package_available("smdistributed")
+    return _is_package_available("smdistributed")[0]
 
 
 def is_sagemaker_mp_enabled() -> bool:
@@ -1453,7 +1498,7 @@ def is_sagemaker_mp_enabled() -> bool:
     except json.JSONDecodeError:
         return False
     # Lastly, check if the `smdistributed` module is present.
-    return _is_package_available("smdistributed")
+    return _is_package_available("smdistributed")[0]
 
 
 def is_training_run_on_sagemaker() -> bool:
@@ -2004,7 +2049,7 @@ class _LazyModule(ModuleType):
 
     # Needed for autocompletion in an IDE
     def __dir__(self):
-        result = super().__dir__()
+        result = list(super().__dir__())
         # The elements of self.__all__ that are submodules may or may not be in the dir already, depending on whether
         # they have been accessed or not. So we only add the elements of self.__all__ that are not already in the dir.
         for attr in self.__all__:
@@ -2258,10 +2303,12 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
     name = "transformers"
     location = os.path.join(path, file)
     spec = importlib.util.spec_from_file_location(name, location, submodule_search_locations=[path])
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    module = sys.modules[name]
-    return module
+    if spec is not None and spec.loader is not None:
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module = sys.modules[name]
+        return module
+    raise ImportError(f"Could not load module {name} from {location}")
 
 
 class VersionComparison(Enum):
@@ -2275,13 +2322,13 @@ class VersionComparison(Enum):
     @staticmethod
     def from_string(version_string: str) -> "VersionComparison":
         string_to_operator = {
-            "=": VersionComparison.EQUAL.value,
-            "==": VersionComparison.EQUAL.value,
-            "!=": VersionComparison.NOT_EQUAL.value,
-            ">": VersionComparison.GREATER_THAN.value,
-            "<": VersionComparison.LESS_THAN.value,
-            ">=": VersionComparison.GREATER_THAN_OR_EQUAL.value,
-            "<=": VersionComparison.LESS_THAN_OR_EQUAL.value,
+            "=": VersionComparison.EQUAL,
+            "==": VersionComparison.EQUAL,
+            "!=": VersionComparison.NOT_EQUAL,
+            ">": VersionComparison.GREATER_THAN,
+            "<": VersionComparison.LESS_THAN,
+            ">=": VersionComparison.GREATER_THAN_OR_EQUAL,
+            "<=": VersionComparison.LESS_THAN_OR_EQUAL,
         }
 
         return string_to_operator[version_string]
@@ -2314,7 +2361,7 @@ class Backend:
         return current_version
 
     def is_satisfied(self) -> bool:
-        return VersionComparison.from_string(self.version_comparison)(
+        return VersionComparison.from_string(self.version_comparison).value(
             version.parse(self.get_installed_version()), version.parse(self.version)
         )
 
