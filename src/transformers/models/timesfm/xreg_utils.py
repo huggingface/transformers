@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,14 +15,14 @@
 
 import itertools
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal
 
 import numpy as np
 import torch
 from sklearn import preprocessing
 
 
-Category = Union[int, str]
+Category = int | str
 XRegMode = Literal["timesfm + xreg", "xreg + timesfm"]
 
 _TOL = 1e-6
@@ -103,12 +102,12 @@ class BatchedInContextXRegBase:
         targets: Sequence[Sequence[float]],
         train_lens: Sequence[int],
         test_lens: Sequence[int],
-        train_dynamic_numerical_covariates: Optional[Mapping[str, Sequence[Sequence[float]]]] = None,
-        train_dynamic_categorical_covariates: Optional[Mapping[str, Sequence[Sequence[Category]]]] = None,
-        test_dynamic_numerical_covariates: Optional[Mapping[str, Sequence[Sequence[float]]]] = None,
-        test_dynamic_categorical_covariates: Optional[Mapping[str, Sequence[Sequence[Category]]]] = None,
-        static_numerical_covariates: Optional[Mapping[str, Sequence[float]]] = None,
-        static_categorical_covariates: Optional[Mapping[str, Sequence[Category]]] = None,
+        train_dynamic_numerical_covariates: Mapping[str, Sequence[Sequence[float]]] | None = None,
+        train_dynamic_categorical_covariates: Mapping[str, Sequence[Sequence[Category]]] | None = None,
+        test_dynamic_numerical_covariates: Mapping[str, Sequence[Sequence[float]]] | None = None,
+        test_dynamic_categorical_covariates: Mapping[str, Sequence[Sequence[Category]]] | None = None,
+        static_numerical_covariates: Mapping[str, Sequence[float]] | None = None,
+        static_categorical_covariates: Mapping[str, Sequence[Category]] | None = None,
     ) -> None:
         """Initialize with exogenous covariate inputs.
 
@@ -229,7 +228,7 @@ class BatchedInContextXRegBase:
 
     def create_covariate_matrix(
         self,
-        one_hot_encoder_drop: Optional[str] = "first",
+        one_hot_encoder_drop: str | None = "first",
         use_intercept: bool = True,
         assert_covariates: bool = False,
         assert_covariate_shapes: bool = False,
@@ -316,7 +315,7 @@ class BatchedInContextXRegLinear(BatchedInContextXRegBase):
     def fit(
         self,
         ridge: float = 0.0,
-        one_hot_encoder_drop: Optional[str] = "first",
+        one_hot_encoder_drop: str | None = "first",
         use_intercept: bool = True,
         force_on_cpu: bool = False,
         max_rows_per_col: int = 0,
@@ -324,8 +323,8 @@ class BatchedInContextXRegLinear(BatchedInContextXRegBase):
         debug_info: bool = False,
         assert_covariates: bool = False,
         assert_covariate_shapes: bool = False,
-        device: Optional[torch.device] = None,
-    ) -> Union[list[np.ndarray], tuple[list[np.ndarray], list[np.ndarray], torch.Tensor, torch.Tensor, torch.Tensor]]:
+        device: torch.device | None = None,
+    ) -> list[np.ndarray] | tuple[list[np.ndarray], list[np.ndarray], torch.Tensor, torch.Tensor, torch.Tensor]:
         """Fit a linear regression model with optional ridge regularization.
 
         Args:

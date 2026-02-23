@@ -78,8 +78,8 @@ class TimesFmOutputForPredictionWithCovariates(TimesFmOutputForPrediction):
         The combined predictions from TimesFM and XReg models.
     """
 
-    xreg_predictions: Optional[torch.Tensor] = None
-    combined_predictions: Optional[torch.Tensor] = None
+    xreg_predictions: torch.Tensor | None = None
+    combined_predictions: torch.Tensor | None = None
 
 
 class TimesFmMLP(nn.Module):
@@ -809,21 +809,21 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
     def forecast_with_covariates(
         self,
         past_values: Sequence[torch.Tensor],
-        dynamic_numerical_covariates: Optional[dict[str, Sequence[Sequence[float]]]] = None,
-        dynamic_categorical_covariates: Optional[dict[str, Sequence[Sequence[Union[int, str]]]]] = None,
-        static_numerical_covariates: Optional[dict[str, Sequence[float]]] = None,
-        static_categorical_covariates: Optional[dict[str, Sequence[Union[int, str]]]] = None,
-        freq: Optional[Sequence[Union[torch.Tensor, int]]] = None,
-        window_size: Optional[int] = None,
-        forecast_context_len: Optional[int] = None,
+        dynamic_numerical_covariates: dict[str, Sequence[Sequence[float]]] | None = None,
+        dynamic_categorical_covariates: dict[str, Sequence[Sequence[int | str]]] | None = None,
+        static_numerical_covariates: dict[str, Sequence[float]] | None = None,
+        static_categorical_covariates: dict[str, Sequence[int | str]] | None = None,
+        freq: Sequence[torch.Tensor | int] | None = None,
+        window_size: int | None = None,
+        forecast_context_len: int | None = None,
         xreg_mode: str = "xreg + timesfm",
         normalize_xreg_target_per_input: bool = True,
         ridge: float = 0.0,
         truncate_negative: bool = False,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        future_values: Optional[torch.Tensor] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        future_values: torch.Tensor | None = None,
     ) -> TimesFmOutputForPredictionWithCovariates:
         r"""
         Forecasts time series with external covariates using batched in-context regression.
@@ -1111,35 +1111,37 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                 padding = last_val.repeat(pad_len)
                 timesfm_forecast = torch.cat([timesfm_forecast, padding])
             mean_predictions_tensor[i, :test_len] = timesfm_forecast
-        # Keep a copy of normalized XReg predictions for later use
-        xreg_tensor_norm = xreg_tensor.clone()
 
-        # Combine predictions with correct scaling depending on mode
+        # Combine predictions in normalized space, then denormalize.
+        # This matches the reference: combined = timesfm_forecast + xreg, then _renormalize(combined).
         if xreg_mode == "timesfm + xreg":
+            # xreg was fit on residuals (targets - timesfm_context) in normalized space.
+            # Denormalize xreg before adding to timesfm horizon forecast (which is in original units).
             if normalize_xreg_target_per_input and per_instance_stats:
                 for i, test_len in enumerate(test_lens):
                     mean_i, std_i = per_instance_stats[i]
-                    if std_i is None or test_len == 0:
+                    if test_len == 0:
                         continue
                     xreg_tensor[i, :test_len] = xreg_tensor[i, :test_len] * float(std_i) + float(mean_i)
             for i, tl in enumerate(test_lens):
                 if tl > 0:
                     combined_tensor[i, :tl] = mean_predictions_tensor[i, :tl] + xreg_tensor[i, :tl]
         else:
+            # "xreg + timesfm": both timesfm and xreg forecasts are in normalized space.
+            # Combine first, then denormalize the combined result.
             for i, tl in enumerate(test_lens):
                 if tl == 0:
                     continue
-                if normalize_xreg_target_per_input and per_instance_stats:
+                # Add in normalized space
+                combined_tensor[i, :tl] = mean_predictions_tensor[i, :tl] + xreg_tensor[i, :tl]
+            if normalize_xreg_target_per_input and per_instance_stats:
+                for i, tl in enumerate(test_lens):
+                    if tl == 0:
+                        continue
                     mean_i, std_i = per_instance_stats[i]
-                    if std_i is not None:
-                        combined_tensor[i, :tl] = (mean_predictions_tensor[i, :tl] + xreg_tensor_norm[i, :tl]) * float(
-                            std_i
-                        ) + float(mean_i)
-                        xreg_tensor[i, :tl] = xreg_tensor_norm[i, :tl] * float(std_i) + float(mean_i)
-                        # TimesFM contribution in original units as residual*std
-                        mean_predictions_tensor[i, :tl] = combined_tensor[i, :tl] - xreg_tensor[i, :tl]
-                else:
-                    combined_tensor[i, :tl] = mean_predictions_tensor[i, :tl] + xreg_tensor[i, :tl]
+                    combined_tensor[i, :tl] = combined_tensor[i, :tl] * float(std_i) + float(mean_i)
+                    xreg_tensor[i, :tl] = xreg_tensor[i, :tl] * float(std_i) + float(mean_i)
+                    mean_predictions_tensor[i, :tl] = mean_predictions_tensor[i, :tl] * float(std_i) + float(mean_i)
 
         # Apply truncation if requested
         if truncate_negative:
@@ -1166,7 +1168,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             # MSE on combined prediction
             mse_loss = (((combined_tensor - future_values[:, : mask.shape[1]]) ** 2) * mask).sum() / denom
 
-            # Quantile loss: combine TimesFM quantiles with XReg per-step predictions
+            # Quantile loss: shift TimesFM quantiles by XReg predictions (both in original units)
             q_losses = []
             for i, tl in enumerate(test_lens):
                 if tl == 0:
@@ -1174,17 +1176,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                 h_start = max(0, fcontext_len - self.config.patch_length)
                 h_end = min(timesfm_output.full_predictions.shape[1], h_start + tl)
                 timesfm_quants = timesfm_output.full_predictions[i, h_start:h_end, 1:]
-                if xreg_mode == "xreg + timesfm" and normalize_xreg_target_per_input and per_instance_stats:
-                    mean_i, std_i = per_instance_stats[i]
-                    if std_i is not None:
-                        xreg_norm_slice = xreg_tensor_norm[i, :tl]
-                        shifted_quants = (timesfm_quants + xreg_norm_slice.unsqueeze(-1)) * float(std_i) + float(
-                            mean_i
-                        )
-                    else:
-                        shifted_quants = timesfm_quants + xreg_tensor[i, :tl].unsqueeze(-1)
-                else:
-                    shifted_quants = timesfm_quants + xreg_tensor[i, :tl].unsqueeze(-1)
+                shifted_quants = timesfm_quants + xreg_tensor[i, :tl].unsqueeze(-1)
                 q_losses.append(self._quantile_loss(shifted_quants, future_values[i, :tl]))
             quantile_loss = torch.stack(q_losses).mean() if q_losses else torch.tensor(0.0, device=device)
             loss = mse_loss + quantile_loss
