@@ -236,7 +236,8 @@ class MusicFlamingoForConditionalGenerationModelTest(ModelTesterMixin, Generatio
 @require_torch
 class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
     """
-    Slow tests against the public checkpoint to validate processor-model alignment and in-place fusion.
+    Slow tests against the public converted checkpoint to validate processor-model alignment and in-place fusion.
+    The original source checkpoint is private, so expected outputs are validated from committed fixtures.
     """
 
     @classmethod
@@ -251,7 +252,8 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_fixture_single_matches(self):
         """
-        reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/c979f0f1a2b9223fa137faf1c02022d4#file-reproducer-py
+        reproducer (creates JSON directly in repo): https://gist.github.com/lashahub/f7f11e90918f661bbf1f31a614a44dd2
+        note: original source checkpoint is private.
         """
         path = Path(__file__).parent.parent.parent / "fixtures/musicflamingo/expected_results_single.json"
         with open(path, "r", encoding="utf-8") as f:
@@ -293,7 +295,8 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_fixture_batched_matches(self):
         """
-        reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/c979f0f1a2b9223fa137faf1c02022d4#file-reproducer-py
+        reproducer (creates JSON directly in repo): https://gist.github.com/lashahub/f7f11e90918f661bbf1f31a614a44dd2
+        note: original source checkpoint is private.
         """
         path = Path(__file__).parent.parent.parent / "fixtures/musicflamingo/expected_results_batched.json"
         with open(path, "r", encoding="utf-8") as f:
