@@ -107,6 +107,61 @@ class MixtralModelTest(CausalLMModelTest, unittest.TestCase):
         # This is to mimic torch.testing.assert_not_close
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
+    @is_flaky(max_attempts=2)
+    def test_load_balancing_loss_with_output_router_logits_false(self):
+        r"""
+        Test that load balancing loss is still computed and added to total loss even when output_router_logits=False.
+        This is a regression test for https://github.com/huggingface/transformers/issues/44242
+        """
+        # Set seed for deterministic test
+        set_seed(42)
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.num_local_experts = 3
+        config.output_router_logits = False  # Explicitly set to False
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+
+        # Test 1: With labels (training mode), aux_loss should be computed even with output_router_logits=False
+        model = MixtralForCausalLM(config)
+        model.to(torch_device)
+        model.eval()
+
+        # When labels are provided, load balancing loss should be computed
+        result_with_labels = model(
+            input_ids,
+            attention_mask=attention_mask,
+            labels=input_ids,  # Provide labels to trigger loss computation
+            output_router_logits=False,
+        )
+        # The loss should include the aux_loss contribution
+        self.assertIsNotNone(result_with_labels.loss)
+        # aux_loss should be computed
+        self.assertIsNotNone(result_with_labels.aux_loss)
+        # router_logits should NOT be in output since output_router_logits=False
+        self.assertIsNone(result_with_labels.router_logits)
+
+        # Test 2: Without labels (inference mode), aux_loss should not be computed
+        result_without_labels = model(
+            input_ids,
+            attention_mask=attention_mask,
+            output_router_logits=False,
+        )
+        # aux_loss should be None when no labels
+        self.assertIsNone(result_without_labels.aux_loss)
+        # router_logits should NOT be in output
+        self.assertIsNone(result_without_labels.router_logits)
+
+        # Test 3: Verify that with output_router_logits=True, we get router_logits in output
+        result_with_router = model(
+            input_ids,
+            attention_mask=attention_mask,
+            labels=input_ids,
+            output_router_logits=True,
+        )
+        self.assertIsNotNone(result_with_router.router_logits)
+        self.assertEqual(result_with_router.router_logits[0].shape, (91, config.num_local_experts))
+
 
 @require_torch
 class MixtralIntegrationTest(unittest.TestCase):

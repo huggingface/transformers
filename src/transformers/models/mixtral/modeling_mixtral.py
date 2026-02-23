@@ -649,6 +649,10 @@ class MixtralForCausalLM(MixtralPreTrainedModel, GenerationMixin):
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
         )
 
+        # If labels are provided, we need to compute load balancing loss, so we need to collect router_logits
+        # regardless of output_router_logits setting
+        forward_router_logits = output_router_logits or (labels is not None)
+
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
@@ -657,7 +661,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_router_logits=output_router_logits,
+            output_router_logits=forward_router_logits,
             cache_position=cache_position,
             **kwargs,
         )
@@ -672,15 +676,14 @@ class MixtralForCausalLM(MixtralPreTrainedModel, GenerationMixin):
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         aux_loss = None
-        if output_router_logits:
+        if labels is not None and forward_router_logits:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,
                 self.num_experts_per_tok,
                 attention_mask,
             )
-            if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+            loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
         return MoeCausalLMOutputWithPast(
             loss=loss,
@@ -689,7 +692,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
+            router_logits=outputs.router_logits if output_router_logits else None,
         )
 
 
