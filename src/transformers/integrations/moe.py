@@ -496,7 +496,6 @@ def use_experts_implementation(
     return wrapper
 
 
-@wrap_triton
 @triton.jit
 def _w8a8_block_fp8_matmul_batched_fused(
     A,  # (S, K)  raw BF16/FP16 activations — fused: quantized inline
@@ -616,7 +615,7 @@ def w8a8_block_fp8_matmul_triton_batched_fused(
     BLOCK_SIZE_M = min(max(triton.next_power_of_2((S + E - 1) // E), 16), 128)
 
     grid = (triton.cdiv(N, block_n), S)
-    _w8a8_block_fp8_matmul_batched_fused[grid](
+    wrap_triton(_w8a8_block_fp8_matmul_batched_fused)[grid](
         A,
         B,
         C,
@@ -644,7 +643,6 @@ def w8a8_block_fp8_matmul_triton_batched_fused(
     return C
 
 
-@wrap_triton
 @triton.jit
 def _w8a8_block_fp8_grouped_mm_fused(
     A,  # (S, K)  raw BF16/FP16 activations, sorted by expert id
@@ -796,8 +794,6 @@ def w8a8_block_fp8_matmul_triton_grouped_fused(
     C = A.new_empty(S, N)
 
     # Adaptive BLOCK_SIZE_M: match tile to average tokens per expert.
-    # Pure integer arithmetic — no GPU sync, CUDA-graph safe.
-    E = B.shape[0]
     BLOCK_SIZE_M = min(max(triton.next_power_of_2((S + E - 1) // E), 16), 128)
     tiles_per_expert = (tokens_per_expert + BLOCK_SIZE_M - 1) // BLOCK_SIZE_M
     tile_offsets = torch.cumsum(tiles_per_expert, dim=0).to(torch.int32)
@@ -808,8 +804,7 @@ def w8a8_block_fp8_matmul_triton_grouped_fused(
     max_M_tiles = triton.cdiv(S, BLOCK_SIZE_M) + E
 
     grid = (max_M_tiles * triton.cdiv(N, block_n),)
-
-    _w8a8_block_fp8_grouped_mm_fused[grid](
+    wrap_triton(_w8a8_block_fp8_grouped_mm_fused)[grid](
         A,
         B,
         C,
