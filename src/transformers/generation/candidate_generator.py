@@ -1140,7 +1140,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
                 break
 
         # In case we didn't find a match return the input sequence unchanged, reverts back to autoregressive decoding
-        if not match_found or len(chosen_ids) == 0:
+        if not match_found or chosen_ids is None or len(chosen_ids) == 0:
             return input_ids, None
 
         # Now need extend input_ids with chosen_ids

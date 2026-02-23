@@ -15,12 +15,13 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from queue import Queue
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    from ..models.auto import AutoTokenizer
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
 
 
 class BaseStreamer:
@@ -71,13 +72,13 @@ class TextStreamer(BaseStreamer):
         ```
     """
 
-    def __init__(self, tokenizer: AutoTokenizer, skip_prompt: bool = False, **decode_kwargs):
+    def __init__(self, tokenizer: PreTrainedTokenizerBase, skip_prompt: bool = False, **decode_kwargs: Any):
         self.tokenizer = tokenizer
         self.skip_prompt = skip_prompt
         self.decode_kwargs = decode_kwargs
 
         # variables used in the streaming process
-        self.token_cache = []
+        self.token_cache: list[int] = []
         self.print_len = 0
         self.next_tokens_are_prompt = True
 
@@ -97,6 +98,8 @@ class TextStreamer(BaseStreamer):
         # Add the new token to the cache and decodes the entire thing.
         self.token_cache.extend(value.tolist())
         text = self.tokenizer.decode(self.token_cache, **self.decode_kwargs)
+        if not isinstance(text, str):
+            text = text[0] if text else ""
 
         # After the symbol for a new line, we flush the cache.
         if text.endswith("\n"):
@@ -120,6 +123,8 @@ class TextStreamer(BaseStreamer):
         # Flush the cache, if it exists
         if len(self.token_cache) > 0:
             text = self.tokenizer.decode(self.token_cache, **self.decode_kwargs)
+            if not isinstance(text, str):
+                text = text[0] if text else ""
             printable_text = text[self.print_len :]
             self.token_cache = []
             self.print_len = 0
@@ -205,7 +210,11 @@ class TextIteratorStreamer(TextStreamer):
     """
 
     def __init__(
-        self, tokenizer: AutoTokenizer, skip_prompt: bool = False, timeout: float | None = None, **decode_kwargs
+        self,
+        tokenizer: PreTrainedTokenizerBase,
+        skip_prompt: bool = False,
+        timeout: float | None = None,
+        **decode_kwargs: Any,
     ):
         super().__init__(tokenizer, skip_prompt, **decode_kwargs)
         self.text_queue = Queue()
@@ -283,14 +292,20 @@ class AsyncTextIteratorStreamer(TextStreamer):
     """
 
     def __init__(
-        self, tokenizer: AutoTokenizer, skip_prompt: bool = False, timeout: float | None = None, **decode_kwargs
+        self,
+        tokenizer: PreTrainedTokenizerBase,
+        skip_prompt: bool = False,
+        timeout: float | None = None,
+        **decode_kwargs: Any,
     ):
         super().__init__(tokenizer, skip_prompt, **decode_kwargs)
         self.text_queue = asyncio.Queue()
         self.stop_signal = None
         self.timeout = timeout
         self.loop = asyncio.get_running_loop()
-        self.has_asyncio_timeout = hasattr(asyncio, "timeout")
+        timeout_context = getattr(asyncio, "timeout", None)
+        self.has_asyncio_timeout = sys.version_info >= (3, 11) and callable(timeout_context)
+        self.asyncio_timeout = timeout_context if self.has_asyncio_timeout else None
 
     def on_finalized_text(self, text: str, stream_end: bool = False):
         """Put the new text in the queue. If the stream is ending, also put a stop signal in the queue."""
@@ -303,8 +318,8 @@ class AsyncTextIteratorStreamer(TextStreamer):
 
     async def __anext__(self):
         try:
-            if self.has_asyncio_timeout:
-                async with asyncio.timeout(self.timeout):
+            if self.has_asyncio_timeout and self.asyncio_timeout is not None:
+                async with self.asyncio_timeout(self.timeout):
                     value = await self.text_queue.get()
             else:
                 value = await asyncio.wait_for(self.text_queue.get(), timeout=self.timeout)

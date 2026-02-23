@@ -372,6 +372,8 @@ class GenerationMixin(ContinuousMixin):
     base_model_prefix: str
     _is_stateful: bool
     hf_quantizer: Any
+    encoder: Any
+    hf_device_map: dict[str, Any]
     forward: Callable[..., Any]
     __call__: Callable[..., Any]
     can_generate: Callable[..., bool]
@@ -690,9 +692,10 @@ class GenerationMixin(ContinuousMixin):
             return inputs
 
         encoder_outputs = model_kwargs.get("encoder_outputs")
-        if self.config.is_encoder_decoder and encoder_outputs is not None:
+        last_hidden_state = getattr(encoder_outputs, "last_hidden_state", None)
+        if self.config.is_encoder_decoder and last_hidden_state is not None:
             # make dummy input_ids with value -100, as a sanity check ensuring that they won't be used for encoding
-            shape = encoder_outputs.last_hidden_state.size()[:-1]
+            shape = last_hidden_state.size()[:-1]
             return torch.ones(shape, dtype=torch.long, device=self.device) * -100
 
         # If there is some tensor in `model_kwargs`, we can infer the batch size from it. This is helpful with
@@ -999,6 +1002,8 @@ class GenerationMixin(ContinuousMixin):
                 vocab_size=self.config.get_text_config().vocab_size,
             )
         elif different_tokenizers:
+            if assistant_model is None or target_tokenizer is None or assistant_tokenizer is None:
+                raise ValueError("`assistant_model`, `target_tokenizer`, and `assistant_tokenizer` must be provided.")
             if generation_config.do_sample is True:
                 atm_translator = AssistantVocabTranslatorCache.get_translator(
                     target_tokenizer,
@@ -1773,17 +1778,21 @@ class GenerationMixin(ContinuousMixin):
         """
         offload_cache = "offloaded" in cache_implementation
 
+        cache_to_check: StaticCache | None = None
         if hasattr(self, "_cache"):
-            cache_to_check = self._cache.self_attention_cache if self.config.is_encoder_decoder else self._cache
+            if isinstance(self._cache, EncoderDecoderCache):
+                cache_to_check = self._cache.self_attention_cache
+            elif isinstance(self._cache, StaticCache):
+                cache_to_check = self._cache
 
         need_new_cache = (
-            not hasattr(self, "_cache")
+            cache_to_check is None
             or cache_to_check.offloading != offload_cache
             or cache_to_check.max_batch_size != batch_size
             or cache_to_check.max_cache_len < max_cache_len
         )
 
-        if self.config.is_encoder_decoder and hasattr(self, "_cache"):
+        if self.config.is_encoder_decoder and hasattr(self, "_cache") and isinstance(self._cache, EncoderDecoderCache):
             need_new_cache = (
                 need_new_cache
                 or self._cache.cross_attention_cache.max_cache_len != model_kwargs["encoder_outputs"][0].shape[1]
@@ -2130,8 +2139,10 @@ class GenerationMixin(ContinuousMixin):
             "assistant_model": assistant_model,
             "streamer": streamer,
         }
+        get_world_size = getattr(dist, "get_world_size", None)
+        world_size = get_world_size() if callable(get_world_size) else 1
         generation_mode_kwargs["synced_gpus"] = (
-            (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and dist.get_world_size() > 1
+            (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and world_size > 1
             if synced_gpus is None
             else synced_gpus
         )
@@ -2578,9 +2589,14 @@ class GenerationMixin(ContinuousMixin):
         if synced_gpus:
             # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
             # The following logic allows an early break if all peers finished generating their sequence
+            all_reduce = getattr(dist, "all_reduce", None)
+            reduce_op = getattr(dist, "ReduceOp", None)
+            reduce_op_sum = getattr(reduce_op, "SUM", None)
+            if not callable(all_reduce) or reduce_op_sum is None:
+                return not this_peer_finished
             this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0, device=device)
             # send 0.0 if we finished, 1.0 otherwise
-            dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+            all_reduce(this_peer_finished_flag, op=reduce_op_sum)
             # did all peers finish? the reduced sum will be 0.0 then
             if this_peer_finished_flag.item() == 0.0:
                 return False
@@ -2627,13 +2643,19 @@ class GenerationMixin(ContinuousMixin):
 
         tail_ids = input_ids[:, -1].tolist()
 
+        def _decode_single_token(token_id: int) -> str:
+            decoded = tokenizer.decode(token_id)
+            if isinstance(decoded, str):
+                return decoded
+            return decoded[0] if decoded else ""
+
         # tail tokens are used for a prefix search, thus, whitespaces are replaced with
         # their tokenization (e.g. 'Ġ') to enable search for tokens prefixed with a whitespace
         if tokenizer.convert_tokens_to_ids(" ") is not None:
             space_tok = tokenizer.convert_ids_to_tokens(tokenizer.convert_tokens_to_ids(" "))[0]
-            tail_toks = (tokenizer.decode(t).replace(" ", space_tok) for t in tail_ids)
+            tail_toks = (_decode_single_token(t).replace(" ", space_tok) for t in tail_ids)
         else:
-            tail_toks = (tokenizer.decode(t) for t in tail_ids)
+            tail_toks = (_decode_single_token(t) for t in tail_ids)
 
         for batch_idx, (tail_id, tail_tok) in enumerate(zip(tail_ids, tail_toks)):
             batch_ids = input_ids[batch_idx]
@@ -3714,7 +3736,7 @@ class GenerationMixin(ContinuousMixin):
             streamer.end()
 
         if (
-            hasattr(candidate_generator, "assistant_model")
+            isinstance(candidate_generator, AssistedCandidateGenerator)
             and candidate_generator.assistant_model.generation_config.num_assistant_tokens_schedule == "heuristic"
         ):
             candidate_generator.assistant_model.generation_config.num_assistant_tokens = (
