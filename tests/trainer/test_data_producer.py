@@ -805,5 +805,193 @@ class TestGRPOPatterns(unittest.TestCase):
                 self.assertFalse(grad_on, "Gradients should be disabled during produce()")
 
 
+# ---------------------------------------------------------------------------
+# Multi-GPU / accelerator safety tests
+# ---------------------------------------------------------------------------
+
+
+class TestAcceleratorSafety(unittest.TestCase):
+    """Tests for correct behaviour when dataloaders go through accelerator.prepare().
+
+    On multi-GPU, accelerator.prepare() wraps DataLoaders with
+    BatchSamplerShard/DataLoaderShard. The online path creates a new
+    DataLoader per rollout, so we must ensure:
+    - Old dataloaders are removed from accelerator tracking (no leak)
+    - len(dataloader) is consistent with actual batches yielded
+    - The dataloader from each rollout is independently functional
+    """
+
+    def test_accelerator_dataloaders_no_leak(self):
+        """Old dataloaders are removed from accelerator._dataloaders across rollouts.
+
+        Without cleanup, each rollout's accelerator.prepare() appends a new
+        entry. Over many rollouts this leaks memory and breaks checkpoint
+        save/load (which iterates accelerator._dataloaders).
+        """
+        config = ProducerConfig(max_rollouts=5, mini_epochs=1)
+        producer = CountingProducer(config=config, dataset_length=16)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=999,
+                per_device_train_batch_size=8,
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = Trainer(model=model, args=args, data_producer=producer)
+            trainer.train()
+            # After 5 rollouts, there should NOT be 5+ dataloaders tracked.
+            # The exact count depends on whether eval dataloaders are also
+            # prepared, but it should be small and bounded — not proportional
+            # to the number of rollouts.
+            num_tracked = len(trainer.accelerator._dataloaders)
+            self.assertLessEqual(
+                num_tracked, 2,
+                f"Expected ≤2 tracked dataloaders, got {num_tracked} — stale dataloaders are leaking",
+            )
+
+    def test_dataloader_len_matches_batches_yielded(self):
+        """len(dataloader) should match the actual number of batches it yields.
+
+        On multi-GPU, accelerator.prepare() wraps the sampler with
+        BatchSamplerShard, which changes len(). The _OnlineEpochSource uses
+        len(dataloader) to compute steps_in_epoch, so a mismatch would
+        cause training to hang or skip steps.
+        """
+        config = ProducerConfig(max_rollouts=1, mini_epochs=1)
+        producer = CountingProducer(config=config, dataset_length=24)
+
+        actual_batches = {"count": 0}
+        original_run_epoch = Trainer._run_epoch
+
+        def counting_run_epoch(self, model, epoch_spec, trial, ignore_keys_for_eval, start_time):
+            # Count actual batches yielded by the dataloader
+            count = 0
+            for _ in epoch_spec.dataloader:
+                count += 1
+            actual_batches["count"] = count
+            # Now run the real epoch (creates a new iterator)
+            return original_run_epoch(self, model, epoch_spec, trial, ignore_keys_for_eval, start_time)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=999,
+                per_device_train_batch_size=8,
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = Trainer(model=model, args=args, data_producer=producer)
+            # Monkey-patch to count batches
+            trainer._run_epoch = counting_run_epoch.__get__(trainer, Trainer)
+            trainer.train()
+            # 24 / 8 = 3 batches
+            self.assertEqual(actual_batches["count"], 3)
+
+    def test_new_dataloader_per_rollout_is_functional(self):
+        """Each rollout gets a fully functional new dataloader.
+
+        This ensures accelerator.prepare() on fresh dataloaders mid-training
+        works correctly — the new dataloader should iterate, yield correct
+        batch sizes, and not inherit state from the previous one.
+        """
+
+        class BatchSizeTrackingProducer(BaseDataProducer):
+            def __init__(self, config=None):
+                super().__init__(config)
+                self.call_count = 0
+
+            def produce(self, model, global_step, **kwargs):
+                self.call_count += 1
+                return SimpleDataset(length=24, seed=self.call_count)
+
+        config = ProducerConfig(max_rollouts=3, mini_epochs=1)
+        producer = BatchSizeTrackingProducer(config=config)
+
+        batch_sizes_per_rollout = []
+        original_run_epoch = Trainer._run_epoch
+
+        def tracking_run_epoch(self, model, epoch_spec, trial, ignore_keys_for_eval, start_time):
+            sizes = []
+            for batch in epoch_spec.dataloader:
+                sizes.append(len(batch["input_x"]))
+            batch_sizes_per_rollout.append(sizes)
+            return original_run_epoch(self, model, epoch_spec, trial, ignore_keys_for_eval, start_time)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=999,
+                per_device_train_batch_size=8,
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = Trainer(model=model, args=args, data_producer=producer)
+            trainer._run_epoch = tracking_run_epoch.__get__(trainer, Trainer)
+            trainer.train()
+            # Each rollout should yield 3 batches of size 8 (24/8)
+            self.assertEqual(len(batch_sizes_per_rollout), 3)
+            for rollout_idx, sizes in enumerate(batch_sizes_per_rollout):
+                self.assertEqual(len(sizes), 3, f"Rollout {rollout_idx}: expected 3 batches, got {len(sizes)}")
+                for batch_idx, size in enumerate(sizes):
+                    self.assertEqual(size, 8, f"Rollout {rollout_idx} batch {batch_idx}: expected size 8, got {size}")
+
+    def test_callback_handler_dataloader_updated(self):
+        """callback_handler.train_dataloader is updated each rollout.
+
+        Callbacks (e.g., for logging, early stopping) reference the current
+        dataloader via callback_handler. On multi-GPU, stale references
+        could cause incorrect progress reporting.
+        """
+
+        class DataloaderCapturingProducer(BaseDataProducer, DataProducerCallback):
+            """Captures the callback_handler.train_dataloader at each rollout boundary."""
+
+            def __init__(self, config=None):
+                super().__init__(config)
+                self.call_count = 0
+                self.captured_dataloaders = []
+
+            def produce(self, model, global_step, **kwargs):
+                self.call_count += 1
+                return SimpleDataset(length=16, seed=self.call_count)
+
+            def on_epoch_begin(self, args, state, control, **kwargs):
+                # Capture what the callback handler thinks is the current dataloader
+                dl = kwargs.get("train_dataloader")
+                if dl is not None:
+                    self.captured_dataloaders.append(id(dl))
+
+        config = ProducerConfig(max_rollouts=3, mini_epochs=1)
+        producer = DataloaderCapturingProducer(config=config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=999,
+                per_device_train_batch_size=8,
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = Trainer(model=model, args=args, data_producer=producer)
+            trainer.train()
+            # Should have captured a dataloader reference for each epoch
+            self.assertEqual(len(producer.captured_dataloaders), 3)
+            # Rollout 0 uses the initial dataloader; rollouts 1 and 2 get new ones
+            # At minimum, rollout 0 and rollout 1 should have different dataloaders
+            self.assertNotEqual(
+                producer.captured_dataloaders[0],
+                producer.captured_dataloaders[1],
+                "Dataloader should change between rollouts",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

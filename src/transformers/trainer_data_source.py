@@ -306,6 +306,14 @@ class _OnlineEpochSource(_EpochSource):
                 # Use the dataset produced during compute_plan()
                 dataloader = self._initial_dataloader
             else:
+                # Remove the previous dataloader from accelerator tracking
+                # to avoid accumulating stale references (which would leak
+                # memory and interfere with checkpoint save/load).
+                prev_dl = dataloader  # noqa: F821 — always set on prior iteration
+                acc_dls = trainer.accelerator._dataloaders
+                if prev_dl in acc_dls:
+                    acc_dls.remove(prev_dl)
+
                 dataset = trainer._produce_data(self._model)
                 dataloader = trainer._get_online_dataloader(dataset)
                 dataloader = trainer._apply_sp_adapter(dataloader, self._model)
