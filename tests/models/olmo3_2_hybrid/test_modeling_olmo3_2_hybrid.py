@@ -1,4 +1,4 @@
-# Copyright 2025 the HuggingFace Team. All rights reserved.
+# Copyright 2026 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,6 @@
 import tempfile
 import unittest
 
-from parameterized import parameterized
-
 from transformers import Olmo3_2HybridConfig, is_torch_available
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
@@ -30,10 +28,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_modeling_common import (
-    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
-    _test_eager_matches_sdpa_inference,
-)
 
 
 if is_torch_available():
@@ -56,107 +50,19 @@ class Olmo3_2HybridModelTester(CausalLMModelTester):
         base_model_class = Olmo3_2HybridModel
         causal_lm_class = Olmo3_2HybridForCausalLM
 
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        intermediate_size=64,
-        hidden_act="silu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        scope=None,
-    ):
-        super().__init__(
-            parent=parent,
-            batch_size=batch_size,
-            seq_length=seq_length,
-            is_training=is_training,
-            use_input_mask=use_input_mask,
-            use_token_type_ids=use_token_type_ids,
-            use_labels=use_labels,
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            intermediate_size=intermediate_size,
-            hidden_act=hidden_act,
-            hidden_dropout_prob=hidden_dropout_prob,
-            attention_probs_dropout_prob=attention_probs_dropout_prob,
-            max_position_embeddings=max_position_embeddings,
-            type_vocab_size=type_vocab_size,
-            type_sequence_label_size=type_sequence_label_size,
-            initializer_range=initializer_range,
-            num_labels=num_labels,
-            num_choices=num_choices,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            scope=scope,
-        )
-
-        # Hybrid-specific config
+    def __init__(self, parent):
+        super().__init__(parent=parent)
         self.layer_types = ["linear_attention", "full_attention"]
-        self.linear_num_key_heads = num_attention_heads
-        self.linear_num_value_heads = num_attention_heads
-        self.linear_key_head_dim = hidden_size // num_attention_heads
-        self.linear_value_head_dim = hidden_size // num_attention_heads
+        self.linear_num_key_heads = 4
+        self.linear_num_value_heads = 4
+        self.linear_key_head_dim = 8
+        self.linear_value_head_dim = 8
         self.linear_conv_kernel_dim = 4
-        self.linear_use_gate = True
         self.linear_allow_neg_eigval = False
-
-    def get_config(self):
-        return Olmo3_2HybridConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            max_position_embeddings=self.max_position_embeddings,
-            initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            layer_types=self.layer_types,
-            linear_num_key_heads=self.linear_num_key_heads,
-            linear_num_value_heads=self.linear_num_value_heads,
-            linear_key_head_dim=self.linear_key_head_dim,
-            linear_value_head_dim=self.linear_value_head_dim,
-            linear_conv_kernel_dim=self.linear_conv_kernel_dim,
-            linear_use_gate=self.linear_use_gate,
-            linear_allow_neg_eigval=self.linear_allow_neg_eigval,
-        )
 
 
 @require_torch
 class Olmo3_2HybridModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (Olmo3_2HybridModel, Olmo3_2HybridForCausalLM) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"feature-extraction": Olmo3_2HybridModel, "text-generation": Olmo3_2HybridForCausalLM}
-        if is_torch_available()
-        else {}
-    )
     model_tester_class = Olmo3_2HybridModelTester
     rotary_embedding_layer = Olmo3_2HybridRotaryEmbedding if is_torch_available() else None
 
@@ -238,40 +144,13 @@ class Olmo3_2HybridModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(len(self_attentions), sum(layer == "full_attention" for layer in config.layer_types))
             self.assertListEqual(list(self_attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
 
-    # === Override eager/sdpa test like Qwen3Next (skip fp16 due to fallback instability) ===
-    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    def test_eager_matches_sdpa_inference(
-        self,
-        name,
-        dtype,
-        padding_side,
-        use_attention_mask,
-        output_attentions,
-        enable_kernels,
-    ):
-        """
-        Overwrite without fp16 because the slow path `torch_chunk_gated_delta_rule`
-        is not robust enough in fp16 due to upscaling in fp32 and downscaling at the end
-        """
-        if dtype == "fp16":
-            self.skipTest("Not robust in fp16")
-        _test_eager_matches_sdpa_inference(
-            self,
-            name,
-            dtype,
-            padding_side,
-            use_attention_mask,
-            output_attentions,
-            enable_kernels,
-        )
-
     @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip("Triton kernels require CUDA")
-    def test_training_overfit(self):
-        pass
+    # @unittest.skip("Triton kernels require CUDA")
+    # def test_training_overfit(self):
+    #     pass
 
     @require_torch_multi_gpu
     def test_can_use_device_map(self):
@@ -383,7 +262,15 @@ class Olmo3_2HybridIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_greedy_generation(self):
-        EXPECTED_TEXT_COMPLETION = "Simply put, the theory of relativity states that \xa0the laws of physics are the same for all non-accelerating observers. This means that the laws of physics are the same for all observers, regardless of their relative motion or the strength of the gravitational field they are in. This theory was first proposed by Albert Einstein in 1905 and has since been confirmed"
+        expectations = Expectations(
+            {
+                (
+                    "cuda",
+                    8,
+                ): "Simply put, the theory of relativity states that \xa0the laws of physics are the same for all non-accelerating observers. This means that the laws of physics are the same for all observers, regardless of their relative motion or the strength of the gravitational field they are in. This theory was first proposed by Albert Einstein in 1905 and has since been confirmed",
+            }
+        )
+        EXPECTED_TEXT_COMPLETION = expectations.get_expectation()
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("yanhong-l/olmo-3.5-test")
         model = Olmo3_2HybridForCausalLM.from_pretrained(

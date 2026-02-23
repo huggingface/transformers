@@ -28,9 +28,6 @@ class Olmo3_2HybridConfig(PreTrainedConfig):
     configuration with the defaults will yield a similar configuration to that of the
     [allenai/OLMo-3.2-1B-Hybrid](https://huggingface.co/allenai/OLMo-3.2-1B-Hybrid) model.
 
-    The OLMo 3.2 Hybrid model combines standard transformer attention layers with GatedDeltaNet linear attention
-    layers for improved efficiency while maintaining model quality.
-
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
@@ -92,10 +89,18 @@ class Olmo3_2HybridConfig(PreTrainedConfig):
                 Dimension of each key head in linear attention layers. Defaults to `0.75 * hidden_size / linear_num_key_heads`.
             linear_value_head_dim (`int`, *optional*):
                 Dimension of each value head in linear attention layers. Defaults to `2 * linear_key_head_dim`.
+            linear_a_log_min (`float`, *optional*, defaults to 0.0):
+                Minimum value for uniform initialization of A_log in GatedDeltaNet layers.
+            linear_a_log_max (`float`, *optional*, defaults to 16.0):
+                Maximum value for uniform initialization of A_log in GatedDeltaNet layers.
+            linear_dt_min (`float`, *optional*, defaults to 0.001):
+                Minimum value for dt initialization in GatedDeltaNet layers.
+            linear_dt_max (`float`, *optional*, defaults to 0.1):
+                Maximum value for dt initialization in GatedDeltaNet layers.
+            linear_dt_init_floor (`float`, *optional*, defaults to 0.0001):
+                Floor value for clamping dt during initialization in GatedDeltaNet layers.
             linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
                 Kernel size for the short convolution applied to queries, keys, and values in linear attention layers.
-            linear_use_gate (`bool`, *optional*, defaults to `True`):
-                Whether to use gating in the linear attention output normalization.
             linear_allow_neg_eigval (`bool`, *optional*, defaults to `True`):
                 Whether to allow negative eigenvalues in the GatedDeltaNet recurrence. When `True`, the beta
                 parameter is scaled by 2.0 to allow values in range [0, 2] instead of [0, 1].
@@ -116,10 +121,10 @@ class Olmo3_2HybridConfig(PreTrainedConfig):
     model_type = "olmo3_2_hybrid"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.k_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.v_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.q_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.k_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.v_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the added norm on q and k
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -155,8 +160,12 @@ class Olmo3_2HybridConfig(PreTrainedConfig):
         linear_num_value_heads: int | None = None,
         linear_key_head_dim: int | None = None,
         linear_value_head_dim: int | None = None,
+        linear_a_log_min: float = 0.0,
+        linear_a_log_max: float = 16.0,
+        linear_dt_min: float = 0.001,
+        linear_dt_max: float = 0.1,
+        linear_dt_init_floor: float = 1e-4,
         linear_conv_kernel_dim: int = 4,
-        linear_use_gate: bool = True,
         linear_allow_neg_eigval: bool = True,
         **kwargs,
     ):
@@ -193,6 +202,11 @@ class Olmo3_2HybridConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+
         self.rms_norm_eps = rms_norm_eps
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -203,13 +217,7 @@ class Olmo3_2HybridConfig(PreTrainedConfig):
 
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
         if linear_num_key_heads is None:
             linear_num_key_heads = num_attention_heads
@@ -224,8 +232,12 @@ class Olmo3_2HybridConfig(PreTrainedConfig):
         self.linear_num_value_heads = linear_num_value_heads
         self.linear_key_head_dim = linear_key_head_dim
         self.linear_value_head_dim = linear_value_head_dim
+        self.linear_a_log_min = linear_a_log_min
+        self.linear_a_log_max = linear_a_log_max
+        self.linear_dt_min = linear_dt_min
+        self.linear_dt_max = linear_dt_max
+        self.linear_dt_init_floor = linear_dt_init_floor
         self.linear_conv_kernel_dim = linear_conv_kernel_dim
-        self.linear_use_gate = linear_use_gate
         self.linear_allow_neg_eigval = linear_allow_neg_eigval
 
 
