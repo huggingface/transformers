@@ -36,7 +36,6 @@ from ...utils import (
 from ...utils.import_utils import (
     is_mambapy_available,
     is_torch_greater_or_equal,
-    is_torchdynamo_compiling,
     is_tracing,
     resolve_internal_import,
 )
@@ -416,7 +415,7 @@ class MambaMixer(nn.Module):
             scan_output = scan_output * self.act(gate)
         else:
             # Use associative_scan for parallel computation when available
-            if self.use_associative_scan and associative_scan is not None and is_tracing() and cache_params is None:
+            if self.use_associative_scan and associative_scan is not None and is_tracing(hidden_states) and cache_params is None:
                 def combine_fn(left, right):
                     a_left, b_left = left
                     a_right, b_right = right
@@ -457,7 +456,7 @@ class MambaMixer(nn.Module):
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
-        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_torchdynamo_compiling():
+        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_tracing(hidden_states):
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
 
