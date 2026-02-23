@@ -152,6 +152,13 @@
       title: Subclassing Trainer methods
     - local: trainer_callbacks
       title: Callbacks
+    title: Trainer API
+  - isExpanded: false
+    sections:
+    - local: trainer_callbacks
+      title: Callbacks
+    - local: data_collators
+      title: Data collators
     - local: optimizers
       title: Optimizers
     - local: hpo_train
