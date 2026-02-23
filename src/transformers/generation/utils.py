@@ -3739,7 +3739,11 @@ class GenerationMixin(ContinuousMixin):
         # according to that if needed
         next_sequence_length = None
         inputs_embeds = model_kwargs.get("inputs_embeds")
-        current_input_length = input_ids.shape[1] if inputs_embeds is None else inputs_embeds.shape[1]
+        # We use inputs_embeds only in this case
+        if not self.config.is_encoder_decoder and inputs_embeds is not None and is_first_iteration:
+            current_input_length = inputs_embeds.shape[1]
+        else:
+            current_input_length = input_ids.shape[1]
         if (cache := model_kwargs.get("past_key_values")) is not None:
             attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
             attention_mask = model_kwargs.get(attention_mask_key)
