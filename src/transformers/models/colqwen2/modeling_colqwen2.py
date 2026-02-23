@@ -160,13 +160,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        position_ids, rope_deltas = self.vlm.model.get_rope_index(
-            input_ids=input_ids,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=None,
-            attention_mask=attention_mask,
-        )
-
         # Custom data preparation to fix an issue with the gradient flow when training with multiple GPUs.
         if inputs_embeds is None:
             inputs_embeds = self.vlm.get_input_embeddings()(input_ids)

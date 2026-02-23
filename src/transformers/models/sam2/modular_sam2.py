@@ -40,7 +40,12 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging
-from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested
+from ...utils.generic import (
+    TransformersKwargs,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..maskformer.modeling_maskformer import MaskFormerSinePositionEmbedding
 from ..sam.image_processing_sam_fast import SamImageProcessorFast
@@ -653,6 +658,8 @@ class Sam2HieraDetModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor | None = None
     intermediate_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -664,6 +671,15 @@ class Sam2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
+    _keys_to_ignore_on_load_unexpected = [
+        r"^memory_.*",
+        r"^mask_downsample.*",
+        r"^object_pointer_proj.*",
+        r"^temporal_positional_encoding_projection_layer.*",
+        "no_memory_positional_encoding",
+        "no_object_pointer",
+        "occlusion_spatial_embedding_parameter",
+    ]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -723,7 +739,8 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -775,7 +792,7 @@ class Sam2VisionModel(Sam2PreTrainedModel):
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
 
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -798,6 +815,8 @@ class Sam2VisionModel(Sam2PreTrainedModel):
             last_hidden_state=hidden_states,
             fpn_hidden_states=fpn_hidden_states,
             fpn_position_encoding=fpn_position_encoding,
+            hidden_states=backbone_output.hidden_states,
+            attentions=backbone_output.attentions,
         )
 
 
@@ -1172,15 +1191,6 @@ class Sam2MaskDecoder(SamMaskDecoder):
     """
 )
 class Sam2Model(SamModel):
-    _keys_to_ignore_on_load_unexpected = [
-        r"^memory_.*",
-        r"^mask_downsample.*",
-        r"^object_pointer_proj.*",
-        r"^temporal_positional_encoding_projection_layer.*",
-        "no_memory_positional_encoding",
-        "no_object_pointer",
-        "occlusion_spatial_embedding_parameter",
-    ]
     _tied_weights_keys = {}
 
     def __init__(self, config: Sam2Config):
@@ -1274,7 +1284,8 @@ class Sam2Model(SamModel):
 
         return vision_outputs
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

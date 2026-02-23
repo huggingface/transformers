@@ -30,7 +30,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEModelOutput, ChameleonVQVAEVectorQuantizer
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
@@ -597,7 +598,8 @@ class GlmImageVisionModel(Glm4vVisionModel):
         pos_ids = torch.cat(pos_ids, dim=0)
         return pos_ids
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
@@ -665,6 +667,7 @@ class GlmImageModel(Glm4vModel):
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Calculate the 3D rope index for image generation task with full batch support.
@@ -784,10 +787,11 @@ class GlmImageModel(Glm4vModel):
                 decode_height_list = []
                 decode_width_list = []
 
+                curr_grids_list = curr_grids.tolist()
                 for i in range(1, num_decode_grids + 1):
                     grid_idx = -i
-                    h = curr_grids[grid_idx, 1].item()
-                    w = curr_grids[grid_idx, 2].item()
+                    h = curr_grids_list[grid_idx][1]
+                    w = curr_grids_list[grid_idx][2]
                     total_tokens = h * w
 
                     h_indices = torch.arange(h, device=device).unsqueeze(1).expand(h, w).flatten()
@@ -909,16 +913,50 @@ class GlmImageModel(Glm4vModel):
         """
 
         special_image_mask = input_ids == self.config.image_token_id
-        n_placeholder_tokens = special_image_mask.sum().item()
+        n_placeholder_tokens = special_image_mask.sum()
         n_image_tokens = image_ids.shape[0]
 
         if n_placeholder_tokens != n_image_tokens:
             raise ValueError(
-                f"Number of image placeholder tokens ({n_placeholder_tokens}) does not match "
+                f"Number of image placeholder tokens ({n_placeholder_tokens.item()}) does not match "
                 f"number of image tokens from VQVAE ({n_image_tokens})"
             )
 
         return special_image_mask
+
+    def compute_3d_position_ids(
+        self,
+        input_ids: torch.Tensor | None,
+        image_grid_thw: torch.Tensor | None,
+        images_per_sample: torch.Tensor | None,
+        inputs_embeds: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: torch.Tensor | None,
+        cache_position: torch.Tensor | None,
+    ) -> torch.Tensor | None:
+        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        can_compute_mrope = input_ids is not None and image_grid_thw is not None
+
+        if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
+            position_ids, rope_deltas = self.get_rope_index(
+                input_ids,
+                image_grid_thw=image_grid_thw,
+                attention_mask=attention_mask,
+                images_per_sample=images_per_sample,
+            )
+            self.rope_deltas = rope_deltas
+        # Use pre-calculated rope-deltas to infer correct 3D position ids
+        elif self.rope_deltas is not None:
+            batch_size, seq_length, _ = inputs_embeds.shape
+            if self._cached_decode_position_ids is not None:
+                step = cache_position[0].item() - self._prefill_len
+                position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
+            else:
+                position_ids = cache_position.view(1, 1, -1).repeat(3, batch_size, 1)
+        else:
+            # Can't build correct 3D positions. Let the model infer it from `cache_position`
+            position_ids = None
+        return position_ids
 
     def forward(
         self,
@@ -967,10 +1005,11 @@ class GlmImageModel(Glm4vModel):
                     non_pad_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids)
 
                 source_grids_list = []
+                is_image_end = input_ids == self.config.image_end_token_id
+                is_non_pad = non_pad_mask == 1
+                num_source_per_sample = (is_image_end & is_non_pad).sum(dim=1).tolist()
                 for sample_idx in range(batch_size):
-                    is_image_end = input_ids[sample_idx] == self.config.image_end_token_id
-                    is_non_pad = non_pad_mask[sample_idx] == 1
-                    num_source = (is_image_end & is_non_pad).sum().item()
+                    num_source = num_source_per_sample[sample_idx]
                     if num_source > 0:
                         source_grids_list.append(grids_per_sample[sample_idx][:num_source])
                 if len(source_grids_list) == 0:
@@ -994,43 +1033,15 @@ class GlmImageModel(Glm4vModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if position_ids is None:
-            attention_mask_2d = attention_mask
-            if attention_mask is not None and attention_mask.ndim == 4:
-                attention_mask_2d = torch.diagonal(attention_mask[:, 0], dim1=1, dim2=2)
-                # Only apply conversion for floating point tensors (inverted masks)
-                if attention_mask_2d.dtype.is_floating_point:
-                    attention_mask_2d = attention_mask_2d / torch.finfo(attention_mask_2d.dtype).min
-                    attention_mask_2d = (1.0 - attention_mask_2d).int()
-
-            # Calculate RoPE index once per generation in the pre-fill stage only.
-            is_prefill_stage = (input_ids is not None and input_ids.shape[1] != 1) or (
-                inputs_embeds is not None and inputs_embeds.shape[1] != 1
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                images_per_sample=images_per_sample,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                cache_position=cache_position,
             )
-            if is_prefill_stage or self.rope_deltas is None:
-                position_ids, rope_deltas = self.get_rope_index(
-                    input_ids,
-                    image_grid_thw,
-                    images_per_sample=images_per_sample,
-                    attention_mask=attention_mask_2d,
-                )
-                self.rope_deltas = rope_deltas
-            # then use the prev pre-calculated rope-deltas to get the correct position ids
-            else:
-                batch_size, seq_length, _ = inputs_embeds.shape
-                # Per-sample decode position lookup
-                # _cached_decode_position_ids shape: [batch_size, 3, max_decode_len]
-                if self._cached_decode_position_ids is not None:
-                    step = cache_position[0].item() - self._prefill_len
-                    # Get position ids for all samples at once, then transpose to [3, batch_size, seq_length]
-                    position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
-                else:
-                    # Fallback for text-to-image or cases without cached decode positions
-                    # Use simple incremental positions
-                    start_pos = cache_position[0].item()
-                    position_ids = torch.arange(
-                        start_pos, start_pos + seq_length, device=inputs_embeds.device, dtype=torch.long
-                    )
-                    position_ids = position_ids.unsqueeze(0).repeat(3, batch_size, 1)
 
         outputs = self.language_model(
             input_ids=None,
@@ -1278,10 +1289,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
                 image_nums = self._get_image_nums(input_ids).tolist()
 
             # Get source image counts per sample from image_end_token_id count
-            source_image_nums = [
-                (input_ids[batch_idx] == self.config.image_end_token_id).sum().item()
-                for batch_idx in range(len(image_nums))
-            ]
+            source_image_nums = (input_ids == self.config.image_end_token_id).sum(dim=1).tolist()
 
             def _repeat_interleave_samples(x, lengths, repeat_times):
                 samples = torch.split(x, lengths)
@@ -1295,14 +1303,15 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
                     if sum(source_image_nums) > 0:
                         # Split grids by sample to compute pixel counts
                         grids_per_sample = torch.split(image_grid_thw, image_nums)
-                        lengths = []
-                        for batch_idx, sample_grids in enumerate(grids_per_sample):
+                        all_pixel_counts = image_grid_thw.prod(dim=1)
+                        pixel_counts_per_sample = torch.split(all_pixel_counts, image_nums)
+                        # Build source mask and compute per-sample source pixel counts in one sync
+                        source_pixel_counts = torch.zeros(len(grids_per_sample), device=image_grid_thw.device)
+                        for batch_idx in range(len(grids_per_sample)):
                             num_source = source_image_nums[batch_idx]
                             if num_source > 0:
-                                source_grids = sample_grids[:num_source]
-                                lengths.append(torch.prod(source_grids, dim=1).sum().item())
-                            else:
-                                lengths.append(0)
+                                source_pixel_counts[batch_idx] = pixel_counts_per_sample[batch_idx][:num_source].sum()
+                        lengths = source_pixel_counts.to(torch.int64).tolist()
 
                         dict_to_expand[key] = _repeat_interleave_samples(
                             dict_to_expand[key], lengths=lengths, repeat_times=expand_size

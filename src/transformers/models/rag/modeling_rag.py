@@ -1588,9 +1588,6 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             max_cache_length=generation_config.max_length - 1,
         )
 
-        # Prefill pass
-        generation_mode_kwargs["prefill_outputs"] = self._prefill(input_ids, generation_config, model_kwargs)
-
         return decoding_method(
             self,
             input_ids,

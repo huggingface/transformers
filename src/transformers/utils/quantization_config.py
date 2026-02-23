@@ -62,6 +62,7 @@ class QuantizationMethod(str, Enum):
     FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
+    SINQ = "sinq"
 
 
 class AwqFormat(str, Enum):
@@ -158,6 +159,12 @@ class QuantizationConfigMixin:
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
+    def to_diff_dict(self) -> dict[str, Any]:
+        """
+        Default behavior: no diffing implemented for this config.
+        """
+        return self.to_dict()
+
     def to_json_string(self, use_diff: bool = True) -> str:
         """
         Serializes this instance to a JSON string.
@@ -170,10 +177,7 @@ class QuantizationConfigMixin:
         Returns:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
         """
-        if use_diff is True:
-            config_dict = self.to_diff_dict()
-        else:
-            config_dict = self.to_dict()
+        config_dict = self.to_diff_dict() if use_diff else self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
     def update(self, **kwargs):
@@ -1254,7 +1258,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
     def is_quantization_compressed(self):
         from compressed_tensors.quantization import QuantizationStatus
 
-        return self.is_quantized and self.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
+        qc = self.quantization_config
+        return self.is_quantized and (qc is not None and qc.quantization_status == QuantizationStatus.COMPRESSED)
 
     @property
     def is_sparsification_compressed(self):
@@ -1902,3 +1907,72 @@ class Mxfp4Config(QuantizationConfigMixin):
             `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         return {"quant_method": self.quant_method, "modules_to_not_convert": self.modules_to_not_convert}
+
+
+@dataclass
+class SinqConfig(QuantizationConfigMixin):
+    """
+    Quantization config for SINQ / A-SINQ.
+
+    Pass this to:
+
+        AutoModel.from_pretrained(..., quantization_config=SinqConfig(...))
+
+    Args:
+        nbits (`int`, default 4):
+            Quantization bits for weights.
+        group_size (`int`, default 64):
+            Group size used in SINQ weight quantization (must be multiple of 8).
+        tiling_mode (`str`, default "1D"):
+            Tiling mode for SINQ (typically "1D"; "2D" if supported in your backend).
+        method (`str`, default "sinq"):
+            "sinq"  – calibration-free weight-only SINQ
+            "asinq" – A-SINQ (activation-aware), not supported in Hugging Face. Please refer to the official SINQ repository.
+        modules_to_not_convert (`list[str]`, *optional*):
+            List of module names/prefixes to keep in full precision.
+
+        **kwargs:
+            Extra user arguments (kept in `_extra_kwargs` for round-tripping).
+    """
+
+    def __init__(
+        self,
+        nbits: int = 4,
+        group_size: int = 64,
+        tiling_mode: str = "1D",
+        method: str = "sinq",  # "sinq" | "asinq"
+        modules_to_not_convert: list[str] | None = None,
+        **kwargs: Any,
+    ):
+        self.quant_method = QuantizationMethod.SINQ
+
+        self.nbits = nbits
+        self.group_size = group_size
+        self.tiling_mode = tiling_mode
+        self.method = method
+
+        self.modules_to_not_convert = modules_to_not_convert
+
+        self._extra_kwargs: dict[str, Any] = dict(kwargs)
+
+        self.post_init()
+
+    def post_init(self):
+        self.nbits = int(self.nbits)
+        self.group_size = int(self.group_size)
+        self.tiling_mode = str(self.tiling_mode)
+        self.method = str(self.method).lower()
+
+        # Validation
+        if not isinstance(self.nbits, int):
+            raise TypeError("`nbits` must be convertible to an int")
+        if not isinstance(self.group_size, int):
+            raise TypeError("`group_size` must be convertible to an int")
+        if not isinstance(self.tiling_mode, str):
+            raise TypeError("`tiling_mode` must be convertible to a string")
+        if self.method not in {"sinq", "asinq"}:
+            raise ValueError(f"`method` must be either 'sinq' or 'asinq', got {self.method}")
+        if self.group_size is not None and self.group_size % 8 != 0:
+            logger.warning(
+                f"SINQ: group_size={self.group_size} is not a multiple of 8; this may be rejected by the backend."
+            )

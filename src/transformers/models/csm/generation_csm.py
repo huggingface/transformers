@@ -209,18 +209,19 @@ class CsmGenerationMixin(GenerationMixin):
         # *************** Csm specific ***************
         model_kwargs.update({"output_hidden_states": True})
 
-        # Assisted generation completes the prefill stage in candidate generator so that
-        # we don't have several `prefill` calls in one generation loop. Skip `_prefill` for assistants
-        if not generation_config.is_assistant:
-            outputs = self._prefill(input_ids, generation_config, model_kwargs)
-            prefill_consumed = False
-        else:
-            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
-            prefill_consumed = True
+        prefill_consumed = False
+        outputs = self._prefill(
+            input_ids,
+            generation_config,
+            model_kwargs,
+            is_first_iteration=not generation_config.is_assistant,
+        )
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
-                model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+                use_cache = model_kwargs.get("use_cache", True)
+                new_inputs_ids = input_ids[:, -1:] if use_cache else input_ids
+                model_inputs = self.prepare_inputs_for_generation(new_inputs_ids, **model_kwargs)
                 # prepare variable output controls (note: some models won't accept all output controls)
                 model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
                 outputs = model_forward(**model_inputs, return_dict=True)
