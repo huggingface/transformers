@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 T5 Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Tokenization class for model T5."""
 
 import re
-from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -72,7 +70,7 @@ class T5Tokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
+        vocab: str | list[tuple[str, float]] | None = None,
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",

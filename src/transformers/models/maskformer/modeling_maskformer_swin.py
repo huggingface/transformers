@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,20 +18,18 @@ states before downsampling, which is different from the default Swin Transformer
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...file_utils import ModelOutput
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import meshgrid
 from ...utils import auto_docstring, torch_int
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
 
@@ -52,11 +49,11 @@ class MaskFormerSwinModelOutputWithPooling(ModelOutput):
         `forward` method.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    pooler_output: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
     hidden_states_spatial_dimensions: tuple[tuple[int, int]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -73,10 +70,10 @@ class MaskFormerSwinBaseModelOutput(ModelOutput):
         method.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
     hidden_states_spatial_dimensions: tuple[tuple[int, int]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 # Copied from transformers.models.swin.modeling_swin.window_partition
@@ -229,7 +226,7 @@ class MaskFormerSwinPatchEmbeddings(nn.Module):
             pixel_values = nn.functional.pad(pixel_values, pad_values)
         return pixel_values
 
-    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> tuple[torch.Tensor, tuple[int]]:
+    def forward(self, pixel_values: torch.FloatTensor | None) -> tuple[torch.Tensor, tuple[int]]:
         _, num_channels, height, width = pixel_values.shape
         # pad the input to be divisible by self.patch_size, if needed
         pixel_values = self.maybe_pad(pixel_values, height, width)
@@ -300,7 +297,7 @@ class MaskFormerSwinPatchMerging(nn.Module):
 class MaskFormerSwinDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -342,8 +339,8 @@ class MaskFormerSwinSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
         hidden_shape = (batch_size, dim, -1, self.attention_head_size)
@@ -394,7 +391,7 @@ class MaskFormerSwinSelfAttention(nn.Module):
         # get pair-wise relative position index for each token inside the window
         coords_h = torch.arange(self.window_size[0])
         coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
+        coords = torch.stack(torch.meshgrid([coords_h, coords_w], indexing="ij"))
         coords_flatten = torch.flatten(coords, 1)
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()
@@ -429,8 +426,8 @@ class MaskFormerSwinAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(hidden_states, attention_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -659,7 +656,7 @@ class MaskFormerSwinEncoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
-    ) -> Union[tuple, MaskFormerSwinBaseModelOutput]:
+    ) -> tuple | MaskFormerSwinBaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_input_dimensions = ()
         all_self_attentions = () if output_attentions else None
@@ -743,7 +740,7 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         interpolate_pos_encoding=False,
         return_dict=None,
         **kwargs,
-    ) -> Union[tuple, MaskFormerSwinModelOutputWithPooling]:
+    ) -> tuple | MaskFormerSwinModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -787,7 +784,7 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         )
 
 
-class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
+class MaskFormerSwinBackbone(BackboneMixin, MaskFormerSwinPreTrainedModel):
     """
     MaskFormerSwin backbone, designed especially for the MaskFormer framework.
 
@@ -801,7 +798,6 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
 
     def __init__(self, config: MaskFormerSwinConfig):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.model = MaskFormerSwinModel(config)
         if "stem" in self.out_features:
@@ -817,9 +813,9 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: Tensor,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

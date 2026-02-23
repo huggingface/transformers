@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     is_flash_attn_2_available,
     require_flash_attn,
     require_large_cpu_ram,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_large_accelerator,
@@ -73,7 +72,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @require_torch_large_accelerator
-    @require_read_token
     def test_model_9b_bf16(self):
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
@@ -94,7 +92,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_torch_large_accelerator
-    @require_read_token
     def test_model_9b_fp16(self):
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
@@ -114,7 +111,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @require_read_token
     @require_torch_large_accelerator
     def test_model_9b_pipeline_bf16(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
@@ -139,7 +135,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
     # TODO: run_test_using_subprocess was added because of an issue in torch 2.9, which is already fixed in nightly
     # We can remove this once we upgrade to torch 2.10
     @run_test_using_subprocess
-    @require_read_token
     def test_model_2b_pipeline_bf16_flex_attention(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
         model_id = "google/gemma-2-2b"
@@ -169,7 +164,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output[0][0]["generated_text"], EXPECTED_BATCH_TEXT[0])
         self.assertEqual(output[1][0]["generated_text"], EXPECTED_BATCH_TEXT[1])
 
-    @require_read_token
     @require_flash_attn
     @require_torch_large_accelerator
     @mark.flash_attn_test
@@ -204,7 +198,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
     @pytest.mark.torch_export_test
     @slow
-    @require_read_token
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.5.0"):
             self.skipTest(reason="This test requires torch >= 2.5 to run.")
@@ -277,7 +270,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
     @slow
-    @require_read_token
     @require_large_cpu_ram
     @pytest.mark.torch_export_test
     def test_export_hybrid_cache(self):
@@ -320,7 +312,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(export_generated_text, eager_generated_text)
 
     @require_torch_large_accelerator
-    @require_read_token
     def test_model_9b_bf16_flex_attention(self):
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
@@ -341,7 +332,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
-    @require_read_token
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
         we need to correctly slice the attention mask in all cases (because we use a hybrid cache).
@@ -387,7 +377,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
-    @require_read_token
     def test_generation_beyond_sliding_window_dynamic(self, attn_implementation: str):
         """
         Same as above, but explicitly setting the cache to Dynamic, as it's otherwise static by default for

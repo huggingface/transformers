@@ -390,6 +390,7 @@ are forwarded, so you can tweak padding or tensor formats just like when calling
 ## AudioFlamingo3Processor
 
 [[autodoc]] AudioFlamingo3Processor
+    - __call__
 
 ## AudioFlamingo3Encoder
 
@@ -400,3 +401,4 @@ are forwarded, so you can tweak padding or tensor formats just like when calling
 
 [[autodoc]] AudioFlamingo3ForConditionalGeneration
     - forward
+    - get_audio_features

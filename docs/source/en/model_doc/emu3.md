@@ -155,6 +155,7 @@ for i, image in enumerate(images['pixel_values']):
 ## Emu3Processor
 
 [[autodoc]] Emu3Processor
+    - __call__
 
 ## Emu3ImageProcessor
 

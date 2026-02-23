@@ -20,7 +20,6 @@ import requests
 
 from transformers import Dinov2Config, PromptDepthAnythingConfig
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils.import_utils import get_torch_major_and_minor_version
 
@@ -169,30 +168,26 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
 
-    @unittest.skip(reason="Prompt Depth Anything does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Prompt Depth Anything does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(
         reason="Prompt Depth Anything with AutoBackbone does not have a base model and hence no input_embeddings"
     )
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @slow
@@ -212,11 +207,13 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        config.backbone = "facebook/dinov2-small"
-        config.use_pretrained_backbone = True
-        config.use_timm_backbone = False
-        config.backbone_config = None
-        config.backbone_kwargs = {"out_indices": [-2, -1]}
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "facebook/dinov2-small"
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["use_timm_backbone"] = False
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": [-2, -1]}
+        config = config.__class__(**config_dict)
         _validate_backbone_init()
 
 
@@ -290,8 +287,6 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
                 self.skipTest(reason="`strict=True` is currently failing with torch 2.7.")
 
             with self.subTest(strict=strict):
-                if not is_torch_greater_or_equal_than_2_4:
-                    self.skipTest(reason="This test requires torch >= 2.4 to run.")
                 model = (
                     PromptDepthAnythingForDepthEstimation.from_pretrained(
                         "depth-anything/prompt-depth-anything-vits-hf"

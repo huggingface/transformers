@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_exaone4.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The LG AI Research and HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -19,8 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
 
@@ -70,6 +67,8 @@ class Exaone4Config(PreTrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             End of stream token id.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
@@ -129,25 +128,26 @@ class Exaone4Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 102400,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 16384,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 32,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 2048,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        bos_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_dropout: Optional[float] = 0.0,
-        sliding_window: Optional[int] = 4096,
-        sliding_window_pattern: Optional[int] = 4,
-        layer_types: Optional[list[str]] = None,
+        vocab_size: int | None = 102400,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 16384,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 32,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        bos_token_id: int | None = 0,
+        eos_token_id: int | None = 2,
+        pad_token_id: int | None = None,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_dropout: float | None = 0.0,
+        sliding_window: int | None = 4096,
+        sliding_window_pattern: int | None = 4,
+        layer_types: list[str] | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -164,6 +164,10 @@ class Exaone4Config(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.sliding_window = sliding_window
         self.sliding_window_pattern = sliding_window_pattern
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.layer_types = layer_types
         if self.sliding_window is None:
@@ -175,15 +179,11 @@ class Exaone4Config(PreTrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        if "sliding_window" in self.layer_types:
-            self.cache_implementation = "hybrid"
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["Exaone4Config"]

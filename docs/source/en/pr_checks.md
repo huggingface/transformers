@@ -95,13 +95,7 @@ make style
 The CI checks those have been applied inside the `ci/circleci: check_code_quality` check. It also runs `ruff`, that will have a basic look at your code and will complain if it finds an undefined variable, or one that is not used. To run that check locally, use
 
 ```bash
-make quality
-```
-
-This can take a lot of time, so to run the same thing on only the files you modified in the current branch, run
-
-```bash
-make fixup
+make check-repo
 ```
 
 This last command will also run all the additional checks for the repository consistency. Let's have a look at them.
@@ -111,7 +105,7 @@ This last command will also run all the additional checks for the repository con
 This regroups all the tests to make sure your PR leaves the repository in a good state, and is performed by the `ci/circleci: check_repository_consistency` check. You can locally run that check by executing the following:
 
 ```bash
-make repo-consistency
+make check-repo
 ```
 
 This checks that:
@@ -129,7 +123,7 @@ This checks that:
 Should this check fail, the first two items require manual fixing, the last four can be fixed automatically for you by running the command
 
 ```bash
-make fix-copies
+make fix-repo
 ```
 
 Additional checks concern PRs that add new models, mainly that:

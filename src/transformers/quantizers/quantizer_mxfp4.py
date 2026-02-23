@@ -55,7 +55,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             try:
                 from ..integrations.hub_kernels import get_kernel
 
-                self.triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+                self.triton_kernels_hub = get_kernel("kernels-community/gpt-oss-triton-kernels")
             except ImportError:
                 raise ImportError("kernels package is required for MXFP4 quantization")
         return self.triton_kernels_hub

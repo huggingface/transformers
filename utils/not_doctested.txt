@@ -242,7 +242,6 @@ docs/source/en/model_doc/yoso.md
 docs/source/en/model_memory_anatomy.md
 docs/source/en/model_sharing.md
 docs/source/en/notebooks.md
-docs/source/en/pad_truncation.md
 docs/source/en/peft.md
 docs/source/en/perf_hardware.md
 docs/source/en/perf_torch_compile.md
@@ -699,7 +698,6 @@ src/transformers/pipelines/feature_extraction.py
 src/transformers/pipelines/fill_mask.py
 src/transformers/pipelines/image_classification.py
 src/transformers/pipelines/image_segmentation.py
-src/transformers/pipelines/image_to_text.py
 src/transformers/pipelines/mask_generation.py
 src/transformers/pipelines/object_detection.py
 src/transformers/pipelines/pt_utils.py
