@@ -39,6 +39,9 @@ from ..qwen3_omni_moe.configuration_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderConfig, Qwen3OmniMoeTextConfig, Qwen3OmniMoeThinkerConfig,
     Qwen3OmniMoeConfig
 )
+from ..qwen3_omni_moe.processing_qwen3_omni_moe import (
+    _get_feat_extract_output_lengths
+)
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     pass
@@ -364,17 +367,6 @@ class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
             "return_attention_mask": True,
         },
     }
-
-
-def _get_feat_extract_output_lengths(input_lengths):
-    """
-    Computes the output length of the convolutional layers and the output length of the audio encoder
-    """
-
-    input_lengths_leave = input_lengths % 100
-    feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    output_lengths = ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
-    return output_lengths
 
 
 class Qwen3ASRProcessor(ProcessorMixin):
