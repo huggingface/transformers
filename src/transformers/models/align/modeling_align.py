@@ -34,7 +34,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.output_capturing import capture_outputs
 from .configuration_align import AlignConfig, AlignTextConfig, AlignVisionConfig
 
 
@@ -856,7 +855,7 @@ class AlignTextModel(AlignPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -963,7 +962,7 @@ class AlignVisionModel(AlignPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
