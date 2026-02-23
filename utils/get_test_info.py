@@ -87,11 +87,24 @@ def get_test_classes(test_file):
     test_module = get_test_module(test_file)
     for attr in dir(test_module):
         attr_value = getattr(test_module, attr)
-        # ModelTesterMixin is also an attribute in specific model test module. Let's exclude them by checking
-        # `all_model_classes` is not empty (which also excludes other special classes).
-        model_classes = getattr(attr_value, "all_model_classes", [])
-        if len(model_classes) > 0:
-            test_classes.append(attr_value)
+        import unittest
+        if isinstance(attr_value, type) and issubclass(attr_value, unittest.TestCase):
+            # ModelTesterMixin is also an attribute in specific model test module. Let's exclude them by checking
+            # `all_model_classes` is not empty (which also excludes other special classes).
+            model_classes = getattr(attr_value, "all_model_classes", [])
+            if model_classes is None:
+                # it has the attribute `all_model_classes` but it's none
+                o = attr_value()
+                o.setUp()
+                model_classes = getattr(o, "all_model_classes", [])
+            # try:
+            #     len(model_classes)
+            # except:
+            #     # breakpoint()
+            if len(model_classes) > 0:
+                # breakpoint()
+                test_classes.append(attr_value)
+                # breakpoint()
 
     # sort with class names
     return sorted(test_classes, key=lambda x: x.__name__)
