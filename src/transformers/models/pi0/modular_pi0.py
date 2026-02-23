@@ -21,17 +21,132 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput, is_valid_image
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, or_masks
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import ProcessingKwargs, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import ModelOutput, auto_docstring, logging
 from ..auto import AutoConfig, AutoModel
 from ..gemma.modeling_gemma import apply_rotary_pos_emb, eager_attention_forward
 from ..paligemma.configuration_paligemma import PaliGemmaConfig
 from ..paligemma.modeling_paligemma import PaliGemmaMultiModalProjector
+from ..paligemma.processing_paligemma import PaliGemmaProcessor
 from ..siglip import SiglipVisionConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+class PI0ProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": "max_length",
+            "max_length": 48,
+        },
+        "images_kwargs": {
+            "data_format": "channels_first",
+        },
+    }
+
+
+def _is_nested_image_list(images) -> bool:
+    return (
+        isinstance(images, (list, tuple))
+        and len(images) > 0
+        and isinstance(images[0], (list, tuple))
+        and len(images[0]) > 0
+        and is_valid_image(images[0][0])
+    )
+
+
+@auto_docstring
+class PI0Processor(PaliGemmaProcessor):
+    model_input_names = ["input_ids", "attention_mask", "pixel_values", "image_masks", "token_type_ids"]
+
+    def __call__(
+        self,
+        images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[PI0ProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        PI0 processor tokenizes language and supports multi-camera images per sample.
+        Unlike `PaliGemmaProcessor`, it does not inject `<image>` placeholder tokens because PI0 concatenates image
+        embeddings and language embeddings directly in the model.
+        """
+        output_kwargs = self._merge_kwargs(PI0ProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
+
+        if images is None:
+            raise ValueError("`images` are expected as arguments to a `PI0Processor` instance.")
+        if text is None:
+            logger.warning_once("You are using PI0 without a text prefix. The processor will use an empty prompt.")
+            text = ""
+
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, (list, tuple)):
+            raise ValueError("`text` must be a string or a list of strings.")
+        elif any(not isinstance(sample, str) for sample in text):
+            raise ValueError("`text` must be a string or a list of strings.")
+
+        text = [sample if sample.endswith("\n") else f"{sample}\n" for sample in text]
+
+        if is_valid_image(images):
+            batched_images = [[images]]
+        elif isinstance(images, (list, tuple)) and len(images) > 0 and is_valid_image(images[0]):
+            batched_images = [[image] for image in images]
+        elif _is_nested_image_list(images):
+            batched_images = [list(sample_images) for sample_images in images]
+        else:
+            raise ValueError("`images` must be an image, a list of images, or a list of list of images.")
+
+        if len(batched_images) != len(text):
+            raise ValueError(
+                f"Received {len(batched_images)} image samples for {len(text)} prompts. "
+                "Each prompt should be associated with one sample (with one or more camera images)."
+            )
+
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        tokenized = self.tokenizer(text, return_token_type_ids=True, **output_kwargs["text_kwargs"])
+
+        max_num_cameras = max(len(sample_images) for sample_images in batched_images)
+        image_masks = []
+        padded_pixel_values = []
+
+        for sample_images in batched_images:
+            processed = self.image_processor(sample_images, return_tensors="pt", **output_kwargs["images_kwargs"])[
+                "pixel_values"
+            ]
+            num_cameras = processed.shape[0]
+
+            sample_mask = torch.zeros(max_num_cameras, dtype=torch.bool)
+            sample_mask[:num_cameras] = True
+            image_masks.append(sample_mask)
+
+            if num_cameras < max_num_cameras:
+                pad = torch.zeros(
+                    max_num_cameras - num_cameras,
+                    *processed.shape[1:],
+                    dtype=processed.dtype,
+                )
+                processed = torch.cat([processed, pad], dim=0)
+
+            padded_pixel_values.append(processed)
+
+        pixel_values = torch.stack(padded_pixel_values, dim=0)
+        image_masks = torch.stack(image_masks, dim=0)
+
+        return_data = {**tokenized, "pixel_values": pixel_values, "image_masks": image_masks}
+        return BatchFeature(data=return_data, tensor_type=return_tensors)
+
+    @property
+    def model_input_names(self):
+        parent_model_input_names = super().model_input_names
+        if "image_masks" not in parent_model_input_names:
+            return [*parent_model_input_names, "image_masks"]
+        return parent_model_input_names
 
 
 class PI0Config(PaliGemmaConfig):
@@ -312,6 +427,14 @@ class PI0Model(PI0PreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     def get_image_features(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+        if pixel_values.ndim == 5:
+            batch_size, num_cameras = pixel_values.shape[:2]
+            pixel_values = pixel_values.reshape(batch_size * num_cameras, *pixel_values.shape[2:])
+            image_outputs = self.vision_tower(pixel_values)
+            image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
+            image_features = image_features.reshape(batch_size, num_cameras, image_features.shape[1], image_features.shape[2])
+            return image_features.flatten(1, 2)
+
         image_outputs = self.vision_tower(pixel_values)
         image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
         return image_features
@@ -565,6 +688,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             inputs_embeds=[prefix_embs, None],
             use_cache=True,
         )
+        prefix_length = prefix_embs.shape[1]
 
         dt = -1.0 / num_steps
         x_t = noise
@@ -586,6 +710,8 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
                 inputs_embeds=[None, suffix_embs],
                 use_cache=False,
             )
+            if past_key_values is not None:
+                past_key_values.crop(prefix_length)
 
             suffix_out = suffix_out[:, -self.config.chunk_size :]
             v_t = self.action_out_proj(suffix_out)
@@ -601,4 +727,6 @@ __all__ = [
     "PI0Model",
     "PI0ForConditionalGeneration",
     "PI0MultiModalProjector",
+    "PI0Processor",
+    "PI0ProcessorKwargs",
 ]

@@ -123,6 +123,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("owlvit", "OwlViTProcessor"),
         ("paddleocr_vl", "PaddleOCRVLProcessor"),
         ("paligemma", "PaliGemmaProcessor"),
+        ("pi0", "PI0Processor"),
         ("perception_lm", "PerceptionLMProcessor"),
         ("phi4_multimodal", "Phi4MultimodalProcessor"),
         ("pix2struct", "Pix2StructProcessor"),

@@ -239,9 +239,18 @@ class PI0Model(PI0PreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     def get_image_features(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+        if pixel_values.ndim == 5:
+            batch_size, num_cameras = pixel_values.shape[:2]
+            pixel_values = pixel_values.reshape(batch_size * num_cameras, *pixel_values.shape[2:])
+            image_outputs = self.vision_tower(pixel_values)
+            image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
+            image_features = image_features.reshape(
+                batch_size, num_cameras, image_features.shape[1], image_features.shape[2]
+            )
+            return image_features.flatten(1, 2)
+
         image_outputs = self.vision_tower(pixel_values)
         image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
-        image_features = image_features / (self.config.text_config.hidden_size**0.5)
         return image_features
 
     def embed_language_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
@@ -519,6 +528,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             inputs_embeds=[prefix_embs, None],
             use_cache=True,
         )
+        prefix_length = prefix_embs.shape[1]
 
         dt = -1.0 / num_steps
         x_t = noise
@@ -540,6 +550,8 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
                 inputs_embeds=[None, suffix_embs],
                 use_cache=False,
             )
+            if past_key_values is not None:
+                past_key_values.crop(prefix_length)
 
             suffix_out = suffix_out[:, -self.config.chunk_size :]
             v_t = self.action_out_proj(suffix_out)
