@@ -35,6 +35,7 @@ if is_torch_available():
 
     from transformers import (
         GraniteForCausalLM,
+        GraniteForSequenceClassification,
         GraniteModel,
     )
 
@@ -140,6 +141,16 @@ class GraniteModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    def create_and_check_for_sequence_classification(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_labels = self.num_labels
+        model = GraniteForSequenceClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -161,6 +172,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         (
             GraniteModel,
             GraniteForCausalLM,
+            GraniteForSequenceClassification,
         )
         if is_torch_available()
         else ()
@@ -169,6 +181,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         {
             "feature-extraction": GraniteModel,
             "text-generation": GraniteForCausalLM,
+            "text-classification": GraniteForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -188,6 +201,10 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
 
 @require_torch_accelerator

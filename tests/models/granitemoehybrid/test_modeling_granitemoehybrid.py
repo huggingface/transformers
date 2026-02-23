@@ -47,6 +47,7 @@ if is_torch_available():
 
     from transformers import (
         GraniteMoeHybridForCausalLM,
+        GraniteMoeHybridForSequenceClassification,
         GraniteMoeHybridModel,
     )
     from transformers.models.granitemoehybrid.modeling_granitemoehybrid import HybridMambaAttentionDynamicCache
@@ -83,6 +84,16 @@ class GraniteMoeHybridModelTester(BambaModelTester):
             layer_types=self.layer_types,
         )
 
+    def create_and_check_for_sequence_classification(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_labels = self.num_labels
+        model = GraniteMoeHybridForSequenceClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
 
 @require_torch
 class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -91,6 +102,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         (
             GraniteMoeHybridModel,
             GraniteMoeHybridForCausalLM,
+            GraniteMoeHybridForSequenceClassification,
         )
         if is_torch_available()
         else ()
@@ -99,6 +111,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         {
             "feature-extraction": GraniteMoeHybridModel,
             "text-generation": GraniteMoeHybridForCausalLM,
+            "text-classification": GraniteMoeHybridForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -140,6 +153,10 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
+
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
