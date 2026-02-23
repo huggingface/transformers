@@ -26,7 +26,6 @@ from math import pi
 import torch
 from torch import Tensor, broadcast_tensors, nn
 from torch.amp import autocast
-from torch.nn import Module
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
@@ -45,8 +44,7 @@ from .configuration_musicflamingo import MusicFlamingoConfig, MusicFlamingoEncod
 logger = logging.get_logger(__name__)
 
 
-# classes
-class MusicFlamingoRotaryEmbedding(Module):
+class MusicFlamingoRotaryEmbedding(nn.Module):
     def __init__(
         self,
         dim,
@@ -364,7 +362,6 @@ class MusicFlamingoEncoderLayer(GradientCheckpointingLayer):
         return hidden_states, attn_weights
 
 
-# rotary embedding helper functions
 def rotate_half(x):
     x = x.reshape(*x.shape[:-1], -1, 2)
     x1, x2 = x.unbind(dim=-1)
@@ -387,9 +384,10 @@ def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
     rot_dim = freqs.shape[-1]
     end_index = start_index + rot_dim
 
-    assert rot_dim <= t.shape[-1], (
-        f"feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
-    )
+    if rot_dim > t.shape[-1]:
+        raise ValueError(
+            f"feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
+        )
 
     t_left, t, t_right = t[..., :start_index], t[..., start_index:end_index], t[..., end_index:]
     t = (t * freqs.cos() * scale) + (rotate_half(t) * freqs.sin() * scale)

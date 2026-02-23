@@ -20,7 +20,6 @@ import numpy as np
 import torch
 from torch import Tensor, broadcast_tensors, nn
 from torch.amp import autocast
-from torch.nn import Module
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...cache_utils import Cache
@@ -311,7 +310,6 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         raise NotImplementedError("Not needed for MusicFlamingo")
 
 
-# rotary embedding helper functions
 def rotate_half(x):
     x = x.reshape(*x.shape[:-1], -1, 2)
     x1, x2 = x.unbind(dim=-1)
@@ -334,17 +332,17 @@ def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
     rot_dim = freqs.shape[-1]
     end_index = start_index + rot_dim
 
-    assert rot_dim <= t.shape[-1], (
-        f"feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
-    )
+    if rot_dim > t.shape[-1]:
+        raise ValueError(
+            f"feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
+        )
 
     t_left, t, t_right = t[..., :start_index], t[..., start_index:end_index], t[..., end_index:]
     t = (t * freqs.cos() * scale) + (rotate_half(t) * freqs.sin() * scale)
     return torch.cat((t_left, t, t_right), dim=-1).to(ori_dtype)
 
 
-# classes
-class MusicFlamingoRotaryEmbedding(Module):
+class MusicFlamingoRotaryEmbedding(nn.Module):
     def __init__(
         self,
         dim,
