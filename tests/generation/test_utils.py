@@ -4499,6 +4499,17 @@ class GenerationIntegrationTests(unittest.TestCase):
         text_output = tokenizer.decode(gen_out[0])
         self.assertTrue(text_output.startswith("<unk><unk><unk><unk><unk>"))  # <unk> is the pad token
 
+    def test_custom_generate_from_model_repo_with_custom_generate_code(self):
+        """
+        Tests that models from model repos containing custom generation code override `generate` with the custom code
+        """
+        model = AutoModelForCausalLM.from_pretrained(
+            "transformers-community/custom_generate_example", device_map="auto", trust_remote_code=True
+        )
+        generate_signature = inspect.signature(model.generate)
+        # `left_padding` is a custom argument, doesn't exist in the base `generate` method
+        self.assertTrue(generate_signature.parameters.get("left_padding"))
+
     def test_custom_generate_bad_requirements(self):
         """Tests that we check the `requirements.txt` file from custom generation repos"""
         model = AutoModelForCausalLM.from_pretrained(
