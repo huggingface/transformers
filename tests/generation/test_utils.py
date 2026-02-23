@@ -15,7 +15,6 @@
 
 import collections
 import copy
-import datetime
 import gc
 import inspect
 import random
@@ -2887,7 +2886,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         stopping_criteria = StoppingCriteriaList()
         stopping_criteria.append(MaxLengthCriteria(max_length=42))
         logger = logging.get_logger("transformers.generation.utils")
-    
+
         logger.warning_once.cache_clear()
         with CaptureLogger(logger) as cl:
             bart_model.generate(input_ids, stopping_criteria=stopping_criteria)
