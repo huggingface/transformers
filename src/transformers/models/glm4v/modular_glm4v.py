@@ -1545,8 +1545,8 @@ class Glm4vProcessor(Qwen2VLProcessor):
             # Replace 0 -> 2 only inside video segments because GLM4v
             # uses the same special token to denote images and video
             # Otherwise replace 0 -> 1 for image modality
-            starts = np.cumsum(array_ids == self.video_start_id)
-            ends = np.cumsum(array_ids == self.video_end_id)
+            starts = np.cumsum(array_ids == self.video_start_id, axis=1)
+            ends = np.cumsum(array_ids == self.video_end_id, axis=1)
             is_video_modality = starts > ends
 
             mm_token_type_ids[(array_ids == self.image_token_id) & is_video_modality] = 2
