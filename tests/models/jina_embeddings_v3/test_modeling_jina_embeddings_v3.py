@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
-
 import pytest
 
-from transformers import AutoTokenizer, JinaEmbeddingsV3ForTokenClassification, is_torch_available
+from transformers import AutoTokenizer, is_torch_available
 from transformers.models.jina_embeddings_v3 import JinaEmbeddingsV3Config
 from transformers.testing_utils import (
     require_torch,
@@ -58,11 +57,10 @@ class JinaEmbeddingsV3ModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=8,
-        type_vocab_size=2,
+        type_vocab_size=1,
         type_sequence_label_size=2,
         initializer_range=0.02,
         num_labels=3,
-        num_choices=4,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -83,7 +81,6 @@ class JinaEmbeddingsV3ModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.num_labels = num_labels
-        self.num_choices = num_choices
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -98,15 +95,13 @@ class JinaEmbeddingsV3ModelTester:
 
         sequence_labels = None
         token_labels = None
-        choice_labels = None
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
+            token_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels
 
     def get_config(self):
         return JinaEmbeddingsV3Config(
@@ -123,20 +118,37 @@ class JinaEmbeddingsV3ModelTester:
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
+    def create_and_check_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels):
         model = JinaEmbeddingsV3Model(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+
         result = model(input_ids, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
+    def create_and_check_model_with_adapter_mask(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels
+    ):
+        model = JinaEmbeddingsV3Model(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # Create a dummy adapter mask (e.g., all 1's for 'retrieval.passage')
+        adapter_mask = torch.ones((self.batch_size,), dtype=torch.long).to(torch_device)
+
+        result = model(input_ids, attention_mask=input_mask, adapter_mask=adapter_mask)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
     def create_and_check_for_masked_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels
     ):
         model = JinaEmbeddingsV3ForMaskedLM(config=config)
         model.to(torch_device)
@@ -145,7 +157,7 @@ class JinaEmbeddingsV3ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_question_answering(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels
     ):
         model = JinaEmbeddingsV3ForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -161,7 +173,7 @@ class JinaEmbeddingsV3ModelTester:
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_for_sequence_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels
     ):
         config.num_labels = self.num_labels
         model = JinaEmbeddingsV3ForSequenceClassification(config)
@@ -178,8 +190,6 @@ class JinaEmbeddingsV3ModelTester:
         input_mask,
         sequence_labels,
         token_labels,
-        choice_labels,
-        next_sentence_label,
     ):
         config.num_labels = self.num_labels
         model = JinaEmbeddingsV3ForTokenClassification(config=config)
@@ -187,6 +197,24 @@ class JinaEmbeddingsV3ModelTester:
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+        ) = config_and_inputs
+
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
+        return config, inputs_dict
 
 
 @require_torch
@@ -226,6 +254,10 @@ class JinaEmbeddingsV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_model_with_adapter_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_adapter_mask(*config_and_inputs)
+
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
@@ -237,6 +269,10 @@ class JinaEmbeddingsV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
