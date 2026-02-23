@@ -1054,7 +1054,7 @@ class JinaEmbeddingsV3ForSequenceClassification(JinaEmbeddingsV3PreTrainedModel)
         self.config = config
         self.classifier = JinaEmbeddingsV3ClassificationHead(config)
 
-        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
+        self.jina_embeddings_v3 = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1086,7 +1086,7 @@ class JinaEmbeddingsV3ForSequenceClassification(JinaEmbeddingsV3PreTrainedModel)
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        outputs = self.roberta(
+        outputs = self.jina_embeddings_v3(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1142,7 +1142,7 @@ class JinaEmbeddingsV3ForTokenClassification(JinaEmbeddingsV3PreTrainedModel):
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
+        self.jina_embeddings_v3 = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1172,7 +1172,7 @@ class JinaEmbeddingsV3ForTokenClassification(JinaEmbeddingsV3PreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        outputs = self.roberta(
+        outputs = self.jina_embeddings_v3(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1209,7 +1209,7 @@ class JinaEmbeddingsV3ForQuestionAnswering(JinaEmbeddingsV3PreTrainedModel):
         self.num_labels = config.num_labels
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
+        self.jina_embeddings_v3 = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1238,7 +1238,7 @@ class JinaEmbeddingsV3ForQuestionAnswering(JinaEmbeddingsV3PreTrainedModel):
 
             [What are token type IDs?](../glossary#token-type-ids)
         """
-        outputs = self.roberta(
+        outputs = self.jina_embeddings_v3(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1288,4 +1288,5 @@ __all__ = [
     "JinaEmbeddingsV3ForSequenceClassification",
     "JinaEmbeddingsV3ForTokenClassification",
     "JinaEmbeddingsV3ForQuestionAnswering",
+    "JinaEmbeddingsV3Layer",
 ]
