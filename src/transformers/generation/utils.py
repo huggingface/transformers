@@ -3733,30 +3733,34 @@ class GenerationMixin(ContinuousMixin):
         should be treated as if it's the first iteration. However, for assisted decoding, assistants call `generate`
         several time in a row for a same batch of inputs, so we need to pass `is_first_iteration` here for such cases.
         """
-        # When restarting from previous cache, the `input_ids` or `inputs_embeds` are either the FULL sequence,
-        # including previous inputs, or only the new tokens but in this case the attention_mask still contains the
-        # FULL sequence (because otherwise we may lose some early padding tokens information). So slice inputs
-        # according to that if needed
+        # When restarting from previous cache, the `input_ids` are either the FULL sequence, including previous inputs,
+        # or only the new tokens but in this case the attention_mask still contains the FULL sequence (because otherwise we may
+        # lose some early padding tokens information). So slice inputs according to that if needed
+        # When restarting from `inputs_embeds`, it's always the FULL sequence, and we always need to slice
         next_sequence_length = None
         inputs_embeds = model_kwargs.get("inputs_embeds")
-        # We use inputs_embeds only in this case
+        use_inputs_embeds = False
         if not self.config.is_encoder_decoder and inputs_embeds is not None and is_first_iteration:
-            current_input_length = inputs_embeds.shape[1]
-        else:
-            current_input_length = input_ids.shape[1]
+            use_inputs_embeds = True
         if (cache := model_kwargs.get("past_key_values")) is not None:
-            attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
-            attention_mask = model_kwargs.get(attention_mask_key)
-            # In this case we need to slice - if it's smaller than the mask, only the new inputs were passed -> no need to do anything
-            if attention_mask is not None and current_input_length == attention_mask.shape[1]:
-                past_length = cache.get_seq_length()
-                # inputs will be sliced as `input_ids[:, -next_sequence_length :]` in `prepare_inputs_for_generation`
-                next_sequence_length = current_input_length - past_length
+            past_length = cache.get_seq_length()
+            # Always directly slice the inputs_embeds if present, as `prepare_inputs_for_generation` never need them full and _get_initial_cache_position
+            # rely on its size explicitly. For input_ids, we need to use `next_sequence_length` to slice later instead of explicit slicing,
+            # as some model need them full for correct input preparation inside `prepare_inputs_for_generation` (i.e. audio models)
+            if use_inputs_embeds:
+                model_kwargs["inputs_embeds"] = inputs_embeds[:, past_length:, :]
+            else:
+                attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+                attention_mask = model_kwargs.get(attention_mask_key)
+                # In this case we need to slice - if it's smaller than the mask, only the new inputs were passed -> no need to do anything
+                if attention_mask is not None and input_ids.shape[1] == attention_mask.shape[1]:
+                    # inputs will be sliced as `input_ids[:, -next_sequence_length :]` in `prepare_inputs_for_generation`
+                    next_sequence_length = input_ids.shape[1] - past_length
 
         # Usual prefill
         if generation_config.prefill_chunk_size is None:
             # The cache is already taken into account in `_get_initial_cache_position`, so the length is only the new tokens if we slice
-            effective_input_length = next_sequence_length if next_sequence_length is not None else current_input_length
+            effective_input_length = next_sequence_length if next_sequence_length is not None else input_ids.shape[1]
             model_kwargs = self._get_initial_cache_position(effective_input_length, input_ids.device, model_kwargs)
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids,
