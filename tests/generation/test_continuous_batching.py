@@ -546,6 +546,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
                 use_cuda_graph=True,
                 use_compile=False,
                 use_async=False,
+                max_new_tokens=30,
                 num_blocks=4,
                 num_repeat_prompts=4,
             )
