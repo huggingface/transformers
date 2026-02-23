@@ -437,5 +437,373 @@ class TestTrainerWithDataProducer(unittest.TestCase):
             self.assertIn(CallbackProducer, callback_types)
 
 
+# ---------------------------------------------------------------------------
+# GRPO-pattern tests
+# ---------------------------------------------------------------------------
+
+
+class TestGRPOPatterns(unittest.TestCase):
+    """Tests exercising patterns needed for GRPO migration.
+
+    These validate that the DataProducer + _OnlineEpochSource machinery
+    supports the key behaviours GRPO relies on:
+    - variable-size produced datasets
+    - mini_epochs reusing the same data (num_iterations)
+    - max_steps stopping mid-rollout
+    - produce() seeing an updated model
+    - eval/train mode switching during produce
+    - gradient accumulation with online source
+    - _get_train_sampler override point
+    - async producer integration
+    """
+
+    def test_variable_size_datasets(self):
+        """produce() can return different-sized datasets across rollouts."""
+
+        class ShrinkingProducer(BaseDataProducer):
+            def __init__(self, config=None):
+                super().__init__(config)
+                self.call_count = 0
+                self.sizes = []
+
+            def produce(self, model, global_step, **kwargs):
+                self.call_count += 1
+                # First rollout: 32 samples, second: 16
+                length = 32 if self.call_count == 1 else 16
+                self.sizes.append(length)
+                return SimpleDataset(length=length, seed=self.call_count)
+
+        config = ProducerConfig(max_rollouts=2, mini_epochs=1)
+        producer = ShrinkingProducer(config=config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=999,
+                per_device_train_batch_size=8,
+                learning_rate=0.1,
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = Trainer(model=model, args=args, data_producer=producer)
+            trainer.train()
+            self.assertEqual(producer.sizes, [32, 16])
+            # 32/8=4 steps from rollout 1, 16/8=2 steps from rollout 2 → 6 total
+            self.assertEqual(trainer.state.global_step, 6)
+
+    def test_mini_epochs_reuse_same_dataloader(self):
+        """With mini_epochs>1, the same data is iterated multiple times per rollout.
+
+        This mirrors GRPO's num_iterations: reuse scored completions across
+        multiple optimizer steps.
+        """
+
+        class TrackingProducer(BaseDataProducer):
+            def __init__(self, config=None):
+                super().__init__(config)
+                self.call_count = 0
+
+            def produce(self, model, global_step, **kwargs):
+                self.call_count += 1
+                return SimpleDataset(length=16, seed=42)
+
+        config = ProducerConfig(max_rollouts=1, mini_epochs=3)
+        producer = TrackingProducer(config=config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=999,
+                per_device_train_batch_size=8,
+                learning_rate=0.1,
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = Trainer(model=model, args=args, data_producer=producer)
+            trainer.train()
+            # Only 1 produce call, but 3 passes over the data
+            self.assertEqual(producer.call_count, 1)
+            # 16/8=2 steps × 3 mini_epochs = 6 steps
+            self.assertEqual(trainer.state.global_step, 6)
+
+    def test_max_steps_stops_mid_rollout(self):
+        """Training stops at max_steps even if mini_epochs are not exhausted.
+
+        GRPO often sets max_steps that doesn't align with rollout boundaries.
+        """
+        config = ProducerConfig(max_rollouts=10, mini_epochs=3)
+        producer = CountingProducer(config=config, dataset_length=16)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=5,  # 16/8=2 steps per epoch, 3 mini_epochs=6 steps per rollout
+                per_device_train_batch_size=8,
+                learning_rate=0.1,
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = Trainer(model=model, args=args, data_producer=producer)
+            trainer.train()
+            # Should stop at 5, not continue to 6 (end of rollout 1's mini_epochs)
+            self.assertEqual(trainer.state.global_step, 5)
+            # Should have needed only 1 produce call (rollout 0)
+            self.assertEqual(producer.call_count, 1)
+
+    def test_produce_receives_updated_model(self):
+        """The model passed to produce() reflects training updates.
+
+        GRPO generates completions from the current policy, so produce()
+        must see the trained model, not the initial one.
+        """
+
+        class ParamSnapshotProducer(BaseDataProducer):
+            def __init__(self, config=None):
+                super().__init__(config)
+                self.param_snapshots = []
+
+            def produce(self, model, global_step, **kwargs):
+                # Snapshot the model parameters
+                params = {n: p.clone().detach() for n, p in model.named_parameters()}
+                self.param_snapshots.append(params)
+                return SimpleDataset(length=16, seed=global_step)
+
+        config = ProducerConfig(max_rollouts=3, mini_epochs=1)
+        producer = ParamSnapshotProducer(config=config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=999,
+                per_device_train_batch_size=8,
+                learning_rate=0.5,  # large LR so params visibly change
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = Trainer(model=model, args=args, data_producer=producer)
+            trainer.train()
+            self.assertEqual(len(producer.param_snapshots), 3)
+            # Params at rollout 0 (initial) should differ from rollout 2 (after training)
+            initial = producer.param_snapshots[0]
+            final = producer.param_snapshots[2]
+            changed = any(
+                not torch.equal(initial[k], final[k]) for k in initial
+            )
+            self.assertTrue(changed, "Model params should change between rollouts")
+
+    def test_eval_mode_during_produce(self):
+        """With eval_during_produce=True (default), model is in eval mode during produce().
+
+        GRPO needs eval mode during generation to disable dropout.
+        """
+
+        class ModeTrackingProducer(BaseDataProducer):
+            def __init__(self, config=None):
+                super().__init__(config)
+                self.training_mode_during_produce = []
+
+            def produce(self, model, global_step, **kwargs):
+                self.training_mode_during_produce.append(model.training)
+                return SimpleDataset(length=16)
+
+        # Default: eval_during_produce=True
+        config = ProducerConfig(max_rollouts=2, eval_during_produce=True)
+        producer = ModeTrackingProducer(config=config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=999,
+                per_device_train_batch_size=8,
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = Trainer(model=model, args=args, data_producer=producer)
+            trainer.train()
+            # Model should have been in eval mode during produce
+            for was_training in producer.training_mode_during_produce:
+                self.assertFalse(was_training, "Model should be in eval mode during produce()")
+
+    def test_eval_mode_not_forced_when_disabled(self):
+        """With eval_during_produce=False, model stays in train mode during produce()."""
+
+        class ModeTrackingProducer(BaseDataProducer):
+            def __init__(self, config=None):
+                super().__init__(config)
+                self.training_mode_during_produce = []
+
+            def produce(self, model, global_step, **kwargs):
+                self.training_mode_during_produce.append(model.training)
+                return SimpleDataset(length=16)
+
+        config = ProducerConfig(max_rollouts=2, eval_during_produce=False)
+        producer = ModeTrackingProducer(config=config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=999,
+                per_device_train_batch_size=8,
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = Trainer(model=model, args=args, data_producer=producer)
+            trainer.train()
+            # Model should have stayed in train mode during produce
+            for was_training in producer.training_mode_during_produce:
+                self.assertTrue(was_training, "Model should stay in train mode when eval_during_produce=False")
+
+    def test_gradient_accumulation_with_online_source(self):
+        """Online source works correctly with gradient_accumulation_steps > 1.
+
+        GRPO uses large gradient_accumulation_steps (e.g., 4-16).
+        """
+        config = ProducerConfig(max_rollouts=2, mini_epochs=1)
+        producer = CountingProducer(config=config, dataset_length=32)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=999,
+                per_device_train_batch_size=8,
+                gradient_accumulation_steps=2,
+                learning_rate=0.1,
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = Trainer(model=model, args=args, data_producer=producer)
+            trainer.train()
+            # 32 samples / 8 batch = 4 forward steps per epoch
+            # 4 forward steps / 2 grad_accum = 2 optimizer steps per epoch
+            # 2 rollouts × 1 mini_epoch × 2 steps = 4 global steps
+            self.assertEqual(trainer.state.global_step, 4)
+
+    def test_get_train_sampler_override_point(self):
+        """Subclass can override _get_train_sampler for online dataloaders.
+
+        GRPO uses RepeatSampler. The _get_online_dataloader path must
+        call _get_train_sampler so the override applies.
+        """
+        sampler_called = {"count": 0}
+
+        class CustomSamplerTrainer(Trainer):
+            def _get_train_sampler(self, dataset=None):
+                sampler_called["count"] += 1
+                return super()._get_train_sampler(dataset)
+
+        config = ProducerConfig(max_rollouts=2, mini_epochs=1)
+        producer = CountingProducer(config=config, dataset_length=16)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=999,
+                per_device_train_batch_size=8,
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = CustomSamplerTrainer(model=model, args=args, data_producer=producer)
+            trainer.train()
+            # _get_train_sampler should be called for each dataloader creation
+            # (once in compute_plan, once for rollout 1)
+            self.assertGreaterEqual(sampler_called["count"], 2)
+
+    def test_async_producer_integration(self):
+        """AsyncDataProducer works with real training loop."""
+        inner = CountingProducer(
+            config=ProducerConfig(max_rollouts=3, async_prefetch=True),
+            dataset_length=16,
+        )
+        producer = AsyncDataProducer(inner)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=999,
+                per_device_train_batch_size=8,
+                learning_rate=0.1,
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = Trainer(model=model, args=args, data_producer=producer)
+            trainer.train()
+            # Should have completed 3 rollouts
+            self.assertGreaterEqual(inner.call_count, 3)
+            # 16/8=2 steps × 3 rollouts = 6 global steps
+            self.assertEqual(trainer.state.global_step, 6)
+        producer.shutdown()
+
+    def test_multiple_rollouts_with_mini_epochs_and_grad_accum(self):
+        """Combined test: multiple rollouts × mini_epochs × gradient accumulation.
+
+        This mirrors GRPO's typical setup: steps_per_generation (mapped to
+        produced dataset size / batch), num_iterations (mapped to mini_epochs),
+        and gradient_accumulation_steps all interacting.
+        """
+        config = ProducerConfig(max_rollouts=2, mini_epochs=2)
+        producer = CountingProducer(config=config, dataset_length=32)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=999,
+                per_device_train_batch_size=8,
+                gradient_accumulation_steps=2,
+                learning_rate=0.1,
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = Trainer(model=model, args=args, data_producer=producer)
+            trainer.train()
+            # 32/8 = 4 forward steps per epoch
+            # 4/2 = 2 optimizer steps per epoch
+            # 2 rollouts × 2 mini_epochs × 2 steps = 8 global steps
+            self.assertEqual(trainer.state.global_step, 8)
+            self.assertEqual(producer.call_count, 2)
+
+    def test_produce_called_with_no_grad(self):
+        """produce() runs under torch.no_grad — no gradient tracking during generation.
+
+        GRPO's _generate_and_score_completions runs under torch.no_grad()
+        because generation is inference-only.
+        """
+
+        class GradCheckProducer(BaseDataProducer):
+            def __init__(self, config=None):
+                super().__init__(config)
+                self.grad_enabled_during_produce = []
+
+            def produce(self, model, global_step, **kwargs):
+                self.grad_enabled_during_produce.append(torch.is_grad_enabled())
+                return SimpleDataset(length=16)
+
+        config = ProducerConfig(max_rollouts=2)
+        producer = GradCheckProducer(config=config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = RegressionModel()
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=999,
+                per_device_train_batch_size=8,
+                report_to="none",
+                use_cpu=True,
+                save_strategy="no",
+            )
+            trainer = Trainer(model=model, args=args, data_producer=producer)
+            trainer.train()
+            for grad_on in producer.grad_enabled_during_produce:
+                self.assertFalse(grad_on, "Gradients should be disabled during produce()")
+
+
 if __name__ == "__main__":
     unittest.main()
