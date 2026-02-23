@@ -41,6 +41,12 @@ class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     pass
 
 
+# TODO: 
+# the following class-level attributes come from Qwen3OmniMoeTextConfig and might need to be removed
+#    keys_to_ignore_at_inference = ["past_key_values"]
+#    default_theta
+#    base_model_tp_plan
+#    base_model_pp_plan
 class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRTextModel`]. It is used to instantiate a
@@ -141,8 +147,6 @@ class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
-    model_type = "qwen3_asr_text"
     base_config_key = "text_config"
 
     def __init__(
