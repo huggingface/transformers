@@ -33,6 +33,8 @@ from logging import captureWarnings as _captureWarnings
 import huggingface_hub.utils as hf_hub_utils
 from tqdm import auto as tqdm_lib
 
+from ._typing import TransformersLogger
+
 
 _lock = threading.Lock()
 _default_handler: logging.Handler | None = None
@@ -99,7 +101,8 @@ def _configure_library_root_logger() -> None:
             formatter = logging.Formatter("[%(levelname)s|%(pathname)s:%(lineno)s] %(asctime)s >> %(message)s")
             _default_handler.setFormatter(formatter)
 
-        is_ci = os.getenv("CI") is not None and os.getenv("CI").upper() in {"1", "ON", "YES", "TRUE"}
+        ci = os.getenv("CI")
+        is_ci = ci is not None and ci.upper() in {"1", "ON", "YES", "TRUE"}
         library_root_logger.propagate = is_ci
 
 
@@ -143,7 +146,7 @@ def captureWarnings(capture):
     _captureWarnings(capture)
 
 
-def get_logger(name: str | None = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> TransformersLogger:
     """
     Return a logger with the specified name.
 
@@ -312,7 +315,7 @@ def warning_advice(self, *args, **kwargs):
     self.warning(*args, **kwargs)
 
 
-logging.Logger.warning_advice = warning_advice
+logging.Logger.warning_advice = warning_advice  # type: ignore[unresolved-attribute]
 
 
 @functools.lru_cache(None)
@@ -327,7 +330,7 @@ def warning_once(self, *args, **kwargs):
     self.warning(*args, **kwargs)
 
 
-logging.Logger.warning_once = warning_once
+logging.Logger.warning_once = warning_once  # type: ignore[unresolved-attribute]
 
 
 @functools.lru_cache(None)
@@ -342,7 +345,7 @@ def info_once(self, *args, **kwargs):
     self.info(*args, **kwargs)
 
 
-logging.Logger.info_once = info_once
+logging.Logger.info_once = info_once  # type: ignore[unresolved-attribute]
 
 
 class EmptyTqdm:

@@ -118,22 +118,5 @@ class GptOssConfig(PreTrainedConfig):
         self.eos_token_id = eos_token_id
         super().__init__(**kwargs)
 
-    def __setattr__(self, key, value):
-        """
-        Overwritten to allow checking for the proper attention implementation to be used.
-
-        Due to `set_attn_implementation` which internally assigns `_attn_implementation_internal = "..."`, simply overwriting
-        the specific attention setter is not enough. Using a property/setter for `_attn_implementation_internal` would result in
-        a recursive dependency (as `_attn_implementation` acts as a wrapper around `_attn_implementation_internal`) - hence, this
-        workaround.
-        """
-        if key in ("_attn_implementation", "_attn_implementation_internal"):
-            if value and "flash" in value and value.removeprefix("paged|") != "kernels-community/vllm-flash-attn3":
-                raise ValueError(
-                    f"GPT-OSS model does not support the specified flash attention implementation: {value}. "
-                    "Only `kernels-community/vllm-flash-attn3` is supported."
-                )
-        super().__setattr__(key, value)
-
 
 __all__ = ["GptOssConfig"]
