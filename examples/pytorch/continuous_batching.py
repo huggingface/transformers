@@ -90,6 +90,7 @@ def batch_generate(
     displayed_samples: int = 0,  # -1: no display, 0: display stats, >0: display inputs and some outputs
     output_file: str | None = None,
     expected_outputs: list[str] | None = None,
+    use_async: bool | None = None,
 ) -> tuple[float, float]:
     # Actual batch generation
     if displayed_samples >= 0:
@@ -98,6 +99,7 @@ def batch_generate(
     batch_outputs = model.generate_batch(
         inputs=simple_batch_inputs,
         generation_config=generation_config,
+        use_async=use_async,
     )
     end_time_simple = time.time()
     if displayed_samples >= 0:
@@ -115,7 +117,7 @@ def batch_generate(
         # Try to decode the output
         try:
             output_text = tokenizer.decode(batch_outputs[request].generated_tokens, skip_special_tokens=False)
-            token_count += len(batch_outputs[request].generated_tokens[1:])
+            token_count += len(batch_outputs[request].generated_tokens)
             data[-1]["cb_outputs"] = output_text
         except Exception as e:
             print(f"Decoding failed for request {request}: {e}")
@@ -175,6 +177,7 @@ if __name__ == "__main__":
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
     parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
     parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
+    parser.add_argument("--use-async", action="store_true", help="Use the asynchronous API for CB")
     parser.add_argument("--do-sample", action="store_true", help="Activate sampling")
     parser.add_argument("--num-return-sequences", type=int, default=1, help="Number of return sequences")
 
@@ -321,9 +324,7 @@ if __name__ == "__main__":
     if args.output_file is None:
         os.makedirs("runs/cb", exist_ok=True)
         attn = args.attn.replace("|", "_").replace("/", "_")
-        args.output_file = (
-            f"runs/cb/{args.num_blocks}_{args.max_batch_tokens}_{attn}_{args.matmul_precision}_{args.samples}.json"
-        )
+        args.output_file = f"runs/cb/{attn}_{args.samples}_{args.cuda_graph}.json"
 
     # Run warmup batch generation if log level is above DEBUG # TODO: understand why warmup incurs a large overhead during cache creation
     if logger.level > logging.DEBUG:
@@ -333,6 +334,7 @@ if __name__ == "__main__":
             generation_cfg,
             tokenizer,
             displayed_samples=-1,
+            use_async=args.use_async,
         )
 
     if args.profile is not None:
@@ -349,6 +351,7 @@ if __name__ == "__main__":
             displayed_samples=args.displayed,
             output_file=args.output_file,
             expected_outputs=expected_outputs,
+            use_async=args.use_async,
         )
     if args.profile is not None:
         filename = args.profile if args.profile.endswith(".json") else args.profile + ".json"
