@@ -771,14 +771,21 @@ class Qwen3ASRThinkerTextRotaryEmbedding(nn.Module):
     def __init__(self, config: Qwen3ASRConfig, device=None):
         super().__init__()
         ### the following overrides rope_type since "default" was removed in transformers v5
-        self.rope_type = config.rope_scaling.get("rope_type", "linear")
+        # Normalize rope_scaling
+        rope_scaling = config.rope_scaling or {}
+
+        # rope_type: default to linear since "default" was removed in v5
+        self.rope_type = rope_scaling.get("rope_type", "linear")
+
         if self.rope_type == "default":
             self.rope_type = "linear"
 
-        # linear expects 'factor', provide fallback
+        # linear expects 'factor'
         if self.rope_type == "linear":
-            if "factor" not in config.rope_scaling:
-                config.rope_scaling["factor"] = 1.0
+            rope_scaling.setdefault("factor", 1.0)
+
+        # write back normalized dict
+        config.rope_scaling = rope_scaling
         ###
 
         self.max_seq_len_cached = config.max_position_embeddings

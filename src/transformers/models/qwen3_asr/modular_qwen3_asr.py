@@ -35,13 +35,13 @@ from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.utils import auto_docstring, can_return_tuple
 from transformers.utils.deprecation import deprecate_kwarg
 from transformers.utils.generic import TransformersKwargs, check_model_inputs
-from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeAudioEncoderConfig
+from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeAudioEncoderConfig, Qwen3OmniMoeTextConfig
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     pass
 
 
-class Qwen3ASRTextConfig(PretrainedConfig):
+class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRTextModel`]. It is used to instantiate a
     Qwen3-ASR model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -188,13 +188,16 @@ class Qwen3ASRTextConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self._attn_implementation = attn_implementation
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+    
+        PreTrainedConfig.__init__(
+            self,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs
+        )
 
 
 class Qwen3ASRThinkerConfig(PretrainedConfig):
@@ -1294,14 +1297,21 @@ class Qwen3ASRThinkerTextRotaryEmbedding(nn.Module):
     def __init__(self, config: Qwen3ASRConfig, device=None):
         super().__init__()
         ### the following overrides rope_type since "default" was removed in transformers v5
-        self.rope_type = config.rope_scaling.get("rope_type", "linear")
+        # Normalize rope_scaling
+        rope_scaling = config.rope_scaling or {}
+
+        # rope_type: default to linear since "default" was removed in v5
+        self.rope_type = rope_scaling.get("rope_type", "linear")
+
         if self.rope_type == "default":
             self.rope_type = "linear"
 
-        # linear expects 'factor', provide fallback
+        # linear expects 'factor'
         if self.rope_type == "linear":
-            if "factor" not in config.rope_scaling:
-                config.rope_scaling["factor"] = 1.0
+            rope_scaling.setdefault("factor", 1.0)
+
+        # write back normalized dict
+        config.rope_scaling = rope_scaling
         ###
 
         self.max_seq_len_cached = config.max_position_embeddings

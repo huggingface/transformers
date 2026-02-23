@@ -114,7 +114,7 @@ class Qwen3ASRAudioEncoderConfig(PreTrainedConfig):
         self.downsample_hidden_size = downsample_hidden_size
 
 
-class Qwen3ASRTextConfig(PretrainedConfig):
+class Qwen3ASRTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRTextModel`]. It is used to instantiate a
     Qwen3-ASR model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -216,6 +216,26 @@ class Qwen3ASRTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen3_asr_text"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
+
+    # Default tensor parallel plan for base model `Qwen3ASRText`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
     base_config_key = "text_config"
 
     def __init__(
@@ -261,7 +281,6 @@ class Qwen3ASRTextConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self._attn_implementation = attn_implementation
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
