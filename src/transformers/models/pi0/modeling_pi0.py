@@ -239,19 +239,19 @@ class PI0Model(PI0PreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     def get_image_features(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
-        if pixel_values.ndim == 5:
-            batch_size, num_cameras = pixel_values.shape[:2]
-            pixel_values = pixel_values.reshape(batch_size * num_cameras, *pixel_values.shape[2:])
-            image_outputs = self.vision_tower(pixel_values)
-            image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
-            image_features = image_features.reshape(
-                batch_size, num_cameras, image_features.shape[1], image_features.shape[2]
+        if pixel_values.ndim != 5:
+            raise ValueError(
+                "`pixel_values` must have shape (batch_size, num_cameras, channels, height, width) for PI0."
             )
-            return image_features.flatten(1, 2)
 
+        batch_size, num_cameras = pixel_values.shape[:2]
+        pixel_values = pixel_values.reshape(batch_size * num_cameras, *pixel_values.shape[2:])
         image_outputs = self.vision_tower(pixel_values)
         image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
-        return image_features
+        image_features = image_features.reshape(
+            batch_size, num_cameras, image_features.shape[1], image_features.shape[2]
+        )
+        return image_features.flatten(1, 2)
 
     def embed_language_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
         lang_emb = self.language_model.embed_tokens(tokens)

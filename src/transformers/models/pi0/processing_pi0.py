@@ -22,8 +22,8 @@ import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 
 
@@ -42,53 +42,14 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-IMAGE_TOKEN = "<image>"
-EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
-
-
-def _is_nested_image_list(images) -> bool:
-    return (
-        isinstance(images, (list, tuple))
-        and len(images) > 0
-        and isinstance(images[0], (list, tuple))
-        and len(images[0]) > 0
-        and is_valid_image(images[0][0])
-    )
-
-
 @auto_docstring
 class PI0Processor(ProcessorMixin):
-    model_input_names = ["input_ids", "attention_mask", "pixel_values", "image_masks", "token_type_ids"]
-
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        chat_template=None,
-        **kwargs,
-    ):
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         if not hasattr(image_processor, "image_seq_length"):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
-
         self.image_seq_length = image_processor.image_seq_length
-
-        if not hasattr(tokenizer, "image_token"):
-            image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
-            tokens_to_add = {"additional_special_tokens": [image_token]}
-            tokenizer.add_special_tokens(tokens_to_add)
-            self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
-            self.image_token = IMAGE_TOKEN
-        else:
-            self.image_token_id = tokenizer.image_token_id
-            self.image_token = tokenizer.image_token
-
-        tokenizer.add_tokens(EXTRA_TOKENS)
-        tokenizer.add_bos_token = False
-        tokenizer.add_eos_token = False
-
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-    @auto_docstring
     def __call__(
         self,
         images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None = None,
@@ -123,7 +84,13 @@ class PI0Processor(ProcessorMixin):
             batched_images = [[images]]
         elif isinstance(images, (list, tuple)) and len(images) > 0 and is_valid_image(images[0]):
             batched_images = [[image] for image in images]
-        elif _is_nested_image_list(images):
+        elif (
+            isinstance(images, (list, tuple))
+            and len(images) > 0
+            and isinstance(images[0], (list, tuple))
+            and len(images[0]) > 0
+            and is_valid_image(images[0][0])
+        ):
             batched_images = [list(sample_images) for sample_images in images]
         else:
             raise ValueError("`images` must be an image, a list of images, or a list of list of images.")
@@ -167,30 +134,16 @@ class PI0Processor(ProcessorMixin):
         return_data = {**tokenized, "pixel_values": pixel_values, "image_masks": image_masks}
         return BatchFeature(data=return_data, tensor_type=return_tensors)
 
-    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
-        """
-        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
-
-        Args:
-            image_sizes (list[list[str]], *optional*):
-                The input sizes formatted as (height, width) per each image.
-        Returns:
-            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
-            input modalities, along with other useful data.
-        """
-        vision_data = {}
-        if image_sizes is not None:
-            num_image_tokens = [self.image_seq_length] * len(image_sizes)
-            num_image_patches = [1] * len(image_sizes)
-            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
-        return MultiModalData(**vision_data)
-
     @property
     def model_input_names(self):
-        parent_model_input_names = super().model_input_names
-        if "image_masks" not in parent_model_input_names:
-            return [*parent_model_input_names, "image_masks"]
-        return parent_model_input_names
+        tokenizer_input_names = list(self.tokenizer.model_input_names)
+        if "token_type_ids" not in tokenizer_input_names:
+            tokenizer_input_names.append("token_type_ids")
+        image_input_names = list(self.image_processor.model_input_names)
+        names = tokenizer_input_names + image_input_names
+        if "image_masks" not in names:
+            names.append("image_masks")
+        return names
 
 
 __all__ = ["PI0Processor", "PI0ProcessorKwargs"]

@@ -25,14 +25,13 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, or_masks
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessingKwargs, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import ModelOutput, auto_docstring, logging
 from ..auto import AutoConfig, AutoModel
 from ..gemma.modeling_gemma import apply_rotary_pos_emb, eager_attention_forward
 from ..paligemma.configuration_paligemma import PaliGemmaConfig
 from ..paligemma.modeling_paligemma import PaliGemmaMultiModalProjector
-from ..paligemma.processing_paligemma import PaliGemmaProcessor
 from ..siglip import SiglipVisionConfig
 
 
@@ -51,19 +50,13 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def _is_nested_image_list(images) -> bool:
-    return (
-        isinstance(images, (list, tuple))
-        and len(images) > 0
-        and isinstance(images[0], (list, tuple))
-        and len(images[0]) > 0
-        and is_valid_image(images[0][0])
-    )
-
-
 @auto_docstring
-class PI0Processor(PaliGemmaProcessor):
-    model_input_names = ["input_ids", "attention_mask", "pixel_values", "image_masks", "token_type_ids"]
+class PI0Processor(ProcessorMixin):
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+        if not hasattr(image_processor, "image_seq_length"):
+            raise ValueError("Image processor is missing an `image_seq_length` attribute.")
+        self.image_seq_length = image_processor.image_seq_length
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
@@ -97,7 +90,13 @@ class PI0Processor(PaliGemmaProcessor):
             batched_images = [[images]]
         elif isinstance(images, (list, tuple)) and len(images) > 0 and is_valid_image(images[0]):
             batched_images = [[image] for image in images]
-        elif _is_nested_image_list(images):
+        elif (
+            isinstance(images, (list, tuple))
+            and len(images) > 0
+            and isinstance(images[0], (list, tuple))
+            and len(images[0]) > 0
+            and is_valid_image(images[0][0])
+        ):
             batched_images = [list(sample_images) for sample_images in images]
         else:
             raise ValueError("`images` must be an image, a list of images, or a list of list of images.")
@@ -143,10 +142,14 @@ class PI0Processor(PaliGemmaProcessor):
 
     @property
     def model_input_names(self):
-        parent_model_input_names = super().model_input_names
-        if "image_masks" not in parent_model_input_names:
-            return [*parent_model_input_names, "image_masks"]
-        return parent_model_input_names
+        tokenizer_input_names = list(self.tokenizer.model_input_names)
+        if "token_type_ids" not in tokenizer_input_names:
+            tokenizer_input_names.append("token_type_ids")
+        image_input_names = list(self.image_processor.model_input_names)
+        names = tokenizer_input_names + image_input_names
+        if "image_masks" not in names:
+            names.append("image_masks")
+        return names
 
 
 class PI0Config(PaliGemmaConfig):
@@ -427,17 +430,12 @@ class PI0Model(PI0PreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     def get_image_features(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
-        if pixel_values.ndim == 5:
-            batch_size, num_cameras = pixel_values.shape[:2]
-            pixel_values = pixel_values.reshape(batch_size * num_cameras, *pixel_values.shape[2:])
-            image_outputs = self.vision_tower(pixel_values)
-            image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
-            image_features = image_features.reshape(batch_size, num_cameras, image_features.shape[1], image_features.shape[2])
-            return image_features.flatten(1, 2)
-
+        batch_size, num_cameras = pixel_values.shape[:2]
+        pixel_values = pixel_values.reshape(batch_size * num_cameras, *pixel_values.shape[2:])
         image_outputs = self.vision_tower(pixel_values)
         image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
-        return image_features
+        image_features = image_features.reshape(batch_size, num_cameras, image_features.shape[1], image_features.shape[2])
+        return image_features.flatten(1, 2)
 
     def embed_language_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
         lang_emb = self.language_model.embed_tokens(tokens)
