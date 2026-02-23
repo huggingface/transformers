@@ -97,7 +97,7 @@ class JinaEmbeddingsV3ModelTester:
         token_labels = None
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
 
         config = self.get_config()
 
