@@ -1499,8 +1499,8 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
                 Kosmos2_5TextSinusoidalPositionalEmbedding.create_position_ids_from_input_ids(
                     input_ids,
                     padding_idx=self.config.pad_token_id,
-                    past_key_values_length=0,
-                )[:, -cache_position.shape[0] :]
+                    past_key_values_length=past_key_values.get_seq_length(),
+                )
             )
 
         # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
