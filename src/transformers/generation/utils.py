@@ -3744,7 +3744,7 @@ class GenerationMixin(ContinuousMixin):
             use_inputs_embeds = True
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
-            # Always directly slice the inputs_embeds if present, as `prepare_inputs_for_generation` never need them full and _get_initial_cache_position
+            # Always directly slice the inputs_embeds if present, as `prepare_inputs_for_generation` never need them full and `_get_initial_cache_position`
             # rely on its size explicitly. For input_ids, we need to use `next_sequence_length` to slice later instead of explicit slicing,
             # as some model need them full for correct input preparation inside `prepare_inputs_for_generation` (i.e. audio models)
             if use_inputs_embeds:
