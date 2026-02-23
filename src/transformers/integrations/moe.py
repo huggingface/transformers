@@ -582,7 +582,6 @@ def _w8a8_block_fp8_matmul_batched_fused(
     tl.store(c_ptrs, c, mask=c_mask)
 
 
-@torch.library.triton_op("transformers::fp8_batched_mm_fused", mutates_args={})
 def w8a8_block_fp8_matmul_triton_batched_fused(
     A: torch.Tensor,
     B: torch.Tensor,
@@ -770,7 +769,6 @@ def _w8a8_block_fp8_grouped_mm_fused(
     tl.store(c_ptrs, c, mask=c_mask)
 
 
-@torch.library.triton_op("transformers::fp8_grouped_mm_fused", mutates_args={})
 def w8a8_block_fp8_matmul_triton_grouped_fused(
     A: torch.Tensor,
     B: torch.Tensor,
@@ -842,54 +840,12 @@ def w8a8_block_fp8_matmul_triton_grouped_fused(
     return C
 
 
-def _fp8_batched_linear(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    weight_scale: torch.Tensor,
-    expert_ids: torch.Tensor,
-    block_n: int,
-    block_k: int,
-) -> torch.Tensor:
-    """FP8 batched linear — mirrors ``_batched_linear`` for FP8 weights.
-
-    Instead of gathering ``weight[expert_ids]`` upfront, the kernel looks up
-    the correct expert slice at runtime via ``expert_ids``, avoiding the large
-    ``(S, N, K)`` temporary.  Activation quantization is fused into the kernel
-    (no separate ``act_quant`` call or intermediate FP8 tensor).
-    """
-    return torch.ops.transformers.fp8_batched_mm_fused(
-        input.contiguous(),
-        weight,
-        weight_scale,
-        expert_ids,
-        block_n,
-        block_k,
+if is_torch_available():
+    torch.library.triton_op(
+        "transformers::w8a8_block_fp8_matmul_batched_fused", _w8a8_block_fp8_matmul_batched_fused, mutates_args=()
     )
-
-
-def _fp8_grouped_linear(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    weight_scale: torch.Tensor,
-    offs: torch.Tensor,
-    tokens_per_expert: torch.Tensor,
-    block_n: int,
-    block_k: int,
-) -> torch.Tensor:
-    """FP8 grouped linear — mirrors ``_grouped_linear`` for FP8 weights.
-
-    ``tokens_per_expert`` is needed in addition to ``offs`` to build the
-    per-expert tile schedule inside the kernel.  Activation quantization is
-    fused into the kernel (no separate ``act_quant`` call).
-    """
-    return torch.ops.transformers.fp8_grouped_mm_fused(
-        input,
-        weight,
-        weight_scale,
-        offs,
-        tokens_per_expert,
-        block_n,
-        block_k,
+    torch.library.triton_op(
+        "transformers::w8a8_block_fp8_grouped_mm_fused", _w8a8_block_fp8_grouped_mm_fused, mutates_args=()
     )
 
 
@@ -914,7 +870,7 @@ def fp8_batched_mm_experts_forward(
     selected_hidden_states = hidden_states[token_idx]
 
     # --- Up projection per expert (FP8 batched) ---
-    gate_up_out = _fp8_batched_linear(
+    gate_up_out = torch.ops.transformers.w8a8_block_fp8_matmul_triton_batched_fused(
         selected_hidden_states,
         self.gate_up_proj,
         self.gate_up_proj_scale_inv,
@@ -927,7 +883,7 @@ def fp8_batched_mm_experts_forward(
     gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 batched) ---
-    out_per_sample = _fp8_batched_linear(
+    out_per_sample = torch.ops.transformers.w8a8_block_fp8_matmul_triton_batched_fused(
         gated_out,
         self.down_proj,
         self.down_proj_scale_inv,
@@ -981,7 +937,7 @@ def fp8_grouped_mm_experts_forward(
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (FP8 grouped) ---
-    gate_up_out = _fp8_grouped_linear(
+    gate_up_out = torch.ops.transformers.w8a8_block_fp8_matmul_triton_grouped_fused(
         selected_hidden_states_g,
         self.gate_up_proj,
         self.gate_up_proj_scale_inv,
@@ -995,7 +951,7 @@ def fp8_grouped_mm_experts_forward(
     gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 grouped) ---
-    out_per_sample_g = _fp8_grouped_linear(
+    out_per_sample_g = torch.ops.transformers.w8a8_block_fp8_matmul_triton_grouped_fused(
         gated_out,
         self.down_proj,
         self.down_proj_scale_inv,
