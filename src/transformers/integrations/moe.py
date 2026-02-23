@@ -581,7 +581,7 @@ def _w8a8_block_fp8_matmul_batched_fused(
     tl.store(c_ptrs, c, mask=c_mask)
 
 
-def w8a8_block_fp8_matmul_triton_batched_fused(
+def w8a8_block_fp8_matmul_batched_fused(
     A: torch.Tensor,
     B: torch.Tensor,
     Bs: torch.Tensor,
@@ -767,7 +767,7 @@ def _w8a8_block_fp8_grouped_mm_fused(
     tl.store(c_ptrs, c, mask=c_mask)
 
 
-def w8a8_block_fp8_matmul_triton_grouped_fused(
+def w8a8_block_fp8_matmul_grouped_fused(
     A: torch.Tensor,
     B: torch.Tensor,
     Bs: torch.Tensor,
@@ -837,10 +837,14 @@ def w8a8_block_fp8_matmul_triton_grouped_fused(
 
 if is_torch_available():
     torch.library.triton_op(
-        "transformers::w8a8_block_fp8_matmul_batched_fused", _w8a8_block_fp8_matmul_batched_fused, mutates_args=()
+        "transformers::w8a8_block_fp8_matmul_batched_fused",
+        w8a8_block_fp8_matmul_batched_fused,
+        mutates_args=(),
     )
     torch.library.triton_op(
-        "transformers::w8a8_block_fp8_grouped_mm_fused", _w8a8_block_fp8_grouped_mm_fused, mutates_args=()
+        "transformers::w8a8_block_fp8_matmul_grouped_fused",
+        w8a8_block_fp8_matmul_grouped_fused,
+        mutates_args=(),
     )
 
 
@@ -865,7 +869,7 @@ def fp8_batched_mm_experts_forward(
     selected_hidden_states = hidden_states[token_idx]
 
     # --- Up projection per expert (FP8 batched) ---
-    gate_up_out = torch.ops.transformers.w8a8_block_fp8_matmul_triton_batched_fused(
+    gate_up_out = torch.ops.transformers.w8a8_block_fp8_matmul_batched_fused(
         selected_hidden_states,
         self.gate_up_proj,
         self.gate_up_proj_scale_inv,
@@ -878,7 +882,7 @@ def fp8_batched_mm_experts_forward(
     gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 batched) ---
-    out_per_sample = torch.ops.transformers.w8a8_block_fp8_matmul_triton_batched_fused(
+    out_per_sample = torch.ops.transformers.w8a8_block_fp8_matmul_batched_fused(
         gated_out,
         self.down_proj,
         self.down_proj_scale_inv,
@@ -932,7 +936,7 @@ def fp8_grouped_mm_experts_forward(
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (FP8 grouped) ---
-    gate_up_out = torch.ops.transformers.w8a8_block_fp8_matmul_triton_grouped_fused(
+    gate_up_out = torch.ops.transformers.w8a8_block_fp8_matmul_grouped_fused(
         selected_hidden_states_g,
         self.gate_up_proj,
         self.gate_up_proj_scale_inv,
@@ -946,7 +950,7 @@ def fp8_grouped_mm_experts_forward(
     gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 grouped) ---
-    out_per_sample_g = torch.ops.transformers.w8a8_block_fp8_matmul_triton_grouped_fused(
+    out_per_sample_g = torch.ops.transformers.w8a8_block_fp8_matmul_grouped_fused(
         gated_out,
         self.down_proj,
         self.down_proj_scale_inv,
