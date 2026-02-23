@@ -362,14 +362,6 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         cached_freqs = self._build_cached_freqs(freqs)
         self.register_buffer("cached_freqs", cached_freqs, persistent=False)
 
-        # dummy for device
-
-        self.register_buffer("dummy", torch.tensor(0), persistent=False)
-
-    @property
-    def device(self):
-        return self.dummy.device
-
     def _build_cached_freqs(self, freqs, device=None, dtype=None):
         if self.max_time is None:
             return None
@@ -384,7 +376,7 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         all_freqs = []
 
         for ind, dim in enumerate(dims):
-            pos = torch.arange(dim, device=self.device)
+            pos = torch.arange(dim, device=self.freqs.device)
 
             freqs = self.forward(pos, seq_len=dim)
 
@@ -436,9 +428,6 @@ class MusicFlamingoPreTrainedModel(AudioFlamingo3PreTrainedModel):
             module.cached_freqs = module._build_cached_freqs(
                 module.freqs, device=module.freqs.device, dtype=module.freqs.dtype
             )
-
-            # Reinitialize dummy buffer
-            module.dummy.data = torch.tensor(0)
 
 
 @auto_docstring(
