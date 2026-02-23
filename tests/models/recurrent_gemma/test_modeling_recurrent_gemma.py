@@ -168,7 +168,9 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @unittest.skip(reason="Flaky: Nan/Infs detected causing cuda device errors when sampling, corrupting state for all other tests")
+    @unittest.skip(
+        reason="Flaky: Nan/Infs detected causing cuda device errors when sampling, corrupting state for all other tests"
+    )
     def test_2b_sample(self):
         set_seed(42)
         expectations = Expectations(
@@ -249,7 +251,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         if torch_device == "cpu":
             self.skipTest("Associative scan compile test requires a torch accelerator.")
 
-        model_id = "alpindale/recurrentgemma-9b-it"
+        model_id = "gg-hf/recurrent-gemma-2b-hf"
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16).to(torch_device)
@@ -273,7 +275,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         if torch_device == "cpu":
             self.skipTest("Associative scan test requires a torch accelerator.")
 
-        model_id = "alpindale/recurrentgemma-9b-it"
+        model_id = "gg-hf/recurrent-gemma-2b-hf"
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
