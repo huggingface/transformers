@@ -37,6 +37,7 @@ from transformers.utils.deprecation import deprecate_kwarg
 from transformers.utils.generic import TransformersKwargs, check_model_inputs
 from ..qwen3_omni_moe.configuration_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderConfig, Qwen3OmniMoeTextConfig, Qwen3OmniMoeThinkerConfig,
+    Qwen3OmniMoeConfig
 )
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
@@ -281,7 +282,7 @@ class Qwen3ASRThinkerConfig(Qwen3OmniMoeThinkerConfig):
         self.text_config = text_config
         self.audio_token_id = audio_token_id
 
-class Qwen3ASRConfig(PretrainedConfig):
+class Qwen3ASRConfig(Qwen3OmniMoeConfig):
     """
     This is the configuration class to store the configuration of a [`Qwen3ASRForConditionalGeneration`]. It is used to instantiate a Qwen3ASR
     model according to the specified sub-models configurations, defining the model architecture.
@@ -314,8 +315,6 @@ class Qwen3ASRConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
-    model_type = "qwen3_asr"
     sub_configs = {
         "thinker_config": Qwen3ASRThinkerConfig,
     }
@@ -327,27 +326,13 @@ class Qwen3ASRConfig(PretrainedConfig):
         attn_implementation=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        PreTrainedConfig.__init__(**kwargs)
         if thinker_config is None:
             thinker_config = {}
 
         self.thinker_config = Qwen3ASRThinkerConfig(**thinker_config)
         self.support_languages = support_languages
         self._attn_implementation = attn_implementation
-
-    def get_text_config(self, decoder=False) -> "PretrainedConfig":
-        """
-        Returns the config that is meant to be used with text IO. On most models, it is the original config instance
-        itself. On specific composite models, it is under a set of valid names.
-
-        Args:
-            decoder (`Optional[bool]`, *optional*, defaults to `False`):
-                If set to `True`, then only search for decoder config names.
-        """
-        # Overridden for deeply nested config like Qwen2.5-Omni. We don't have any omni model
-        # except for Qwen yet. This has to be generalized if more deeply nested configs are
-        # added. NOTE: currently method used only by vLLM
-        return self.thinker_config.get_text_config()
 
     ###
     @property

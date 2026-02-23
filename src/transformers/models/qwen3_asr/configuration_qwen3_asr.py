@@ -4,9 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_qwen3_asr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
-from transformers.configuration_utils import PretrainedConfig
-
 from ...configuration_utils import PreTrainedConfig
 
 
@@ -369,7 +366,7 @@ class Qwen3ASRThinkerConfig(PreTrainedConfig):
         self.audio_token_id = audio_token_id
 
 
-class Qwen3ASRConfig(PretrainedConfig):
+class Qwen3ASRConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`Qwen3ASRForConditionalGeneration`]. It is used to instantiate a Qwen3ASR
     model according to the specified sub-models configurations, defining the model architecture.
@@ -423,7 +420,7 @@ class Qwen3ASRConfig(PretrainedConfig):
         self.support_languages = support_languages
         self._attn_implementation = attn_implementation
 
-    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+    def get_text_config(self, decoder=False) -> "PreTrainedConfig":
         """
         Returns the config that is meant to be used with text IO. On most models, it is the original config instance
         itself. On specific composite models, it is under a set of valid names.
@@ -432,7 +429,7 @@ class Qwen3ASRConfig(PretrainedConfig):
             decoder (`Optional[bool]`, *optional*, defaults to `False`):
                 If set to `True`, then only search for decoder config names.
         """
-        # Overridden for deeply nested config like Qwen2.5-Omni. We don't have any omni model
+        # Overridden for deeply nested config like Qwen2-Omni. We don't have any omni model
         # except for Qwen yet. This has to be generalized if more deeply nested configs are
         # added. NOTE: currently method used only by vLLM
         return self.thinker_config.get_text_config()
@@ -453,8 +450,6 @@ class Qwen3ASRConfig(PretrainedConfig):
     @vocab_size.setter
     def vocab_size(self, value):
         self.thinker_config.text_config.vocab_size = value
-
-    ###
 
 
 __all__ = ["Qwen3ASRAudioEncoderConfig", "Qwen3ASRThinkerConfig", "Qwen3ASRConfig"]
