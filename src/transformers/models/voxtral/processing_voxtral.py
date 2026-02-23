@@ -147,23 +147,6 @@ class VoxtralProcessor(ProcessorMixin):
             if kwargs.get("return_assistant_tokens_mask", False):
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
-        # Fill sets of kwargs that should be used by different parts of template
-        processed_kwargs = {
-            "mm_load_kwargs": {},
-            "template_kwargs": {},
-        }
-
-        for kwarg_type in processed_kwargs:
-            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__:
-                kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
-                default_value = getattr(kwarg_type_defaults, key, None)
-                value = kwargs.pop(key, default_value)
-                if value is not None and not isinstance(value, dict):
-                    processed_kwargs[kwarg_type][key] = value
-
-        # Pass unprocessed custom kwargs
-        processed_kwargs["template_kwargs"].update(kwargs)
-
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
         ):
@@ -173,12 +156,16 @@ class VoxtralProcessor(ProcessorMixin):
             is_batched = False
             conversations = [conversation]
 
-        # Check for any overlapping keys between mm_load_kwargs and kwargs
-        mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
-        if any(key in kwargs for key in mm_load_kwargs):
-            overlapping_keys = [key for key in mm_load_kwargs if key in kwargs]
+        # - `sampling_rate` is already fixed in `VoxtralProcessorKwargs._defaults` and audio loading is
+        #   delegated to `mistral_common`'s tokenizer which handles it internally.
+        # - `load_audio_from_video` is irrelevant as Voxtral is a speech-only model with no video support.
+        # We strip them here to avoid passing unrecognized kwargs to `_merge_kwargs`.
+        unsupported_keys = {"sampling_rate", "load_audio_from_video"} & kwargs.keys()
+        if unsupported_keys:
+            for key in unsupported_keys:
+                kwargs.pop(key)
             logger.warning(
-                f"{overlapping_keys[0] if len(overlapping_keys) == 1 else ', '.join(overlapping_keys)} load multimodal data kwarg{'s' if len(overlapping_keys) > 1 else ''} {'have' if len(overlapping_keys) > 1 else 'has'} been passed to the processor, but {'they are' if len(overlapping_keys) > 1 else 'it is'} not supported for VoxtralProcessor since it relies on mistral_common directly. {'They' if len(overlapping_keys) > 1 else 'It'} will be ignored."
+                f"{', '.join(sorted(unsupported_keys))} {'is' if len(unsupported_keys) == 1 else 'are'} not supported for VoxtralProcessor's apply_chat_template and will be ignored."
             )
 
         output_kwargs = self._merge_kwargs(
@@ -192,20 +179,12 @@ class VoxtralProcessor(ProcessorMixin):
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
-        tokenizer_kwargs = {**processed_kwargs["template_kwargs"], **text_kwargs}
+        tokenizer_kwargs = output_kwargs["text_kwargs"]
         tokenizer_kwargs["return_tensors"] = None  # let's not return tensors here
-        tokenize = tokenizer_kwargs.pop("tokenize", False)
-        return_dict = tokenizer_kwargs.pop("return_dict", True)
+        encoded_instruct_inputs = self.tokenizer.apply_chat_template(conversations, **tokenizer_kwargs)
 
-        encoded_instruct_inputs = self.tokenizer.apply_chat_template(
-            conversations,
-            tokenize=tokenize,
-            return_dict=return_dict,
-            **tokenizer_kwargs,
-        )
-
-        if tokenize:
-            if return_dict:
+        if text_kwargs.get("tokenize", False):
+            if text_kwargs.get("return_dict", False):
                 audio = encoded_instruct_inputs.pop("audio", None)
                 data = dict(encoded_instruct_inputs)
                 if audio is not None:

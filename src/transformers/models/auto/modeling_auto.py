@@ -212,6 +212,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("helium", "HeliumModel"),
         ("hgnet_v2", "HGNetV2Backbone"),
         ("hiera", "HieraModel"),
+        ("higgs_audio_v2", "HiggsAudioV2ForConditionalGeneration"),
+        ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerModel"),
         ("hubert", "HubertModel"),
         ("hunyuan_v1_dense", "HunYuanDenseV1Model"),
         ("hunyuan_v1_moe", "HunYuanMoEV1Model"),
@@ -290,6 +292,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mobilevitv2", "MobileViTV2Model"),
         ("modernbert", "ModernBertModel"),
         ("modernbert-decoder", "ModernBertDecoderModel"),
+        ("modernvbert", "ModernVBertModel"),
         ("moonshine", "MoonshineModel"),
         ("moonshine_streaming", "MoonshineStreamingModel"),
         ("moshi", "MoshiModel"),
@@ -486,6 +489,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("big_bird", "BigBirdForPreTraining"),
         ("bloom", "BloomForCausalLM"),
         ("camembert", "CamembertForMaskedLM"),
+        ("colmodernvbert", "ColModernVBertForRetrieval"),
         ("colpali", "ColPaliForRetrieval"),
         ("colqwen2", "ColQwen2ForRetrieval"),
         ("ctrl", "CTRLLMHeadModel"),
@@ -917,6 +921,7 @@ MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_RETRIEVAL_MAPPING_NAMES = OrderedDict(
     [
+        ("colmodernvbert", "ColModernVBertForRetrieval"),
         ("colpali", "ColPaliForRetrieval"),
     ]
 )
@@ -1031,6 +1036,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForMaskedLM"),
         ("mobilebert", "MobileBertForMaskedLM"),
         ("modernbert", "ModernBertForMaskedLM"),
+        ("modernvbert", "ModernVBertForMaskedLM"),
         ("mpnet", "MPNetForMaskedLM"),
         ("mra", "MraForMaskedLM"),
         ("mvp", "MvpForConditionalGeneration"),
@@ -1217,6 +1223,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mobilebert", "MobileBertForSequenceClassification"),
         ("modernbert", "ModernBertForSequenceClassification"),
         ("modernbert-decoder", "ModernBertDecoderForSequenceClassification"),
+        ("modernvbert", "ModernVBertForSequenceClassification"),
         ("mpnet", "MPNetForSequenceClassification"),
         ("mpt", "MptForSequenceClassification"),
         ("mra", "MraForSequenceClassification"),
@@ -1425,6 +1432,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mixtral", "MixtralForTokenClassification"),
         ("mobilebert", "MobileBertForTokenClassification"),
         ("modernbert", "ModernBertForTokenClassification"),
+        ("modernvbert", "ModernVBertForTokenClassification"),
         ("mpnet", "MPNetForTokenClassification"),
         ("mpt", "MptForTokenClassification"),
         ("mra", "MraForTokenClassification"),
@@ -1588,6 +1596,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         ("csm", "CsmForConditionalGeneration"),
         ("fastspeech2_conformer", "FastSpeech2ConformerWithHifiGan"),
         ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGan"),
+        ("higgs_audio_v2", "HiggsAudioV2ForConditionalGeneration"),
         ("musicgen", "MusicgenForConditionalGeneration"),
         ("musicgen_melody", "MusicgenMelodyForConditionalGeneration"),
         ("qwen2_5_omni", "Qwen2_5OmniForConditionalGeneration"),
@@ -1737,6 +1746,7 @@ MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     [
         ("dac", "DacModel"),
+        ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
     ]
 )
