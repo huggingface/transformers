@@ -844,12 +844,24 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             self._check_caches_are_similar(outputs.past_key_values, cached_output.past_key_values)
 
     def _check_caches_are_similar(self, cache1, cache2):
-        # Cache values can diverge numerically in IDEFICS while producing identical continuation tokens.
-        # Check cache structure instead of strict value equality to avoid flaky failures.
+        # In this continuation setup, rare numerical drift appears on the newest cache slot only.
+        # Keep strict checks on earlier slots and use a tolerant check on the newest slot.
         self.assertEqual(len(cache1), len(cache2))
         for idx in range(len(cache1)):
-            self.assertEqual(cache1.layers[idx].keys.shape, cache2.layers[idx].keys.shape)
-            self.assertEqual(cache1.layers[idx].values.shape, cache2.layers[idx].values.shape)
+            keys1 = cache1.layers[idx].keys
+            keys2 = cache2.layers[idx].keys
+            values1 = cache1.layers[idx].values
+            values2 = cache2.layers[idx].values
+
+            self.assertEqual(keys1.shape, keys2.shape)
+            self.assertEqual(values1.shape, values2.shape)
+
+            if keys1.shape[-2] > 1:
+                torch.testing.assert_close(keys1[..., :-1, :], keys2[..., :-1, :])
+                torch.testing.assert_close(values1[..., :-1, :], values2[..., :-1, :])
+
+            torch.testing.assert_close(keys1[..., -1:, :], keys2[..., -1:, :], rtol=5e-2, atol=1e-2)
+            torch.testing.assert_close(values1[..., -1:, :], values2[..., -1:, :], rtol=5e-2, atol=1e-2)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
