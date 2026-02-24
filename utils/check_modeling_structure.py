@@ -506,6 +506,32 @@ def check_gradient_checkpointing_contract(
     tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation]
 ) -> list[Violation]:
     class_to_bases = _collect_class_bases(tree)
+    local_classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
+
+    def local_base_has_gradient_checkpointing_hook(class_name: str, visiting: set[str] | None = None) -> bool:
+        if visiting is None:
+            visiting = set()
+        if class_name in visiting or class_name not in local_classes:
+            return False
+        visiting.add(class_name)
+
+        class_node = local_classes[class_name]
+        methods = _class_methods(class_node)
+        assignments = _get_class_assignments(class_node)
+        if "_set_gradient_checkpointing" in methods or "_gradient_checkpointing_func" in assignments:
+            return True
+
+        for base in class_node.bases:
+            if not isinstance(base, (ast.Name, ast.Attribute)):
+                continue
+            try:
+                base_name = _simple_name(full_name(base))
+            except ValueError:
+                continue
+            if local_base_has_gradient_checkpointing_hook(base_name, visiting):
+                return True
+        return False
+
     for node in tree.body:
         if not isinstance(node, ast.ClassDef):
             continue
@@ -524,8 +550,27 @@ def check_gradient_checkpointing_contract(
             continue
         if "_gradient_checkpointing_func" in assignments:
             continue
-        if any(isinstance(base, ast.Name) and base.id.endswith("PreTrainedModel") for base in node.bases):
-            # Directly extending a model base often inherits the hook from the parent class in the same model family.
+
+        has_external_base = False
+        local_bases: list[str] = []
+        for base in node.bases:
+            if not isinstance(base, (ast.Name, ast.Attribute)):
+                has_external_base = True
+                continue
+            try:
+                base_name = _simple_name(full_name(base))
+            except ValueError:
+                has_external_base = True
+                continue
+            if base_name in local_classes:
+                local_bases.append(base_name)
+            else:
+                has_external_base = True
+
+        if any(local_base_has_gradient_checkpointing_hook(base_name) for base_name in local_bases):
+            continue
+        if has_external_base:
+            # Conservative behavior: unknown external parents may implement checkpointing hooks.
             continue
 
         violations.append(
@@ -693,10 +738,9 @@ def check_generation_mixin_hooks(
 
         # Conservative behavior: if hooks may come from any other parent class,
         # do not emit a violation.
-        if has_external_non_generation_base or non_generation_bases:
-            continue
-
         if any(local_base_has_generation_hook(base_name) for base_name in non_generation_bases):
+            continue
+        if has_external_non_generation_base:
             continue
 
         violations.append(

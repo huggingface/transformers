@@ -96,6 +96,72 @@ class FooModel(FooPreTrainedModel):
         self.assertEqual(violation.rule_id, cms.TRF002)
         self.assertEqual(violation.line_number, 1)
 
+    def test_trf006_flags_local_missing_gradient_checkpointing_hook(self):
+        source = """
+class FooPreTrainedModel:
+    pass
+
+class FooModel(FooPreTrainedModel):
+    supports_gradient_checkpointing = True
+"""
+        file_path = Path("src/transformers/models/foo/modeling_foo.py")
+        violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF006})
+        trf006 = [violation for violation in violations if violation.rule_id == cms.TRF006]
+        self.assertEqual(len(trf006), 1)
+        self.assertIn("supports_gradient_checkpointing=True", trf006[0].message)
+
+    def test_trf006_allows_local_inherited_gradient_checkpointing_hook(self):
+        source = """
+class FooPreTrainedModel:
+    def _set_gradient_checkpointing(self, module, value=False):
+        module.gradient_checkpointing = value
+
+class FooModel(FooPreTrainedModel):
+    supports_gradient_checkpointing = True
+"""
+        file_path = Path("src/transformers/models/foo/modeling_foo.py")
+        violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF006})
+        trf006 = [violation for violation in violations if violation.rule_id == cms.TRF006]
+        self.assertEqual(trf006, [])
+
+    def test_trf009_flags_missing_hooks_with_local_non_generation_parent(self):
+        source = """
+class FooBackbone:
+    pass
+
+class FooLM(FooBackbone, GenerationMixin):
+    pass
+"""
+        file_path = Path("src/transformers/models/foo/modeling_foo.py")
+        violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF009})
+        trf009 = [violation for violation in violations if violation.rule_id == cms.TRF009]
+        self.assertEqual(len(trf009), 1)
+        self.assertIn("directly inherits GenerationMixin", trf009[0].message)
+
+    def test_trf009_allows_local_inherited_generation_hook(self):
+        source = """
+class FooBackbone:
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        return {"input_ids": input_ids}
+
+class FooLM(FooBackbone, GenerationMixin):
+    pass
+"""
+        file_path = Path("src/transformers/models/foo/modeling_foo.py")
+        violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF009})
+        trf009 = [violation for violation in violations if violation.rule_id == cms.TRF009]
+        self.assertEqual(trf009, [])
+
+    def test_trf009_skips_external_non_generation_parent(self):
+        source = """
+class FooLM(PreTrainedModel, GenerationMixin):
+    pass
+"""
+        file_path = Path("src/transformers/models/foo/modeling_foo.py")
+        violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF009})
+        trf009 = [violation for violation in violations if violation.rule_id == cms.TRF009]
+        self.assertEqual(trf009, [])
+
     def test_trf010_catches_singular_past_key_value_without_usage(self):
         source = """
 class FooPreTrainedModel:

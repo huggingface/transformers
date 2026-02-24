@@ -89,21 +89,26 @@ def forward(self, x, return_dict=None):
 '''
 
 [rules.TRF006]
-description = "supports_gradient_checkpointing=True should be paired with gradient checkpointing implementation hooks."
+description = "supports_gradient_checkpointing=True should have a visible local hook or a known local inherited hook."
 default_enabled = true
 
 [rules.TRF006.explanation]
-what_it_does = "Checks that models advertising gradient checkpointing support expose expected implementation hooks."
+what_it_does = "Checks that models advertising gradient checkpointing support define hooks on the class or in local parent classes."
 why_bad = "Declaring support without hooks can mislead users and fail at runtime when checkpointing is enabled."
 bad_example = '''
 class FooPreTrainedModel(PreTrainedModel):
+    pass
+
+class FooModel(FooPreTrainedModel):
     supports_gradient_checkpointing = True
 '''
 good_example = '''
 class FooPreTrainedModel(PreTrainedModel):
-    supports_gradient_checkpointing = True
     def _set_gradient_checkpointing(self, module, value=False):
         module.gradient_checkpointing = value
+
+class FooModel(FooPreTrainedModel):
+    supports_gradient_checkpointing = True
 '''
 
 [rules.TRF007]
@@ -140,20 +145,26 @@ _no_split_modules = ["FooDecoderLayer", "FooAttention"]
 '''
 
 [rules.TRF009]
-description = "Classes directly mixing GenerationMixin should provide generation input preparation hooks."
+description = "Classes directly mixing GenerationMixin should define generation hooks, unless inherited from a parent."
 default_enabled = true
 
 [rules.TRF009.explanation]
-what_it_does = "Checks directly mixed-in GenerationMixin classes for explicit generation hooks when no other parent class exists."
-why_bad = "A standalone GenerationMixin class without hooks may expose incomplete generation behavior."
+what_it_does = "Checks directly mixed-in GenerationMixin classes for generation hooks on the class or in local parent classes."
+why_bad = "Mixing GenerationMixin without generation hooks can expose incomplete generation behavior."
 bad_example = '''
-class FooLM(GenerationMixin):
+class FooBackbone:
+    pass
+
+class FooLM(FooBackbone, GenerationMixin):
     pass
 '''
 good_example = '''
-class FooLM(GenerationMixin):
+class FooBackbone:
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         return {"input_ids": input_ids}
+
+class FooLM(FooBackbone, GenerationMixin):
+    pass
 '''
 
 [rules.TRF010]
