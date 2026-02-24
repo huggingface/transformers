@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_timesfm_2p5.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 the HuggingFace Team. All rights reserved.
+# Copyright 2026 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,10 +23,76 @@ from ...configuration_utils import PreTrainedConfig
 
 
 class Timesfm2P5Config(PreTrainedConfig):
-    """
-    Configuration class for TimesFM 2.5 model.
+    r"""
+    This is the configuration class to store the configuration of a [`Timesfm2P5ModelForPrediction`]. It is used to
+    instantiate a TimesFM 2.5 model according to the specified arguments, defining the model architecture. Instantiating
+    a configuration with the defaults will yield a similar configuration to that of the TimesFM 2.5
+    [google/timesfm-2.5-200m-transformers](https://huggingface.co/google/timesfm-2.5-200m-transformers) architecture.
 
-    Example checkpoint: [google/timesfm-2.5-200m-transformers](https://huggingface.co/google/timesfm-2.5-200m-transformers).
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        patch_length (`int`, *optional*, defaults to 32):
+            The length of one patch in the input sequence.
+        context_length (`int`, *optional*, defaults to 16384):
+            The length of the input context.
+        horizon_length (`int`, *optional*, defaults to 128):
+            The length of the prediction horizon.
+        quantiles (`list[float]`, *optional*, defaults to `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`):
+            The quantiles to predict.
+        hidden_size (`int`, *optional*, defaults to 1280):
+            Size of the hidden layers.
+        intermediate_size (`int`, *optional*, defaults to 1280):
+            Dimension of the MLP representations.
+        head_dim (`int`, *optional*, defaults to 80):
+            Size of the key, query, value projections per attention head.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer.
+        num_key_value_heads (`int`, *optional*, defaults to 16):
+            Number of key-value heads. Set equal to `num_attention_heads` for full (non-grouped) attention.
+        num_hidden_layers (`int`, *optional*, defaults to 20):
+            Number of Transformer layers.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+            The epsilon used by the RMS normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for the attention scores.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the attention linear projections.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        output_quantile_len (`int`, *optional*, defaults to 1024):
+            Length of the quantile output projection dimension.
+        decode_index (`int`, *optional*, defaults to 5):
+            Index into the quantile dimension used to extract the point (median) forecast.
+        use_qk_norm (`bool`, *optional*, defaults to `True`):
+            Whether to apply RMS normalization to query and key states before attention.
+        use_per_dim_scale (`bool`, *optional*, defaults to `True`):
+            Whether to use a learnable per-dimension scaling parameter on the query.
+        use_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in MLP and transformer linear layers.
+        activation (`str`, *optional*, defaults to `"swish"`):
+            Activation function used in MLP and residual block layers (any key from `ACT2FN`).
+        use_continuous_quantile_head (`bool`, *optional*, defaults to `True`):
+            Whether to use the continuous quantile head for non-median quantile predictions.
+        force_flip_invariance (`bool`, *optional*, defaults to `True`):
+            Whether to apply flip-invariance averaging during forecasting.
+        infer_is_positive (`bool`, *optional*, defaults to `True`):
+            Whether to clamp forecasts to non-negative values when the input minimum is non-negative.
+        max_position_embeddings (`int`, *optional*, defaults to 16384):
+            Maximum number of position embeddings supported by the rotary encoding.
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings.
+
+    Example:
+
+    ```python
+    >>> from transformers import Timesfm2P5Config, Timesfm2P5ModelForPrediction
+
+    >>> configuration = Timesfm2P5Config()
+    >>> model = Timesfm2P5ModelForPrediction(configuration)
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "timesfm_2p5"
@@ -35,73 +101,58 @@ class Timesfm2P5Config(PreTrainedConfig):
 
     def __init__(
         self,
-        # TimesFM 2.5 specific parameters
         patch_length: int = 32,
         context_length: int = 16384,
         horizon_length: int = 128,
         quantiles: list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        pad_val: float = -1e9,
-        freq_size: int = 10,
         hidden_size: int = 1280,
         intermediate_size: int = 1280,
         head_dim: int = 80,
         num_attention_heads: int = 16,
-        num_key_value_heads: int = 16,  # Same as num_attention_heads for full attention
-        tolerance: float = 1e-5,
+        num_key_value_heads: int = 16,
+        num_hidden_layers: int = 20,
         rms_norm_eps: float = 1e-6,
         attention_dropout: float = 0.0,
         attention_bias: bool = False,
         initializer_range: float = 0.02,
-        min_timescale: float = 1.0,
-        max_timescale: float = 10000.0,
-        # Override defaults for 2.5
-        num_hidden_layers: int = 20,
-        output_quantile_len: int = 1024,  # From original TimesFM 2.5 config
+        output_quantile_len: int = 1024,
         decode_index: int = 5,
-        use_rotary_embeddings: bool = True,
         use_qk_norm: bool = True,
         use_per_dim_scale: bool = True,
         use_bias: bool = False,
         activation: str = "swish",
-        use_positional_embedding: bool = False,  # TimesFM 2.5 uses rotary embeddings instead
         use_continuous_quantile_head: bool = True,
-        normalize_inputs: bool = True,
         force_flip_invariance: bool = True,
         infer_is_positive: bool = True,
-        # Gemma2-compatible parameters for query scaling
-        query_pre_attn_scalar: float = 256.0,  # This provides the per-dim scaling
+        # Gemma2-compatible parameters needed for inherited attention/rotary
+        query_pre_attn_scalar: float = 256.0,
         attn_logit_softcapping: float | None = None,
-        layer_types: list | None = None,  # All layers are the same type
-        sliding_window: int | None = None,  # No sliding window
-        max_position_embeddings: int = 16384,  # Should match context_length
-        rope_theta: float = 10000.0,  # RoPE theta parameter
+        max_position_embeddings: int = 16384,
+        rope_theta: float = 10000.0,
         rope_parameters: dict | None = None,
         **kwargs,
     ):
+        # Must be set before super().__init__() so PreTrainedConfig can detect and populate it
         self.rope_parameters = rope_parameters
         self.patch_length = patch_length
         self.context_length = context_length
         self.horizon_length = horizon_length
         self.quantiles = quantiles
-        self.pad_val = pad_val
-        self.freq_size = freq_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.head_dim = head_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.tolerance = tolerance
         self.rms_norm_eps = rms_norm_eps
         self.attention_dropout = attention_dropout
-        self.use_positional_embedding = use_positional_embedding
         self.initializer_range = initializer_range
-        self.min_timescale = min_timescale
-        self.max_timescale = max_timescale
 
         kwargs["is_encoder_decoder"] = self.is_encoder_decoder
         super().__init__(**kwargs)
-        self.use_rotary_embeddings = use_rotary_embeddings
-        self.normalize_inputs = normalize_inputs
+
+        # Explicitly assign params not covered by parent TimesFmConfig
+        self.num_key_value_heads = num_key_value_heads
+        self.attention_bias = attention_bias
         self.output_quantile_len = output_quantile_len
         self.decode_index = decode_index
         self.use_qk_norm = use_qk_norm
@@ -113,13 +164,8 @@ class Timesfm2P5Config(PreTrainedConfig):
         self.infer_is_positive = infer_is_positive
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.attn_logit_softcapping = attn_logit_softcapping
-        self.num_key_value_heads = num_key_value_heads
-        self.attention_bias = attention_bias
-        self.layer_types = layer_types or ["attention"] * num_hidden_layers
-        self.sliding_window = sliding_window
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
-        self.rope_parameters = self.rope_parameters or {"rope_type": "default", "rope_theta": rope_theta}
 
 
 __all__ = ["Timesfm2P5Config"]

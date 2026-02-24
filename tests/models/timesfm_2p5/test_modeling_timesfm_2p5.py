@@ -1,4 +1,4 @@
-# Copyright 2025 the HuggingFace Team. All rights reserved.
+# Copyright 2026 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,13 +44,9 @@ class Timesfm2P5ModelTester:
         intermediate_size: int = 64,
         head_dim: int = 16,
         num_heads: int = 2,
-        tolerance: float = 1e-6,
         rms_norm_eps: float = 1e-6,
         quantiles: list[float] = [0.1, 0.5, 0.9],
         output_quantile_len: int = 16,
-        pad_val: float = 1123581321.0,
-        use_positional_embedding: bool = True,
-        initializer_factor: float = 0.0,
         is_training: bool = False,
         batch_size: int = 2,
     ):
@@ -60,22 +56,17 @@ class Timesfm2P5ModelTester:
         self.horizon_length = horizon_length
         self.quantiles = quantiles
         self.output_quantile_len = output_quantile_len
-        self.pad_val = pad_val
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.head_dim = head_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_heads
-        self.tolerance = tolerance
         self.rms_norm_eps = rms_norm_eps
-        self.use_positional_embedding = use_positional_embedding
-        self.initializer_factor = initializer_factor
         self.is_training = is_training
         self.batch_size = batch_size
 
         # The size of test input
         self.seq_length = context_length // patch_length
-        self.hidden_size = hidden_size
 
     def get_config(self):
         return Timesfm2P5Config(
@@ -84,17 +75,13 @@ class Timesfm2P5ModelTester:
             horizon_length=self.horizon_length,
             quantiles=self.quantiles,
             output_quantile_len=self.output_quantile_len,
-            pad_val=self.pad_val,
             hidden_size=self.hidden_size,
             intermediate_size=self.intermediate_size,
             head_dim=self.head_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_attention_heads,  # Same for full attention
-            tolerance=self.tolerance,
+            num_key_value_heads=self.num_attention_heads,
             rms_norm_eps=self.rms_norm_eps,
-            use_positional_embedding=self.use_positional_embedding,
-            initializer_factor=self.initializer_factor,
         )
 
     def get_pipeline_config(self):
@@ -118,12 +105,7 @@ class Timesfm2P5ModelTester:
 @require_torch
 class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Timesfm2P5ModelForPrediction,) if is_torch_available() else ()
-    all_generative_model_classes = ()
-    all_parallelizable_model_classes = ()
-    fx_compatible = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_model_parallel = False
     is_encoder_decoder = False
     test_inputs_embeds = False
 
