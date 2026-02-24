@@ -20,7 +20,7 @@ We try to avoid direct inheritance between model-specific files. We have two mec
 ## Adding a Model (modular way)
 - Create `src/transformers/models/<name>/modular_<name>.py`, inherit from a similar model, define only what changes.
 - `super().__init__(...)` unravels the parent body; use `del self.attr` after to drop unwanted attributes.
-- Run `python utils/modular_model_converter.py <name>` to generate files, then `make check-repo`.
+- Run `make fix-repo` to regenerate model files from modular files.
 - Full guide: [docs/source/en/modular_transformers.md](docs/source/en/modular_transformers.md)
 
 ## CI Test Selection
