@@ -14,27 +14,14 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Customizing the Trainer
+# Subclassing Trainer methods
 
 Subclass [`Trainer`] methods to change training behavior without rewriting the entire loop. Subclassing modifies the *training loop*, for example the forward pass or loss computation.
 
 Before subclassing, consider whether you need to change *what* [`Trainer`] computes or *when* and *whether* it acts. For timing and conditional logic, use a [Callback](./trainer_callbacks) instead. Callbacks control when things happen (logging, evaluation, early stopping) and subclassing changes what happens (loss computation, data loading, optimization).
 
-The table below lists methods available for subclassing.
-
-| method | description |
-|---|---|
-| [`~Trainer.get_train_dataloader`] | create a training DataLoader |
-| [`~Trainer.get_eval_dataloader`] | create an evaluation DataLoader |
-| [`~Trainer.get_test_dataloader`] | create a test DataLoader |
-| [`~Trainer.log`] | log information about the training process |
-| [`~Trainer.create_optimizer_and_scheduler`] | create an optimizer and learning rate scheduler (can also be separately customized with [`~Trainer.create_optimizer`] and [`~Trainer.create_scheduler`] if they weren't passed in `__init__`) |
-| [`~Trainer.compute_loss`] | compute the loss of a batch of training inputs |
-| [`~Trainer.training_step`] | perform the training step |
-| [`~Trainer.prediction_step`] | perform the prediction and test step |
-| [`~Trainer.evaluate`] | evaluate the model and return the evaluation metric |
-
-The examples below show how to subclass some of these methods.
+> [!NOTE]
+> See the [`Trainer`] API docs for a complete list of methods you can subclass. Private methods (prefixed with `_`) like `_save_checkpoint` or `_evaluate` can also be overridden, but these may change without notice.
 
 ## get_train_dataloader
 
@@ -48,7 +35,7 @@ def get_train_dataloader(self):
 )
 ```
 
-GRPO needs to generate completions before training on them. Generating completions every step is expensive because it's autoregressive. A 512-token completion requires ~512 sequential forward passes compared to one forward pass for a training step. [`~trl.GRPOTrainer`] subclasses [`~Trainer.get_train_dataloader`] to batch generation across multiple steps.
+[GRPO](https://huggingface.co/docs/trl/en/grpo_trainer) is an online reinforcement learning algorithm that generates completions before training on them. Generating completions every step is expensive because it's autoregressive. A 512-token completion requires ~512 sequential forward passes compared to one forward pass for a training step. [`~trl.GRPOTrainer`] subclasses [`~Trainer.get_train_dataloader`] to batch generation across multiple steps.
 
 [`trl.GRPOTrainer.get_train_dataloader`] loads *batches* of generation prompts for multiple training steps at once by multiplying batch size by a `steps_per_generation` argument. If `train_batch_size=4` and `steps_per_generation=8`, the dataloader produces batches of 32, cutting generation cost by 8x.
 
@@ -69,12 +56,12 @@ def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=N
     ...
     outputs = model(**inputs)
     ...
-        loss = outputs["loss"] # get loss from model
+    loss = outputs["loss"] # get loss from model
 
     return (loss, outputs) if return_outputs else loss
 ```
 
-DPO measures how much more likely the policy model is to prefer a chosen response versus a rejected one, relative to a reference model. [`~trl.DPOTrainer`] subclasses [`~Trainer.compute_loss`] because the loss computation differs from standard cross-entropy in several ways:
+[DPO](https://huggingface.co/docs/trl/en/dpo_trainer) measures how strongly the policy model prefers a chosen response over a rejected one, relative to a reference model. [`~trl.DPOTrainer`] subclasses [`~Trainer.compute_loss`] because the loss computation differs from standard cross-entropy in several ways:
 
 - the model never sees labels; it only returns logits for DPO to calculate log-probs from
 - chosen and rejected responses are concatenated
@@ -92,16 +79,20 @@ def compute_loss(
     num_items_in_batch=None,
 ) -> torch.Tensor | tuple[torch.Tensor, dict[str, float]]:
     ...
-    with compute_loss_context_manager:
-        # 1. concatenated_forward: run chosen + rejected through the model in one forward pass
-        # 2. compute reference model log-probs (or use precomputed values from the batch)
-        # 3. dpo_loss: loss = -log σ(β * (log π(chosen)/π_ref(chosen) - log π(rejected)/π_ref(rejected)))
-        loss, metrics = self.get_batch_loss_metrics(model, inputs, train_eval="train")
-
-    ...
-
-    if return_outputs:
-        return loss, metrics
-
-    return loss
+    outputs = model(**inputs)
+    logits = outputs.logits
+    logps = get_logps(logits, inputs)
+    chosen_logps, rejected_logps = logps.chunk(2, dim=0)  # batch is [chosen, rejected]
+    ref_logits = self.ref_model(**inputs).logits
+    ref_logps = get_logps(ref_logits, inputs)
+    ref_chosen_logps, ref_rejected_logps = ref_logps.chunk(2, dim=0)  # batch is [chosen, rejected]
+    chosen_scores = chosen_logps - ref_chosen_logps
+    rejected_scores = rejected_logps - ref_rejected_logps
+    per_sequence_loss = -F.logsigmoid(self.beta * chosen_scores - rejected_scores)
+    loss = per_sequence_loss.mean()
+    return (loss, outputs) if return_outputs else loss
 ```
+
+## Next steps
+
+- For more real-world examples, see how [`~trl.GRPOTrainer`] and [`~trl.DPOTrainer`] extend [`Trainer`] in TRL, or how [Axolotl](https://github.com/axolotl-ai-cloud/axolotl/tree/main/src/axolotl/core/trainers) builds custom trainers on top of it.

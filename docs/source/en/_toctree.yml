@@ -149,7 +149,7 @@
   - isExpanded: false
     sections:
     - local: trainer_customize
-      title: Customizing the Trainer
+      title: Subclassing Trainer methods
     - local: trainer_callbacks
       title: Callbacks
     - local: optimizers

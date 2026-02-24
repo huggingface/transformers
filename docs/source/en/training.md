@@ -97,7 +97,8 @@ model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto")
 <hfoption id="training optimizations">
 
 - Set `bf16=True` for fast mixed precision training if your hardware supports it (Ampere+ GPUs). Otherwise, fall back to `fp16=True` on older hardware.
-- Enable `gradient_accumulation_steps` and `gradient_checkpointing` to simulate training on larger batches and reduce memory usage.
+- `gradient_accumulation_steps` simulates a larger effective batch size by accumulating gradients over multiple forward passes before updating weights.
+- `gradient_checkpointing` trades compute for memory by recomputing intermediate activations during the backward pass instead of storing them.
 
 </hfoption>
 <hfoption id="evaluation and checkpointing">
