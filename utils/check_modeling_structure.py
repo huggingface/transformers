@@ -670,30 +670,43 @@ def check_generation_mixin_hooks(
 ) -> list[Violation]:
     local_classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
 
-    def local_base_has_generation_hook(class_name: str, visiting: set[str] | None = None) -> bool:
+    def local_base_generation_status(class_name: str, visiting: set[str] | None = None) -> tuple[bool, bool]:
+        """
+        Return `(has_generation_hook, has_external_or_unknown_ancestor)`.
+        """
         if visiting is None:
             visiting = set()
         if class_name in visiting or class_name not in local_classes:
-            return False
+            return False, False
         visiting.add(class_name)
 
         class_node = local_classes[class_name]
         methods = _class_methods(class_node)
         if "prepare_inputs_for_generation" in methods or "_reorder_cache" in methods or "can_generate" in methods:
-            return True
+            return True, False
 
+        has_external_or_unknown_ancestor = False
         for base in class_node.bases:
             if not isinstance(base, (ast.Name, ast.Attribute)):
+                has_external_or_unknown_ancestor = True
                 continue
             try:
                 base_name = _simple_name(full_name(base))
             except ValueError:
+                has_external_or_unknown_ancestor = True
                 continue
             if base_name == "GenerationMixin":
                 continue
-            if local_base_has_generation_hook(base_name, visiting):
-                return True
-        return False
+            if base_name not in local_classes:
+                has_external_or_unknown_ancestor = True
+                continue
+
+            has_hook, has_unknown = local_base_generation_status(base_name, visiting)
+            if has_hook:
+                return True, False
+            if has_unknown:
+                has_external_or_unknown_ancestor = True
+        return False, has_external_or_unknown_ancestor
 
     for node in tree.body:
         if not isinstance(node, ast.ClassDef):
@@ -738,7 +751,10 @@ def check_generation_mixin_hooks(
 
         # Conservative behavior: if hooks may come from any other parent class,
         # do not emit a violation.
-        if any(local_base_has_generation_hook(base_name) for base_name in non_generation_bases):
+        local_base_statuses = [local_base_generation_status(base_name) for base_name in non_generation_bases]
+        if any(has_hook for has_hook, _ in local_base_statuses):
+            continue
+        if any(has_unknown for _, has_unknown in local_base_statuses):
             continue
         if has_external_non_generation_base:
             continue

@@ -162,6 +162,19 @@ class FooLM(PreTrainedModel, GenerationMixin):
         trf009 = [violation for violation in violations if violation.rule_id == cms.TRF009]
         self.assertEqual(trf009, [])
 
+    def test_trf009_skips_local_parent_with_external_ancestor(self):
+        source = """
+class FooPreTrainedModel(PreTrainedModel):
+    pass
+
+class FooLM(FooPreTrainedModel, GenerationMixin):
+    pass
+"""
+        file_path = Path("src/transformers/models/foo/modeling_foo.py")
+        violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF009})
+        trf009 = [violation for violation in violations if violation.rule_id == cms.TRF009]
+        self.assertEqual(trf009, [])
+
     def test_trf010_catches_singular_past_key_value_without_usage(self):
         source = """
 class FooPreTrainedModel:
