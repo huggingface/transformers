@@ -10,10 +10,12 @@
 - After any code change: `make style` -> targeted `pytest tests/models/<name>/...`
 - After touching copied code, modular files, docs, or docstrings: `make fix-repo` instead
 
-## Copies and Modular Models (critical)
-- Files with `# Copied from ...`: edit the source file, then run `make fix-repo` to propagate. Never edit the copy directly.
-- Files with `modular_<name>.py`: never edit generated `modeling_*.py` directly. Edit the modular file, then run `make fix-repo` or `python utils/modular_model_converter.py <name>`.
-- Generated files are identified by `This file was automatically generated from` on the second line, or by `_pb2.py` suffix.
+## Copies and Modular Models
+
+We try to avoid direct inheritance between model-specific files. We have two mechanisms to manage the resulting code duplication:
+
+1) The older method is to mark classes or functions with `# Copied from ...`. Copies are kept in sync by linters and `make fix-repo`. Do not edit a `# Copied from` block, as it will be reverted by `make fix-repo`. Ideally you should edit the code it's copying from and propagate the change, but you can break the `# Copied from` link if needed.
+2) The newer method is to add a file named `modular_<name>.py` in the model directory. `modular` files **can** inherit from other models. `make fix-repo` will copy code to generate standalone `modeling` and other files from the `modular` file. When a `modular` file is present, that file should be edited directly. Changes made to the generated files will be overwritten by `make fix-repo`!
 
 ## Adding a Model (modular way)
 - Create `src/transformers/models/<name>/modular_<name>.py`, inherit from a similar model, define only what changes.
