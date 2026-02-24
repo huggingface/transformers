@@ -372,7 +372,6 @@ OBJECTS_TO_IGNORE = {
     "NystromformerConfig",
     "OPTConfig",
     "ObjectDetectionPipeline",
-    "Olmo3_2HybridConfig",
     "OneFormerProcessor",
     "OpenAIGPTTokenizerFast",
     "OpenLlamaConfig",
