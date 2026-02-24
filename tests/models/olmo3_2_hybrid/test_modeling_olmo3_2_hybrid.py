@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Olmo3_2Hybrid model."""
 
-import tempfile
 import unittest
 
 from transformers import Olmo3_2HybridConfig, is_torch_available
@@ -22,7 +21,6 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_torch,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -147,40 +145,6 @@ class Olmo3_2HybridModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
     def test_multi_gpu_data_parallel_forward(self):
         pass
-
-    # @unittest.skip("Triton kernels require CUDA")
-    # def test_training_overfit(self):
-    #     pass
-
-    @require_torch_multi_gpu
-    def test_can_use_device_map(self):
-        """
-        Test that this model can be dispatched on multiple gpus.
-        """
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            inputs_dict = {k: v.to(0) if isinstance(v, torch.Tensor) else v for k, v in inputs_dict.items()}
-            config.layer_types = ["full_attention", "linear_attention"]
-            model = model_class(config).eval()
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                del model
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    device_map={
-                        "lm_head": 0,
-                        "model.embed_tokens": 0,
-                        "model.norm": 0,
-                        "model.layers.0": 0,
-                        "model.layers.1": 1,
-                    },
-                )
-
-                self.assertTrue({param.device for param in model.model.layers[0].parameters()} == {torch.device(0)})
-                self.assertTrue({param.device for param in model.model.layers[1].parameters()} == {torch.device(1)})
-
-                _ = model.generate(**inputs_dict, max_new_tokens=5, min_new_tokens=5)
 
 
 @require_torch

@@ -38,7 +38,6 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="allenai/OLMo-3.2-1B-Hybrid",
-    torch_dtype=torch.bfloat16,
 )
 
 result = pipe("Plants create energy through a process known as")
@@ -57,7 +56,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/OLMo-3.2-1B-Hybrid",
-    torch_dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
