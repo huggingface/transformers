@@ -468,7 +468,7 @@ Parameters:
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
-            [`transformers.modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.FloatTensor)`: A [`transformers.modeling_outputs.CausalLMOutputWithPast`] or a tuple of
+            [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.FloatTensor)`: A [`~modeling_outputs.CausalLMOutputWithPast`] or a tuple of
             `torch.FloatTensor` (if `return_dict=False` is passed or when `config.return_dict=False`) comprising various
             elements depending on the configuration ([`None`]) and inputs.
 
@@ -535,7 +535,7 @@ Parameters:
                 are listed above; see the TypedDict class for the complete list of supported arguments.
 
         Returns:
-            `<class 'transformers.image_processing_base.BatchFeature'>`:
+            `~image_processing_base.BatchFeature`:
             - **data** (`dict`) -- Dictionary of lists/arrays/tensors returned by the __call__ method ('pixel_values', etc.).
             - **tensor_type** (`Union[None, str, TensorType]`, *optional*) -- You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
               initialization.
@@ -597,7 +597,7 @@ Parameters:
                 for the complete list of supported arguments.
 
         Returns:
-            `<class 'transformers.image_processing_base.BatchFeature'>`:
+            `~image_processing_base.BatchFeature`:
             - **data** (`dict`) -- Dictionary of lists/arrays/tensors returned by the __call__ method ('pixel_values', etc.).
             - **tensor_type** (`Union[None, str, TensorType]`, *optional*) -- You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
               initialization.

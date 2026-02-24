@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import inspect
 import os
-import types as types_module
 from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -23,6 +22,7 @@ from types import UnionType
 from typing import Union, get_args, get_origin
 
 import regex as re
+import typing_extensions
 
 from .doc import (
     MODELS_TO_PIPELINE,
@@ -2142,30 +2142,70 @@ def _is_processor_class(func, parent_class):
     return filename.startswith("processing_") and filename.endswith(".py")
 
 
+# Python < 3.12 fallback: naming heuristics when __orig_bases__ is not set (cpython#103699).
+# Order matters: check ImageProcessorKwargs before ProcessorKwargs.
+_BASIC_KWARGS_NAMES = frozenset({"ImagesKwargs", "ProcessingKwargs", "TextKwargs", "VideosKwargs", "AudioKwargs"})
+_BASIC_KWARGS_CLASSES = None  # Lazy-loaded name -> class mapping
+
+
+def _get_base_kwargs_class_from_name(cls_name: str) -> str | None:
+    """Map kwargs class name to base using naming conventions. Returns base class name or None."""
+    if cls_name in _BASIC_KWARGS_NAMES:
+        return cls_name
+    if "ImageProcessorKwargs" in cls_name or cls_name.endswith("ImagesKwargs"):
+        return "ImagesKwargs"
+    if "ProcessorKwargs" in cls_name:
+        return "ProcessingKwargs"
+    if "VideoProcessorKwargs" in cls_name or cls_name.endswith("VideosKwargs"):
+        return "VideosKwargs"
+    if "AudioProcessorKwargs" in cls_name or cls_name.endswith("AudioKwargs"):
+        return "AudioKwargs"
+    if "TextKwargs" in cls_name:
+        return "TextKwargs"
+    return None
+
+
 def _get_base_kwargs_class(cls):
     """
-    Get the root/base TypedDict class by walking __orig_bases__.
+    Get the root/base TypedDict class by walking the inheritance chain.
     For model-specific kwargs like ComplexProcessingKwargs(ProcessingKwargs), returns ProcessingKwargs.
     For model-specific kwargs like DummyImageProcessorKwargs(ImagesKwargs), returns ImagesKwargs.
 
-    Uses types.get_original_bases() when available. Falls back to name-based heuristics for Python <3.12
-    where non-generic TypedDict subclasses don't have __orig_bases__ set.
+    Compatibility: On Python < 3.12, non-generic TypedDict subclasses do not have __orig_bases__ set
+    (cpython#103699). We fall back to naming heuristics (e.g. *ImageProcessorKwargs -> ImagesKwargs).
     """
     current = cls
     while True:
-        bases = (
-            types_module.get_original_bases(current)
-            if hasattr(types_module, "get_original_bases")
-            else getattr(current, "__orig_bases__", ())
-        )
+        bases = typing_extensions.get_original_bases(current)
         parent = None
         for base in bases:
             if isinstance(base, type) and base not in (dict, object):
-                # Skip TypedDict from typing module
                 if getattr(base, "__name__", "") == "TypedDict" and getattr(base, "__module__", "") == "typing":
                     continue
                 parent = base
                 break
+        if parent is None:
+            # Python < 3.12 fallback: use naming heuristics
+            base_name = _get_base_kwargs_class_from_name(current.__name__)
+            if base_name is not None:
+                global _BASIC_KWARGS_CLASSES
+                if _BASIC_KWARGS_CLASSES is None:
+                    from transformers.processing_utils import (
+                        AudioKwargs,
+                        ImagesKwargs,
+                        ProcessingKwargs,
+                        TextKwargs,
+                        VideosKwargs,
+                    )
+
+                    _BASIC_KWARGS_CLASSES = {
+                        "ImagesKwargs": ImagesKwargs,
+                        "ProcessingKwargs": ProcessingKwargs,
+                        "TextKwargs": TextKwargs,
+                        "VideosKwargs": VideosKwargs,
+                        "AudioKwargs": AudioKwargs,
+                    }
+                parent = _BASIC_KWARGS_CLASSES[base_name]
         if parent is None or parent == current:
             return current
         current = parent
