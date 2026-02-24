@@ -26,10 +26,9 @@ from typing import Any
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
 
-from transformers.trainer_pt_utils import AcceleratorConfig
-
 from transformers import Trainer, TrainingArguments
 from transformers.testing_utils import TestCasePlus, require_torch
+from transformers.trainer_pt_utils import AcceleratorConfig
 
 from .trainer_test_utils import (
     RegressionModelConfig,

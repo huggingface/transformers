@@ -16,6 +16,7 @@
 Core Trainer integration tests: reproducibility, gradient accumulation, gradient checkpointing,
 mixed precision, logging, NEFTune, memory metrics, and end-to-end training.
 """
+
 import math
 import os
 import tempfile
@@ -58,23 +59,22 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+
 from .trainer_test_utils import (
     ATOL,
-    RTOL,
     PATH_SAMPLE_TEXT,
+    RTOL,
     BasicTextGenerationModel,
     ForCausalLMLoss,
     RegressionDataset,
-    RegressionDictModel,
     RegressionModel,
-    RegressionModelConfig,
-    RegressionPreTrainedModel,
     RepeatDataset,
     StoreLossCallback,
     TrainerIntegrationCommon,
     get_dataset,
     get_regression_trainer,
 )
+
 
 # ---------------------------------------------------------------------------
 # Mixed precision tests
@@ -794,7 +794,6 @@ class TrainerStepCountingTest(TestCasePlus):
             )
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, int(self.n_epochs))
-
 
 
 # ---------------------------------------------------------------------------
