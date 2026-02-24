@@ -45,7 +45,8 @@ from ..qwen3_omni_moe.processing_qwen3_omni_moe import (
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerTextRMSNorm, rotate_half, repeat_kv, apply_rotary_pos_emb,
     eager_attention_forward, Qwen3OmniMoeThinkerTextAttention, 
-    Qwen3OmniMoeThinkerTextMLP, Qwen3OmniMoeThinkerTextDecoderLayer
+    Qwen3OmniMoeThinkerTextMLP, Qwen3OmniMoeThinkerTextDecoderLayer,
+    _get_feat_extract_output_lengths
 )
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
@@ -609,17 +610,6 @@ class Qwen3ASRThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     """
 
     rope_deltas: Optional[torch.LongTensor] = None
-
-
-def _get_feat_extract_output_lengths(input_lengths):
-    """
-    Computes the output length of the convolutional layers and the output length of the audio encoder
-    """
-
-    input_lengths_leave = input_lengths % 100
-    feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    output_lengths = ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
-    return output_lengths
 
 
 class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3ASRPreTrainedModel):
