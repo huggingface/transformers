@@ -725,7 +725,7 @@ class DogeForCausalLM(MixtralForCausalLM):
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         aux_loss = None
-        if outputs.router_logits is not None:
+        if self.config.is_moe and outputs.router_logits is not None:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,
