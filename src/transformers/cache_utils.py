@@ -72,7 +72,11 @@ class CacheLayerMixin(ABC):
             self.values.zero_()
         # This attribute is set on several Layers
         if hasattr(self, "cumulative_length"):
-            self.cumulative_length = 0
+            # It can either be an int for dynamic layers, or a tensor for static layers
+            if isinstance(self.cumulative_length, int):
+                self.cumulative_length = 0
+            else:
+                self.cumulative_length.zero_()
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         """Reorders this layer's cache for beam search."""
@@ -256,7 +260,8 @@ class StaticLayer(CacheLayerMixin):
     def __init__(self, max_cache_len: int):
         super().__init__()
         self.max_cache_len = max_cache_len
-        self.cumulative_length = 0
+        # Very important that it's a tensor here, to avoid recompiling when we update it
+        self.cumulative_length = torch.tensor([0], dtype=int)
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         """
@@ -287,6 +292,7 @@ class StaticLayer(CacheLayerMixin):
             dtype=self.dtype,
             device=self.device,
         )
+        self.cumulative_length = self.cumulative_length.to(self.device)
         # Note: `mark_static_address` is used to tag the cache as a fixed data pointer, preventing compiled graph
         # breaks when updating the cache. However, it is not supported when tracing the graph, so we skip it in this case.
         # As prefill should never be compiled, this is not an issue and it will still be run (except when users compile
@@ -337,7 +343,7 @@ class StaticLayer(CacheLayerMixin):
 
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
-        return self.cumulative_length
+        return self.cumulative_length.item()
 
     def get_max_cache_shape(self) -> int:
         """Return the maximum cache shape of the cache"""
@@ -362,6 +368,7 @@ class StaticSlidingWindowLayer(StaticLayer):
     def __init__(self, max_cache_len: int, sliding_window: int):
         effective_max_cache_len = min(sliding_window, max_cache_len)
         super().__init__(max_cache_len=effective_max_cache_len)
+        # Here it cannot be a tensor as otherwise we have data-dependent control flows
         self.cumulative_length = 0
 
     def update(
@@ -455,6 +462,10 @@ class StaticSlidingWindowLayer(StaticLayer):
             kv_length = sliding_window
 
         return kv_length, kv_offset
+
+    def get_seq_length(self) -> int:
+        """Returns the sequence length of the cached states."""
+        return self.cumulative_length
 
 
 class QuantizedLayer(DynamicLayer):
