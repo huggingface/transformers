@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING
 
 from ...utils import logging
 from .auto_factory import (
-    _BaseAutoBackboneClass,
     _BaseAutoModelClass,
     _LazyAutoMapping,
     auto_class_update,
@@ -2154,7 +2153,7 @@ class AutoModelForTextToWaveform(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING
 
 
-class AutoBackbone(_BaseAutoBackboneClass):
+class AutoBackbone(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_BACKBONE_MAPPING
 
 
