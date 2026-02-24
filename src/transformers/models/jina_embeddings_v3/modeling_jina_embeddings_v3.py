@@ -18,6 +18,7 @@ from torch.nn import functional as F
 from ... import initialization as init
 from ...activations import ACT2FN, gelu
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
@@ -264,7 +265,7 @@ class JinaEmbeddingsV3SelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -370,7 +371,7 @@ class JinaEmbeddingsV3Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -468,7 +469,7 @@ class JinaEmbeddingsV3Layer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -499,7 +500,7 @@ class JinaEmbeddingsV3Encoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.FloatTensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -771,7 +772,7 @@ class LoRAParametrization(nn.Module):
 
 class JinaEmbeddingsV3PreTrainedModel(PreTrainedModel):
     config_class = JinaEmbeddingsV3Config
-    base_model_prefix = "jina_embeddings_v3"
+    base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -860,6 +861,25 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
         adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling | tuple:
+        r"""
+        adapter_mask (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Tensor indicating which LoRA adaptation to apply for each sample in the batch.
+
+            Each value in `adapter_mask` must be an integer corresponding to the index of a LoRA
+            adaptation defined in `config.lora_adaptations`. The mapping between task names and
+            adaptation indices is stored in `model._adaptation_map`.
+
+            If `None`, the base model weights are used without task-specific adaptation.
+
+            Example:
+
+            ```python
+            task = "retrieval.query"
+            task_id = model._adaptation_map[task]
+            adapter_mask = torch.full((batch_size,), task_id, dtype=torch.long)
+            outputs = model(**inputs, adapter_mask=adapter_mask)
+            ```
+        """
         if (input_ids is not None) and (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         elif input_ids is not None:
@@ -894,13 +914,15 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
 
         position_embeddings = self.rotary_emb(embedding_output, position_ids)
 
-        extended_attention_mask = self.get_extended_attention_mask(
-            attention_mask, input_shape, dtype=self.embeddings.word_embeddings.weight.dtype
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
         )
 
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             adapter_mask=adapter_mask,
             **kwargs,
@@ -941,14 +963,14 @@ class JinaEmbeddingsV3LMHead(nn.Module):
 @auto_docstring
 class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "jina_embeddings_v3.embeddings.word_embeddings.weight",
+        "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.weight",
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.jina_embeddings_v3 = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
+        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
         self.lm_head = JinaEmbeddingsV3LMHead(config)
 
         # Initialize weights and apply final processing
@@ -962,7 +984,7 @@ class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
         self.lm_head.bias = new_embeddings.bias
 
     def get_input_embeddings(self) -> nn.Embedding:
-        return self.jina_embeddings_v3.embeddings.word_embeddings
+        return self.roberta.embeddings.word_embeddings
 
     @can_return_tuple
     @auto_docstring
@@ -991,7 +1013,7 @@ class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-        outputs = self.jina_embeddings_v3(
+        outputs = self.roberta(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1043,7 +1065,7 @@ class JinaEmbeddingsV3ClassificationHead(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    Jina-Embeddings-V3 Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    XLM-RoBERTa Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
     """
 )
@@ -1054,7 +1076,7 @@ class JinaEmbeddingsV3ForSequenceClassification(JinaEmbeddingsV3PreTrainedModel)
         self.config = config
         self.classifier = JinaEmbeddingsV3ClassificationHead(config)
 
-        self.jina_embeddings_v3 = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
+        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1086,7 +1108,7 @@ class JinaEmbeddingsV3ForSequenceClassification(JinaEmbeddingsV3PreTrainedModel)
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        outputs = self.jina_embeddings_v3(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1142,7 +1164,7 @@ class JinaEmbeddingsV3ForTokenClassification(JinaEmbeddingsV3PreTrainedModel):
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.jina_embeddings_v3 = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
+        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1172,7 +1194,7 @@ class JinaEmbeddingsV3ForTokenClassification(JinaEmbeddingsV3PreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        outputs = self.jina_embeddings_v3(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1209,7 +1231,7 @@ class JinaEmbeddingsV3ForQuestionAnswering(JinaEmbeddingsV3PreTrainedModel):
         self.num_labels = config.num_labels
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.jina_embeddings_v3 = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
+        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1238,7 +1260,7 @@ class JinaEmbeddingsV3ForQuestionAnswering(JinaEmbeddingsV3PreTrainedModel):
 
             [What are token type IDs?](../glossary#token-type-ids)
         """
-        outputs = self.jina_embeddings_v3(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,

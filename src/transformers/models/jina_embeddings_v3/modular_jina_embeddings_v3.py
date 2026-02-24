@@ -10,6 +10,7 @@ from torch.nn import functional as F
 
 from ... import initialization as init
 from ...integrations import use_kernelized_func
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
@@ -23,6 +24,9 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
 from ..xlm_roberta.modeling_xlm_roberta import (
+    XLMRobertaForQuestionAnswering,
+    XLMRobertaForSequenceClassification,
+    XLMRobertaForTokenClassification,
     XLMRobertaIntermediate,
     XLMRobertaLMHead,
     XLMRobertaOutput,
@@ -33,6 +37,27 @@ from ..xlm_roberta.modeling_xlm_roberta import (
 
 
 logger = logging.get_logger(__name__)
+
+"""
+Update Attention mask to new api
+
+search for modular way/model for maskedlm, seqclass, tokenclass, qa.
+
+Docs: adapter_mask
+
+Add integration tests for all task_id's, check the last export test.
+
+maskedlm head tie-weights update and fix
+
+conversion_mapping.py use? Fix failure, test_reverse_loading_mapping, pooler
+
+post_init() vs lora parameterization order,
+- parameterization failing test
+- lora_dropout_mask buffer initialization
+
+Fix gradient checkpointing issues.
+
+"""
 
 
 class JinaEmbeddingsV3Config(PreTrainedConfig):
@@ -159,8 +184,11 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
 
         if lora_adaptations is None:
             lora_adaptations = [
-                "retrieval.query", "retrieval.passage", "separation",
-                "classification", "text-matching"
+                "retrieval.query",
+                "retrieval.passage",
+                "separation",
+                "classification",
+                "text-matching",
             ]
 
         if task_instructions is None:
@@ -169,30 +197,30 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
                 "retrieval.passage": "Represent the document for retrieval: ",
                 "separation": "",
                 "classification": "",
-                "text-matching": ""
+                "text-matching": "",
             }
 
         if matryoshka_dimensions is None:
             matryoshka_dimensions = [32, 64, 128, 256, 512, 768, 1024]
 
-        self.vocab_size=vocab_size
-        self.hidden_size=hidden_size
-        self.num_hidden_layers=num_hidden_layers
-        self.num_attention_heads=num_attention_heads
-        self.intermediate_size=intermediate_size
-        self.hidden_act=hidden_act
-        self.hidden_dropout_prob=hidden_dropout_prob
-        self.attention_probs_dropout_prob=attention_probs_dropout_prob
-        self.max_position_embeddings=max_position_embeddings
-        self.type_vocab_size=type_vocab_size
-        self.initializer_range=initializer_range
-        self.layer_norm_eps=layer_norm_eps
-        self.pad_token_id=pad_token_id
-        self.bos_token_id=bos_token_id
-        self.eos_token_id=eos_token_id
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.position_embedding_type = position_embedding_type
         self.rope_parameters = rope_parameters
-        self.classifier_dropout=classifier_dropout
+        self.classifier_dropout = classifier_dropout
         self.lora_adaptations = lora_adaptations
         self.lora_rank = lora_rank
         self.lora_alpha = lora_alpha
@@ -252,7 +280,7 @@ class JinaEmbeddingsV3Embeddings(nn.Module):
                     *input_shape,
                     self.word_embeddings.embedding_dim,
                     dtype=self.word_embeddings.weight.dtype,
-                    device=device
+                    device=device,
                 )
                 unique_tasks = torch.unique(adapter_mask)
                 for task_id in unique_tasks:
@@ -313,7 +341,7 @@ class JinaEmbeddingsV3SelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -323,7 +351,7 @@ class JinaEmbeddingsV3SelfAttention(nn.Module):
         hidden_shape = (batch_size, seq_len, 3, self.num_attention_heads, self.attention_head_size)
 
         if adapter_mask is not None:
-            query_states= torch.empty(out_shape, dtype=hidden_states.dtype, device=hidden_states.device)
+            query_states = torch.empty(out_shape, dtype=hidden_states.dtype, device=hidden_states.device)
             key_states = torch.empty(out_shape, dtype=hidden_states.dtype, device=hidden_states.device)
             value_states = torch.empty(out_shape, dtype=hidden_states.dtype, device=hidden_states.device)
 
@@ -388,9 +416,7 @@ class JinaEmbeddingsV3SelfOutput(XLMRobertaSelfOutput):
         if adapter_mask is not None:
             output_dim = self.dense.out_features
             output_tensor = torch.empty(
-                *hidden_states.shape[:-1], output_dim,
-                dtype=hidden_states.dtype,
-                device=hidden_states.device
+                *hidden_states.shape[:-1], output_dim, dtype=hidden_states.dtype, device=hidden_states.device
             )
 
             unique_tasks = torch.unique(adapter_mask)
@@ -418,7 +444,7 @@ class JinaEmbeddingsV3Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -446,10 +472,7 @@ class JinaEmbeddingsV3Intermediate(XLMRobertaIntermediate):
         if adapter_mask is not None:
             output_dim = self.dense.out_features
             output_tensor = torch.empty(
-                *hidden_states.shape[:-1],
-                output_dim,
-                dtype=hidden_states.dtype,
-                device=hidden_states.device
+                *hidden_states.shape[:-1], output_dim, dtype=hidden_states.dtype, device=hidden_states.device
             )
 
             unique_tasks = torch.unique(adapter_mask)
@@ -477,12 +500,12 @@ class JinaEmbeddingsV3Output(XLMRobertaOutput):
         input_tensor: torch.Tensor,
         adapter_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-
         if adapter_mask is not None:
             output_tensor = torch.empty(
-                *hidden_states.shape[:-1], self.dense.out_features,
+                *hidden_states.shape[:-1],
+                self.dense.out_features,
                 dtype=hidden_states.dtype,
-                device=hidden_states.device
+                device=hidden_states.device,
             )
 
             unique_tasks = torch.unique(adapter_mask)
@@ -511,7 +534,7 @@ class JinaEmbeddingsV3Layer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -542,7 +565,7 @@ class JinaEmbeddingsV3Encoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.FloatTensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -566,10 +589,7 @@ class JinaEmbeddingsV3Pooler(XLMRobertaPooler):
         super().__init__(config)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        pool: bool = True,
-        adapter_mask: torch.Tensor | None = None
+        self, hidden_states: torch.Tensor, pool: bool = True, adapter_mask: torch.Tensor | None = None
     ) -> torch.FloatTensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
@@ -580,7 +600,7 @@ class JinaEmbeddingsV3Pooler(XLMRobertaPooler):
                 *first_token_tensor.shape[:-1],
                 self.dense.out_features,
                 dtype=hidden_states.dtype,
-                device=hidden_states.device
+                device=hidden_states.device,
             )
 
             unique_tasks = torch.unique(adapter_mask)
@@ -633,6 +653,7 @@ class LoRAParametrization(nn.Module):
     It supports multi-task adaptation by maintaining a stack of adapter weights (A and B matrices)
     and selecting the appropriate one based on a `task_id` provided during the forward pass.
     """
+
     def __init__(
         self,
         fan_in: int,
@@ -814,7 +835,7 @@ class LoRAParametrization(nn.Module):
 
 class JinaEmbeddingsV3PreTrainedModel(PreTrainedModel):
     config_class = JinaEmbeddingsV3Config
-    base_model_prefix = "jina_embeddings_v3"
+    base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -903,6 +924,25 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
         adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling | tuple:
+        r"""
+        adapter_mask (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Tensor indicating which LoRA adaptation to apply for each sample in the batch.
+
+            Each value in `adapter_mask` must be an integer corresponding to the index of a LoRA
+            adaptation defined in `config.lora_adaptations`. The mapping between task names and
+            adaptation indices is stored in `model._adaptation_map`.
+
+            If `None`, the base model weights are used without task-specific adaptation.
+
+            Example:
+
+            ```python
+            task = "retrieval.query"
+            task_id = model._adaptation_map[task]
+            adapter_mask = torch.full((batch_size,), task_id, dtype=torch.long)
+            outputs = model(**inputs, adapter_mask=adapter_mask)
+            ```
+        """
         if (input_ids is not None) and (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         elif input_ids is not None:
@@ -937,17 +977,23 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
 
         position_embeddings = self.rotary_emb(embedding_output, position_ids)
 
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, dtype=self.embeddings.word_embeddings.weight.dtype)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             adapter_mask=adapter_mask,
             **kwargs,
         )
         sequence_output = encoder_outputs.last_hidden_state
-        pooled_output = self.pooler(sequence_output, pool=True, adapter_mask=adapter_mask) if self.pooler is not None else None
+        pooled_output = (
+            self.pooler(sequence_output, pool=True, adapter_mask=adapter_mask) if self.pooler is not None else None
+        )
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -962,14 +1008,14 @@ class JinaEmbeddingsV3LMHead(XLMRobertaLMHead):
 @auto_docstring
 class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "jina_embeddings_v3.embeddings.word_embeddings.weight",
+        "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.weight",
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.jina_embeddings_v3 = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
+        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
         self.lm_head = JinaEmbeddingsV3LMHead(config)
 
         # Initialize weights and apply final processing
@@ -983,7 +1029,7 @@ class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
         self.lm_head.bias = new_embeddings.bias
 
     def get_input_embeddings(self) -> nn.Embedding:
-        return self.jina_embeddings_v3.embeddings.word_embeddings
+        return self.roberta.embeddings.word_embeddings
 
     @can_return_tuple
     @auto_docstring
@@ -1012,7 +1058,7 @@ class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-        outputs = self.jina_embeddings_v3(
+        outputs = self.roberta(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1040,266 +1086,16 @@ class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
         )
 
 
-class JinaEmbeddingsV3ClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
-        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
-
-    def forward(self, features, **kwargs):
-        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = torch.tanh(x)
-        x = self.dropout(x)
-        x = self.out_proj(x)
-        return x
+class JinaEmbeddingsV3ForSequenceClassification(XLMRobertaForSequenceClassification):
+    pass
 
 
-@auto_docstring(
-    custom_intro="""
-    Jina-Embeddings-V3 Model transformer with a sequence classification/regression head on top (a linear layer on top of the
-    pooled output) e.g. for GLUE tasks.
-    """
-)
-class JinaEmbeddingsV3ForSequenceClassification(JinaEmbeddingsV3PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.config = config
-        self.classifier = JinaEmbeddingsV3ClassificationHead(config)
-
-        self.jina_embeddings_v3 = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        token_type_ids: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
-        r"""
-        token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-            This parameter can only be used when the model is initialized with `type_vocab_size` parameter with value
-            >= 2. All the value in this tensor should be always < type_vocab_size.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        outputs = self.jina_embeddings_v3(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            return_dict=True,
-            **kwargs,
-        )
-        sequence_output = outputs[0]
-        logits = self.classifier(sequence_output)
-
-        loss = None
-        if labels is not None:
-            # move labels to correct device
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+class JinaEmbeddingsV3ForTokenClassification(XLMRobertaForTokenClassification):
+    pass
 
 
-@auto_docstring
-class JinaEmbeddingsV3ForTokenClassification(JinaEmbeddingsV3PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.jina_embeddings_v3 = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        token_type_ids: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | TokenClassifierOutput:
-        r"""
-        token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-            This parameter can only be used when the model is initialized with `type_vocab_size` parameter with value
-            >= 2. All the value in this tensor should be always < type_vocab_size.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
-        outputs = self.jina_embeddings_v3(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            return_dict=True,
-            **kwargs,
-        )
-
-        sequence_output = outputs[0]
-
-        sequence_output = self.dropout(sequence_output)
-        logits = self.classifier(sequence_output)
-
-        loss = None
-        if labels is not None:
-            # move labels to correct device
-            labels = labels.to(logits.device)
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@auto_docstring
-class JinaEmbeddingsV3ForQuestionAnswering(JinaEmbeddingsV3PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.jina_embeddings_v3 = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        token_type_ids: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        start_positions: torch.LongTensor | None = None,
-        end_positions: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | QuestionAnsweringModelOutput:
-        r"""
-        token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-            This parameter can only be used when the model is initialized with `type_vocab_size` parameter with value
-            >= 2. All the value in this tensor should be always < type_vocab_size.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        """
-        outputs = self.jina_embeddings_v3(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            return_dict=True,
-            **kwargs,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1).contiguous()
-        end_logits = end_logits.squeeze(-1).contiguous()
-
-        total_loss = None
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions = start_positions.clamp(0, ignored_index)
-            end_positions = end_positions.clamp(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            total_loss = (start_loss + end_loss) / 2
-
-        return QuestionAnsweringModelOutput(
-            loss=total_loss,
-            start_logits=start_logits,
-            end_logits=end_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+class JinaEmbeddingsV3ForQuestionAnswering(XLMRobertaForQuestionAnswering):
+    pass
 
 
 __all__ = [
