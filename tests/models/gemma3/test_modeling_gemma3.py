@@ -259,14 +259,13 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 class Gemma3Vision2TextModelTester(VLMModelTester):
-    if is_torch_available():
-        base_model_class = Gemma3Model
-        config_class = Gemma3Config
-        text_config_class = Gemma3TextConfig
-        vision_config_class = SiglipVisionConfig
-        conditional_generation_class = Gemma3ForConditionalGeneration
-        sequence_classification_class = Gemma3ForSequenceClassification
-        all_model_classes = (Gemma3Model, Gemma3ForConditionalGeneration, Gemma3ForSequenceClassification)
+    base_model_class = Gemma3Model
+    config_class = Gemma3Config
+    text_config_class = Gemma3TextConfig
+    vision_config_class = SiglipVisionConfig
+    conditional_generation_class = Gemma3ForConditionalGeneration
+    sequence_classification_class = Gemma3ForSequenceClassification
+    all_model_classes = (Gemma3Model, Gemma3ForConditionalGeneration, Gemma3ForSequenceClassification)
 
     def __init__(self, parent, mm_tokens_per_image=2, **kwargs):
         kwargs.setdefault("image_size", 20)
@@ -291,7 +290,7 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
     def get_additional_inputs(self, config, input_ids, pixel_values):
         # Gemma3 requires specific token_type_ids for bidirectional attention on image tokens
         token_type_ids = torch.zeros_like(input_ids)
-        token_type_ids[input_ids == config.image_token_index] = 1
+        token_type_ids[input_ids == config.image_token_id] = 1
         return {"token_type_ids": token_type_ids}
 
 
