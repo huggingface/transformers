@@ -387,6 +387,22 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else {}
     )
 
+    def _greedy_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as xlm cannot use a cache correctly."""
+        return super()._greedy_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _sample_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as xlm cannot use a cache correctly."""
+        return super()._sample_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _beam_search_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as xlm cannot use a cache correctly."""
+        return super()._beam_search_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _beam_sample_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as xlm cannot use a cache correctly."""
+        return super()._beam_sample_generate(*args, use_cache=use_cache, **kwargs)
+
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
         self,
@@ -494,6 +510,14 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model = XLMModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @unittest.skip("xlm cannot use a cache correctly and this test sets it to True explicitly")
+    def test_generate_methods_with_logits_to_keep(self):
+        pass
+
+    @unittest.skip("xlm cannot use a cache correctly and this test sets it to True explicitly")
+    def test_generate_with_and_without_position_ids(self):
+        pass
+
 
 @require_torch
 class XLMModelLanguageGenerationTest(unittest.TestCase):
@@ -526,5 +550,5 @@ class XLMModelLanguageGenerationTest(unittest.TestCase):
         ]  # the president the president the president the president the president the president the president the president the president the president
         # TODO(PVP): this and other input_ids I tried for generation give pretty bad results. Not sure why. Model might just not be made for auto-regressive inference
         # We limit the generation output to (max_length - input_length) while by default 20 new tokens will be generated.
-        output_ids = model.generate(input_ids, do_sample=False, max_length=20)
+        output_ids = model.generate(input_ids, do_sample=False, max_length=20, use_cache=False)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

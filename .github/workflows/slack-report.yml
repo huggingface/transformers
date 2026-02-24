@@ -27,7 +27,10 @@ on:
       commit_sha:
         required: false
         type: string
-
+    outputs:
+      is_slack_reporting_job_ok:
+        description: "Whether the send_results job succeeded (not failed)"
+        value: ${{ jobs.send_results.result != 'failure' }}
 
 env:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}

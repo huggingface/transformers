@@ -75,6 +75,7 @@ parallelism_config:
                    """,
         )
 
+        sp_yes_eval_metrics_path = sp_yes_output_dir / "sp_yes_eval_metrics.json"
         cmd_sp = f"""
             accelerate launch
             --config_file {sp_yes_accelerate_config_path}
@@ -87,7 +88,9 @@ parallelism_config:
             --logging_steps 1
             --remove_unused_columns False
             --seed 42
+            --per_device_eval_batch_size 1
             --loss_output_file {sp_yes_losses_path}
+            --eval_output_file {sp_yes_eval_metrics_path}
         """.split()
 
         execute_subprocess_async(cmd_sp, env=self.get_env())
@@ -147,12 +150,19 @@ num_processes: {world_size}
             msg=f"SP-enabled losses {sp_yes_losses} do not match SP-disabled losses {sp_no_losses}",
         )
 
+        # Eval should succeed even though eval sequences are not divisible by sp_size,
+        # because SP is disabled in eval mode.
+        eval_metrics = read_json_file(sp_yes_eval_metrics_path)
+        assert "eval_loss" in eval_metrics, f"Expected eval_loss in metrics, got keys: {list(eval_metrics.keys())}"
+        assert torch.isfinite(torch.tensor(eval_metrics["eval_loss"])), f"Eval loss is not finite: {eval_metrics}"
+
 
 if __name__ == "__main__":
     model_name = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 
     # Parse custom arguments (not TrainingArguments parameters)
     loss_output_file = None
+    eval_output_file = None
 
     if "--loss_output_file" in sys.argv:
         idx = sys.argv.index("--loss_output_file")
@@ -160,8 +170,15 @@ if __name__ == "__main__":
         sys.argv.pop(idx)
         sys.argv.pop(idx)
 
+    if "--eval_output_file" in sys.argv:
+        idx = sys.argv.index("--eval_output_file")
+        eval_output_file = sys.argv[idx + 1]
+        sys.argv.pop(idx)
+        sys.argv.pop(idx)
+
     parser = HfArgumentParser((TrainingArguments,))
     training_args = parser.parse_args_into_dataclasses()[0]
+    training_args.do_eval = True
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
@@ -183,7 +200,13 @@ if __name__ == "__main__":
     def tokenize_function(examples):
         return tokenizer(examples, max_length=128, truncation=True, padding="max_length")
 
+    def tokenize_eval_function(examples):
+        # Use an odd max_length to ensure it's not divisible by sp_size (2),
+        # so eval would fail if SP isn't disabled in eval mode.
+        return tokenizer(examples, max_length=127, truncation=True, padding="max_length")
+
     train_dataset = [tokenize_function(text) for text in texts]
+    eval_dataset = [tokenize_eval_function(text) for text in texts]
 
     # Use standard DataCollatorForLanguageModeling for causal LM
     # pad_to_multiple_of=4 ensures sequences are divisible by sp_size * 2 (for sp_size=2)
@@ -198,6 +221,7 @@ if __name__ == "__main__":
         model=model,
         args=training_args,
         train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
         data_collator=data_collator,
     )
 
@@ -206,6 +230,12 @@ if __name__ == "__main__":
 
     # Verify training completed
     assert trainer.state.global_step > 0, "Training should have completed at least one step"
+
+    if training_args.do_eval:
+        eval_metrics = trainer.evaluate()
+        if eval_output_file and training_args.process_index == 0:
+            with open(eval_output_file, "w") as f:
+                json.dump(eval_metrics, f)
 
     # Save losses to file if requested (for equivalence testing)
     if loss_output_file and training_args.process_index == 0:

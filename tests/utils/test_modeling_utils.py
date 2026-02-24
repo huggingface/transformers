@@ -2279,7 +2279,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_decoder_only_model_can_be_used_as_encoder(self, attn_implementation: str):
         """Test that most well-behaved decoder models can be used as encoders through the `is_causal` kwarg/config.
         Note that it's enough to test it on Llama, as the entry points are all through general code
-        (masking_utils.py + `check_model_inputs` decorator). This makes it easier as the model need to use both the
+        (masking_utils.py + `capture_outputs` decorator). This makes it easier as the model need to use both the
         mask API from masking_utils.py and the decorator as mentionned above, and we don't know what models follow that
         standard exactly (so we cannot make it easily a common model test)."""
         if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
@@ -2306,7 +2306,7 @@ class ModelUtilsTest(TestCasePlus):
         # so we need this one instead to absorb them
         def create_bidirectional_mask_with_kwargs(
             config,
-            input_embeds,
+            inputs_embeds,
             attention_mask,
             encoder_hidden_states=None,
             or_mask_function=None,
@@ -2314,7 +2314,7 @@ class ModelUtilsTest(TestCasePlus):
             **kwargs,
         ):
             return create_bidirectional_mask(
-                config, input_embeds, attention_mask, encoder_hidden_states, or_mask_function, and_mask_function
+                config, inputs_embeds, attention_mask, encoder_hidden_states, or_mask_function, and_mask_function
             )
 
         # Explicitly monkey patch the mask creation function + forward the is_causal kwarg to get the expected result

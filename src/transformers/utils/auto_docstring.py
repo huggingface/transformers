@@ -613,6 +613,15 @@ class ModelArgs:
         "shape": "of shape `(batch_size, sequence_length)`",
     }
 
+    mm_token_type_ids = {
+        "description": """
+    Indices of input sequence tokens matching each modality. For example text (0), image (1), video (2).
+    Multimodal token type ids can be obtained using [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
+    }
+
     position_ids = {
         "description": """
     Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.n_positions - 1]`.

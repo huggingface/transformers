@@ -33,6 +33,10 @@
     sections:
     - local: fast_tokenizers
       title: Tokenizers
+    - local: custom_tokenizers
+      title: Customizing tokenizers
+    - local: tokenizer_summary
+      title: Tokenization algorithms
     - local: image_processors
       title: Image processors
     - local: video_processors
@@ -43,10 +47,6 @@
       title: Feature extractors
     - local: processors
       title: Processors
-    - local: tokenizer_summary
-      title: Summary of the tokenizers
-    - local: pad_truncation
-      title: Padding and truncation
     title: Preprocessors
   title: Base classes
 - isExpanded: true
@@ -235,6 +235,8 @@
     title: SpQR
   - local: quantization/vptq
     title: VPTQ
+  - local: quantization/sinq
+    title: SINQ
   - local: quantization/contribute
     title: Contribute
   title: Quantization
@@ -301,6 +303,8 @@
         title: Audio classification
       - local: tasks/asr
         title: Automatic speech recognition
+      - local: tasks/audio_text_to_text
+        title: Audio-text-to-text
       - local: tasks/text-to-speech
         title: Text to speech
       title: Audio
@@ -667,6 +671,8 @@
         title: ModernBert
       - local: model_doc/modernbert-decoder
         title: ModernBERTDecoder
+      - local: model_doc/modernvbert
+        title: ModernVBert
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -973,6 +979,10 @@
         title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
+      - local: model_doc/higgs_audio_v2
+        title: Higgs Audio V2
+      - local: model_doc/higgs_audio_v2_tokenizer
+        title: Higgs Audio V2 Tokenizer
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/kyutai_speech_to_text
@@ -1089,6 +1099,8 @@
         title: Code World Model (CWM)
       - local: model_doc/cohere2_vision
         title: Cohere2Vision
+      - local: model_doc/colmodernvbert
+        title: ColModernVBert
       - local: model_doc/colpali
         title: ColPali
       - local: model_doc/colqwen2
@@ -1281,6 +1293,8 @@
         title: VisualBERT
       - local: model_doc/voxtral
         title: Voxtral
+      - local: model_doc/voxtral_realtime
+        title: VoxtralRealtime
       - local: model_doc/xclip
         title: X-CLIP
       title: Multimodal models
