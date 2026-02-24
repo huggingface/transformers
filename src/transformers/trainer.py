@@ -4152,7 +4152,7 @@ class Trainer:
         **kwargs,
     ) -> BestRun | list[BestRun]:
         """
-        Launch an hyperparameter search using `optuna` or `Ray Tune`. The optimized quantity is determined
+        Launch a hyperparameter search using `optuna` or `Ray Tune`. The optimized quantity is determined
         by `compute_objective`, which defaults to a function returning the evaluation loss when no metric is provided,
         the sum of all metrics otherwise.
 
