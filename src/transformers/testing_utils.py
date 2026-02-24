@@ -94,6 +94,7 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flute_available,
+    is_fouroversix_available,
     is_fp_quant_available,
     is_fsdp_available,
     is_g2p_en_available,
@@ -1295,6 +1296,13 @@ def require_flute_hadamard(test_case):
     return unittest.skipUnless(
         is_flute_available() and is_hadamard_available(), "test requires flute and fast_hadamard_transform"
     )(test_case)
+
+
+def require_fouroversix(test_case):
+    """
+    Decorator marking a test that requires fouroversix
+    """
+    return unittest.skipUnless(is_fouroversix_available(), "test requires fouroversix")(test_case)
 
 
 def require_fp_quant(test_case):
