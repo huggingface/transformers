@@ -318,7 +318,6 @@ def convert_checkpoint(checkpoint_path, output_dir, push_to_hub, bfloat16, max_s
     VibeVoiceAsrProcessor.from_pretrained(str(output_path))
     VibeVoiceAsrForConditionalGeneration.from_pretrained(str(output_path))
     logger.info("Model reloaded successfully!")
-
     logger.info("Conversion complete!")
 
 

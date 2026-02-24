@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-import numpy as np
+import math
 
 from ...configuration_utils import PretrainedConfig
 
@@ -103,7 +103,7 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
 
     @property
     def hop_length(self):
-        return int(np.prod(self.downsampling_ratios))
+        return int(math.prod(self.downsampling_ratios))
 
     @property
     def encoder_config(self):

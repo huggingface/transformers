@@ -74,34 +74,19 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
         feature_extractor,
         tokenizer,
         chat_template=None,
+        audio_token="<|box_start|>",
+        audio_bos_token="<|object_ref_start|>",
+        audio_eos_token="<|object_ref_end|>",
+        audio_duration_token="<|AUDIO_DURATION|>",
     ):
+        self.audio_token = audio_token
+        self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
+        self.audio_bos_token = audio_bos_token
+        self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
+        self.audio_eos_token = audio_eos_token
+        self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
+        self.audio_duration_token = audio_duration_token
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
-
-        if not hasattr(tokenizer, "audio_bos_token"):
-            self.audio_bos_token = "<|object_ref_start|>"
-            self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(self.audio_bos_token)
-        else:
-            self.audio_bos_token = tokenizer.audio_bos_token
-            self.audio_bos_token_id = tokenizer.audio_bos_token_id
-
-        if not hasattr(tokenizer, "audio_eos_token"):
-            self.audio_eos_token = "<|object_ref_end|>"
-            self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(self.audio_eos_token)
-        else:
-            self.audio_eos_token = tokenizer.audio_eos_token
-            self.audio_eos_token_id = tokenizer.audio_eos_token_id
-
-        if not hasattr(tokenizer, "audio_token"):
-            self.audio_token = "<|box_start|>"
-            self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
-        else:
-            self.audio_token = tokenizer.audio_token
-            self.audio_token_id = tokenizer.audio_token_id
-
-        if not hasattr(tokenizer, "audio_duration_token"):
-            self.audio_duration_token = "<|AUDIO_DURATION|>"
-        else:
-            self.audio_duration_token = tokenizer.audio_duration_token
 
     def __call__(
         self,
@@ -156,13 +141,15 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
         # Replace audio duration placeholders in text
         audio_lengths = data["padding_mask"].sum(dim=-1).cpu().numpy()
         audio_durations = audio_lengths / self.feature_extractor.sampling_rate
+        audio_duration_pattern = re.compile(re.escape(self.audio_duration_token))
         for i in range(len(text)):
-            text[i] = text[i].replace(self.audio_duration_token, f"{audio_durations[i]:.2f}")
+            text[i] = audio_duration_pattern.sub(f"{audio_durations[i]:.2f}", text[i])
 
         # Expand audio tokens in text
         num_audio_tokens = np.ceil(audio_lengths / audio_kwargs["pad_to_multiple_of"]).astype(int).tolist()
+        audio_token_pattern = re.compile(re.escape(self.audio_token))
         for i, num_tokens in enumerate(num_audio_tokens):
-            text[i] = re.sub(re.escape(self.audio_token), self.audio_token * num_tokens, text[i])
+            text[i] = audio_token_pattern.sub(self.audio_token * num_tokens, text[i])
 
         text_inputs = self.tokenizer(text, **text_kwargs)
         data.update(text_inputs)

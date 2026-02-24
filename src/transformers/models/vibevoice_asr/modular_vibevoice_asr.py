@@ -58,7 +58,7 @@ class VibeVoiceAsrConfig(PretrainedConfig):
             The audio begin-of-sequence token index.
         audio_eos_token_id (`int`, *optional*, defaults to 151647):
             The audio end-of-sequence token index.
-        tokenizer_chunk_size (`int`, *optional*, defaults to 1440000):
+        acoustic_tokenizer_chunk_size (`int`, *optional*, defaults to 1440000):
             The chunk size (in number of samples) to use when tokenizer audio inputs. Default corresponds to 60 seconds at 24kHz.
 
     Example:
@@ -98,7 +98,7 @@ class VibeVoiceAsrConfig(PretrainedConfig):
         audio_token_id=151648,
         audio_bos_token_id=151646,
         audio_eos_token_id=151647,
-        tokenizer_chunk_size=1440000,
+        acoustic_tokenizer_chunk_size=1440000,
         **kwargs,
     ):
         if isinstance(acoustic_tokenizer_encoder_config, dict):
@@ -133,7 +133,7 @@ class VibeVoiceAsrConfig(PretrainedConfig):
         self.audio_token_id = audio_token_id
         self.audio_bos_token_id = audio_bos_token_id
         self.audio_eos_token_id = audio_eos_token_id
-        self.tokenizer_chunk_size = tokenizer_chunk_size
+        self.acoustic_tokenizer_chunk_size = acoustic_tokenizer_chunk_size
 
         super().__init__(**kwargs)
 
@@ -206,7 +206,7 @@ class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneratio
         self,
         input_values: torch.FloatTensor,
         padding_mask: torch.BoolTensor | None = None,
-        tokenizer_chunk_size: int | None = None,
+        acoustic_tokenizer_chunk_size: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
@@ -214,28 +214,28 @@ class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneratio
             Input audio tensor. Audio should be sampled at 24kHz.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
-        tokenizer_chunk_size (`int`, *optional*):
-            Size of audio chunks to process at once through the tokenizers. Defaults to `config.tokenizer_chunk_size`,
+        acoustic_tokenizer_chunk_size (`int`, *optional*):
+            Size of audio chunks to process at once through the tokenizers. Defaults to `config.acoustic_tokenizer_chunk_size`,
             but can be modified to fit the available memory.
         """
 
-        if tokenizer_chunk_size is None:
-            tokenizer_chunk_size = self.config.tokenizer_chunk_size
+        if acoustic_tokenizer_chunk_size is None:
+            acoustic_tokenizer_chunk_size = self.config.acoustic_tokenizer_chunk_size
         else:
-            if tokenizer_chunk_size % self.config.acoustic_tokenizer_encoder_config.hop_length != 0:
-                tokenizer_chunk_size = int(
-                    (tokenizer_chunk_size // self.config.acoustic_tokenizer_encoder_config.hop_length)
+            if acoustic_tokenizer_chunk_size % self.config.acoustic_tokenizer_encoder_config.hop_length != 0:
+                acoustic_tokenizer_chunk_size = int(
+                    (acoustic_tokenizer_chunk_size // self.config.acoustic_tokenizer_encoder_config.hop_length)
                     * self.config.acoustic_tokenizer_encoder_config.hop_length
                 )
                 raise ValueError(
-                    f"`tokenizer_chunk_size` must be a multiple of hop length ({self.config.acoustic_tokenizer_encoder_config.hop_length}), {tokenizer_chunk_size} is a valid option."
+                    f"`acoustic_tokenizer_chunk_size` must be a multiple of hop length ({self.config.acoustic_tokenizer_encoder_config.hop_length}), {acoustic_tokenizer_chunk_size} is a valid option."
                 )
 
         with torch.no_grad():
             acoustic_encoder_cache, semantic_encoder_cache = None, None
             acoustic_latents, semantic_latents = [], []
 
-            for chunk in torch.split(input_values, tokenizer_chunk_size, dim=-1):
+            for chunk in torch.split(input_values, acoustic_tokenizer_chunk_size, dim=-1):
                 acoustic_encoder_output = self.acoustic_tokenizer_encoder(
                     chunk,
                     padding_cache=acoustic_encoder_cache,
@@ -284,15 +284,15 @@ class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneratio
         inputs_embeds: torch.FloatTensor | None = None,
         input_values: torch.FloatTensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
-        tokenizer_chunk_size: int | None = None,
+        acoustic_tokenizer_chunk_size: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
-        tokenizer_chunk_size (`int`, *optional*):
+        acoustic_tokenizer_chunk_size (`int`, *optional*):
             Size of audio chunks processed by the acoustic and semantic tokenizers. Defaults to
-            `config.tokenizer_chunk_size`, but can be modified to fit the available memory.
+            `config.acoustic_tokenizer_chunk_size`, but can be modified to fit the available memory.
 
         Example:
 
@@ -316,7 +316,9 @@ class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneratio
 
         if input_values is not None and input_ids is not None:
             audio_embeds = self.get_audio_features(
-                input_values=input_values, padding_mask=padding_mask, tokenizer_chunk_size=tokenizer_chunk_size
+                input_values=input_values,
+                padding_mask=padding_mask,
+                acoustic_tokenizer_chunk_size=acoustic_tokenizer_chunk_size,
             ).pooler_output
 
             # Replace text-audio token placeholders with audio embeddings
@@ -332,7 +334,7 @@ class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneratio
     def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
         input_values = kwargs.pop("input_values", None)
         padding_mask = kwargs.pop("padding_mask", None)
-        tokenizer_chunk_size = kwargs.pop("tokenizer_chunk_size", None)
+        acoustic_tokenizer_chunk_size = kwargs.pop("acoustic_tokenizer_chunk_size", None)
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
@@ -341,8 +343,8 @@ class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneratio
                 model_inputs["input_values"] = input_values
             if padding_mask is not None:
                 model_inputs["padding_mask"] = padding_mask
-            if tokenizer_chunk_size is not None:
-                model_inputs["tokenizer_chunk_size"] = tokenizer_chunk_size
+            if acoustic_tokenizer_chunk_size is not None:
+                model_inputs["acoustic_tokenizer_chunk_size"] = acoustic_tokenizer_chunk_size
 
         return model_inputs
 

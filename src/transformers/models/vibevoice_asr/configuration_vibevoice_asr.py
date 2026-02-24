@@ -48,7 +48,7 @@ class VibeVoiceAsrConfig(PretrainedConfig):
             The audio begin-of-sequence token index.
         audio_eos_token_id (`int`, *optional*, defaults to 151647):
             The audio end-of-sequence token index.
-        tokenizer_chunk_size (`int`, *optional*, defaults to 1440000):
+        acoustic_tokenizer_chunk_size (`int`, *optional*, defaults to 1440000):
             The chunk size (in number of samples) to use when tokenizer audio inputs. Default corresponds to 60 seconds at 24kHz.
 
     Example:
@@ -88,7 +88,7 @@ class VibeVoiceAsrConfig(PretrainedConfig):
         audio_token_id=151648,
         audio_bos_token_id=151646,
         audio_eos_token_id=151647,
-        tokenizer_chunk_size=1440000,
+        acoustic_tokenizer_chunk_size=1440000,
         **kwargs,
     ):
         if isinstance(acoustic_tokenizer_encoder_config, dict):
@@ -123,7 +123,7 @@ class VibeVoiceAsrConfig(PretrainedConfig):
         self.audio_token_id = audio_token_id
         self.audio_bos_token_id = audio_bos_token_id
         self.audio_eos_token_id = audio_eos_token_id
-        self.tokenizer_chunk_size = tokenizer_chunk_size
+        self.acoustic_tokenizer_chunk_size = acoustic_tokenizer_chunk_size
 
         super().__init__(**kwargs)
 

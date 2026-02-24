@@ -155,7 +155,7 @@ WITH CONTEXT   : VibeVoice is this novel framework designed for generating expre
 
 ### Batch inference
 
-Batch inference is possible by passing a list of audio and (if provided) a list of prompts of equal length.
+Batch inference is possible by passing a list of audio and, if provided, a list of prompts. The number of audio inputs and prompts should match (for prompts, you can set an entry to `None` if not needed for a given audio).
 
 ```python
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
@@ -183,12 +183,12 @@ print(transcription)
 
 A key feature of VibeVoice ASR is that it can transcribe up to 60 minutes of continuous audio. This is done by chunking audio into 60-second segments (1440000 samples at 24kHz) and caching the convolution states between each segment.
 
-However, if chunks of 60 seconds are too large for your device, the `tokenizer_chunk_size` argument passed to `generate` can be adjusted. *Note it should be a multiple of the hop length (3200 for the original acoustic tokenizer).*
+However, if chunks of 60 seconds are too large for your device, the `acoustic_tokenizer_chunk_size` argument passed to `generate` can be adjusted. *Note it should be a multiple of the hop length (3200 for the original acoustic tokenizer).*
 
 ```python
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
 
-tokenizer_chunk_size = 64000    # default is 1440000 (60s @ 24kHz)
+acoustic_tokenizer_chunk_size = 64000    # default is 1440000 (60s @ 24kHz)
 model_id = "bezzam/VibeVoice-ASR-7B"
 audio = [
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
@@ -201,7 +201,7 @@ model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, device_ma
 print(f"Model loaded on {model.device} with dtype {model.dtype}")
 
 inputs = processor.apply_transcription_request(audio, prompt=prompts).to(model.device, model.dtype)
-output_ids = model.generate(**inputs, tokenizer_chunk_size=tokenizer_chunk_size)
+output_ids = model.generate(**inputs, acoustic_tokenizer_chunk_size=acoustic_tokenizer_chunk_size)
 generated_ids = output_ids[:, inputs["input_ids"].shape[1] :]
 transcription = processor.decode(generated_ids, return_format="transcription_only")
 print(transcription)
