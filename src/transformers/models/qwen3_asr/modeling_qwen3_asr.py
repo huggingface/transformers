@@ -8,7 +8,6 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -522,24 +521,6 @@ class Qwen3ASRAudioAttention(nn.Module):
 
 class Qwen3ASRAudioEncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
     pass
-
-
-class SinusoidsPositionEmbedding(nn.Module):
-    def __init__(self, length, channels, max_timescale=10000):
-        super().__init__()
-        if channels % 2 != 0:
-            raise ValueError("SinusoidsPositionEmbedding needs even channels input")
-        log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
-        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2).float())
-        scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-        self.register_buffer(
-            "positional_embedding",
-            torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1),
-            persistent=False,
-        )
-
-    def forward(self, seqlen: int):
-        return self.positional_embedding[:seqlen, :]
 
 
 def _get_feat_extract_output_lengths(input_lengths):
