@@ -25,4 +25,4 @@ Underneath, [`Trainer`] handles batching, shuffling, and padding your dataset in
 ## Next steps
 
 - Start with the [fine-tuning](./training) tutorial for an introduction to training a large language model with [`Trainer`].
-- Check the [Customizing the Trainer](./trainer_customize) guide for examples of how to subclass [`Trainer`] methods.
+- Check the [Subclassing Trainer methods](./trainer_customize) guide for examples of how to subclass [`Trainer`] methods.
