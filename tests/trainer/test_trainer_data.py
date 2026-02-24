@@ -18,6 +18,7 @@ batch size finder, pad/concatenate, collators, and eval loop container.
 """
 
 import copy
+import tempfile
 import unittest
 import warnings
 
@@ -56,9 +57,16 @@ from transformers.trainer_pt_utils import (
 from transformers.trainer_utils import RemoveColumnsCollator, find_executable_batch_size
 
 from .trainer_test_utils import (
+    AlmostAccuracy,
     CustomDataloaderTrainer,
+    DynamicShapesDataset,
     RegressionDataset,
     RegressionModel,
+    RegressionModelConfig,
+    RegressionPreTrainedModel,
+    RegressionTrainingArguments,
+    SampleIterableDataset,
+    TrainerIntegrationCommon,
     TstLayer,
     get_regression_trainer,
 )
@@ -743,3 +751,118 @@ class TrainerDataUtilsTest(unittest.TestCase):
         self.assertEqual(len(arrays[2]), 2)
         self.assertEqual(arrays[2][0].shape, (8, 2, 3))
         self.assertEqual(arrays[2][1].shape, (8, 2))
+
+
+# ---------------------------------------------------------------------------
+# Dynamic shapes and iterable dataset tests
+# ---------------------------------------------------------------------------
+
+
+@require_torch
+class TrainerDynamicShapesAndIterableTest(TestCasePlus, TrainerIntegrationCommon):
+    def setUp(self):
+        super().setUp()
+        args = TrainingArguments("..")
+        self.n_epochs = args.num_train_epochs
+        self.batch_size = args.train_batch_size
+
+    def test_dynamic_shapes(self):
+        eval_dataset = DynamicShapesDataset(batch_size=self.batch_size)
+        model = RegressionModel(a=2, b=1)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(tmp_dir, report_to="none")
+            trainer = Trainer(model, args, eval_dataset=eval_dataset)
+
+            # Check evaluation can run to completion
+            _ = trainer.evaluate()
+
+            # Check predictions
+            preds = trainer.predict(eval_dataset)
+            for expected, seen in zip(eval_dataset.ys, preds.label_ids):
+                self.assertTrue(np.array_equal(expected, seen[: expected.shape[0]]))
+                self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
+
+            for expected, seen in zip(eval_dataset.xs, preds.predictions):
+                self.assertTrue(np.array_equal(2 * expected + 1, seen[: expected.shape[0]]))
+                self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
+
+        # Same tests with eval accumulation
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(tmp_dir, eval_accumulation_steps=2, report_to="none")
+            trainer = Trainer(model, args, eval_dataset=eval_dataset)
+
+            # Check evaluation can run to completion
+            _ = trainer.evaluate()
+
+            # Check predictions
+            preds = trainer.predict(eval_dataset)
+            for expected, seen in zip(eval_dataset.ys, preds.label_ids):
+                self.assertTrue(np.array_equal(expected, seen[: expected.shape[0]]))
+                self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
+
+            for expected, seen in zip(eval_dataset.xs, preds.predictions):
+                self.assertTrue(np.array_equal(2 * expected + 1, seen[: expected.shape[0]]))
+                self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
+
+    def test_training_iterable_dataset(self):
+        config = RegressionModelConfig()
+        model = RegressionPreTrainedModel(config)
+        # Adding one column not used by the model should have no impact
+        train_dataset = SampleIterableDataset(label_names=["labels", "extra"])
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = RegressionTrainingArguments(output_dir=tmp_dir, max_steps=4)
+            trainer = Trainer(model=model, args=args, train_dataset=train_dataset)
+            trainer.train()
+            self.assertEqual(trainer.state.global_step, 4)
+
+            loader = trainer.get_train_dataloader()
+            self.assertIsInstance(loader, torch.utils.data.DataLoader)
+            self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
+
+    def test_evaluation_iterable_dataset(self):
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        model = RegressionPreTrainedModel(config)
+        # Adding one column not used by the model should have no impact
+        eval_dataset = SampleIterableDataset(label_names=["labels", "extra"])
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = RegressionTrainingArguments(output_dir=tmp_dir)
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
+            results = trainer.evaluate()
+            x, y = trainer.eval_dataset.dataset.x, trainer.eval_dataset.dataset.ys[0]
+            pred = 1.5 * x + 2.5
+            expected_loss = ((pred - y) ** 2).mean()
+            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+            self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+            # With a number of elements not a round multiple of the batch size
+            eval_dataset = SampleIterableDataset(length=66)
+            results = trainer.evaluate(eval_dataset)
+
+            x, y = eval_dataset.dataset.x, eval_dataset.dataset.ys[0]
+            pred = 1.5 * x + 2.5
+            expected_loss = ((pred - y) ** 2).mean()
+            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+            self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+    def test_predict_iterable_dataset(self):
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        model = RegressionPreTrainedModel(config)
+        eval_dataset = SampleIterableDataset()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = RegressionTrainingArguments(output_dir=tmp_dir)
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
+            preds = trainer.predict(trainer.eval_dataset).predictions
+            x = eval_dataset.dataset.x
+            self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+
+            # With a number of elements not a round multiple of the batch size
+            # Adding one column not used by the model should have no impact
+            test_dataset = SampleIterableDataset(length=66, label_names=["labels", "extra"])
+            preds = trainer.predict(test_dataset).predictions
+            x = test_dataset.dataset.x
+            self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
