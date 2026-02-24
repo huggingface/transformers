@@ -255,6 +255,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | list[int] | None = None,
         do_pooling: bool | None = None,
+        use_cache: bool | None = None,
         **kwargs,
     ) -> TimmWrapperModelOutput | tuple[Tensor, ...]:
         r"""

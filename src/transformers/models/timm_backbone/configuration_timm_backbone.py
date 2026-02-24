@@ -59,6 +59,12 @@ class TimmBackboneConfig(TimmWrapperConfig):
     """
 
     model_type = "timm_backbone"
+    special_attribute_map = {
+        "backbone": "architecture",
+        "num_channels": ("model_args", "in_chans"),
+        "output_stride": ("model_args", "output_stride"),
+        "features_only": ("model_args", "features_only"),
+    }
 
     def __init__(
         self,
@@ -89,22 +95,22 @@ class TimmBackboneConfig(TimmWrapperConfig):
             **kwargs,
         )
 
-    # TODO: just override getattr/setattr instead and add a warning
-    @property
-    def backbone(self):
-        return self.architecture
+    def __setattr__(self, key, value):
+        if (mapped_key := super().__getattribute__("special_attribute_map").get(key)) is not None:
+            first_attr = self
+            if isinstance(mapped_key, (tuple, list)):
+                first_attr = super().__getattribute__("__dict__").get(mapped_key[0])
+            setattr(first_attr, mapped_key[1], value)
+        else:
+            super().__setattr__(key, value)
 
-    @property
-    def num_channels(self):
-        return self.model_args["in_chans"]
-
-    @property
-    def output_stride(self):
-        return self.model_args["output_stride"]
-
-    @property
-    def features_only(self):
-        return self.model_args["features_only"]
+    def __getattribute__(self, key):
+        if (mapped_key := super().__getattribute__("special_attribute_map").get(key)) is not None:
+            first_attr = self
+            if isinstance(mapped_key, (tuple, list)):
+                first_attr = super().__getattribute__(mapped_key[0])
+            return getattr(first_attr, mapped_key[1])
+        return super().__getattribute__(key)
 
 
 __all__ = ["TimmBackboneConfig"]
