@@ -419,7 +419,8 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
         tokenizer_chunk_size (`int`, *optional*):
-            Size of audio chunks to process at once through the tokenizers.
+            Size of audio chunks processed by the acoustic and semantic tokenizers. Defaults to
+            `config.tokenizer_chunk_size`, but can be modified to fit the available memory.
 
         Example:
 
