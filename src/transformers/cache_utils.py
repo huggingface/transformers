@@ -292,7 +292,9 @@ class StaticLayer(CacheLayerMixin):
             dtype=self.dtype,
             device=self.device,
         )
-        self.cumulative_length = self.cumulative_length.to(self.device)
+        # We use this check to easily inherit the method in StaticSlidingWindowLayer without overriding to remove this line
+        if isinstance(self.cumulative_length, torch.Tensor):
+            self.cumulative_length = self.cumulative_length.to(self.device)
         # Note: `mark_static_address` is used to tag the cache as a fixed data pointer, preventing compiled graph
         # breaks when updating the cache. However, it is not supported when tracing the graph, so we skip it in this case.
         # As prefill should never be compiled, this is not an issue and it will still be run (except when users compile
@@ -370,7 +372,7 @@ class StaticSlidingWindowLayer(StaticLayer):
     def __init__(self, max_cache_len: int, sliding_window: int):
         effective_max_cache_len = min(sliding_window, max_cache_len)
         super().__init__(max_cache_len=effective_max_cache_len)
-        # Here it cannot be a tensor as otherwise we have data-dependent control flows
+        # Here it cannot be a tensor as otherwise we have data-dependent control flows - overwrite it
         self.cumulative_length = 0
 
     def update(

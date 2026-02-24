@@ -578,7 +578,7 @@ class Lfm2MoeShortConv(nn.Module):
 
         if past_key_values is not None and past_key_values.get_seq_length() > 0:
             conv_state = past_key_values.conv_cache[self.layer_idx]
-            cache_position = torch.arange(x.shape[1], device=x.device) + past_key_values.get_seq_length()
+            cache_position = torch.arange(seqlen, device=x.device) + past_key_values.get_seq_length()
             cache_position = cache_position.clamp(0, self.L_cache - 1)
             conv_state = conv_state.roll(shifts=-1, dims=-1)
             conv_state[:, :, cache_position] = Bx.to(device=conv_state.device, dtype=conv_state.dtype)
