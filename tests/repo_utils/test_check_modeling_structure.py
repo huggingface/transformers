@@ -124,6 +124,19 @@ class FooModel(FooPreTrainedModel):
         trf006 = [violation for violation in violations if violation.rule_id == cms.TRF006]
         self.assertEqual(trf006, [])
 
+    def test_trf006_skips_local_parent_with_external_ancestor(self):
+        source = """
+class FooPreTrainedModel(PreTrainedModel):
+    pass
+
+class FooModel(FooPreTrainedModel):
+    supports_gradient_checkpointing = True
+"""
+        file_path = Path("src/transformers/models/foo/modeling_foo.py")
+        violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF006})
+        trf006 = [violation for violation in violations if violation.rule_id == cms.TRF006]
+        self.assertEqual(trf006, [])
+
     def test_trf009_flags_missing_hooks_with_local_non_generation_parent(self):
         source = """
 class FooBackbone:

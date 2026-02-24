@@ -508,29 +508,44 @@ def check_gradient_checkpointing_contract(
     class_to_bases = _collect_class_bases(tree)
     local_classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
 
-    def local_base_has_gradient_checkpointing_hook(class_name: str, visiting: set[str] | None = None) -> bool:
+    def local_base_gradient_checkpointing_status(
+        class_name: str, visiting: set[str] | None = None
+    ) -> tuple[bool, bool]:
+        """
+        Return `(has_gradient_checkpointing_hook, has_external_or_unknown_ancestor)`.
+        """
         if visiting is None:
             visiting = set()
         if class_name in visiting or class_name not in local_classes:
-            return False
+            return False, False
         visiting.add(class_name)
 
         class_node = local_classes[class_name]
         methods = _class_methods(class_node)
         assignments = _get_class_assignments(class_node)
         if "_set_gradient_checkpointing" in methods or "_gradient_checkpointing_func" in assignments:
-            return True
+            return True, False
 
+        has_external_or_unknown_ancestor = False
         for base in class_node.bases:
             if not isinstance(base, (ast.Name, ast.Attribute)):
+                has_external_or_unknown_ancestor = True
                 continue
             try:
                 base_name = _simple_name(full_name(base))
             except ValueError:
+                has_external_or_unknown_ancestor = True
                 continue
-            if local_base_has_gradient_checkpointing_hook(base_name, visiting):
-                return True
-        return False
+            if base_name not in local_classes:
+                has_external_or_unknown_ancestor = True
+                continue
+
+            has_hook, has_unknown = local_base_gradient_checkpointing_status(base_name, visiting)
+            if has_hook:
+                return True, False
+            if has_unknown:
+                has_external_or_unknown_ancestor = True
+        return False, has_external_or_unknown_ancestor
 
     for node in tree.body:
         if not isinstance(node, ast.ClassDef):
@@ -567,7 +582,10 @@ def check_gradient_checkpointing_contract(
             else:
                 has_external_base = True
 
-        if any(local_base_has_gradient_checkpointing_hook(base_name) for base_name in local_bases):
+        local_base_statuses = [local_base_gradient_checkpointing_status(base_name) for base_name in local_bases]
+        if any(has_hook for has_hook, _ in local_base_statuses):
+            continue
+        if any(has_unknown for _, has_unknown in local_base_statuses):
             continue
         if has_external_base:
             # Conservative behavior: unknown external parents may implement checkpointing hooks.
