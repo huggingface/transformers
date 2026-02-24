@@ -14,7 +14,7 @@
 
 import copy
 import weakref
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import numpy as np
 import torch
@@ -591,9 +591,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self, input_ids: torch.LongTensor, assistant_sequences: torch.LongTensor
     ) -> torch.LongTensor:
         """Processes assistant outputs to obtain target input IDs."""
-        if self.prev_assistant_ids is None:
-            return input_ids
-        num_prev_assistant = self.prev_assistant_ids.shape[1]
+        prev_assistant_ids = cast(torch.LongTensor, self.prev_assistant_ids)
+        num_prev_assistant = prev_assistant_ids.shape[1]
         start_assistant_look_index = num_prev_assistant - self.assistant_lookbehind
 
         new_target_ids_from_window = self.convert_source_tokens_to_target_tokens(
