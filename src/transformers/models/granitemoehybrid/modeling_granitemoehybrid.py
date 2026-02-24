@@ -1316,11 +1316,11 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = create_causal_mask(
-            self.config,
-            inputs_embeds,
-            attention_mask,
-            cache_position,
-            past_key_values,
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
         mamba_mask = self._update_mamba_mask(attention_mask, cache_position)
 
