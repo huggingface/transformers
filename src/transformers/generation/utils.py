@@ -1003,8 +1003,9 @@ class GenerationMixin(ContinuousMixin):
                 vocab_size=self.config.get_text_config().vocab_size,
             )
         elif different_tokenizers:
-            if assistant_model is None or target_tokenizer is None or assistant_tokenizer is None:
-                raise ValueError("`assistant_model`, `target_tokenizer`, and `assistant_tokenizer` must be provided.")
+            assistant_model = cast("PreTrainedModel", assistant_model)
+            target_tokenizer = cast("PreTrainedTokenizerBase", target_tokenizer)
+            assistant_tokenizer = cast("PreTrainedTokenizerBase", assistant_tokenizer)
             if generation_config.do_sample is True:
                 atm_translator = AssistantVocabTranslatorCache.get_translator(
                     target_tokenizer,
@@ -2661,10 +2662,7 @@ class GenerationMixin(ContinuousMixin):
         tail_ids = input_ids[:, -1].tolist()
 
         def _decode_single_token(token_id: int) -> str:
-            decoded = tokenizer.decode(token_id)
-            if isinstance(decoded, str):
-                return decoded
-            return decoded[0] if decoded else ""
+            return cast(str, tokenizer.decode(token_id))
 
         # tail tokens are used for a prefix search, thus, whitespaces are replaced with
         # their tokenization (e.g. 'Ġ') to enable search for tokens prefixed with a whitespace
