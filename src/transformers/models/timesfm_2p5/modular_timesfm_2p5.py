@@ -23,8 +23,8 @@ import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..gemma2.modeling_gemma2 import (
@@ -620,9 +620,7 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
             if input_len < context_len:
                 num_front_pad = context_len - input_len
                 ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
-                padding = torch.cat(
-                    [torch.ones(num_front_pad, dtype=ts.dtype, device=padding.device), padding], dim=0
-                )
+                padding = torch.cat([torch.ones(num_front_pad, dtype=ts.dtype, device=padding.device), padding], dim=0)
             elif input_len > context_len:
                 ts = ts[-context_len:]
                 padding = padding[-(context_len + self.horizon_len) :]
@@ -733,9 +731,7 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
 
         normalized_ts = self.model._revin(input_ts, mu_global, sigma_global, reverse=False)
 
-        pf_outputs, quantile_spreads, model_outputs = self._decode_and_project(
-            normalized_ts, input_padding, **kwargs
-        )
+        pf_outputs, quantile_spreads, model_outputs = self._decode_and_project(normalized_ts, input_padding, **kwargs)
 
         if force_flip_invariance:
             flipped_pf, flipped_qs, _ = self._decode_and_project(-normalized_ts, input_padding, **kwargs)
@@ -797,6 +793,7 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
             full_predictions=full_predictions,
             loss=loss,
         )
+
 
 __all__ = [
     "Timesfm2P5Config",
