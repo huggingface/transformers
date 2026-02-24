@@ -25,7 +25,8 @@ from huggingface_hub import create_repo, is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
-from .image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from .image_processing_backends import TorchvisionBackend
+from .image_processing_utils import BatchFeature, get_size_dict
 from .image_utils import (
     ChannelDimension,
     SizeDict,
@@ -143,7 +144,7 @@ BASE_VIDEO_PROCESSOR_DOCSTRING = r"""
     BASE_VIDEO_PROCESSOR_DOCSTRING,
 )
 @requires(backends=("vision", "torchvision"))
-class BaseVideoProcessor(BaseImageProcessor):
+class BaseVideoProcessor(TorchvisionBackend):
     _auto_class = None
 
     resample = None
@@ -431,7 +432,7 @@ class BaseVideoProcessor(BaseImageProcessor):
             if do_center_crop:
                 stacked_videos = self.center_crop(stacked_videos, crop_size)
             # Fused rescale and normalize
-            stacked_videos = self.rescale_and_normalize(
+            stacked_videos = self._rescale_and_normalize(
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_videos_grouped[shape] = stacked_videos
