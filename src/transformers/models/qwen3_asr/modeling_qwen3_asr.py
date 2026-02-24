@@ -28,7 +28,7 @@ from transformers.utils import auto_docstring, can_return_tuple
 from transformers.utils.deprecation import deprecate_kwarg
 from transformers.utils.generic import TransformersKwargs, check_model_inputs
 
-from ...integrations import use_kernel_func_from_hub
+from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from .configuration_qwen3_asr import Qwen3ASRAudioEncoderConfig, Qwen3ASRConfig, Qwen3ASRThinkerConfig
 
 
@@ -124,6 +124,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Qwen3ASRTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -149,8 +150,10 @@ class Qwen3ASRTextAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = Qwen3ASRTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = Qwen3ASRTextRMSNorm(
+        self.q_norm = Qwen3ASRThinkerTextRMSNorm(
+            self.head_dim, eps=config.rms_norm_eps
+        )  # unlike olmo, only on the head dim!
+        self.k_norm = Qwen3ASRThinkerTextRMSNorm(
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
 

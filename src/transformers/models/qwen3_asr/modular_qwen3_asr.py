@@ -44,7 +44,7 @@ from ..qwen3_omni_moe.processing_qwen3_omni_moe import (
 )
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerTextRMSNorm, rotate_half, repeat_kv, apply_rotary_pos_emb,
-    eager_attention_forward
+    eager_attention_forward, Qwen3OmniMoeThinkerTextAttention
 )
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
@@ -515,37 +515,12 @@ class Qwen3ASRTextRMSNorm(Qwen3OmniMoeThinkerTextRMSNorm):
     pass
 
 
-class Qwen3ASRTextAttention(nn.Module):
+class Qwen3ASRTextAttention(Qwen3OmniMoeThinkerTextAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: Qwen3ASRConfig, layer_idx: int):
         super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-        self.q_norm = Qwen3ASRTextRMSNorm(
-            self.head_dim, eps=config.rms_norm_eps
-        )  # unlike olmo, only on the head dim!
-        self.k_norm = Qwen3ASRTextRMSNorm(
-            self.head_dim, eps=config.rms_norm_eps
-        )  # thus post q_norm does not need reshape
+        del self.sliding_window
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
