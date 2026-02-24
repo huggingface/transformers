@@ -619,7 +619,7 @@ class GlmMoeDsaPreTrainedModel(Glm4MoePreTrainedModel):
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
-    _default_flash_implementation = "kernels-community/flash-mla"
+    _compatible_flash_implementations = ["kernels-community/flash-mla"]
 
 
 class GlmMoeDsaModel(Glm4MoeModel):

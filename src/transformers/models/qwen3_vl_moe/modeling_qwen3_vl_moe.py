@@ -44,13 +44,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput, MoeMode
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_grouped_mm_available,
-    torch_compilable_check,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_qwen3_vl_moe import Qwen3VLMoeConfig, Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
@@ -372,15 +366,15 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = (
-        is_grouped_mm_available()
-    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, index=0),
         "hidden_states": Qwen3VLMoeTextDecoderLayer,
         "attentions": Qwen3VLMoeTextAttention,
     }
+    input_modalities = ("text", "image", "video")
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -602,6 +596,7 @@ class Qwen3VLMoeVisionPatchMerger(nn.Module):
 
 class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
     config: Qwen3VLMoeVisionConfig
+    input_modalities = ("image", "video")
     _no_split_modules = ["Qwen3VLMoeVisionBlock"]
     _can_record_outputs = {
         "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.gate", index=0),
@@ -907,6 +902,7 @@ class Qwen3VLMoeTextRotaryEmbedding(nn.Module):
 )
 class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
     config: Qwen3VLMoeTextConfig
+    input_modalities = ("text",)
     _no_split_modules = ["Qwen3VLMoeTextDecoderLayer"]
 
     def __init__(self, config: Qwen3VLMoeTextConfig):
@@ -966,17 +962,17 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
-        # the hard coded `3` is for temporal, height and width.
+        # the hard coded `4` is for text, temporal, height and width.
         if position_ids is None:
-            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
+            position_ids = cache_position.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
-            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
+            position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
 
         if position_ids.ndim == 3 and position_ids.shape[0] == 4:
             text_position_ids = position_ids[0]
             position_ids = position_ids[1:]
         else:
-            text_position_ids = position_ids[0]
+            text_position_ids = None
 
         attention_mask = create_causal_mask(
             config=self.config,

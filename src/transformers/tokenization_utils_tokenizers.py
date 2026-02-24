@@ -425,15 +425,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         bos = self.bos_token
         bos_token_id = self.bos_token_id
         if bos is None and self.add_bos_token:
-            raise ValueError("add_bos_token = True but bos_token = None")
+            self.add_bos_token = False
 
         eos = self.eos_token
         eos_token_id = self.eos_token_id
-        # If eos_token is None and add_eos_token is True, silently disable add_eos_token
-        # This allows tokenizers to set add_eos_token even if eos_token is not configured
         if eos is None and self.add_eos_token:
             self.add_eos_token = False
-            return
 
         single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
         pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
@@ -939,23 +936,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             else self.clean_up_tokenization_spaces
         )
         if clean_up_tokenization_spaces:
-            # Call custom cleanup method if it exists
-            if hasattr(self, "clean_up_tokenization") and callable(self.clean_up_tokenization):
-                text = self.clean_up_tokenization(text)
-            else:
-                # Apply standard cleanup
-                text = (
-                    text.replace(" .", ".")
-                    .replace(" ?", "?")
-                    .replace(" !", "!")
-                    .replace(" ,", ",")
-                    .replace(" ' ", "'")
-                    .replace(" n't", "n't")
-                    .replace(" 'm", "'m")
-                    .replace(" 's", "'s")
-                    .replace(" 've", "'ve")
-                    .replace(" 're", "'re")
-                )
+            text = self.clean_up_tokenization(text)
 
         return text
 
