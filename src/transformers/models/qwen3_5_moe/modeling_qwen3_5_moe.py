@@ -1444,19 +1444,19 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = Qwen3_5MoeDynamicCache(config=self.config)
 
-        # mrope: the hard coded `3` is for temporal, height and width.
+        # the hard coded `4` is for text, temporal, height and width.
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
+            position_ids = position_ids.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
-            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
+            position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
 
         if position_ids.ndim == 3 and position_ids.shape[0] == 4:
             text_position_ids = position_ids[0]
             position_ids = position_ids[1:]
         else:
-            text_position_ids = position_ids[0]
+            text_position_ids = None
 
         causal_mask = create_causal_mask(
             config=self.config,
