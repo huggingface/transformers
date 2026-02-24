@@ -24,6 +24,80 @@ from ..auto import AutoConfig
 
 
 class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`PPDocLayoutV2ReadingOrder`].
+
+    It is used to instantiate the reading order sub-module of the PP-DocLayoutV2 model. This configuration defines the architecture and hyperparameters specific to the reading order detection task within the larger PP-DocLayoutV2 framework.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 512):
+            Dimension of the encoder layers and the pooled layer.
+        num_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the attention probabilities.
+        has_relative_attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether or not to use a relative attention bias in the self-attention mechanism.
+        has_spatial_attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether or not to use a spatial attention bias in the self-attention mechanism.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the layer normalization layers.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        intermediate_size (`int`, *optional*, defaults to 2048):
+            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        num_hidden_layers (`int`, *optional*, defaults to 6):
+            Number of the hidden layers.
+        rel_pos_bins (`int`, *optional*, defaults to 32):
+            The number of relative position bins to be used in the self-attention mechanism.
+        max_rel_pos (`int`, *optional*, defaults to 128):
+            The maximum number of relative positions to be used in the self-attention mechanism.
+        rel_2d_pos_bins (`int`, *optional*, defaults to 64):
+            The number of 2D relative position bins in the self-attention mechanism.
+        max_rel_2d_pos (`int`, *optional*, defaults to 256):
+            The maximum number of relative 2D positions in the self-attention mechanism.
+        max_position_embeddings (`int`, *optional*, defaults to 514):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
+            The maximum value that the 2D position embedding might ever be used with. Typically set this to something
+            large just in case (e.g., 1024).
+        type_vocab_size (`int`, *optional*, defaults to 1):
+            The vocabulary size of the `token_type_ids`.
+        vocab_size (`int`, *optional*, defaults to 4):
+            Vocabulary size of the model. Defines the number of different tokens that can be represented by the `inputs_ids`.
+        start_token_id (`int`, *optional*, defaults to 0):
+            Token id representing the start of a sequence.
+        pad_token_id (`int`, *optional*, defaults to 1):
+            Token id used for padding the input sequences.
+        end_token_id (`int`, *optional*, defaults to 2):
+            Token id representing the end of a sequence.
+        pred_token_id (`int`, *optional*, defaults to 3):
+            Token id representing valid prediction positions (placeholders) in the sequence.
+        coordinate_size (`int`, *optional*, defaults to 171):
+            Dimension of the coordinate embeddings.
+        shape_size (`int`, *optional*, defaults to 170):
+            Dimension of the width and height embeddings.
+        num_classes (`int`, *optional*, defaults to 20):
+            Number of labels or classes for the layout elements.
+        relation_bias_embed_dim (`int`, *optional*, defaults to 16):
+            Embedding dimension for the relation bias.
+        relation_bias_temperature (`float`, *optional*, defaults to 10000):
+            Temperature parameter used for relation bias scaling.
+        relation_bias_scale (`float`, *optional*, defaults to 100):
+            Scale parameter for the relation bias.
+        global_pointer_head_size (`int`, *optional*, defaults to 64):
+            The size of the global pointer head.
+        gp_dropout_value (`float`, *optional*, defaults to 0.0):
+            The dropout probability in the global pointer head.
+    """
+
     def __init__(
         self,
         hidden_size=512,
@@ -51,9 +125,9 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         coordinate_size=171,
         shape_size=170,
         num_classes=20,
-        rel_bias_embed_dim=16,
-        rel_bias_temperature=10000,
-        rel_bias_scale=100,
+        relation_bias_embed_dim=16,
+        relation_bias_temperature=10000,
+        relation_bias_scale=100,
         global_pointer_head_size=64,
         gp_dropout_value=0.0,
         **kwargs,
@@ -83,9 +157,9 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         self.coordinate_size = coordinate_size
         self.shape_size = shape_size
         self.num_classes = num_classes
-        self.rel_bias_embed_dim = rel_bias_embed_dim
-        self.rel_bias_temperature = rel_bias_temperature
-        self.rel_bias_scale = rel_bias_scale
+        self.relation_bias_embed_dim = relation_bias_embed_dim
+        self.relation_bias_temperature = relation_bias_temperature
+        self.relation_bias_scale = relation_bias_scale
         self.global_pointer_head_size = global_pointer_head_size
         self.gp_dropout_value = gp_dropout_value
 
@@ -185,10 +259,10 @@ class PPDocLayoutV2Config(PreTrainedConfig):
             Whether to disable custom kernels.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the architecture has an encoder decoder structure.
-        threshold_mapping (`dict[str, float]`, *optional*):
-            Mapping from class name to class priority.
-        order_map (`dict[str, float]`, *optional*):
-            Mapping from class name to class threshold.
+        class_thresholds (`list[float]`, *optional*):
+            The thresholds for each label.
+        class_order (`list[int]`, *optional*):
+            The priority for each label.
         reading_order_config (`dict`, *optional*):
             The configuration of a `PPDocLayoutV2ReadingOrder`.
 
@@ -260,8 +334,8 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         disable_custom_kernels=True,
         is_encoder_decoder=True,
         # label
-        threshold_mapping=None,
-        order_map=None,
+        class_thresholds=None,
+        class_order=None,
         reading_order_config=None,
         **kwargs,
     ):
@@ -328,8 +402,8 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         self.anchor_image_size = list(anchor_image_size) if anchor_image_size is not None else None
         self.disable_custom_kernels = disable_custom_kernels
 
-        self.threshold_mapping = threshold_mapping
-        self.order_map = order_map
+        self.class_thresholds = class_thresholds
+        self.class_order = class_order
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

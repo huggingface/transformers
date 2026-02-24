@@ -138,6 +138,8 @@ class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
         Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
         bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
+        PPDocLayoutV2 is identical to PPDocLayoutV3, except that it does not return `polygon_points`.
+
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
                 Raw outputs of the model.

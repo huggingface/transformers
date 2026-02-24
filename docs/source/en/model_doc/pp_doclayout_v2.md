@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-10-16 and added to Hugging Face Transformers on 2026-02-13.*
+*This model was released on 2025-10-16 and added to Hugging Face Transformers on 2026-02-24.*
 
 # PP-DocLayoutV2
 
@@ -58,6 +58,8 @@ print(result)
 <hfoption id="AutoModel">
 
 ```py
+import requests
+from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 model_path = "PaddlePaddle/PP-DocLayoutV2_safetensors"
@@ -67,7 +69,7 @@ image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/padd
 inputs = image_processor(images=image, return_tensors="pt")
 
 outputs = model(**inputs)
-results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([image.size[::-1]]))
+results = image_processor.post_process_object_detection(outputs, target_sizes=[image.size[::-1]])
 for result in results:
     print(result["scores"])
     print(result["labels"])
@@ -105,6 +107,9 @@ print(result[1])
 <hfoption id="AutoModel">
 
 ```py
+import requests
+import torch
+from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 model_path = "PaddlePaddle/PP-DocLayoutV2_safetensors"

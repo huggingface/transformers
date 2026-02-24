@@ -34,7 +34,7 @@ from ...image_transforms import center_to_corners_format, corners_to_center_form
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModuleUtilsMixin, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward, compile_compatible_method_lru_cache
 from ...utils import (
@@ -73,9 +73,9 @@ class PPDocLayoutV2GlobalPointer(nn.Module):
 class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.embed_dim = config.rel_bias_embed_dim
-        self.temperature = config.rel_bias_temperature
-        self.scale = config.rel_bias_scale
+        self.embed_dim = config.relation_bias_embed_dim
+        self.temperature = config.relation_bias_temperature
+        self.scale = config.relation_bias_scale
         self.pos_proj = nn.Conv2d(
             in_channels=self.embed_dim * 4, out_channels=config.num_attention_heads, kernel_size=1
         )
@@ -83,11 +83,14 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     def box_relative_encoding(
         self, source_boxes: torch.Tensor, target_boxes: torch.Tensor = None, epsilon: float = 1e-5
     ):
+        source_boxes, target_boxes = source_boxes.unsqueeze(-2), target_boxes.unsqueeze(-3)
         source_coordinates, source_dim = source_boxes[..., :2], source_boxes[..., 2:]
         target_coordinates, target_dim = target_boxes[..., :2], target_boxes[..., 2:]
-        coordinate_difference = torch.abs(source_coordinates.unsqueeze(-2) - target_coordinates.unsqueeze(-3))
-        relative_coordinates = torch.log(coordinate_difference / (source_dim.unsqueeze(-2) + epsilon) + 1.0)
-        relative_dim = torch.log((source_dim.unsqueeze(-2) + epsilon) / (target_dim.unsqueeze(-3) + epsilon))
+
+        coordinate_difference = torch.abs(source_coordinates - target_coordinates)
+        relative_coordinates = torch.log(coordinate_difference / (source_dim + epsilon) + 1.0)
+        relative_dim = torch.log((source_dim + epsilon) / (target_dim + epsilon))
+
         relative_encoding = torch.cat([relative_coordinates, relative_dim], dim=-1)
 
         return relative_encoding
@@ -819,7 +822,7 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.weight.data[module.padding_idx])
 
 
-class PPDocLayoutV2ReadingOrder(nn.Module):
+class PPDocLayoutV2ReadingOrder(nn.Module, ModuleUtilsMixin):
     def __init__(self, config):
         super().__init__()
         self.embeddings = PPDocLayoutV2TextEmbeddings(config)
@@ -863,12 +866,13 @@ class PPDocLayoutV2ReadingOrder(nn.Module):
         final_embeddings = self.embeddings.norm(final_embeddings)
         final_embeddings = self.embeddings.dropout(final_embeddings)
 
-        attn_1d = pred_col_idx < (num_pred + 2).unsqueeze(1)
-        attention_mask = (1.0 - attn_1d.to(dtype=bbox_embedding.dtype)).unsqueeze(1).unsqueeze(2) * -1e9
+        input_embeddings = pred_col_idx < (num_pred + 2).unsqueeze(1)
+        input_shape = input_embeddings.size()
+        attention_mask = self.get_extended_attention_mask(input_embeddings, input_shape)
         encoder_output = self.encoder(hidden_states=final_embeddings, bbox=pad_boxes, attention_mask=attention_mask)
         encoder_output = encoder_output.last_hidden_state
-        tok = encoder_output[:, 1 : 1 + seq_len, :]
-        read_order_logits = self.relative_head(tok)
+        token = encoder_output[:, 1 : 1 + seq_len, :]
+        read_order_logits = self.relative_head(token)
         return read_order_logits
 
 
@@ -1344,7 +1348,7 @@ class PPDocLayoutV2EncoderLayer(nn.Module):
             hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -2287,10 +2291,11 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         )
 
         self.model.denoising_class_embed = nn.Embedding(config.num_labels, config.d_model)
-        self.class_thresholds = [config.threshold_mapping[v] for v in config.id2label.values()]
-        self.class_map = [config.order_map[category] for category in config.order_map]
+        # self.class_thresholds = [config.threshold_mapping[v] for v in config.id2label.values()]
+        # self.class_map = [config.order_map[category] for category in config.order_map]
         self.reading_order = PPDocLayoutV2ReadingOrder(config.reading_order_config)
         self.num_queries = config.num_queries
+        self.config = config
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         self.post_init()
 
@@ -2307,7 +2312,7 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV2ForObjectDetectionOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -2382,14 +2387,14 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         raw_bboxes = intermediate_reference_points[:, -1]
         logits = intermediate_logits[:, -1]
 
-        cxcy, wh = raw_bboxes.split(2, dim=-1)
-        bboxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1) * 1000
+        box_centers, box_sizes = raw_bboxes.split(2, dim=-1)
+        bboxes = torch.cat([box_centers - 0.5 * box_sizes, box_centers + 0.5 * box_sizes], dim=-1) * 1000
         bboxes = bboxes.clamp_(0.0, 1000.0)
 
         max_logits, class_ids = logits.max(dim=-1)
         max_probs = max_logits.sigmoid()
 
-        class_thresholds = torch.tensor(self.class_thresholds, dtype=torch.float32, device=logits.device)
+        class_thresholds = torch.tensor(self.config.class_thresholds, dtype=torch.float32, device=logits.device)
         thresholds = class_thresholds[class_ids]
         mask = max_probs >= thresholds
 
@@ -2405,8 +2410,8 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         pad_boxes = torch.where(sorted_mask[..., None], sorted_boxes, torch.zeros_like(sorted_boxes))
         pad_class_ids = torch.where(sorted_mask, sorted_class_ids, torch.zeros_like(sorted_class_ids))
 
-        class_map = torch.tensor(self.class_map, dtype=torch.int32, device=logits.device)
-        pad_class_ids = class_map[pad_class_ids]
+        class_order = torch.tensor(self.config.class_order, dtype=torch.int32, device=logits.device)
+        pad_class_ids = class_order[pad_class_ids]
 
         order_logits = self.reading_order(
             boxes=pad_boxes,

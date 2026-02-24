@@ -21,8 +21,11 @@ from torch import nn
 from ... import initialization as init
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_utils import ModuleUtilsMixin
+from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     logging,
@@ -51,6 +54,80 @@ logger = logging.get_logger(__name__)
 
 
 class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`PPDocLayoutV2ReadingOrder`].
+
+    It is used to instantiate the reading order sub-module of the PP-DocLayoutV2 model. This configuration defines the architecture and hyperparameters specific to the reading order detection task within the larger PP-DocLayoutV2 framework.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 512):
+            Dimension of the encoder layers and the pooled layer.
+        num_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the attention probabilities.
+        has_relative_attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether or not to use a relative attention bias in the self-attention mechanism.
+        has_spatial_attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether or not to use a spatial attention bias in the self-attention mechanism.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the layer normalization layers.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        intermediate_size (`int`, *optional*, defaults to 2048):
+            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        num_hidden_layers (`int`, *optional*, defaults to 6):
+            Number of the hidden layers.
+        rel_pos_bins (`int`, *optional*, defaults to 32):
+            The number of relative position bins to be used in the self-attention mechanism.
+        max_rel_pos (`int`, *optional*, defaults to 128):
+            The maximum number of relative positions to be used in the self-attention mechanism.
+        rel_2d_pos_bins (`int`, *optional*, defaults to 64):
+            The number of 2D relative position bins in the self-attention mechanism.
+        max_rel_2d_pos (`int`, *optional*, defaults to 256):
+            The maximum number of relative 2D positions in the self-attention mechanism.
+        max_position_embeddings (`int`, *optional*, defaults to 514):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
+            The maximum value that the 2D position embedding might ever be used with. Typically set this to something
+            large just in case (e.g., 1024).
+        type_vocab_size (`int`, *optional*, defaults to 1):
+            The vocabulary size of the `token_type_ids`.
+        vocab_size (`int`, *optional*, defaults to 4):
+            Vocabulary size of the model. Defines the number of different tokens that can be represented by the `inputs_ids`.
+        start_token_id (`int`, *optional*, defaults to 0):
+            Token id representing the start of a sequence.
+        pad_token_id (`int`, *optional*, defaults to 1):
+            Token id used for padding the input sequences.
+        end_token_id (`int`, *optional*, defaults to 2):
+            Token id representing the end of a sequence.
+        pred_token_id (`int`, *optional*, defaults to 3):
+            Token id representing valid prediction positions (placeholders) in the sequence.
+        coordinate_size (`int`, *optional*, defaults to 171):
+            Dimension of the coordinate embeddings.
+        shape_size (`int`, *optional*, defaults to 170):
+            Dimension of the width and height embeddings.
+        num_classes (`int`, *optional*, defaults to 20):
+            Number of labels or classes for the layout elements.
+        relation_bias_embed_dim (`int`, *optional*, defaults to 16):
+            Embedding dimension for the relation bias.
+        relation_bias_temperature (`float`, *optional*, defaults to 10000):
+            Temperature parameter used for relation bias scaling.
+        relation_bias_scale (`float`, *optional*, defaults to 100):
+            Scale parameter for the relation bias.
+        global_pointer_head_size (`int`, *optional*, defaults to 64):
+            The size of the global pointer head.
+        gp_dropout_value (`float`, *optional*, defaults to 0.0):
+            The dropout probability in the global pointer head.
+    """
+
     def __init__(
         self,
         hidden_size=512,
@@ -78,9 +155,9 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         coordinate_size=171,
         shape_size=170,
         num_classes=20,
-        rel_bias_embed_dim=16,
-        rel_bias_temperature=10000,
-        rel_bias_scale=100,
+        relation_bias_embed_dim=16,
+        relation_bias_temperature=10000,
+        relation_bias_scale=100,
         global_pointer_head_size=64,
         gp_dropout_value=0.0,
         **kwargs,
@@ -110,9 +187,9 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         self.coordinate_size = coordinate_size
         self.shape_size = shape_size
         self.num_classes = num_classes
-        self.rel_bias_embed_dim = rel_bias_embed_dim
-        self.rel_bias_temperature = rel_bias_temperature
-        self.rel_bias_scale = rel_bias_scale
+        self.relation_bias_embed_dim = relation_bias_embed_dim
+        self.relation_bias_temperature = relation_bias_temperature
+        self.relation_bias_scale = relation_bias_scale
         self.global_pointer_head_size = global_pointer_head_size
         self.gp_dropout_value = gp_dropout_value
 
@@ -212,10 +289,10 @@ class PPDocLayoutV2Config(PreTrainedConfig):
             Whether to disable custom kernels.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the architecture has an encoder decoder structure.
-        threshold_mapping (`dict[str, float]`, *optional*):
-            Mapping from class name to class priority.
-        order_map (`dict[str, float]`, *optional*):
-            Mapping from class name to class threshold.
+        class_thresholds (`list[float]`, *optional*):
+            The thresholds for each label.
+        class_order (`list[int]`, *optional*):
+            The priority for each label.
         reading_order_config (`dict`, *optional*):
             The configuration of a `PPDocLayoutV2ReadingOrder`.
 
@@ -287,8 +364,8 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         disable_custom_kernels=True,
         is_encoder_decoder=True,
         # label
-        threshold_mapping=None,
-        order_map=None,
+        class_thresholds=None,
+        class_order=None,
         reading_order_config=None,
         **kwargs,
     ):
@@ -355,8 +432,8 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         self.anchor_image_size = list(anchor_image_size) if anchor_image_size is not None else None
         self.disable_custom_kernels = disable_custom_kernels
 
-        self.threshold_mapping = threshold_mapping
-        self.order_map = order_map
+        self.class_thresholds = class_thresholds
+        self.class_order = class_order
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
@@ -380,6 +457,8 @@ class PPDocLayoutV2ImageProcessorFast(PPDocLayoutV3ImageProcessorFast):
         """
         Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
         bottom_right_x, bottom_right_y) format. Only supports PyTorch.
+
+        PPDocLayoutV2 is identical to PPDocLayoutV3, except that it does not return `polygon_points`.
 
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
@@ -444,9 +523,9 @@ class PPDocLayoutV2GlobalPointer(PPDocLayoutV3GlobalPointer):
 class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.embed_dim = config.rel_bias_embed_dim
-        self.temperature = config.rel_bias_temperature
-        self.scale = config.rel_bias_scale
+        self.embed_dim = config.relation_bias_embed_dim
+        self.temperature = config.relation_bias_temperature
+        self.scale = config.relation_bias_scale
         self.pos_proj = nn.Conv2d(
             in_channels=self.embed_dim * 4, out_channels=config.num_attention_heads, kernel_size=1
         )
@@ -454,11 +533,14 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     def box_relative_encoding(
         self, source_boxes: torch.Tensor, target_boxes: torch.Tensor = None, epsilon: float = 1e-5
     ):
+        source_boxes, target_boxes = source_boxes.unsqueeze(-2), target_boxes.unsqueeze(-3)
         source_coordinates, source_dim = source_boxes[..., :2], source_boxes[..., 2:]
         target_coordinates, target_dim = target_boxes[..., :2], target_boxes[..., 2:]
-        coordinate_difference = torch.abs(source_coordinates.unsqueeze(-2) - target_coordinates.unsqueeze(-3))
-        relative_coordinates = torch.log(coordinate_difference / (source_dim.unsqueeze(-2) + epsilon) + 1.0)
-        relative_dim = torch.log((source_dim.unsqueeze(-2) + epsilon) / (target_dim.unsqueeze(-3) + epsilon))
+
+        coordinate_difference = torch.abs(source_coordinates - target_coordinates)
+        relative_coordinates = torch.log(coordinate_difference / (source_dim + epsilon) + 1.0)
+        relative_dim = torch.log((source_dim + epsilon) / (target_dim + epsilon))
+
         relative_encoding = torch.cat([relative_coordinates, relative_dim], dim=-1)
 
         return relative_encoding
@@ -688,7 +770,7 @@ class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
                 init.zeros_(module.weight.data[module.padding_idx])
 
 
-class PPDocLayoutV2ReadingOrder(nn.Module):
+class PPDocLayoutV2ReadingOrder(nn.Module, ModuleUtilsMixin):
     def __init__(self, config):
         super().__init__()
         self.embeddings = PPDocLayoutV2TextEmbeddings(config)
@@ -732,12 +814,13 @@ class PPDocLayoutV2ReadingOrder(nn.Module):
         final_embeddings = self.embeddings.norm(final_embeddings)
         final_embeddings = self.embeddings.dropout(final_embeddings)
 
-        attn_1d = pred_col_idx < (num_pred + 2).unsqueeze(1)
-        attention_mask = (1.0 - attn_1d.to(dtype=bbox_embedding.dtype)).unsqueeze(1).unsqueeze(2) * -1e9
+        input_embeddings = pred_col_idx < (num_pred + 2).unsqueeze(1)
+        input_shape = input_embeddings.size()
+        attention_mask = self.get_extended_attention_mask(input_embeddings, input_shape)
         encoder_output = self.encoder(hidden_states=final_embeddings, bbox=pad_boxes, attention_mask=attention_mask)
         encoder_output = encoder_output.last_hidden_state
-        tok = encoder_output[:, 1 : 1 + seq_len, :]
-        read_order_logits = self.relative_head(tok)
+        token = encoder_output[:, 1 : 1 + seq_len, :]
+        read_order_logits = self.relative_head(token)
         return read_order_logits
 
 
@@ -820,10 +903,11 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
         super().__init__(config)
 
         self.model.denoising_class_embed = nn.Embedding(config.num_labels, config.d_model)
-        self.class_thresholds = [config.threshold_mapping[v] for v in config.id2label.values()]
-        self.class_map = [config.order_map[category] for category in config.order_map]
+        # self.class_thresholds = [config.threshold_mapping[v] for v in config.id2label.values()]
+        # self.class_map = [config.order_map[category] for category in config.order_map]
         self.reading_order = PPDocLayoutV2ReadingOrder(config.reading_order_config)
         self.num_queries = config.num_queries
+        self.config = config
 
         self.post_init()
 
@@ -837,7 +921,7 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
         inputs_embeds: torch.FloatTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV2ForObjectDetectionOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -912,14 +996,14 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
         raw_bboxes = intermediate_reference_points[:, -1]
         logits = intermediate_logits[:, -1]
 
-        cxcy, wh = raw_bboxes.split(2, dim=-1)
-        bboxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1) * 1000
+        box_centers, box_sizes = raw_bboxes.split(2, dim=-1)
+        bboxes = torch.cat([box_centers - 0.5 * box_sizes, box_centers + 0.5 * box_sizes], dim=-1) * 1000
         bboxes = bboxes.clamp_(0.0, 1000.0)
 
         max_logits, class_ids = logits.max(dim=-1)
         max_probs = max_logits.sigmoid()
 
-        class_thresholds = torch.tensor(self.class_thresholds, dtype=torch.float32, device=logits.device)
+        class_thresholds = torch.tensor(self.config.class_thresholds, dtype=torch.float32, device=logits.device)
         thresholds = class_thresholds[class_ids]
         mask = max_probs >= thresholds
 
@@ -935,8 +1019,8 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
         pad_boxes = torch.where(sorted_mask[..., None], sorted_boxes, torch.zeros_like(sorted_boxes))
         pad_class_ids = torch.where(sorted_mask, sorted_class_ids, torch.zeros_like(sorted_class_ids))
 
-        class_map = torch.tensor(self.class_map, dtype=torch.int32, device=logits.device)
-        pad_class_ids = class_map[pad_class_ids]
+        class_order = torch.tensor(self.config.class_order, dtype=torch.int32, device=logits.device)
+        pad_class_ids = class_order[pad_class_ids]
 
         order_logits = self.reading_order(
             boxes=pad_boxes,
