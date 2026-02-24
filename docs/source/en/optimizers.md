@@ -14,63 +14,99 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Optimizers
+# Optimizers and schedulers
 
-Transformers offers two native optimizers, AdamW and AdaFactor. It also provides integrations for more specialized optimizers. Install the library that offers the optimizer and drop it in the `optim` parameter in [`TrainingArguments`].
+An optimizer updates model weights during training. The scheduler wraps the optimizer and adjusts the learning rate each training step. [`Trainer`] creates both when it calls [`~Trainer.create_optimizer_and_scheduler`].
 
-This guide will show you how to use these optimizers with [`Trainer`] using [`TrainingArguments`] shown below.
+```md
+                                    ┌────────────┐         ┌──────────────┐
+                                    │ Optimizer  │         │  Scheduler   │
+                                    │ (adamw_torch_fused)◄─│  (linear)    │
+                                    │            │         │              │
+                                    │ param_groups         │ lr_lambda()  │
+                                    │  └ lr       ◄────────┤ step counter │
+                                    │  └ weight_decay      │              │
+                                    └──────┬─────┘         └──────┬───────┘
+                                           │                      │
+  ┌──── EACH TRAINING STEP ───────────────────────────────────────────┐
+  │                                        │                      │   │
+  │   model(batch)                         │                      │   │
+  │       │                                │                      │   │
+  │       ▼                                │                      │   │
+  │     loss ──► loss.backward() ──► param.grad                   │   │
+  │                                        │                      │   │
+  │                          ┌─────────────┘                      │   │
+  │                          ▼                                    │   │
+  │              optimizer.step() ◄── reads lr ◄──────────────────┘   │
+  │                          │                                        │
+  │                          ▼                                        │
+  │                   param.data updated                              │
+  │                          │                                        │
+  │                          ▼                                        │
+  │              lr_scheduler.step()  ──► recalculates lr             │
+  │                          │            writes to optimizer         │
+  │                          ▼            .param_groups['lr']         │
+  │              optimizer.zero_grad()                                │
+  │                                                                   │
+  └───────────────────────────────────────────────────────────────────┘
+```
+
+Configure optimizer and scheduler behavior, like [`~TrainingArguments.lr_scheduler_type`] and [`~TrainingArguments.optim`], in [`TrainingArguments`].
 
 ```py
-import torch
-from transformers import TrainingArguments, AutoTokenizer, AutoModelForCausalLM, Trainer
+from transformers import TrainingArguments
 
 args = TrainingArguments(
-    output_dir="./test-optimizer",
-    max_steps=1000,
-    per_device_train_batch_size=4,
-    logging_strategy="steps",
-    logging_steps=1,
+    ...,
+    # Optimizer
+    optim="adamw_torch",          # or "adamw_torch_fused", "adafactor", "sgd", etc.
     learning_rate=2e-5,
-    save_strategy="no",
-    run_name="optimizer-name",
+    weight_decay=0.01,
+    adam_beta1=0.9,
+    adam_beta2=0.999,
+    adam_epsilon=1e-8,
+    # Scheduler
+    lr_scheduler_type="cosine",   # "linear", "cosine", "constant_with_warmup", etc.
+    warmup_steps=500,             # or warmup_ratio=0.06 (fraction of total steps)
+    lr_scheduler_kwargs={"num_cycles": 3},  # scheduler-specific extras
 )
 ```
 
-## APOLLO
+## Optimizer integrations
+
+Transformers integrates third-party optimizers for specialized training scenarios. The table below summarizes each optimizer.
+
+| Optimizer | Install | `optim="value"` | Description |
+|---|---|---|---|
+| APOLLO | `apollo-torch` | `apollo_adamw` | Memory-efficient full-param via random projections; rank-1 sufficient |
+| GrokAdamW | `grokadamw` | `grokadamw` | Targets delayed generalization (grokking) |
+| LOMO / AdaLomo | `lomo-optim` | `lomo` / `adalomo` | Fuses gradient + update step for low-memory full-param fine-tuning |
+| Schedule Free | `schedulefree` | `schedule_free_adamw`, `schedule_free_radam`, `schedule_free_sgd` | Eliminates LR annealing; pair with `lr_scheduler_type="constant"` |
+| StableAdamW | `torch-optimi` | `stable_adamw` | AdamW + AdaFactor update clipping; no gradient clipping needed |
+
+<hfoptions id="optimizer">
+<hfoption id="APOLLO">
 
 ```bash
 pip install apollo-torch
 ```
 
-[Approximated Gradient Scaling for Memory Efficient LLM Optimization (APOLLO)](https://github.com/zhuhanqing/APOLLO) is a memory-efficient optimizer that allows full parameter learning for both pretraining and fine-tuning. It maintains AdamW-level performance with SGD-like memory efficiency. For extreme memory efficiency, you can use APOLLO-Mini, a rank 1 variant of APOLLO. APOLLO optimizers support:
-
-* Ultra-low rank efficiency. You can use a much lower rank than [GaLoRE](./trainer#galore), rank 1 is sufficient.
-* Avoid expensive SVD computations. APOLLO leverages random projections to avoid training stalls.
+[Approximated Gradient Scaling for Memory Efficient LLM Optimization (APOLLO)](https://huggingface.co/papers/2412.05270) is a memory-efficient optimizer for full parameter learning during pretraining and fine-tuning. It maintains AdamW-level performance with SGD-like memory efficiency. APOLLO uses random projections instead of expensive SVD computations, and a much lower rank works. For extreme memory savings, use APOLLO-Mini, a rank-1 variant of APOLLO.
 
 Use the `optim_target_modules` parameter to specify which layers to train.
 
 ```diff
-import torch
-from transformers import TrainingArguments
-
 args = TrainingArguments(
-    output_dir="./test-apollo",
-    max_steps=100,
-    per_device_train_batch_size=2,
 +   optim="apollo_adamw",
 +   optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
-    logging_strategy="steps",
-    logging_steps=1,
-    learning_rate=2e-5,
-    save_strategy="no",
-    run_name="apollo_adamw",
+    ...  # remaining args from the TrainingArguments intro config
 )
 ```
 
-For additional training options, use `optim_args` to define hyperparameters like `rank`, `scale`, and more. Refer to the table below for a complete list of available hyperparameters.
+For additional training options, pass hyperparameters through `optim_args`. The table below lists all available hyperparameters.
 
 > [!TIP]
-> The `scale` parameter can be set to `n/r`, where `n` is the original space dimension and `r` is the low-rank space dimension. You could achieve a similar effect by adjusting the learning rate while keeping `scale` at its default value.
+> Set `scale` to `n/r`, where `n` is the original space dimension and `r` is the low-rank space dimension. Adjusting the learning rate while keeping `scale` at its default achieves a similar effect.
 
 | parameter | description | APOLLO | APOLLO-Mini |
 |---|---|---|---|
@@ -83,122 +119,96 @@ For additional training options, use `optim_args` to define hyperparameters like
 The example below enables the APOLLO-Mini optimizer.
 
 ```py
-from transformers import TrainingArguments
-
 args = TrainingArguments(
-    output_dir="./test-apollo_mini",
-    max_steps=100,
-    per_device_train_batch_size=2,
     optim="apollo_adamw",
     optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
     optim_args="proj=random,rank=1,scale=128.0,scale_type=tensor,update_proj_gap=200",
+    ...  # remaining args from the TrainingArguments intro config
 )
 ```
 
-## GrokAdamW
+</hfoption>
+<hfoption id="GrokAdamW">
 
 ```bash
 pip install grokadamw
 ```
 
-[GrokAdamW](https://github.com/cognitivecomputations/grokadamw) is an optimizer designed to help models that benefit from *grokking*, a term used to describe delayed generalization because of slow-varying gradients. It is particularly useful for models requiring more advanced optimization techniques to achieve better performance and stability.
+[GrokAdamW](https://github.com/cognitivecomputations/grokadamw) targets *grokking*, where models exhibit delayed generalization due to slow-varying gradients.
 
 ```diff
-import torch
-from transformers import TrainingArguments
-
 args = TrainingArguments(
-    output_dir="./test-grokadamw",
-    max_steps=1000,
-    per_device_train_batch_size=4,
 +   optim="grokadamw",
-    logging_strategy="steps",
-    logging_steps=1,
-    learning_rate=2e-5,
-    save_strategy="no",
-    run_name="grokadamw",
+    ...  # remaining args from the TrainingArguments intro config
 )
 ```
 
-## LOMO
+</hfoption>
+<hfoption id="LOMO">
 
 ```bash
 pip install lomo-optim
 ```
 
-[Low-Memory Optimization (LOMO)](https://github.com/OpenLMLab/LOMO) is a family of optimizers, [LOMO](https://huggingface.co/papers/2306.09782) and [AdaLomo](https://hf.co/papers/2310.10195), designed for low-memory full-parameter finetuning of LLMs. Both LOMO optimizers fuse the gradient computation and parameter update in one step to reduce memory usage. AdaLomo builds on top of LOMO by incorporating an adaptive learning rate for each parameter like the Adam optimizer.
+[Low-Memory Optimization (LOMO)](https://github.com/OpenLMLab/LOMO) is a family of optimizers, [LOMO](https://huggingface.co/papers/2306.09782) and [AdaLomo](https://hf.co/papers/2310.10195), designed for low-memory full-parameter finetuning of LLMs. Both fuse the gradient computation and parameter update in one step to reduce memory usage. AdaLomo adds an adaptive per-parameter learning rate, similar to Adam.
 
 > [!TIP]
-> It is recommended to use AdaLomo without `grad_norm` for better performance and higher throughput.
+> AdaLomo works best without `grad_norm`, improving performance and throughput.
 
 ```diff
 args = TrainingArguments(
-    output_dir="./test-lomo",
-    max_steps=1000,
-    per_device_train_batch_size=4,
 +   optim="adalomo",
-    gradient_checkpointing=True,
-    logging_strategy="steps",
-    logging_steps=1,
++   gradient_checkpointing=True,
     learning_rate=2e-6,
-    save_strategy="no",
-    run_name="adalomo",
+    ...  # remaining args from the TrainingArguments intro config
 )
 ```
 
-## Schedule Free
+</hfoption>
+<hfoption id="Schedule Free">
 
 ```bash
 pip install schedulefree
 ```
 
-[Schedule Free optimizer (SFO)](https://hf.co/papers/2405.15682) replaces the base optimizers momentum with a combination of averaging and interpolation. Unlike a traditional scheduler, SFO completely removes the need to anneal the learning rate.
+[Schedule Free optimizer (SFO)](https://hf.co/papers/2405.15682) replaces the base optimizer's momentum with a combination of averaging and interpolation. Unlike a traditional scheduler, SFO completely removes the need to anneal the learning rate.
 
-SFO supports the RAdam (`schedule_free_radam`), AdamW (`schedule_free_adamw`) and SGD (`schedule_free_sgd`) optimizers. The RAdam scheduler doesn't require `warmup_steps`.
+SFO supports the RAdam (`schedule_free_radam`), AdamW (`schedule_free_adamw`), and SGD (`schedule_free_sgd`) optimizers. The RAdam scheduler doesn't require `warmup_steps`.
 
-By default, it is recommended to set `lr_scheduler_type="constant"`. Other `lr_scheduler_type` values may also work, but combining SFO optimizers with other learning rate schedules could affect SFOs intended behavior and performance.
+Pair SFO with `lr_scheduler_type="constant"`. Other `lr_scheduler_type` values work, but combining SFO with other learning rate schedules affects SFO's intended behavior.
 
 ```diff
 args = TrainingArguments(
-    output_dir="./test-schedulefree",
-    max_steps=1000,
-    per_device_train_batch_size=4,
-+   optim="schedule_free_radamw",
++   optim="schedule_free_radam",
 +   lr_scheduler_type="constant",
-    gradient_checkpointing=True,
-    logging_strategy="steps",
-    logging_steps=1,
++   gradient_checkpointing=True,
     learning_rate=2e-6,
-    save_strategy="no",
-    run_name="sfo",
+    ...  # remaining args from the TrainingArguments intro config
 )
 ```
 
-## StableAdamW
+</hfoption>
+<hfoption id="StableAdamW">
 
 ```bash
 pip install torch-optimi
 ```
 
-[StableAdamW](https://huggingface.co/papers/2304.13013) is a hybrid between AdamW and AdaFactor. It ports AdaFactor's update clipping into AdamW, which removes the need for gradient clipping. Otherwise, it behaves as a drop-in replacement for AdamW.
+[StableAdamW](https://huggingface.co/papers/2304.13013) is a hybrid of AdamW and AdaFactor. It ports AdaFactor's update clipping into AdamW, removing the need for gradient clipping. Otherwise, it's a drop-in replacement for AdamW.
 
 > [!TIP]
-> If training on large batch sizes or still observing training loss spikes, consider reducing beta_2 between [0.95, 0.99].
+> If you're training with large batch sizes or still observing loss spikes, try setting `beta_2` between 0.95 and 0.99.
 
 ```diff
 args = TrainingArguments(
-    output_dir="./test-stable-adamw",
-    max_steps=1000,
-    per_device_train_batch_size=4,
 +   optim="stable_adamw",
-    gradient_checkpointing=True,
-    logging_strategy="steps",
-    logging_steps=1,
++   gradient_checkpointing=True,
     learning_rate=2e-6,
-    save_strategy="no",
-    run_name="stable-adamw",
+    ...  # remaining args from the TrainingArguments intro config
 )
 ```
+</hfoption>
+</hfoptions>
 
 ## GaLore
 
@@ -273,3 +283,94 @@ trainer.train()
 </hfoptions>
 
 Only linear layers that are considered GaLore layers can be trained with low-rank decomposition. The rest of the model layers are optimized in the usual way.
+
+## Customizing optimizer and scheduler
+
+Create a custom optimizer and scheduler to enable a new optimizer not yet integrated, adjust per-layer or per-group learning rates, or apply other custom logic.
+
+### Pass prebuilt instances
+
+The simplest approach is to pass a predefined optimizer and scheduler with your specific arguments to [`~Trainer.optimizers`]. The [`Trainer`] will skip its [`~Trainer.create_optimizer`] and [`~Trainer.create_scheduler`] methods. If you don't pass a scheduler, [`Trainer`] automatically creates one.
+
+> [!WARNING]
+> Build the optimizer after placing your model on the correct device. Parameters are resolved at construction time, before `Trainer` moves the model. In distributed training, this can silently cause incorrect behavior.
+
+```py
+import torch
+from transformers import Trainer, get_cosine_schedule_with_warmup
+
+optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5)
+scheduler = get_cosine_schedule_with_warmup(
+    optimizer, num_warmup_steps=500, num_training_steps=10_000
+)
+
+trainer = Trainer(
+    ...
+    optimizers=(optimizer, scheduler),
+)
+```
+
+[`Trainer`] skips its own [`~Trainer.create_optimizer`] and [`~Trainer.create_scheduler`] methods with this approach, so you need to specify your own parameter groups. Your model must also already be on the correct device because parameters are resolved at construction time, before [`Trainer`] moves the model.
+
+### Pass a class and kwargs
+
+Another option is [`~Trainer.optimizer_cls_and_kwargs`]. Pass a custom optimizer class while delegating parameter grouping and device placement to [`Trainer`].
+
+[`Trainer`] defers building the optimizer until [`~Trainer.create_optimizer`] runs, so the model is placed on the correct device automatically.
+
+```py
+import torch
+
+trainer = Trainer(
+    ...
+    optimizer_cls_and_kwargs=(
+        torch.optim.SGD,
+        {"momentum": 0.9, "nesterov": True}
+    ),
+)
+```
+
+This approach doesn't allow a custom scheduler, and you can't use [`~Trainer.optimizers`] and [`~Trainer.optimizer_cls_and_kwargs`] at the same time.
+
+### Override create_optimizer and create_scheduler
+
+The most flexible option is subclassing [`~Trainer.create_optimizer`] and [`~Trainer.create_scheduler`] for full control. Both methods run *during* [`~Trainer.train`].
+
+The example below subclasses [`~Trainer.create_scheduler`] to use the [OneCycleLR](https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.OneCycleLR.html) scheduler which isn't available in [`SchedulerType`].
+
+For each method, make sure to assign to `self` and return it.
+
+1. Assign `OneCycleLR` to `self.lr_scheduler`.
+2. Set `self._created_lr_scheduler = True`, otherwise [`Trainer`] rebuilds the scheduler and overwrites `OneCycleLR`.
+3. Return `self.lr_scheduler`.
+
+```py
+import torch
+from transformers import Trainer
+
+class MyTrainer(Trainer):
+
+    def create_scheduler(self, num_training_steps, optimizer=None):
+        optimizer = optimizer or self.optimizer
+        self.lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=0.1,
+            total_steps=num_training_steps,
+        )
+        self._created_lr_scheduler = True
+        return self.lr_scheduler
+```
+
+You don't need to override [`~Trainer.create_optimizer`] if the default optimizer class works. Extending a method with `super()` is often easier than replacing it entirely. The example below adds an extra parameter group while keeping everything else the same.
+
+```py
+class MyTrainer(Trainer):
+    def create_optimizer(self, model=None):
+        super().create_optimizer(model)  # builds the default two param groups
+        # add extra param group
+        self.optimizer.add_param_group({
+            "params": self.model.classifier.parameters(),
+            "lr": self.args.learning_rate * 10,
+        })
+        return self.optimizer
+```

@@ -165,7 +165,7 @@
     - local: data_collators
       title: Data collators
     - local: optimizers
-      title: Optimizers
+      title: Optimizers and schedulers
     - local: hpo_train
       title: Hyperparameter search
     title: Customization
