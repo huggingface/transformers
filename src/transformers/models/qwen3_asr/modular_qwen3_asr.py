@@ -44,9 +44,9 @@ from ..qwen3_omni_moe.processing_qwen3_omni_moe import (
 )
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerTextRMSNorm, rotate_half, repeat_kv, apply_rotary_pos_emb,
-    eager_attention_forward, Qwen3OmniMoeThinkerTextAttention, 
-    Qwen3OmniMoeThinkerTextMLP, Qwen3OmniMoeThinkerTextDecoderLayer,
-    _get_feat_extract_output_lengths, Qwen3OmniMoePreTrainedModelForConditionalGeneration
+    eager_attention_forward, Qwen3OmniMoeThinkerTextAttention, Qwen3OmniMoeThinkerTextMLP, 
+    Qwen3OmniMoeThinkerTextDecoderLayer, _get_feat_extract_output_lengths, 
+    Qwen3OmniMoePreTrainedModelForConditionalGeneration, Qwen3OmniMoeAudioAttention,
 )
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
@@ -712,76 +712,8 @@ class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedMode
         return position_ids, mrope_position_deltas
 
 
-class Qwen3ASRAudioAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config):
-        super().__init__()
-        self.embed_dim = config.d_model
-        self.num_heads = config.encoder_attention_heads
-        self.dropout = config.attention_dropout
-        self.head_dim = self.embed_dim // self.num_heads
-        self.num_key_value_groups = 1  # needed for eager attention
-        self.config = config
-
-        if (self.head_dim * self.num_heads) != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
-                f" and `num_heads`: {self.num_heads})."
-            )
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = 0.0
-        self.is_decoder = False
-        self.is_causal = False
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
-
-        seq_length, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
-        key_states = self.k_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
-        value_states = self.v_proj(hidden_states).reshape(seq_length, self.num_heads, -1)
-
-        query_states = query_states.transpose(0, 1).unsqueeze(0)
-        key_states = key_states.transpose(0, 1).unsqueeze(0)
-        value_states = value_states.transpose(0, 1).unsqueeze(0)
-        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, _ = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask=attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            cu_seq_lens_q=cu_seqlens,  # pass cu seq lens for FA2
-            cu_seq_lens_k=cu_seqlens,
-            max_length_q=max_seqlen,
-            max_length_k=max_seqlen,
-            is_causal=False,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(seq_length, -1).contiguous()
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output
+class Qwen3ASRAudioAttention(Qwen3OmniMoeAudioAttention):
+    pass
 
 
 class Qwen3ASRAudioEncoderLayer(GradientCheckpointingLayer):
