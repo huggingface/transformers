@@ -563,8 +563,8 @@ class GenerationMixin(ContinuousMixin):
             causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
             attention_mask = causal_mask_creation_function(
                 config=self.config,
-                # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
-                inputs_embeds=torch.empty((batch_size, sequence_length), dtype=self.dtype),
+                # we only need batch size, seq_length, dtype and device here - so we pass a 0-sized tensor with only the metadata
+                inputs_embeds=torch.empty((batch_size, sequence_length, 0), dtype=self.dtype, device=input_ids.device),
                 attention_mask=attention_mask,
                 cache_position=model_inputs.get("cache_position"),
                 past_key_values=model_inputs.get("past_key_values"),
