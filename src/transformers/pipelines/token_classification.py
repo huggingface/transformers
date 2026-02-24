@@ -152,6 +152,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         is_split_into_words: bool = False,
         stride: int | None = None,
         delimiter: str | None = None,
+        grouped_entities: bool | None = None,
     ):
         preprocess_params = {}
         preprocess_params["is_split_into_words"] = is_split_into_words
@@ -163,6 +164,14 @@ class TokenClassificationPipeline(ChunkPipeline):
             preprocess_params["offset_mapping"] = offset_mapping
 
         postprocess_params = {}
+        if grouped_entities is not None:
+            if aggregation_strategy is not None:
+                raise ValueError(
+                    "Cannot specify both `grouped_entities` and `aggregation_strategy`. "
+                    "Please use `aggregation_strategy` only, as `grouped_entities` is deprecated."
+                )
+            aggregation_strategy = AggregationStrategy.SIMPLE if grouped_entities else AggregationStrategy.NONE
+
         if aggregation_strategy is not None:
             if isinstance(aggregation_strategy, str):
                 aggregation_strategy = AggregationStrategy[aggregation_strategy.upper()]
