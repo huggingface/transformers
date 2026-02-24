@@ -131,6 +131,9 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
             Beginning of stream token id.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.0001):
             The aux loss factor for the loss.
+        output_router_logits (`bool`, *optional*, defaults to `False`):
+            Whether or not the router logits should be returned by the model. Enabling this will also
+            allow the model to output the auxiliary loss.
 
     ```python
     >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig
@@ -193,6 +196,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         eos_token_id: int | None = None,
         bos_token_id: int | None = None,
         router_aux_loss_coef: float | None = 0.0001,
+        output_router_logits: bool | None = False,
         **kwargs,
     ):
         self.pad_token_id = pad_token_id
@@ -226,6 +230,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.output_router_logits = output_router_logits
         PreTrainedConfig.__init__(self, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
 
