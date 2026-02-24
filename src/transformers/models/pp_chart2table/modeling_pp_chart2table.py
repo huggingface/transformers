@@ -4,6 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pp_chart2table.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+import collections
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional, Union
@@ -34,398 +35,314 @@ from .configuration_pp_chart2table import PPChart2TableConfig, PPChart2TableText
 
 
 class PPChart2TableVisionPatchEmbed(nn.Module):
-    r"""
-    Image to Patch Embedding layer for PP-Chart2Table vision encoder.
-
-    This module converts raw chart images (HWC format) into flattened patch embeddings via a 2D convolution,
-    followed by dimension permutation to align with the vision transformer's input format.
-
-    Args:
-        kernel_size (`tuple[int, int]`, *optional*, defaults to `(16, 16)`):
-            Size of the convolution kernel (patch size) for splitting images into patches.
-        stride (`tuple[int, int]`, *optional*, defaults to `(16, 16)`):
-            Stride of the convolution operation (matches patch size for non-overlapping patches).
-        padding (`tuple[int, int]`, *optional*, defaults to `(0, 0)`):
-            Padding applied to the input image before convolution (ensures patch alignment).
-        in_chans (`int`, *optional*, defaults to 3):
-            Number of input channels (3 for RGB chart images).
-        embed_dim (`int`, *optional*, defaults to 768):
-            Dimensionality of the output patch embeddings (hidden size of the vision transformer).
-
-    Shape:
-        - Input: `(B, C, H, W)` (batch size, channels, height, width)
-        - Output: `(B, H_out, W_out, C_out)` (batch size, patch height, patch width, embedding dim)
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
-    def __init__(
-        self,
-        kernel_size: tuple[int, int] = (16, 16),
-        stride: tuple[int, int] = (16, 16),
-        padding: tuple[int, int] = (0, 0),
-        in_chans: int = 3,
-        embed_dim: int = 768,
-    ) -> None:
+    def __init__(self, config):
         super().__init__()
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=kernel_size, stride=stride, padding=padding)
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.embed_dim
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.proj(hidden_states)
-        hidden_states = hidden_states.permute(0, 2, 3, 1)
-        return hidden_states
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+
+    def forward(self, pixel_values):
+        batch_size, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        if height != self.image_size[0] or width != self.image_size[1]:
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            )
+        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
+        return embeddings
 
 
 class PPChart2TableVisionMLPBlock(nn.Module):
-    r"""
-    Multi-Layer Perceptron (MLP) block for PP-Chart2Table vision transformer layers.
-
-    Implements a two-layer feed-forward network with activation function, used in the vision transformer's
-    decoder layers to project features to a higher dimension and back.
-
-    Args:
-        embedding_dim (`int`):
-            Dimensionality of the input/output embeddings (hidden size of the transformer layer).
-        mlp_dim (`int`):
-            Dimensionality of the intermediate (hidden) layer in the MLP (typically 4x embedding_dim).
-        act (`Type[nn.Module]`, *optional*, defaults to `torch.nn.GELU`):
-            Non-linear activation function to apply between the two linear layers.
-
-    Shape:
-        - Input: `(B, H, W, embedding_dim)` or `(B, N, embedding_dim)` (N = H*W)
-        - Output: Same shape as input
-    """
-
-    def __init__(
-        self,
-        embedding_dim: int,
-        mlp_dim: int,
-        act: type[nn.Module] = torch.nn.GELU,
-    ) -> None:
+    def __init__(self, config) -> None:
         super().__init__()
-        self.lin1 = nn.Linear(embedding_dim, mlp_dim)
-        self.lin2 = nn.Linear(mlp_dim, embedding_dim)
-        self.act = act()
+        self.lin1 = nn.Linear(config.embed_dim, int(config.embed_dim * config.mlp_ratio))
+        self.lin2 = nn.Linear(int(config.embed_dim * config.mlp_ratio), config.embed_dim)
+        self.act = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.lin2(self.act(self.lin1(hidden_states)))
-
-
-class PPChart2TableVisionLayerNorm2d(nn.Module):
-    r"""
-    2D Layer Normalization for spatial feature maps (adapted for PP-Chart2Table vision encoder).
-
-    Applies layer normalization over the channel dimension of 2D feature maps, with learnable scale/bias parameters
-    broadcasted across spatial dimensions (height/width).
-
-    Args:
-        num_channels (`int`):
-            Number of channels in the input feature map (embedding dimension).
-        epsilon (`float`, *optional*, defaults to `1e-06`):
-            Small value added to variance to avoid division by zero.
-
-    Shape:
-        - Input: `(B, C, H, W)` (batch size, channels, height, width)
-        - Output: Same shape as input
-    """
-
-    def __init__(self, num_channels: int, epsilon: float = 1e-06) -> None:
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(num_channels))
-        self.bias = nn.Parameter(torch.zeros(num_channels))
-        self.epsilon = epsilon
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        u = hidden_states.mean(dim=1, keepdim=True)
-        s = (hidden_states - u).pow(2).mean(dim=1, keepdim=True)
-        hidden_states = (hidden_states - u) / torch.sqrt(s + self.epsilon)
-        hidden_states = self.weight[:, None, None] * hidden_states + self.bias[:, None, None]
+        hidden_states = self.lin1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.lin2(hidden_states)
         return hidden_states
 
 
-def get_rel_pos(q_size: int, k_size: int, rel_pos: torch.Tensor) -> torch.Tensor:
-    r"""
-    Get relative positional embeddings for query and key sequences, with interpolation for mismatched sizes.
-
-    Args:
-        q_size (`int`):
-            Spatial size (height/width) of query feature map
-        k_size (`int`):
-            Spatial size (height/width) of key feature map
-        rel_pos (`torch.Tensor`):
-            Precomputed relative positional embeddings with shape [max_rel_dist_original, dim]
-
-    Returns:
-        `torch.Tensor`:
-            Interpolated relative positional embeddings for the query-key pair, shape [q_size, k_size, dim]
+class PPChart2TableVisionLayerNorm(nn.LayerNorm):
+    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
+    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
+    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
-    max_rel_dist = int(2 * max(q_size, k_size) - 1)
-    if rel_pos.shape[0] != max_rel_dist:
+
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
+        if data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {data_format}")
+        self.data_format = data_format
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+        """
+        if self.data_format == "channels_first":
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
+        else:
+            features = super().forward(features)
+        return features
+
+
+class PPChart2TableVisionAttention(nn.Module):
+    """Multi-head Attention block with relative position embeddings."""
+
+    def __init__(self, config, window_size):
+        super().__init__()
+        input_size = (
+            (config.image_size // config.patch_size, config.image_size // config.patch_size)
+            if window_size == 0
+            else (window_size, window_size)
+        )
+
+        self.num_attention_heads = config.num_attention_heads
+        head_dim = config.embed_dim // config.num_attention_heads
+        self.scale = head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.qkv = nn.Linear(config.embed_dim, config.embed_dim * 3, bias=config.qkv_bias)
+        self.proj = nn.Linear(config.embed_dim, config.embed_dim)
+
+        self.use_rel_pos = config.use_rel_pos
+        if self.use_rel_pos:
+            if input_size is None:
+                raise ValueError("Input size must be provided if using relative positional encoding.")
+
+            # initialize relative positional embeddings
+            self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
+            self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
+
+    def get_rel_pos(self, q_size: int, k_size: int, rel_pos: torch.Tensor) -> torch.Tensor:
+        """
+        Get relative positional embeddings according to the relative positions of
+            query and key sizes.
+
+        Args:
+            q_size (int):
+                size of the query.
+            k_size (int):
+                size of key k.
+            rel_pos (`torch.Tensor`):
+                relative position embeddings (L, channel).
+
+        Returns:
+            Extracted positional embeddings according to relative positions.
+        """
+        max_rel_dist = int(2 * max(q_size, k_size) - 1)
+        # Interpolate rel pos.
         rel_pos_resized = F.interpolate(
             rel_pos.reshape(1, rel_pos.shape[0], -1).permute(0, 2, 1),
             size=max_rel_dist,
             mode="linear",
         )
         rel_pos_resized = rel_pos_resized.reshape(-1, max_rel_dist).permute(1, 0)
-    else:
-        rel_pos_resized = rel_pos
 
-    q_coords = torch.arange(q_size)[:, None] * max(k_size / q_size, 1.0)
-    k_coords = torch.arange(k_size)[None, :] * max(q_size / k_size, 1.0)
-    relative_coords = q_coords - k_coords + (k_size - 1) * max(q_size / k_size, 1.0)
-    return rel_pos_resized[relative_coords.long()]
+        # Scale the coords with short length if shapes for q and k are different.
+        q_coords = torch.arange(q_size)[:, None] * max(k_size / q_size, 1.0)
+        k_coords = torch.arange(k_size)[None, :] * max(q_size / k_size, 1.0)
+        relative_coords = (q_coords - k_coords) + (k_size - 1) * max(q_size / k_size, 1.0)
 
+        return rel_pos_resized[relative_coords.long()]
 
-def add_decomposed_rel_pos(
-    attn: torch.Tensor,
-    q: torch.Tensor,
-    rel_pos_h: torch.Tensor,
-    rel_pos_w: torch.Tensor,
-    q_size: tuple[int, int],
-    k_size: tuple[int, int],
-) -> torch.Tensor:
-    r"""
-    Add decomposed relative positional embeddings (height and width separately) to attention scores.
-
-    Args:
-        attn (`torch.Tensor`):
-            Attention scores with shape [B, q_h*q_w, k_h*k_w]
-        q (`torch.Tensor`):
-            Query tensor with shape [B, q_h*q_w, dim]
-        rel_pos_h (`torch.Tensor`):
-            Precomputed relative positional embeddings for height dimension
-        rel_pos_w (`torch.Tensor`):
-            Precomputed relative positional embeddings for width dimension
-        q_size (`tuple[int, int]`):
-            Spatial size (q_h, q_w) of query feature map
-        k_size (`tuple[int, int]`):
-            Spatial size (k_h, k_w) of key feature map
-
-    Returns:
-        `torch.Tensor`:
-            Attention scores with added relative positional embeddings, shape [B, q_h*q_w, k_h*k_w]
-    """
-    q_h, q_w = q_size
-    k_h, k_w = k_size
-    Rh = get_rel_pos(q_h, k_h, rel_pos_h)
-    Rw = get_rel_pos(q_w, k_w, rel_pos_w)
-
-    B, _, dim = q.shape
-    r_q = q.reshape(B, q_h, q_w, dim)
-    rel_h = torch.einsum("bhwc,hkc->bhwk", r_q, Rh)
-    rel_w = torch.einsum("bhwc,wkc->bhwk", r_q, Rw)
-
-    attn = (attn.reshape(B, q_h, q_w, k_h, k_w) + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]).reshape(
-        B, q_h * q_w, k_h * k_w
-    )
-
-    return attn
-
-
-class PPChart2TableVisionAttention(nn.Module):
-    r"""
-    Multi-Head Self-Attention (MHSA) layer for PP-Chart2Table vision encoder, with optional relative positional encoding.
-
-    Implements standard multi-head attention with query/key/value projection, scaled dot-product attention,
-    and optional decomposed relative positional embeddings (height/width separate) for spatial awareness.
-
-    Args:
-        dim (`int`):
-            Dimensionality of the input embeddings (hidden size of the transformer layer).
-        num_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads (must divide `dim` evenly).
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add bias terms to the query/key/value projection layers.
-        use_rel_pos (`bool`, *optional*, defaults to `False`):
-            Whether to use relative positional encoding for spatial attention.
-        rel_pos_zero_init (`bool`, *optional*, defaults to `True`):
-            Whether to initialize relative positional embeddings to zero (stable training).
-        input_size (`Tuple[int, int]`, *optional*):
-            Spatial size (H, W) of the input feature map (required if `use_rel_pos=True`).
-
-    Shape:
-        - Input: `(B, H, W, dim)` (batch size, height, width, embedding dim)
-        - Output: Same shape as input
-    """
-
-    def __init__(
+    def get_decomposed_rel_pos(
         self,
-        dim: int,
-        num_heads: int = 8,
-        qkv_bias: bool = True,
-        use_rel_pos: bool = False,
-        rel_pos_zero_init: bool = True,
-        input_size: Optional[tuple[int, int]] = None,
-    ) -> None:
+        query: torch.Tensor,
+        rel_pos_h: torch.Tensor,
+        rel_pos_w: torch.Tensor,
+        q_size: tuple[int, int],
+        k_size: tuple[int, int],
+    ) -> torch.Tensor:
+        """
+        Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
+        https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py
+
+        Args:
+            query (`torch.Tensor`):
+                query q in the attention layer with shape (batch_size, query_height * query_width, channel).
+            rel_pos_h (`torch.Tensor`):
+                relative position embeddings (Lh, channel) for height axis.
+            rel_pos_w (`torch.Tensor`):
+                relative position embeddings (Lw, channel) for width axis.
+            q_size (tuple):
+                spatial sequence size of query q with (query_height, query_width).
+            k_size (tuple):
+                spatial sequence size of key k with (key_height, key_width).
+
+        Returns:
+            decomposed_rel_pos (`torch.Tensor`):
+                decomposed relative position embeddings.
+        """
+        query_height, query_width = q_size
+        key_height, key_width = k_size
+        relative_position_height = self.get_rel_pos(query_height, key_height, rel_pos_h)
+        relative_position_width = self.get_rel_pos(query_width, key_width, rel_pos_w)
+
+        batch_size, _, dim = query.shape
+        reshaped_query = query.reshape(batch_size, query_height, query_width, dim)
+        rel_h = torch.einsum("bhwc,hkc->bhwk", reshaped_query, relative_position_height)
+        rel_w = torch.einsum("bhwc,wkc->bhwk", reshaped_query, relative_position_width)
+
+        decomposed_rel_pos = rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
+
+        return decomposed_rel_pos
+
+    def forward(self, hidden_states: torch.Tensor, output_attentions=None) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, height, width, _ = hidden_states.shape
+        # qkv with shape (3, batch_size, nHead, height * width, channel)
+        qkv = (
+            self.qkv(hidden_states)
+            .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
+            .permute(2, 0, 3, 1, 4)
+        )
+        # q, k, v with shape (batch_size * nHead, height * width, channel)
+        query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
+
+        attn_weights = (query * self.scale) @ key.transpose(-2, -1)
+
+        if self.use_rel_pos:
+            decomposed_rel_pos = self.get_decomposed_rel_pos(
+                query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
+            )
+            decomposed_rel_pos = decomposed_rel_pos.reshape_as(attn_weights)
+            attn_weights = attn_weights + decomposed_rel_pos
+
+        attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
+
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+
+        attn_output = (attn_probs @ value).reshape(batch_size, self.num_attention_heads, height, width, -1)
+        attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
+
+        attn_output = self.proj(attn_output)
+        return attn_output, attn_weights
+
+
+class PPChart2TableVisionDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config, window_size) -> None:
         super().__init__()
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
-        self.scale = head_dim**-0.5
+        self.layer_norm1 = nn.LayerNorm(config.embed_dim)
+        self.attn = PPChart2TableVisionAttention(config, window_size=window_size)
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.proj = nn.Linear(dim, dim)
+        self.layer_norm2 = nn.LayerNorm(config.embed_dim)
+        self.mlp = PPChart2TableVisionMLPBlock(config)
+        self.window_size = window_size
 
-        self.use_rel_pos = use_rel_pos
-        if self.use_rel_pos:
-            assert input_size is not None, "Input size must be provided if using relative positional encoding."
-            self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
-            self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
+    def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> tuple[torch.Tensor, tuple[int, int]]:
+        """
+        Args:
+        Partition into non-overlapping windows with padding if needed.
+            hidden_states (tensor): input tokens with [batch_size, height, width, channel]. window_size (int): window
+            size.
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        B, H, W, _ = hidden_states.shape
-        qkv = self.qkv(hidden_states).reshape(B, H * W, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv.reshape(3, B * self.num_heads, H * W, -1).unbind(dim=0)
-        attn = (q * self.scale) @ k.transpose(1, 2)
+        Returns:
+            windows: windows after partition with [batch_size * num_windows, window_size, window_size, channel].
+            (pad_height, pad_width): padded height and width before partition
+        """
+        batch_size, height, width, channel = hidden_states.shape
 
-        if self.use_rel_pos:
-            attn = add_decomposed_rel_pos(attn, q, self.rel_pos_h, self.rel_pos_w, (H, W), (H, W))
+        pad_h = (window_size - height % window_size) % window_size
+        pad_w = (window_size - width % window_size) % window_size
+        hidden_states = F.pad(hidden_states, (0, 0, 0, pad_w, 0, pad_h))
+        pad_height, pad_width = height + pad_h, width + pad_w
 
-        attn = F.softmax(attn, dim=-1)
-        hidden_states = (attn @ v).reshape(B, self.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
-        hidden_states = self.proj(hidden_states)
+        hidden_states = hidden_states.reshape(
+            batch_size, pad_height // window_size, window_size, pad_width // window_size, window_size, channel
+        )
+        windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(-1, window_size, window_size, channel)
+        return windows, (pad_height, pad_width)
+
+    def window_unpartition(
+        self, windows: torch.Tensor, window_size: int, padding_shape: tuple[int, int], original_shape: tuple[int, int]
+    ) -> torch.Tensor:
+        """
+        Args:
+        Window unpartition into original sequences and removing padding.
+            hidden_states (tensor):
+                input tokens with [batch_size * num_windows, window_size, window_size, channel].
+            window_size (int):
+                window size.
+            padding_shape (Tuple):
+                padded height and width (pad_height, pad_width).
+            original_shape (Tuple): original height and width (height, width) before padding.
+
+        Returns:
+            hidden_states: unpartitioned sequences with [batch_size, height, width, channel].
+        """
+        pad_height, pad_width = padding_shape
+        height, width = original_shape
+        batch_size = windows.shape[0] // (pad_height * pad_width // window_size // window_size)
+        hidden_states = windows.reshape(
+            batch_size, pad_height // window_size, pad_width // window_size, window_size, window_size, -1
+        )
+        hidden_states = (
+            hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().reshape(batch_size, pad_height, pad_width, -1)
+        )
+
+        hidden_states = hidden_states[:, :height, :width, :].contiguous()
+        return hidden_states
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.FloatTensor]:
+        residual = hidden_states
+        hidden_states = self.layer_norm1(hidden_states)
+        # Window partition
+        if self.window_size > 0:
+            height, width = hidden_states.shape[1], hidden_states.shape[2]
+            hidden_states, padding_shape = self.window_partition(hidden_states, self.window_size)
+
+        hidden_states, attn_weights = self.attn(
+            hidden_states=hidden_states,
+        )
+        # Reverse window partition
+        if self.window_size > 0:
+            hidden_states = self.window_unpartition(hidden_states, self.window_size, padding_shape, (height, width))
+
+        hidden_states = residual + hidden_states
+        layernorm_output = self.layer_norm2(hidden_states)
+        hidden_states = hidden_states + self.mlp(layernorm_output)
         return hidden_states
 
 
-def window_partition(hidden_states: torch.Tensor, window_size: int) -> tuple[torch.Tensor, tuple[int, int]]:
-    r"""
-    Partition 2D feature maps into non-overlapping windows, with padding to ensure dimensions are divisible by window size.
-
-    Args:
-        hidden_states (`torch.Tensor`):
-            Input feature map with shape [B, H, W, C], where:
-            - B: batch size
-            - H: height of feature map
-            - W: width of feature map
-            - C: channel dimension
-        window_size (`int`):
-            Size of each non-overlapping window (square window).
-
-    Returns:
-        tuple[torch.Tensor, tuple[int, int]]:
-            - windows: Partitioned windows with shape [num_windows * B, window_size, window_size, C],
-              where num_windows = (Hp // window_size) * (Wp // window_size)
-            - (Hp, Wp): Padded height and width of the feature map (after padding)
-    """
-    B, H, W, C = hidden_states.shape
-
-    pad_h = (window_size - H % window_size) % window_size
-    pad_w = (window_size - W % window_size) % window_size
-    if pad_h > 0 or pad_w > 0:
-        hidden_states = F.pad(hidden_states, (0, 0, 0, pad_w, 0, pad_h))
-    Hp, Wp = H + pad_h, W + pad_w
-
-    hidden_states = hidden_states.reshape(B, Hp // window_size, window_size, Wp // window_size, window_size, C)
-    windows = hidden_states.permute(0, 1, 3, 2, 4, 5).reshape(-1, window_size, window_size, C)
-    return windows, (Hp, Wp)
-
-
-def window_unpartition(
-    windows: torch.Tensor,
-    window_size: int,
-    pad_hw: tuple[int, int],
-    hw: tuple[int, int],
-) -> torch.Tensor:
-    r"""
-    Reverse operation of window_partition: merge windows back to original 2D feature map shape, removing padding.
-
-    Args:
-        windows (`torch.Tensor`):
-            Partitioned windows with shape [num_windows * B, window_size, window_size, C]
-        window_size (`int`):
-            Size of each non-overlapping window (must match window_partition's window_size)
-        pad_hw (`tuple[int, int]`):
-            Padded height and width (Hp, Wp) returned by window_partition
-        hw (`tuple[int, int]`):
-            Original height and width (H, W) of feature map before padding
-
-    Returns:
-        `torch.Tensor`:
-            Reconstructed feature map with shape [B, H, W, C] (original dimensions before padding)
-    """
-    Hp, Wp = pad_hw
-    H, W = hw
-    B = windows.shape[0] // (Hp * Wp // window_size // window_size)
-    hidden_states = windows.reshape(B, Hp // window_size, Wp // window_size, window_size, window_size, -1)
-    hidden_states = hidden_states.permute(0, 1, 3, 2, 4, 5).reshape(B, Hp, Wp, -1)
-    if Hp > H or Wp > W:
-        hidden_states = hidden_states[:, :H, :W, :]
-    return hidden_states
-
-
-class PPChart2TableVisionDecoderLayer(nn.Module):
-    r"""
-    Single decoder layer of the PP-Chart2Table vision transformer, with optional windowed attention.
-
-    Implements the standard transformer decoder layer structure:
-    Layer Norm → Multi-Head Attention (with residual) → Layer Norm → MLP (with residual)
-    Supports windowed attention (SW-MHA) for large feature maps to reduce computation.
-
-    Args:
-        dim (`int`):
-            Dimensionality of the input embeddings (hidden size of the transformer layer).
-        num_heads (`int`):
-            Number of attention heads (passed to MHSA layer).
-        mlp_ratio (`float`, *optional*, defaults to 4.0):
-            Ratio of MLP hidden dimension to embedding dimension (mlp_dim = dim * mlp_ratio).
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in Q/K/V projection (passed to MHSA layer).
-        norm_layer (`Type[nn.Module]`, *optional*, defaults to `nn.LayerNorm`):
-            Normalization layer to use (LayerNorm for flattened patches, LayerNorm2d for 2D feature maps).
-        act_layer (`Type[nn.Module]`, *optional*, defaults to `nn.GELU`):
-            Activation function for MLP block.
-        use_rel_pos (`bool`, *optional*, defaults to `False`):
-            Whether to use relative positional encoding (passed to MHSA layer).
-        rel_pos_zero_init (`bool`, *optional*, defaults to `True`):
-            Whether to zero-initialize relative positional embeddings (passed to MHSA layer).
-        window_size (`int`, *optional*, defaults to 0):
-            Size of attention windows (0 = full attention, >0 = windowed attention).
-        input_size (`Tuple[int, int]`, *optional*):
-            Spatial size of input feature map (passed to MHSA layer for relative positional encoding).
-
-    Shape:
-        - Input: `(B, H, W, dim)` (batch size, height, width, embedding dim)
-        - Output: Same shape as input
-    """
-
-    def __init__(
-        self,
-        dim: int,
-        num_heads: int,
-        mlp_ratio: float = 4.0,
-        qkv_bias: bool = True,
-        norm_layer: type[nn.Module] = nn.LayerNorm,
-        act_layer: type[nn.Module] = nn.GELU,
-        use_rel_pos: bool = False,
-        rel_pos_zero_init: bool = True,
-        window_size: int = 0,
-        input_size: Optional[tuple[int, int]] = None,
-    ) -> None:
+class PPChart2TableVisionNeck(nn.Module):
+    def __init__(self, config: PPChart2TableVisionConfig):
         super().__init__()
-        self.norm1 = norm_layer(dim)
-        self.attn = PPChart2TableVisionAttention(
-            dim,
-            num_heads=num_heads,
-            qkv_bias=qkv_bias,
-            use_rel_pos=use_rel_pos,
-            rel_pos_zero_init=rel_pos_zero_init,
-            input_size=input_size if window_size == 0 else (window_size, window_size),
-        )
+        self.config = config
 
-        self.norm2 = norm_layer(dim)
-        self.mlp = PPChart2TableVisionMLPBlock(embedding_dim=dim, mlp_dim=int(dim * mlp_ratio), act=act_layer)
+        self.conv1 = nn.Conv2d(config.embed_dim, config.output_channels, kernel_size=1, bias=False)
+        self.layer_norm1 = PPChart2TableVisionLayerNorm(config.output_channels, data_format="channels_first")
+        self.conv2 = nn.Conv2d(config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False)
+        self.layer_norm2 = PPChart2TableVisionLayerNorm(config.output_channels, data_format="channels_first")
 
-        self.window_size = window_size
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.permute(0, 3, 1, 2)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.layer_norm1(hidden_states)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        shortcut = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        if self.window_size > 0:
-            H, W = hidden_states.shape[1], hidden_states.shape[2]
-            hidden_states, pad_hw = window_partition(hidden_states, self.window_size)
-        hidden_states = self.attn(hidden_states)
-
-        if self.window_size > 0:
-            hidden_states = window_unpartition(hidden_states, self.window_size, pad_hw, (H, W))
-        hidden_states = shortcut + hidden_states
-        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
+        hidden_states = self.conv2(hidden_states)
+        hidden_states = self.layer_norm2(hidden_states)
         return hidden_states
 
 
@@ -483,60 +400,27 @@ class PPChart2TableVisionModel(PPChart2TableVisionPreTrainedModel):
     def __init__(
         self,
         config: PPChart2TableVisionConfig,
-        in_chans: int = 3,
-        norm_layer: type[nn.Module] = nn.LayerNorm,
-        act_layer: type[nn.Module] = nn.GELU,
-        rel_pos_zero_init: bool = True,
     ) -> None:
         super().__init__(config)
-        self.img_size = config.img_size
+        self.image_size = config.image_size
 
-        self.patch_embed = PPChart2TableVisionPatchEmbed(
-            kernel_size=(config.patch_size, config.patch_size),
-            stride=(config.patch_size, config.patch_size),
-            in_chans=in_chans,
-            embed_dim=config.embed_dim,
-        )
+        self.patch_embed = PPChart2TableVisionPatchEmbed(config)
 
         self.pos_embed = nn.Parameter(
             torch.zeros(
-                1, config.img_size // config.patch_size, config.img_size // config.patch_size, config.embed_dim
+                1, config.image_size // config.patch_size, config.image_size // config.patch_size, config.embed_dim
             )
         )
 
         self.blocks = nn.ModuleList()
         for i in range(config.depth):
             block = PPChart2TableVisionDecoderLayer(
-                dim=config.embed_dim,
-                num_heads=config.num_heads,
-                mlp_ratio=config.mlp_ratio,
-                qkv_bias=config.qkv_bias,
-                norm_layer=norm_layer,
-                act_layer=act_layer,
-                use_rel_pos=config.use_rel_pos,
-                rel_pos_zero_init=rel_pos_zero_init,
+                config,
                 window_size=config.window_size if i not in config.global_attn_indexes else 0,
-                input_size=(config.img_size // config.patch_size, config.img_size // config.patch_size),
             )
             self.blocks.append(block)
 
-        self.neck = nn.Sequential(
-            nn.Conv2d(
-                config.embed_dim,
-                config.out_chans,
-                kernel_size=1,
-                bias=False,
-            ),
-            PPChart2TableVisionLayerNorm2d(config.out_chans),
-            nn.Conv2d(
-                config.out_chans,
-                config.out_chans,
-                kernel_size=3,
-                padding=1,
-                bias=False,
-            ),
-            PPChart2TableVisionLayerNorm2d(config.out_chans),
-        )
+        self.neck = PPChart2TableVisionNeck(config)
 
         self.net_2 = nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1, bias=False)
         self.net_3 = nn.Conv2d(512, config.hidden_size, kernel_size=3, stride=2, padding=1, bias=False)
@@ -546,9 +430,9 @@ class PPChart2TableVisionModel(PPChart2TableVisionPreTrainedModel):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.patch_embed(hidden_states)
         hidden_states = hidden_states + self.pos_embed
-        for blk in self.blocks:
-            hidden_states = blk(hidden_states)
-        hidden_states = self.neck(hidden_states.permute(0, 3, 1, 2))
+        for block in self.blocks:
+            hidden_states = block(hidden_states)
+        hidden_states = self.neck(hidden_states)
         hidden_states = self.net_2(hidden_states)
         hidden_states = self.net_3(hidden_states)
         return hidden_states

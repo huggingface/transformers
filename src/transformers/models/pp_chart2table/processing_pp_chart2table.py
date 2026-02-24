@@ -41,7 +41,7 @@ class PPChart2TableProcessor(ProcessorMixin):
         else:
             image_inputs = {}
         img_cnt = len(image_inputs)
-        b, c, h, w = image_inputs["pixel_values"].shape
+        _, _, h, _ = image_inputs["pixel_values"].shape
         num_patches = h // self.image_processor.patch_size // self.image_processor.merge_size
         prompt = (
             "<|im_start|>system\n"

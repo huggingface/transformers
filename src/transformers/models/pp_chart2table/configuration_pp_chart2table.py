@@ -31,11 +31,11 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
             Dimensionality of the patch embedding layer in the vision encoder.
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the hidden layers in the vision Transformer encoder.
-        img_size (`int`, *optional*, defaults to 1024):
+        image_size (`int`, *optional*, defaults to 1024):
             The size (resolution) of input chart images (assumed to be square).
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             Ratio of the dimensionality of the feed-forward layer to the hidden size in the vision Transformer blocks.
-        num_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each self-attention layer in the vision Transformer encoder.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each image patch extracted from the input chart image.
@@ -47,7 +47,7 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
             List of layer indexes where global attention (instead of windowed attention) is applied in the vision encoder.
         window_size (`int`, *optional*, defaults to 14):
             The size of the attention window for windowed self-attention in the vision Transformer layers.
-        out_chans (`int`, *optional*, defaults to 256):
+        output_channels (`int`, *optional*, defaults to 256):
             Number of output channels from the convolutional stem layer before patch embedding.
 
     Example:
@@ -75,15 +75,17 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         depth: int = 12,
         embed_dim: int = 768,
         hidden_size: int = 1024,
-        img_size: int = 1024,
+        num_channels: int = 3,
+        image_size: int = 1024,
         mlp_ratio: float = 4.0,
-        num_heads: int = 12,
+        num_attention_heads: int = 12,
         patch_size: int = 16,
         qkv_bias: bool = True,
         use_rel_pos: bool = True,
         global_attn_indexes: Optional[list] = None,
         window_size: int = 14,
-        out_chans: int = 256,
+        output_channels: int = 256,
+        attention_dropout: float = 0.0,
         **kwargs,
     ):
         self.im_patch_token = im_patch_token
@@ -92,15 +94,17 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         self.depth = depth
         self.embed_dim = embed_dim
         self.hidden_size = hidden_size
-        self.img_size = img_size
+        self.image_size = image_size
+        self.num_channels = num_channels
         self.mlp_ratio = mlp_ratio
-        self.num_heads = num_heads
+        self.num_attention_heads = num_attention_heads
         self.patch_size = patch_size
         self.qkv_bias = qkv_bias
         self.use_rel_pos = use_rel_pos
         self.global_attn_indexes = global_attn_indexes if global_attn_indexes is not None else [2, 5, 8, 11]
         self.window_size = window_size
-        self.out_chans = out_chans
+        self.output_channels = output_channels
+        self.attention_dropout = attention_dropout
 
         super().__init__(**kwargs)
 
@@ -295,7 +299,7 @@ class PPChart2TableConfig(PreTrainedConfig):
     >>> configuration = PPChart2TableConfig()
 
     >>> # Initializing a PPChart2Table configuration with custom vision and text sub-configs
-    >>> vision_config = {"img_size": 512, "patch_size": 8}
+    >>> vision_config = {"image_size": 512, "patch_size": 8}
     >>> text_config = {"hidden_size": 2048, "num_hidden_layers": 16}
     >>> configuration = PPChart2TableConfig(vision_config=vision_config, text_config=text_config)
 
