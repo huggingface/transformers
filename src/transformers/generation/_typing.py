@@ -48,3 +48,9 @@ class GenerativePreTrainedModel(Protocol):
     def get_compiled_call(self, compile_config: Any) -> Any: ...
     def set_experts_implementation(self, *args: Any, **kwargs: Any) -> Any: ...
     def _supports_logits_to_keep(self) -> bool: ...
+
+
+class WhisperGenerationConfigLike(Protocol):
+    """Protocol for Whisper-specific generation config fields accessed in generation internals."""
+
+    no_timestamps_token_id: int

@@ -124,11 +124,11 @@ class WatermarkDetector:
         self,
         model_config: "PreTrainedConfig",
         device: str,
-        watermarking_config: Union["WatermarkingConfig", dict] | None,
+        watermarking_config: Union["WatermarkingConfig", dict],
         ignore_repeated_ngrams: bool = False,
         max_cache_size: int = 128,
     ):
-        if watermarking_config is not None and not isinstance(watermarking_config, dict):
+        if not isinstance(watermarking_config, dict):
             watermarking_config = watermarking_config.to_dict()
 
         self.bos_token_id = (

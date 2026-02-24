@@ -15,13 +15,14 @@
 import inspect
 import math
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import torch
 
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
+from ._typing import WhisperGenerationConfigLike
 
 
 # TODO (joao): We shouldn't need this, but there would be a circular import
@@ -1965,8 +1966,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         begin_index: int,
         _detect_timestamp_from_logprob: bool | None = None,
     ):  # support for the kwargs
-        self.no_timestamps_token_id = generate_config.no_timestamps_token_id
-        self.timestamp_begin = generate_config.no_timestamps_token_id + 1
+        whisper_generate_config = cast(WhisperGenerationConfigLike, generate_config)
+        self.no_timestamps_token_id = whisper_generate_config.no_timestamps_token_id
+        self.timestamp_begin = whisper_generate_config.no_timestamps_token_id + 1
         self.eos_token_id = generate_config.eos_token_id or generate_config.bos_token_id
 
         # this variable is mostly just used for testing

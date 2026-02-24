@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from queue import Queue
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 
 if TYPE_CHECKING:
@@ -97,9 +97,7 @@ class TextStreamer(BaseStreamer):
 
         # Add the new token to the cache and decodes the entire thing.
         self.token_cache.extend(value.tolist())
-        text = self.tokenizer.decode(self.token_cache, **self.decode_kwargs)
-        if not isinstance(text, str):
-            text = text[0] if text else ""
+        text = cast(str, self.tokenizer.decode(self.token_cache, **self.decode_kwargs))
 
         # After the symbol for a new line, we flush the cache.
         if text.endswith("\n"):
@@ -122,9 +120,7 @@ class TextStreamer(BaseStreamer):
         """Flushes any remaining cache and prints a newline to stdout."""
         # Flush the cache, if it exists
         if len(self.token_cache) > 0:
-            text = self.tokenizer.decode(self.token_cache, **self.decode_kwargs)
-            if not isinstance(text, str):
-                text = text[0] if text else ""
+            text = cast(str, self.tokenizer.decode(self.token_cache, **self.decode_kwargs))
             printable_text = text[self.print_len :]
             self.token_cache = []
             self.print_len = 0
