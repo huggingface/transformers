@@ -86,7 +86,7 @@ class Qwen3ASRModelTester:
 class Qwen3ASRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase): 
     all_model_classes = (Qwen3ASRForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {
-        "automatic-speech-recognition": Qwen3ASRForConditionalGeneration,
+        "audio-text-to-text": Qwen3ASRForConditionalGeneration,
     } if is_torch_available() else {}
     
     def setUp(self):
