@@ -265,7 +265,6 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
     vision_config_class = SiglipVisionConfig
     conditional_generation_class = Gemma3ForConditionalGeneration
     sequence_classification_class = Gemma3ForSequenceClassification
-    all_model_classes = (Gemma3Model, Gemma3ForConditionalGeneration, Gemma3ForSequenceClassification)
 
     def __init__(self, parent, mm_tokens_per_image=2, **kwargs):
         kwargs.setdefault("image_size", 20)
@@ -297,7 +296,6 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
 @require_torch
 class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Gemma3Vision2TextModelTester
-    config_tester = ConfigTester
 
     test_missing_keys = False
     _is_stateful = True

@@ -59,7 +59,6 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
     conditional_generation_class = LlavaNextForConditionalGeneration
     text_config_class = LlamaConfig
     vision_config_class = CLIPVisionConfig
-    all_model_classes = (LlavaNextModel, LlavaNextForConditionalGeneration)
 
     # LlavaNext-specific: number of patches per image (1 grid patch + 1 base patch)
     num_patches_per_image = 2
