@@ -1516,7 +1516,6 @@ class TrainingArguments:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
 
         if self.report_to == "all" or self.report_to == ["all"]:
-            # Import at runtime to avoid a circular import.
             from .integrations import get_available_reporting_integrations
 
             self.report_to = get_available_reporting_integrations()
