@@ -84,14 +84,9 @@ def _supports_cutlass(block_size: list[int] | None, output_dtype: torch.dtype) -
         return False
 
 
-try:
-    _FP8_DTYPE = torch.float8_e4m3fn
-    _FP8_MIN = torch.finfo(_FP8_DTYPE).min
-    _FP8_MAX = torch.finfo(_FP8_DTYPE).max
-except AttributeError:
-    _FP8_DTYPE = None
-    _FP8_MIN, _FP8_MAX = -448, 448
-    logger.warning_once("torch.float8_e4m3fn not available")
+_FP8_DTYPE = torch.float8_e4m3fn
+_FP8_MIN = torch.finfo(_FP8_DTYPE).min
+_FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
 
 # Copied from https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/main/inference/kernel.py
@@ -750,7 +745,9 @@ def replace_with_fp8_linear(
         with torch.device("meta"):
             if module_name.endswith(".experts"):
                 new_module = FP8Expert(
-                    config=model.config, block_size=quantization_config.weight_block_size, **module_kwargs
+                    config=model.config.get_text_config(),
+                    block_size=quantization_config.weight_block_size,
+                    **module_kwargs,
                 )
             elif isinstance(module, nn.Linear):
                 new_module = FP8Linear(

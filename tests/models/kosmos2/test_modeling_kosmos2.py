@@ -44,6 +44,7 @@ from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
+    global_rng,
     ids_tensor,
     random_attention_mask,
 )
@@ -308,6 +309,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.config_tester = ConfigTester(
             self, config_class=Kosmos2Config, has_text_modality=False, common_properties=["latent_query_num"]
         )
+        global_rng.seed(0)
 
     def test_config(self):
         self.config_tester.run_common_tests()

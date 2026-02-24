@@ -921,7 +921,7 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
 
@@ -1063,7 +1063,7 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
         if encoder_hidden_states is not None and memory_key_padding_mask is not None:
             memory_key_padding_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=memory_key_padding_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )

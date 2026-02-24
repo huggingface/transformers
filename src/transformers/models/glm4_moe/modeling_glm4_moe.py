@@ -37,8 +37,9 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_grouped_mm_available
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_glm4_moe import Glm4MoeConfig
 
 
@@ -136,8 +137,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -484,15 +484,15 @@ class Glm4MoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = (
-        is_grouped_mm_available()
-    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Glm4MoeDecoderLayer,
         "attentions": Glm4MoeAttention,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -507,8 +507,6 @@ class Glm4MoePreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Glm4MoeModel(Glm4MoePreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
-
     def __init__(self, config: Glm4MoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -525,7 +523,8 @@ class Glm4MoeModel(Glm4MoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -558,7 +557,7 @@ class Glm4MoeModel(Glm4MoePreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

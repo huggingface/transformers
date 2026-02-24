@@ -27,11 +27,6 @@ from .core_model_loading import (
     WeightConverter,
     WeightRenaming,
 )
-from .utils import is_torch_available
-
-
-if is_torch_available():
-    import torch
 
 
 if TYPE_CHECKING:
@@ -146,17 +141,14 @@ def _build_checkpoint_conversion_mapping():
         ],
         "qwen3_vl_moe": [
             WeightConverter(
-                source_patterns=[
-                    "mlp.experts.*.gate_proj.weight",
-                    "mlp.experts.*.up_proj.weight",
-                ],
+                source_patterns="mlp.experts.gate_up_proj",
                 target_patterns="mlp.experts.gate_up_proj",
-                operations=[MergeModulelist(dim=0), Concatenate(dim=1), Transpose(1, 2)],
+                operations=[Transpose(1, 2, check_dims=True), Force16BytesAlignment()],
             ),
             WeightConverter(
-                source_patterns="mlp.experts.*.down_proj.weight",
+                source_patterns="mlp.experts.down_proj",
                 target_patterns="mlp.experts.down_proj",
-                operations=[MergeModulelist(dim=0), Transpose(1, 2)],
+                operations=[Transpose(1, 2, check_dims=True), Force16BytesAlignment()],
             ),
         ],
         "phimoe": [
@@ -322,28 +314,16 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
     }
-    if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
-        mapping["legacy"] += [
-            WeightRenaming(
-                source_patterns=".weight_g$",
-                target_patterns=".parametrizations.weight.original0",
-            ),
-            WeightRenaming(
-                source_patterns=".weight_v$",
-                target_patterns=".parametrizations.weight.original1",
-            ),
-        ]
-    else:
-        mapping["legacy"] += [
-            WeightRenaming(
-                source_patterns="parametrizations.weight.original0",
-                target_patterns="weight_g",
-            ),
-            WeightRenaming(
-                source_patterns="parametrizations.weight.original1",
-                target_patterns="weight_v",
-            ),
-        ]
+    mapping["legacy"] += [
+        WeightRenaming(
+            source_patterns=".weight_g$",
+            target_patterns=".parametrizations.weight.original0",
+        ),
+        WeightRenaming(
+            source_patterns=".weight_v$",
+            target_patterns=".parametrizations.weight.original1",
+        ),
+    ]
 
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] += [
