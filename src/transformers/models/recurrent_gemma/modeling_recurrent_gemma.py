@@ -415,9 +415,7 @@ class RecurrentGemmaRglru(nn.Module):
 
             contextualized_states = torch.zeros_like(hidden_states)
             for t in range(hidden_states.shape[1]):
-                recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states.to(
-                    recurrent_gate.device
-                )
+                recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states.to(recurrent_gate.device)
                 recurrent_states = recurrent_states + hidden_states[:, t].type(acc_dtype)
                 contextualized_states[:, t] = recurrent_states.type(hidden_states.dtype)
 
