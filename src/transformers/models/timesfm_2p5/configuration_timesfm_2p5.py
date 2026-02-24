@@ -80,7 +80,7 @@ class Timesfm2P5Config(PreTrainedConfig):
         infer_is_positive (`bool`, *optional*, defaults to `True`):
             Whether to clamp forecasts to non-negative values when the input minimum is non-negative.
         max_position_embeddings (`int`, *optional*, defaults to 16384):
-            Maximum number of position embeddings supported by the rotary encoding.
+            Maximum sequence length supported by the rotary position encoding.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
 
@@ -124,16 +124,12 @@ class Timesfm2P5Config(PreTrainedConfig):
         use_continuous_quantile_head: bool = True,
         force_flip_invariance: bool = True,
         infer_is_positive: bool = True,
-        # Gemma2-compatible parameters needed for inherited attention/rotary
-        query_pre_attn_scalar: float = 256.0,
-        attn_logit_softcapping: float | None = None,
         max_position_embeddings: int = 16384,
         rope_theta: float = 10000.0,
-        rope_parameters: dict | None = None,
         **kwargs,
     ):
-        # Must be set before super().__init__() so PreTrainedConfig can detect and populate it
-        self.rope_parameters = rope_parameters
+        # Set before super().__init__() so PreTrainedConfig detects it and populates rope_parameters
+        self.rope_parameters = None
         self.patch_length = patch_length
         self.context_length = context_length
         self.horizon_length = horizon_length
@@ -163,8 +159,9 @@ class Timesfm2P5Config(PreTrainedConfig):
         self.use_continuous_quantile_head = use_continuous_quantile_head
         self.force_flip_invariance = force_flip_invariance
         self.infer_is_positive = infer_is_positive
-        self.query_pre_attn_scalar = query_pre_attn_scalar
-        self.attn_logit_softcapping = attn_logit_softcapping
+        # Gemma2-compatible: needed by Gemma2Attention.__init__
+        self.query_pre_attn_scalar = 256.0
+        self.attn_logit_softcapping = None
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
 

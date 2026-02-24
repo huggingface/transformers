@@ -113,19 +113,19 @@ def write_model(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytorch
     # Mapping of the layers from the original TimesFM 2.5 model to the Transformers model
     MODEL_LAYER_MAPPING = {
         # Input projection (tokenizer) - ResidualBlock: 64 -> 1280 -> 1280
-        "tokenizer.hidden_layer.weight": "model.input_ff_layer.hidden_layer.weight",
-        "tokenizer.hidden_layer.bias": "model.input_ff_layer.hidden_layer.bias",
+        "tokenizer.hidden_layer.weight": "model.input_ff_layer.input_layer.weight",
+        "tokenizer.hidden_layer.bias": "model.input_ff_layer.input_layer.bias",
         "tokenizer.output_layer.weight": "model.input_ff_layer.output_layer.weight",
         "tokenizer.output_layer.bias": "model.input_ff_layer.output_layer.bias",
         "tokenizer.residual_layer.weight": "model.input_ff_layer.residual_layer.weight",
         "tokenizer.residual_layer.bias": "model.input_ff_layer.residual_layer.bias",
         # Separate output projections for TimesFM 2.5 - these are at model level, not inside model
         # Point projection: 1280 -> 1280 -> 1280
-        "output_projection_point.hidden_layer.weight": "output_projection_point.hidden_layer.weight",
+        "output_projection_point.hidden_layer.weight": "output_projection_point.input_layer.weight",
         "output_projection_point.output_layer.weight": "output_projection_point.output_layer.weight",
         "output_projection_point.residual_layer.weight": "output_projection_point.residual_layer.weight",
         # Quantile projection: 1280 -> 1280 -> output_dims
-        "output_projection_quantiles.hidden_layer.weight": "output_projection_quantiles.hidden_layer.weight",
+        "output_projection_quantiles.hidden_layer.weight": "output_projection_quantiles.input_layer.weight",
         "output_projection_quantiles.output_layer.weight": "output_projection_quantiles.output_layer.weight",
         "output_projection_quantiles.residual_layer.weight": "output_projection_quantiles.residual_layer.weight",
     }

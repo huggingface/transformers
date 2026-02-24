@@ -92,23 +92,20 @@ class Timesfm2P5MLP(nn.Module):
 
 
 class Timesfm2P5ResidualBlock(nn.Module):
-    """
-    Residual block with configurable activation and bias, similar to [`TimesFmResidualBlock`] but with
-    configurable `use_bias` and `activation` parameters.
-    """
+    """[`TimesFmResidualBlock`] variant with configurable `use_bias` and `activation`."""
 
     def __init__(
         self, input_dims: int, hidden_dims: int, output_dims: int, use_bias: bool = True, activation: str = "swish"
     ):
         super().__init__()
-        self.hidden_layer = nn.Linear(input_dims, hidden_dims, bias=use_bias)
+        self.input_layer = nn.Linear(input_dims, hidden_dims, bias=use_bias)
         self.output_layer = nn.Linear(hidden_dims, output_dims, bias=use_bias)
         self.residual_layer = nn.Linear(input_dims, output_dims, bias=use_bias)
         self.activation = ACT2FN[activation]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = self.residual_layer(hidden_states)
-        hidden_states = self.hidden_layer(hidden_states)
+        hidden_states = self.input_layer(hidden_states)
         hidden_states = self.activation(hidden_states)
         return self.output_layer(hidden_states) + residual
 
@@ -509,11 +506,17 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         self.post_init()
 
     def _revin(
-        self, hidden_states: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor, reverse: bool = False
+        self,
+        hidden_states: torch.Tensor,
+        loc: torch.Tensor,
+        scale: torch.Tensor,
+        reverse: bool = False,
+        mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Reversible instance normalization (RevIN).
 
         Normalizes or denormalizes `hidden_states` using the provided location and scale statistics.
+        When `mask` is provided during normalization (reverse=False), masked positions are zeroed out.
         """
         if len(loc.shape) == len(hidden_states.shape) - 1:
             loc = loc[..., None]
@@ -527,7 +530,10 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         if reverse:
             return hidden_states * scale + loc
 
-        return (hidden_states - loc) / safe_scale
+        normed = (hidden_states - loc) / safe_scale
+        if mask is not None:
+            normed = torch.where(mask, torch.zeros_like(normed), normed)
+        return normed
 
     @staticmethod
     def _update_running_stats(
@@ -617,8 +623,7 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
             context_mu = mean.unsqueeze(1)
             context_sigma = std.unsqueeze(1)
 
-        normed_inputs = self._revin(patched_inputs, context_mu, context_sigma, reverse=False)
-        normed_inputs = torch.where(patched_masks_bool, torch.zeros_like(normed_inputs), normed_inputs)
+        normed_inputs = self._revin(patched_inputs, context_mu, context_sigma, reverse=False, mask=patched_masks_bool)
 
         tokenizer_inputs = torch.cat(
             [normed_inputs, patched_masks_bool.to(dtype=normed_inputs.dtype)],
@@ -803,13 +808,8 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
 
         mu_global = input_ts.mean(dim=1, keepdim=True)
         sigma_global = input_ts.std(dim=1, keepdim=True)
-        sigma_safe = torch.where(
-            sigma_global < self.model.tolerance,
-            torch.ones_like(sigma_global),
-            sigma_global,
-        )
 
-        normalized_ts = (input_ts - mu_global) / sigma_safe
+        normalized_ts = self.model._revin(input_ts, mu_global, sigma_global, reverse=False)
 
         pf_outputs, quantile_spreads, model_outputs = self._decode_and_project(normalized_ts, input_padding, **kwargs)
 
@@ -924,14 +924,6 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         )[:, -1, :, :]
 
         return point_forecast, quantile_spreads, model_outputs
-
-    @staticmethod
-    def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
-        """Calculates the moving average using PyTorch's convolution function."""
-        arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
-        kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
-        smoothed_arr = F.conv1d(arr_padded.view(1, 1, -1), kernel.view(1, 1, -1)).squeeze()
-        return [smoothed_arr, arr - smoothed_arr]
 
 
 __all__ = ["Timesfm2P5ModelForPrediction", "Timesfm2P5PreTrainedModel", "Timesfm2P5Model"]
