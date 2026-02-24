@@ -1566,6 +1566,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         model_kwargs["encoder_outputs"] = encoder_outputs
         model_kwargs["attention_mask"] = context_attention_mask
         model_kwargs["n_docs"] = n_docs
+        model_kwargs["use_cache"] = generation_config.use_cache
 
         prepared_logits_processor = self._get_logits_processor(
             generation_config=generation_config,
