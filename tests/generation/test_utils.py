@@ -3442,7 +3442,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             "assistant_model": assistant_model,
         }
         model.generate(**inputs, **generation_kwargs)
-        self.assertTrue(assistant_model.generation_config.num_assistant_tokens == 11)
+        self.assertEqual(assistant_model.generation_config.num_assistant_tokens, 11)
 
     def test_assisted_decoding_num_assistant_tokens_heuristic_transient_schedule(self):
         # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
@@ -3554,7 +3554,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         torch.testing.assert_allclose(logits_fwd.tolist(), logits_gen.tolist())
 
     def test_return_unprocessed_logit_scores(self):
-        "Test that the returned logits and scores are different, i.e. unproceessed vs processed scores"
+        "Tests that the returned logits and scores are different, i.e. unprocessed vs processed scores"
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         text = "generate yes or no: "
         input_ids = tokenizer([text], return_tensors="pt").input_ids.to(torch_device)
@@ -3585,7 +3585,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
 
         for token_logits, token_scores in zip(outputs.logits, outputs.scores):
-            self.assertTrue((token_logits == token_scores).all().item())
+            self.assertListEqual(token_logits.tolist(), token_scores.tolist())
 
     @slow
     @require_torch_multi_accelerator
@@ -3820,13 +3820,13 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # 2. If we pass input ids by themselves, we should get back the same input ids
         model_inputs = model.prepare_inputs_for_generation(input_ids)
-        self.assertTrue(torch.all(model_inputs["input_ids"] == input_ids))
+        self.assertListEqual(model_inputs["input_ids"].tolist() == input_ids.tolist())
 
         # 3. `use_cache` (and other kwargs) are forwarded
         self.assertFalse("use_cache" in model_inputs)  # From the previous input, there is no `use_cache`
         model_inputs = model.prepare_inputs_for_generation(input_ids, use_cache=True, foo="bar")
         self.assertTrue(model_inputs["use_cache"] is True)
-        self.assertTrue(model_inputs["foo"] == "bar")
+        self.assertEqual(model_inputs["foo"], "bar")
 
         # 4. We never discard data from input ids and expect it to be already slice
         init_input_ids = input_ids[:, :2]
@@ -3840,10 +3840,10 @@ class GenerationIntegrationTests(unittest.TestCase):
             position_ids=position_ids,
         )
         self.assertTrue("past_key_values" in model_inputs)
-        self.assertTrue(torch.all(model_inputs["cache_position"] == init_cache_position))
-        self.assertTrue(model_inputs["input_ids"].shape[-1] == input_ids.shape[1])
-        self.assertTrue(model_inputs["position_ids"].shape[-1] == input_ids.shape[1])
-        self.assertTrue(model_inputs["attention_mask"].shape[-1] == input_ids.shape[1])
+        self.assertListEqual(model_inputs["cache_position"].tolist() == init_cache_position.tolist())
+        self.assertEqual(model_inputs["input_ids"].shape[-1], input_ids.shape[1])
+        self.assertEqual(model_inputs["position_ids"].shape[-1], input_ids.shape[1])
+        self.assertEqual(model_inputs["attention_mask"].shape[-1], input_ids.shape[1])
 
         # 4.1: We do not have to pass prepared `cache_positions` to slice the data!
         # Data is sliced based on input ids length
@@ -3854,10 +3854,10 @@ class GenerationIntegrationTests(unittest.TestCase):
             position_ids=position_ids,
         )
         self.assertTrue("past_key_values" in model_inputs)
-        self.assertTrue(model_inputs["cache_position"] is None)
-        self.assertTrue(model_inputs["input_ids"].shape[-1] == init_input_ids.shape[1])
-        self.assertTrue(model_inputs["position_ids"].shape[-1] == init_input_ids.shape[1])
-        self.assertTrue(model_inputs["attention_mask"].shape[-1] == 3)  # attn mask is never sliced, we need PAD mask
+        self.assertEqual(model_inputs["cache_position"], None)
+        self.assertEqual(model_inputs["input_ids"].shape[-1], init_input_ids.shape[1])
+        self.assertEqual(model_inputs["position_ids"].shape[-1], init_input_ids.shape[1])
+        self.assertEqual(model_inputs["attention_mask"].shape[-1], 3)  # attn mask is never sliced, we need PAD mask
 
         # 5. If we pass a `static_cache`, the attention mask will be prepared as a static shape 4D mask
         max_cache_len = 10
@@ -3867,7 +3867,9 @@ class GenerationIntegrationTests(unittest.TestCase):
             init_input_ids, past_key_values=static_cache, attention_mask=attention_mask, cache_position=cache_position
         )
         self.assertTrue("past_key_values" in model_inputs)
-        self.assertTrue(list(model_inputs["attention_mask"].shape) == [2, 1, init_input_ids.shape[1], max_cache_len])
+        self.assertListEqual(
+            list(model_inputs["attention_mask"].shape), [2, 1, init_input_ids.shape[1], max_cache_len]
+        )
 
         # 6. We can also pass `inputs_embeds` as the embedded prompt. Because `generate` will append its result to
         # `input_ids` and the models will only accept one of the two inputs (`input_ids` or `inputs_embeds`), we
@@ -4251,7 +4253,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         out = output_sequences.sequences_scores.cpu().numpy()
 
         diff = np.abs(np.sum(batched_out[:5]) - np.sum(out))
-        self.assertTrue(diff < 5e-4)
+        self.assertLess(diff, 5e-4)
 
     def test_generate_input_ids_as_kwarg(self):
         """Test that `input_ids` work equally as a positional and keyword argument in decoder-only models"""
@@ -4367,9 +4369,9 @@ class GenerationIntegrationTests(unittest.TestCase):
             "hf-internal-testing/tiny-random-LlavaForConditionalGeneration-no-generation-config",
             device_map=torch_device,
         )
-        self.assertTrue(model.generation_config.eos_token_id is None)
-        self.assertTrue(model.generation_config.bos_token_id is None)
-        self.assertTrue(model.generation_config.pad_token_id == 1)
+        self.assertEqual(model.generation_config.eos_token_id, None)
+        self.assertEqual(model.generation_config.bos_token_id, None)
+        self.assertEqual(model.generation_config.pad_token_id, 1)
 
     @slow
     @require_torch_accelerator
