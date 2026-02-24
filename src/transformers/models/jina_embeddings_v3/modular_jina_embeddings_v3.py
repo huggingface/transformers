@@ -39,17 +39,11 @@ from ..xlm_roberta.modeling_xlm_roberta import (
 logger = logging.get_logger(__name__)
 
 """
-Update Attention mask to new api
-
-search for modular way/model for maskedlm, seqclass, tokenclass, qa.
-
-Docs: adapter_mask
-
-Add integration tests for all task_id's, check the last export test.
-
 maskedlm head tie-weights update and fix
 
 conversion_mapping.py use? Fix failure, test_reverse_loading_mapping, pooler
+
+Add integration tests for all task_id's, check the last export test.
 
 post_init() vs lora parameterization order,
 - parameterization failing test
