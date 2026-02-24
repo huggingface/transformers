@@ -107,7 +107,11 @@ class VitMatteConvStream(nn.Module):
         # to enable loading HF backbone models.
         in_channels = 4
         if config.backbone_config is not None:
-            in_channels = config.backbone_config.num_channels
+            in_channels = (
+                config.backbone_config.num_channels
+                if hasattr(config.backbone_config, "num_channels")
+                else config.backbone_config.model_args["in_chans"]
+            )
 
         out_channels = config.convstream_hidden_sizes
 
