@@ -152,5 +152,5 @@ trainer.push_to_hub()
 
 ## Next steps
 
-- Read the [Customizing the Trainer](./trainer_customize) to learn how to subclass [`Trainer`] methods to support new and custom functionalities.
+- Read the [Subclassing Trainer methods](./trainer_customize) guide to learn how to subclass [`Trainer`] methods to support new and custom functionalities.
 - Browse [transformers/examples/pytorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [notebooks](./notebooks), or the **Resources > Task Recipes** section for additional training examples on different text, audio, vision, and multimodal tasks.
