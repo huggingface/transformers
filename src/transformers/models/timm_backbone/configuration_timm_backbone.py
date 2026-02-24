@@ -74,42 +74,36 @@ class TimmBackboneConfig(TimmWrapperConfig):
         out_indices=None,
         freeze_batch_norm_2d=False,
         output_stride=None,
-        architecture=None,
-        do_pooling=False,
-        model_args=None,
         **kwargs,
     ):
         self.out_indices = out_indices if out_indices is not None else [-1]
-        architecture = backbone if backbone is not None else architecture
-        if model_args is None:
-            model_args = {
+        kwargs["architecture"] = backbone if backbone is not None else kwargs.get("architecture")
+        kwargs["do_pooling"] = False  # hardcode for backbone model
+        if kwargs.get("model_args") is None:
+            kwargs["model_args"] = {
                 "features_only": features_only,
                 "in_chans": num_channels,
                 "output_stride": output_stride,
             }
-        super().__init__(
-            architecture=architecture,
-            do_pooling=do_pooling,
-            model_args=model_args,
-            freeze_batch_norm_2d=freeze_batch_norm_2d,
-            **kwargs,
-        )
+        logger.warning("Deprecation message!")
+        super().__init__(freeze_batch_norm_2d=freeze_batch_norm_2d, **kwargs)
 
     def __setattr__(self, key, value):
         if (mapped_key := super().__getattribute__("special_attribute_map").get(key)) is not None:
-            first_attr = self
             if isinstance(mapped_key, (tuple, list)):
-                first_attr = super().__getattribute__("__dict__").get(mapped_key[0])
-            setattr(first_attr, mapped_key[1], value)
+                model_args = super().__getattribute__("__dict__").get(mapped_key[0])
+                model_args[mapped_key[1]] = value
+            else:
+                setattr(self, mapped_key[1], value)
         else:
             super().__setattr__(key, value)
 
     def __getattribute__(self, key):
         if (mapped_key := super().__getattribute__("special_attribute_map").get(key)) is not None:
-            first_attr = self
             if isinstance(mapped_key, (tuple, list)):
-                first_attr = super().__getattribute__(mapped_key[0])
-            return getattr(first_attr, mapped_key[1])
+                model_args = super().__getattribute__(mapped_key[0])
+                return model_args[mapped_key[1]]
+            return getattr(self, mapped_key[1])
         return super().__getattribute__(key)
 
 

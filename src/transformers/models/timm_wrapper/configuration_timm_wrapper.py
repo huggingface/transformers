@@ -76,11 +76,19 @@ class TimmWrapperConfig(PreTrainedConfig, BackboneConfigMixin):
         model_args: dict[str, Any] | None = None,
         **kwargs,
     ):
-        self.architecture = architecture
+        is_backbone_config = kwargs.get("backbone") is not None
+        self.architecture = kwargs.pop("backbone") if is_backbone_config else architecture
         self.initializer_range = initializer_range
         self.do_pooling = do_pooling
         self.freeze_batch_norm_2d = freeze_batch_norm_2d
         self.model_args = model_args  # named "model_args" for BC with timm
+        if model_args is None and is_backbone_config:
+            model_args = {
+                "features_only": kwargs.pop("features_only", True),
+                "in_chans": kwargs.pop("num_channels", 3),
+                "output_stride": kwargs.get("output_stride"),
+            }
+
         super().__init__(**kwargs)
 
     @classmethod

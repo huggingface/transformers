@@ -407,6 +407,7 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
     def _load_timm_backbone_from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         requires_backends(cls, ["vision", "timm"])
         from ...models.timm_backbone import TimmBackboneConfig
+        from ...models.timm_wrapper import TimmWrapperConfig
 
         config = kwargs.pop("config", TimmBackboneConfig())
 
@@ -419,11 +420,14 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
         num_channels = kwargs.pop("num_channels", config.num_channels)
         features_only = kwargs.pop("features_only", config.features_only)
         out_indices = kwargs.pop("out_indices", config.out_indices)
-        config = TimmBackboneConfig(
-            backbone=pretrained_model_name_or_path,
-            num_channels=num_channels,
-            features_only=features_only,
+        config = TimmWrapperConfig(
+            architecture=pretrained_model_name_or_path,
+            do_pooling=False,
             out_indices=out_indices,
+            model_args={
+                "in_chans": num_channels,
+                "features_only": features_only,
+            },
         )
         # Always load a pretrained model when `from_pretrained` is called
         kwargs.pop("use_pretrained_backbone", None)
