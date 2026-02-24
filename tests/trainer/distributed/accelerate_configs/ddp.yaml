@@ -1,0 +1,6 @@
+compute_environment: LOCAL_MACHINE
+distributed_type: MULTI_GPU
+main_training_function: main
+mixed_precision: "no"
+num_machines: 1
+num_processes: 2
