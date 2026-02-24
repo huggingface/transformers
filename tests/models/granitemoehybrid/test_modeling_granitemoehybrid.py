@@ -65,11 +65,13 @@ class GraniteMoeHybridModelTester(BambaModelTester):
         use_cache=False,
         shared_intermediate_size=174,
         layer_types=None,
+        type_sequence_label_size=2,
     ):
         super().__init__(parent)
         self.shared_intermediate_size = shared_intermediate_size
         self.layer_types = layer_types
         self.use_cache = use_cache
+        self.type_sequence_label_size = type_sequence_label_size
 
     def _update_layer_configs(self):
         super()._update_layer_configs()
@@ -93,7 +95,7 @@ class GraniteMoeHybridModelTester(BambaModelTester):
 
         sequence_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.num_labels)
+            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
         self._update_layer_configs()
         config = self.get_config()
