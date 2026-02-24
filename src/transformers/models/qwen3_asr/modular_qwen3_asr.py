@@ -42,6 +42,9 @@ from ..qwen3_omni_moe.configuration_qwen3_omni_moe import (
 from ..qwen3_omni_moe.processing_qwen3_omni_moe import (
     _get_feat_extract_output_lengths, Qwen3OmniMoeProcessor
 )
+from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
+    Qwen3OmniMoeThinkerTextRMSNorm
+)
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     pass
@@ -507,24 +510,8 @@ class Qwen3ASRProcessor(Qwen3OmniMoeProcessor):
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class Qwen3ASRTextRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        Qwen3ASRTextRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+class Qwen3ASRTextRMSNorm(Qwen3OmniMoeThinkerTextRMSNorm):
+    pass
 
 
 def rotate_half(x):
