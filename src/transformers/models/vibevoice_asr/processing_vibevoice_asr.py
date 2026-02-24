@@ -64,6 +64,14 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             The tokenizer for text processing.
         chat_template (`str`, *optional*):
             A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
+        audio_token (`str`, *optional*, defaults to `"<|box_start|>"`):
+            The audio token placeholder to use in the chat template.
+        audio_bos_token (`str`, *optional*, defaults to `"<|object_ref_start|>"`):
+            The audio begin-of-sequence token placeholder to use in the chat template.
+        audio_eos_token (`str`, *optional*, defaults to `"<|object_ref_end|>"`):
+            The audio end-of-sequence token placeholder to use in the chat template.
+        audio_duration_token (`str`, *optional*, defaults to `"<|AUDIO_DURATION|>"`):
+            The audio duration token placeholder to use in the chat template.
     """
 
     feature_extractor_class = "VibeVoiceAcousticTokenizerFeatureExtractor"
