@@ -91,6 +91,9 @@ class SwitchTransformersConfig(PreTrainedConfig):
             Whether to output router probabilities to compute router auxiliary loss.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        output_router_logits (`bool`, *optional*, defaults to `False`):
+            Whether or not the router logits should be returned by the model. Enabling this will also
+            allow the model to output the auxiliary loss.
     """
 
     model_type = "switch_transformers"
@@ -131,6 +134,7 @@ class SwitchTransformersConfig(PreTrainedConfig):
         tie_word_embeddings=True,
         is_decoder=False,
         add_cross_attention=False,
+        output_router_logits=False,
         **kwargs,
     ):
         self.is_decoder = is_decoder
@@ -181,6 +185,7 @@ class SwitchTransformersConfig(PreTrainedConfig):
 
         self.router_z_loss_coef = router_z_loss_coef
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.output_router_logits = output_router_logits
         self.dense_act_fn = dense_act_fn
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
