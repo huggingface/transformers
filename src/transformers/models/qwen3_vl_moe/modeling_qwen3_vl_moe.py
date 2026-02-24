@@ -368,6 +368,7 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
         "hidden_states": Qwen3VLMoeTextDecoderLayer,
         "attentions": Qwen3VLMoeTextAttention,
     }
+    input_modalities = ("text", "image", "video")
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -589,6 +590,7 @@ class Qwen3VLMoeVisionPatchMerger(nn.Module):
 
 class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
     config: Qwen3VLMoeVisionConfig
+    input_modalities = ("image", "video")
     _no_split_modules = ["Qwen3VLMoeVisionBlock"]
     _can_record_outputs = {
         "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.gate", index=0),
@@ -894,6 +896,7 @@ class Qwen3VLMoeTextRotaryEmbedding(nn.Module):
 )
 class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
     config: Qwen3VLMoeTextConfig
+    input_modalities = ("text",)
     _no_split_modules = ["Qwen3VLMoeTextDecoderLayer"]
 
     def __init__(self, config: Qwen3VLMoeTextConfig):

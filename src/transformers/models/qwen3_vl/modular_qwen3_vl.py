@@ -506,6 +506,7 @@ class Qwen3VLPreTrainedModel(Qwen2VLPreTrainedModel):
 
 class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
     config: Qwen3VLVisionConfig
+    input_modalities = ("image", "video")
     _no_split_modules = ["Qwen3VLVisionBlock"]
     _can_record_outputs = {
         "hidden_states": Qwen3VLVisionBlock,
@@ -721,6 +722,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
 )
 class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
     config: Qwen3VLTextConfig
+    input_modalities = ("text",)
     _no_split_modules = ["Qwen3VLTextDecoderLayer"]
 
     def __init__(self, config: Qwen3VLTextConfig):
