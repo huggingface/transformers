@@ -204,11 +204,11 @@ class ModelType(ExplicitEnum):
 
 @add_end_docstrings(build_pipeline_init_args(has_image_processor=True, has_tokenizer=True))
 class DocumentQuestionAnsweringPipeline(ChunkPipeline):
-    # TODO: Update task_summary docs to include an example with document QA and then update the first sentence
     """
-    Document Question Answering pipeline using any `AutoModelForDocumentQuestionAnswering`. The inputs/outputs are
-    similar to the (extractive) question answering pipeline; however, the pipeline takes an image (and optional OCR'd
-    words/boxes) as input instead of text context.
+    Document Question Answering pipeline using any `AutoModelForDocumentQuestionAnswering`. See the task summary
+    in the Transformers documentation for an end-to-end example. The inputs/outputs are similar to the (extractive)
+    question answering pipeline; however, the pipeline takes an image (and optional OCR'd words/boxes) as input
+    instead of text context.
 
     Unless the model you're using explicitly sets these generation parameters in its configuration files
     (`generation_config.json`), the following default values will be used:
