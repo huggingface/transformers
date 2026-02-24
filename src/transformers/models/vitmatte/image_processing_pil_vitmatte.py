@@ -15,11 +15,12 @@
 
 from typing import Union
 
-import torch
+import numpy as np
 
-from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_transforms import PaddingMode
+from ...image_transforms import pad as np_pad
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -27,25 +28,17 @@ from ...image_utils import (
     ImageInput,
     get_image_size,
 )
-from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...processing_utils import Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available
+from .image_processing_vitmatte import VitMatteImageProcessorKwargs
 
 
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
-
-
-class VitMatteImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
-        The width and height of the image will be padded to be divisible by this number.
-    """
-
-    size_divisor: int
+if is_torch_available():
+    import torch
 
 
 @auto_docstring
-class VitMatteImageProcessor(TorchvisionBackend):
+class VitMatteImageProcessorPil(PilBackend):
     do_rescale = True
     rescale_factor = 1 / 255
     do_normalize = True
@@ -56,36 +49,39 @@ class VitMatteImageProcessor(TorchvisionBackend):
     valid_kwargs = VitMatteImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[VitMatteImageProcessorKwargs]) -> None:
-        # Backward compatibility
         size_divisibility = kwargs.pop("size_divisibility", None)
         if size_divisibility is not None:
             kwargs.setdefault("size_divisor", size_divisibility)
         super().__init__(**kwargs)
 
-    def _pad_image(
+    def pad_image(
         self,
-        images: "torch.Tensor",
+        image: np.ndarray,
         size_divisor: int = 32,
-    ) -> "torch.Tensor":
+    ) -> np.ndarray:
         """
-        Pads an image or batched images constantly so that width and height are divisible by size_divisor
-
         Args:
-            images (`torch.Tensor`):
+            image (`np.ndarray`):
                 Image to pad.
             size_divisor (`int`, *optional*, defaults to 32):
                 The width and height of the image will be padded to be divisible by this number.
         """
-        height, width = get_image_size(images, channel_dim=ChannelDimension.FIRST)
+        height, width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
 
         pad_height = 0 if height % size_divisor == 0 else size_divisor - height % size_divisor
         pad_width = 0 if width % size_divisor == 0 else size_divisor - width % size_divisor
-
         if pad_width + pad_height > 0:
-            padding = (0, 0, pad_width, pad_height)
-            images = tvF.pad(images, padding)
+            padding = ((0, pad_height), (0, pad_width))
+            image = np_pad(
+                image,
+                padding=padding,
+                mode=PaddingMode.CONSTANT,
+                constant_values=0,
+                data_format=ChannelDimension.FIRST,
+                input_data_format=ChannelDimension.FIRST,
+            )
 
-        return images
+        return image
 
     @auto_docstring
     def preprocess(
@@ -121,8 +117,8 @@ class VitMatteImageProcessor(TorchvisionBackend):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
-        trimaps: list["torch.Tensor"],
+        images: list[np.ndarray],
+        trimaps: list[np.ndarray],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -130,31 +126,27 @@ class VitMatteImageProcessor(TorchvisionBackend):
         image_std: float | list[float] | None,
         do_pad: bool | None,
         size_divisor: int | None,
-        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        grouped_trimaps, grouped_trimaps_index = group_images_by_shape(trimaps, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        for shape in grouped_images:
-            stacked_images = grouped_images[shape]
-            stacked_trimaps = grouped_trimaps[shape]
-            # Fused rescale and normalize
-            stacked_images = self._rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            stacked_trimaps = self._rescale_and_normalize(
-                stacked_trimaps, do_rescale, rescale_factor, False, image_mean, image_std
-            )
-            stacked_images = torch.cat([stacked_images, stacked_trimaps], dim=1)
+        processed_images = []
+        for image, trimap in zip(images, trimaps):
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+                trimap = self.rescale(trimap, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+            # Concatenate images and trimaps along channel dimension
+            # trimap is already (1, H, W) from _prepare_image_like_inputs with expected_ndims=2
+            if trimap.ndim == 3 and trimap.shape[0] == 1:
+                image = np.concatenate([image, trimap], axis=0)
+            else:
+                image = np.concatenate([image, np.expand_dims(trimap, axis=0)], axis=0)
             if do_pad:
-                stacked_images = self._pad_image(stacked_images, size_divisor)
-            processed_images_grouped[shape] = stacked_images
-
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+                image = self.pad_image(image, size_divisor)
+            processed_images.append(image)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
-__all__ = ["VitMatteImageProcessor"]
+__all__ = ["VitMatteImageProcessorPil"]

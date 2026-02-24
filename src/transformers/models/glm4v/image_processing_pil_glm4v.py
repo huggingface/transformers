@@ -11,15 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for GLM-4.1V."""
+"""PIL Image processor class for GLM-4.1V."""
 
-import math
+import numpy as np
 
-import torch
-
-from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
@@ -28,11 +25,8 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
-
-
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
+from ...utils import TensorType, auto_docstring, logging
+from .image_processing_glm4v import smart_resize
 
 
 logger = logging.get_logger(__name__)
@@ -53,44 +47,8 @@ class Glm4vImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size: int
 
 
-def smart_resize(
-    num_frames: int,
-    height: int,
-    width: int,
-    temporal_factor: int = 2,
-    factor: int = 28,
-    min_pixels: int = 112 * 112,
-    max_pixels: int = 14 * 14 * 2 * 2 * 2 * 6144,
-):
-    if num_frames < temporal_factor:
-        raise ValueError(f"t:{num_frames} must be larger than temporal_factor:{temporal_factor}")
-    if height < factor or width < factor:
-        scale = max(factor / height, factor / width)
-        height = int(height * scale)
-        width = int(width * scale)
-
-    if max(height, width) / min(height, width) > 200:
-        raise ValueError(
-            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
-        )
-    h_bar = round(height / factor) * factor
-    w_bar = round(width / factor) * factor
-    t_bar = round(num_frames / temporal_factor) * temporal_factor
-
-    if t_bar * h_bar * w_bar > max_pixels:
-        beta = math.sqrt((num_frames * height * width) / max_pixels)
-        h_bar = max(factor, math.floor(height / beta / factor) * factor)
-        w_bar = max(factor, math.floor(width / beta / factor) * factor)
-    elif t_bar * h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (num_frames * height * width))
-        h_bar = math.ceil(height * beta / factor) * factor
-        w_bar = math.ceil(width * beta / factor) * factor
-
-    return h_bar, w_bar
-
-
 @auto_docstring
-class Glm4vImageProcessor(TorchvisionBackend):
+class Glm4vImageProcessorPil(PilBackend):
     do_resize = True
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}
@@ -131,10 +89,10 @@ class Glm4vImageProcessor(TorchvisionBackend):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -143,18 +101,17 @@ class Glm4vImageProcessor(TorchvisionBackend):
         patch_size: int,
         temporal_patch_size: int,
         merge_size: int,
-        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """
-        Preprocess an image or batch of images.
+        Preprocess images one by one for PIL backend.
         """
+        processed_images = []
+        processed_grids = []
 
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            height, width = stacked_images.shape[-2:]
+        for image in images:
+            height, width = image.shape[-2:]
             if do_resize:
                 resized_height, resized_width = smart_resize(
                     num_frames=temporal_patch_size,
@@ -165,39 +122,40 @@ class Glm4vImageProcessor(TorchvisionBackend):
                     min_pixels=size.shortest_edge,
                     max_pixels=size.longest_edge,
                 )
-                stacked_images = self.resize(
-                    stacked_images,
+                image = self.resize(
+                    image,
                     size=SizeDict(height=resized_height, width=resized_width),
                     resample=resample,
                 )
-            resized_images_grouped[shape] = stacked_images
 
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+            # Rescale and normalize
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
 
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        processed_grids = {}
+            # Ensure float32 for patch processing
+            image_array = np.asarray(image, dtype=np.float32)
+            if image_array.ndim == 3:  # (C, H, W)
+                image_array = np.expand_dims(image_array, axis=0)  # (1, C, H, W)
+            if image_array.ndim == 4:  # (B, C, H, W)
+                image_array = np.expand_dims(image_array, axis=1)  # (B, T=1, C, H, W)
 
-        for shape, stacked_images in grouped_images.items():
-            resized_height, resized_width = stacked_images.shape[-2:]
+            resized_height, resized_width = image_array.shape[-2:]
 
-            patches = self._rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            if patches.ndim == 4:  # (B, C, H, W)
-                patches = patches.unsqueeze(1)  # (B, T=1, C, H, W)
-
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(
-                    1, temporal_patch_size - (patches.shape[1] % temporal_patch_size), 1, 1, 1
+            if image_array.shape[1] % temporal_patch_size != 0:
+                repeats = np.repeat(
+                    image_array[:, -1:],
+                    temporal_patch_size - (image_array.shape[1] % temporal_patch_size),
+                    axis=1,
                 )
-                patches = torch.cat([patches, repeats], dim=1)
+                image_array = np.concatenate([image_array, repeats], axis=1)
 
-            batch_size, t_len, channel = patches.shape[:3]
+            batch_size, t_len, channel = image_array.shape[:3]
             grid_t = t_len // temporal_patch_size
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
-            patches = patches.view(
+            patches = image_array.reshape(
                 batch_size,
                 grid_t,
                 temporal_patch_size,
@@ -210,7 +168,7 @@ class Glm4vImageProcessor(TorchvisionBackend):
                 patch_size,
             )
             # (B, grid_t, gh, gw, mh, mw, C, tp, ph, pw)
-            patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
+            patches = np.transpose(patches, (0, 1, 4, 7, 5, 8, 3, 2, 6, 9))
 
             flatten_patches = patches.reshape(
                 batch_size,
@@ -218,14 +176,13 @@ class Glm4vImageProcessor(TorchvisionBackend):
                 channel * temporal_patch_size * patch_size * patch_size,
             )
 
-            processed_images_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            # Remove batch dimension and append: shape is (seq_len, hidden_dim)
+            processed_images.append(flatten_patches.squeeze(0))
+            processed_grids.append([grid_t, grid_h, grid_w])
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_grids = reorder_images(processed_grids, grouped_images_index)
-
-        pixel_values = torch.cat(processed_images, dim=0)
-        image_grid_thw = torch.tensor(processed_grids)
+        # Concatenate all images along sequence dimension: (total_seq_len, hidden_dim)
+        pixel_values = np.concatenate(processed_images, axis=0)
+        image_grid_thw = np.array(processed_grids)
 
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
@@ -268,4 +225,4 @@ class Glm4vImageProcessor(TorchvisionBackend):
         return grid_h * grid_w
 
 
-__all__ = ["Glm4vImageProcessor", "smart_resize"]
+__all__ = ["Glm4vImageProcessorPil"]

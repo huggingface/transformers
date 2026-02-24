@@ -11,29 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for Got-OCR-2."""
+"""Image processor class for Llama4."""
 
 import math
 from collections import defaultdict
 from functools import lru_cache
-from typing import Optional
 
 import torch
-import torchvision.transforms.v2.functional as tvF
 
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    group_images_by_shape,
-    reorder_images,
-)
-from ...image_transforms import split_to_tiles
+from ...image_transforms import group_images_by_shape, reorder_images, split_to_tiles
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-)
+from ...utils import TensorType, auto_docstring, is_torchvision_available
+
+
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 
 def get_factors(dividend: int) -> set[int]:
@@ -301,7 +296,7 @@ class Llama4ImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class Llama4ImageProcessorFast(BaseImageProcessorFast):
+class Llama4ImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = [0.5, 0.5, 0.5]
     image_std = [0.5, 0.5, 0.5]
@@ -317,9 +312,13 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Llama4ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Llama4ImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
     # Disable compilation here as conversion to bfloat16 causes differences in the output of the compiled and non-compiled versions
     @torch.compiler.disable
-    def rescale_and_normalize(
+    def _rescale_and_normalize(
         self,
         images: "torch.Tensor",
         do_rescale: bool,
@@ -342,22 +341,19 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
 
         return images
 
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Llama4ImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
+        do_resize: bool,
         size: SizeDict,
-        max_patches: int,
-        resize_to_max_canvas: bool,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        max_patches: int,
+        resize_to_max_canvas: bool,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
@@ -377,21 +373,24 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
                 new_target_height = min(max(image_size[0], max_upscaling_size), target_size[0])
                 new_target_width = min(max(image_size[1], max_upscaling_size), target_size[1])
                 target_size_without_distortion = (new_target_height, new_target_width)
+            else:
+                target_size_without_distortion = target_size
 
             # resize to target_size while preserving aspect ratio
             new_size_without_distortion = get_max_res_without_distortion(image_size, target_size_without_distortion)
             new_size_without_distortion = SizeDict(
                 height=max(new_size_without_distortion[0], 1), width=max(new_size_without_distortion[1], 1)
             )
+
             processed_images = self.resize(
                 stacked_images,
                 new_size_without_distortion,
-                interpolation=interpolation,
+                resample=resample,
             )
 
             # pad to target_size to be able to split into tiles
             processed_images = pad_to_best_fit(processed_images, target_size)
-            processed_images = self.rescale_and_normalize(
+            processed_images = self._rescale_and_normalize(
                 processed_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
 
@@ -411,9 +410,9 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
                 global_tiles = self.resize(
                     stacked_images,
                     size,
-                    interpolation=interpolation,
+                    resample=resample,
                 )
-                global_tiles = self.rescale_and_normalize(
+                global_tiles = self._rescale_and_normalize(
                     global_tiles, do_rescale, rescale_factor, do_normalize, image_mean, image_std
                 )
                 grouped_processed_images[shape] = torch.cat([processed_images, global_tiles.unsqueeze(1)], dim=1)
@@ -426,4 +425,4 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         )
 
 
-__all__ = ["Llama4ImageProcessorFast"]
+__all__ = ["Llama4ImageProcessor"]

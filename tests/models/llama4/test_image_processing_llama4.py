@@ -16,13 +16,8 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
-
-if is_vision_available() and is_torchvision_available():
-    from transformers import Llama4ImageProcessorFast
 
 
 class Llama4ImageProcessingTester(unittest.TestCase):
@@ -90,9 +85,6 @@ class Llama4ImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class Llama4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    test_slow_image_processor = False
-    fast_image_processing_class = Llama4ImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = Llama4ImageProcessingTester(self)
@@ -102,7 +94,7 @@ class Llama4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "size"))
@@ -112,7 +104,7 @@ class Llama4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
     def test_split_tiles(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)[0]
             processed_images = image_processor(
@@ -122,7 +114,3 @@ class Llama4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(len(processed_images.pixel_values), 1)
             self.assertEqual(processed_images.pixel_values[0].shape[0], 17)
             self.assertEqual(processed_images.pixel_values[0].shape[-2:], (20, 20))
-
-    @unittest.skip("Broken on main right now. Should be fixable!")
-    def test_image_processor_save_load_with_autoimageprocessor(self):
-        pass

@@ -15,19 +15,13 @@ import math
 from functools import lru_cache
 
 import torch
-import torchvision.transforms.v2.functional as tvF
 
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    group_images_by_shape,
-    reorder_images,
-)
-from ...image_transforms import split_to_tiles
+from ...image_transforms import group_images_by_shape, reorder_images, split_to_tiles
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    ImageInput,
     PILImageResampling,
     SizeDict,
 )
@@ -35,9 +29,13 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
+    is_torchvision_available,
     logging,
 )
 
+
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 logger = logging.get_logger(__name__)
 
@@ -220,7 +218,7 @@ class Lfm2VlImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
+class Lfm2VlImageProcessor(TorchvisionBackend):
     downsample_factor = 2
     do_image_splitting = True
     min_tiles = 2
@@ -293,7 +291,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         tile_size: int,
         use_thumbnail: bool,
         thumbnail_size: tuple[int],
-        interpolation: "tvF.InterpolationMode" = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -306,8 +304,9 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         grid_width, grid_height, target_width, target_height, total_patches = self._get_grid_layout(
             height, width, min_tiles=min_tiles, max_tiles=max_tiles, tile_size=tile_size
         )
-        resized_image = tvF.resize(
-            image, (target_height, target_width), interpolation=interpolation, antialias=antialias
+
+        resized_image = super().resize(
+            image, SizeDict(height=target_height, width=target_width), resample=resample, antialias=antialias
         )
 
         # split the image into patches
@@ -320,7 +319,12 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
 
         if use_thumbnail and grid_width * grid_height != 1:
             total_patches += 1
-            thumbnail_image = tvF.resize(image, thumbnail_size, interpolation=interpolation, antialias=antialias)
+            thumbnail_image = super().resize(
+                image,
+                SizeDict(height=thumbnail_size[0], width=thumbnail_size[1]),
+                resample=resample,
+                antialias=antialias,
+            )
             for i in range(batch_size):
                 processed_images[i] = list(processed_images[i]) + list(thumbnail_image[i][None, ...])
 
@@ -390,8 +394,8 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         encoder_patch_size: int,
         tile_size: int,
         max_pixels_tolerance: float,
-        interpolation: "tvF.InterpolationMode",
-    ) -> "torch.Tensor":
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+    ) -> tuple[list["torch.Tensor"], list[list[int]], list[list[int]], list[list[tuple[int, int]]]]:
         batch_size, _, height, width = images.shape
         do_image_splitting = not min_tiles == max_tiles == 1
         is_image_large = self._is_image_too_large(
@@ -421,11 +425,11 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
                 tile_size=tile_size,
                 thumbnail_size=(new_height, new_width),
                 use_thumbnail=use_thumbnail,
-                interpolation=interpolation,
+                resample=resample,
             )
         else:
             num_rows = num_cols = 1
-            images = tvF.resize(images, (new_height, new_width), interpolation=interpolation)
+            images = super().resize(images, SizeDict(height=new_height, width=new_width), resample=resample)
             # Make a list and treat it as single crop per image so it can be re-grouped back correctly
             images = [[image] for image in images]
 
@@ -436,10 +440,9 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: ImageInput,
-        size: SizeDict,
-        interpolation: "tvF.InterpolationMode",
+        images: list["torch.Tensor"],
         do_resize: bool,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -455,10 +458,10 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         encoder_patch_size: int,
         tile_size: int,
         max_pixels_tolerance: float,
-        return_tensors: str | TensorType,
-        disable_grouping: bool,
         do_pad: bool,
         return_row_col_info: bool,
+        return_tensors: str | TensorType | None,
+        disable_grouping: bool | None,
         **kwargs,
     ) -> BatchFeature:
         if not do_image_splitting:
@@ -501,7 +504,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
                     encoder_patch_size=encoder_patch_size,
                     tile_size=tile_size,
                     max_pixels_tolerance=max_pixels_tolerance,
-                    interpolation=interpolation,
+                    resample=resample,
                 )
 
             rows_grouped[shape] = num_rows
@@ -521,7 +524,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         processed_masks, processed_spatial_shapes = {}, {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
+            stacked_images = self._rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             batch_size, *_, height, width = stacked_images.shape
@@ -558,4 +561,4 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         return encoding
 
 
-__all__ = ["Lfm2VlImageProcessorFast"]
+__all__ = ["Lfm2VlImageProcessor"]

@@ -11,25 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for ZoeDepth."""
+"""Image processor class for ZoeDepth."""
 
-from typing import (
-    Optional,
-    Union,
-)
+from typing import TYPE_CHECKING, Union
 
 import numpy as np
-import torch
-import torchvision.transforms.v2.functional as tvF
 
-from ...image_processing_utils import (
-    BatchFeature,
-)
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_backends import PilBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import PaddingMode
+from ...image_transforms import pad as np_pad
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -40,21 +31,24 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    logging,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
 from .image_processing_zoedepth import ZoeDepthImageProcessorKwargs, get_resize_output_image_size
-from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
 
 
-logger = logging.get_logger(__name__)
+if TYPE_CHECKING:
+    from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
+
+if is_torch_available():
+    import torch
+    from torch import nn
+
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 
 @auto_docstring
-class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
+class ZoeDepthImageProcessorPil(PilBackend):
+    valid_kwargs = ZoeDepthImageProcessorKwargs
     do_pad = True
     do_rescale = True
     do_normalize = True
@@ -65,112 +59,112 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     keep_aspect_ratio = True
     ensure_multiple_of = 1 / 32
-    valid_kwargs = ZoeDepthImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[ZoeDepthImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[ZoeDepthImageProcessorKwargs],
-    ) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[ZoeDepthImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(
         self,
-        images: "torch.Tensor",
+        image: np.ndarray,
         size: SizeDict,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
-        interpolation: Optional["tvF.InterpolationMode"] = None,
-    ) -> "torch.Tensor":
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+    ) -> np.ndarray:
         """
-        Resize an image or batchd images to target size `(size["height"], size["width"])`. If `keep_aspect_ratio` is `True`, the image
+        Resize an image to target size `(size.height, size.width)`. If `keep_aspect_ratio` is `True`, the image
         is resized to the largest possible size such that the aspect ratio is preserved. If `ensure_multiple_of` is
         set, the image is resized to a size that is a multiple of this value.
 
         Args:
-            images (`torch.Tensor`):
-                Images to resize.
-            size (`dict[str, int]`):
+            image (`np.ndarray`):
+                Image to resize.
+            size (`SizeDict`):
                 Target size of the output image.
             keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
                 If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
             ensure_multiple_of (`int`, *optional*, defaults to 1):
                 The image is resized to a size that is a multiple of this value.
-            interpolation (`tvF.InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Defines the resampling filter to use if resizing the image. Otherwise, the image is resized to size
                 specified in `size`.
         """
         if not size.height or not size.width:
             raise ValueError(f"The size dictionary must contain the keys 'height' and 'width'. Got {size}")
-        output_size = get_resize_output_image_size(
-            images,
+        height, width = get_resize_output_image_size(
+            image,
             output_size=(size.height, size.width),
             keep_aspect_ratio=keep_aspect_ratio,
             multiple=ensure_multiple_of,
             input_data_format=ChannelDimension.FIRST,
         )
-        height, width = output_size
 
-        resized_images = torch.nn.functional.interpolate(
-            images, (int(height), int(width)), mode=interpolation.value, align_corners=True
+        torch_image = torch.from_numpy(image).unsqueeze(0)
+        # TODO support align_corners=True in image_transforms.resize
+        requires_backends(self, "torch")
+        resample_to_mode = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
+        mode = resample_to_mode[resample]
+        resized_image = nn.functional.interpolate(
+            torch_image, (int(height), int(width)), mode=mode, align_corners=True
         )
+        resized_image = resized_image.squeeze().numpy()
 
-        return resized_images
+        return resized_image
 
-    def _pad_images(
+    def pad_image(
         self,
-        images: "torch.Tensor",
+        image: np.ndarray,
     ):
         """
         Args:
-            image (`torch.Tensor`):
+            image (`np.ndarray`):
                 Image to pad.
         """
-        height, width = get_image_size(images, channel_dim=ChannelDimension.FIRST)
+        height, width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
 
         pad_height = int(np.sqrt(height / 2) * 3)
         pad_width = int(np.sqrt(width / 2) * 3)
 
-        return tvF.pad(images, padding=(pad_width, pad_height), padding_mode="reflect")
+        return np_pad(
+            image,
+            padding=((pad_height, pad_height), (pad_width, pad_width)),
+            mode=PaddingMode.REFLECT,
+            data_format=ChannelDimension.FIRST,
+            input_data_format=ChannelDimension.FIRST,
+        )
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
         keep_aspect_ratio: bool | None,
         ensure_multiple_of: int | None,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float | None,
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
-        disable_grouping: bool | None,
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
-        # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        processed_images = []
+        for image in images:
             if do_rescale:
-                stacked_images = self.rescale(stacked_images, rescale_factor)
+                image = self.rescale(image, rescale_factor)
             if do_pad:
-                stacked_images = self._pad_images(images=stacked_images)
+                image = self.pad_image(image)
             if do_resize:
-                stacked_images = self.resize(
-                    stacked_images, size, keep_aspect_ratio, ensure_multiple_of, interpolation
-                )
+                image = self.resize(image, size, keep_aspect_ratio, ensure_multiple_of, resample)
             if do_normalize:
-                stacked_images = self.normalize(stacked_images, image_mean, image_std)
-            resized_images_grouped[shape] = stacked_images
-        processed_images = reorder_images(resized_images_grouped, grouped_images_index)
+                image = self.normalize(image, image_mean, image_std)
+            processed_images.append(image)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
@@ -284,4 +278,4 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         return results
 
 
-__all__ = ["ZoeDepthImageProcessorFast"]
+__all__ = ["ZoeDepthImageProcessorPil"]

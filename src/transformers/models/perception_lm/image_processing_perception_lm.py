@@ -10,35 +10,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for PerceptionLM."""
+"""Image processor class for PerceptionLM."""
 
 import math
 from functools import reduce
 
-import numpy as np
 import torch
-from torchvision.transforms import functional as F
 
-from ...image_processing_utils import (
-    BatchFeature,
-)
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    get_image_size,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    ChannelDimension,
+    ImageInput,
     PILImageResampling,
+    SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-)
+from ...utils import TensorType, auto_docstring, is_torchvision_available
+
+
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 
 class PerceptionLMImageProcessorKwargs(ImagesKwargs, total=False):
@@ -58,7 +52,7 @@ class PerceptionLMImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
+class PerceptionLMImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -77,7 +71,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images, **kwargs: Unpack[PerceptionLMImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[PerceptionLMImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     @staticmethod
@@ -239,13 +233,16 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
 
     def resize(
         self,
-        image: np.ndarray,
+        image: "torch.Tensor",
         tile_size: int,
         max_num_tiles: int,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        input_data_format: str | ChannelDimension | None = None,
-    ):
-        height, width = get_image_size(image, channel_dim=input_data_format)
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        **kwargs,
+    ) -> tuple["torch.Tensor", tuple[int, int]]:
+        """
+        Custom resize method for PerceptionLM that handles tiling logic.
+        """
+        height, width = image.shape[-2:]
         if max_num_tiles > 1:
             aspect_ratio = self._fit_image_to_canvas(img_width=width, img_height=height, tile_size=tile_size)
             if aspect_ratio is None:
@@ -254,24 +251,26 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         else:
             aspect_ratio = (1, 1)
         new_width, new_height = aspect_ratio[0] * tile_size, aspect_ratio[1] * tile_size
-        image = F.resize(image, (new_height, new_width), interpolation=resample)
+
+        image = super().resize(image, SizeDict(height=new_height, width=new_width), resample=resample)
         return image, aspect_ratio
 
     def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
-        do_rescale: bool | None,
-        rescale_factor: int | float | None,
-        do_normalize: bool | None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         vision_input_type: str,
         tile_size: int,
         max_num_tiles: int,
         return_tensors: str | TensorType | None,
-        disable_grouping: bool,
-        **kwargs: Unpack[PerceptionLMImageProcessorKwargs],
+        disable_grouping: bool | None,
+        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched transformation
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -279,14 +278,14 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 if vision_input_type == "thumb+tile":
-                    thumbnails, _ = self.resize(stacked_images, tile_size, max_num_tiles=1)
+                    thumbnails, _ = self.resize(stacked_images, tile_size, max_num_tiles=1, resample=resample)
                     images_for_tiling, (tiles_w, tiles_h) = self.resize(
-                        stacked_images, tile_size, max_num_tiles=max_num_tiles
+                        stacked_images, tile_size, max_num_tiles=max_num_tiles, resample=resample
                     )
                     image_tiles = self._split(images_for_tiling, tiles_w, tiles_h)
                     stacked_images = torch.cat([thumbnails.unsqueeze(1), image_tiles], dim=1)
                 else:  # vanilla single tile for low memory devices
-                    stacked_images, _ = self.resize(stacked_images, tile_size, max_num_tiles=1)
+                    stacked_images, _ = self.resize(stacked_images, tile_size, max_num_tiles=1, resample=resample)
 
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
@@ -295,7 +294,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
+            stacked_images = self._rescale_and_normalize(
                 stacked_images,
                 do_rescale,
                 rescale_factor,
@@ -309,4 +308,4 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
-__all__ = ["PerceptionLMImageProcessorFast"]
+__all__ = ["PerceptionLMImageProcessor"]

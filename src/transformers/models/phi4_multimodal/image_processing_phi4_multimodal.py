@@ -11,25 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Image processor class for Phi4Multimodal."""
 
 import math
-from typing import Optional
 
 import torch
-import torchvision.transforms.v2.functional as tvF
 
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    BatchFeature,
-    Unpack,
-)
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import ImagesKwargs
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    logging,
-)
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
+
+
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -48,7 +44,7 @@ class Phi4MultimodalImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
+class Phi4MultimodalImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
     size = {"height": 448, "width": 448}
     patch_size = 14
@@ -64,6 +60,10 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[Phi4MultimodalImageProcessorKwargs]):
         super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Phi4MultimodalImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     def find_closest_aspect_ratio(self, aspect_ratio, target_ratios, width, height, image_size):
         best_ratio_diff = float("inf")
@@ -154,31 +154,24 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
             masks = torch.cat([masks, pad], dim=0)
         return masks
 
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[Phi4MultimodalImageProcessorKwargs],
-    ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
+        do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         patch_size: int,
         dynamic_hd: int,
-        do_rescale: bool,
-        rescale_factor: float | None,
-        do_normalize: bool,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        return_tensors: str | TensorType | None = None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ):
         if size.height != size.width:
-            raise ValueError("Phi4MultimodalFastImageProcessor only supports square sizes.")
+            raise ValueError("Phi4MultimodalImageProcessor only supports square sizes.")
         mask_size = size.height // patch_size
         images_transformed = []
         masks_transformed = []
@@ -188,10 +181,10 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
             resized_image, attention_mask = self.dynamic_preprocess(
                 image, size.height, patch_size, mask_size, max_num=dynamic_hd
             )
-            processed_image = self.rescale_and_normalize(
+            processed_image = self._rescale_and_normalize(
                 resized_image, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            global_image = self.resize(processed_image, size, interpolation=interpolation, antialias=False)
+            global_image = self.resize(processed_image, size, resample=resample, antialias=False)
             height, width = processed_image.shape[-2:]
             mask_height, mask_width = attention_mask.shape[-2:]
             global_attention_mask = torch.ones((1, mask_size, mask_size))
@@ -254,4 +247,4 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-__all__ = ["Phi4MultimodalImageProcessorFast"]
+__all__ = ["Phi4MultimodalImageProcessor"]

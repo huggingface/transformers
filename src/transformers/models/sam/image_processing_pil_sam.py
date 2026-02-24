@@ -11,25 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for SAM."""
+"""Image processor class for SAM."""
 
 import math
 from copy import deepcopy
 from itertools import product
-from typing import Any, Optional, Union
+from typing import Any, Iterable, Optional, Union
 
 import numpy as np
-import torch
-import torchvision.transforms.v2.functional as tvF
-from torch.nn import functional as F
-from torchvision.ops.boxes import batched_nms
 
+from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_transforms import (
-    group_images_by_shape,
-    reorder_images,
-)
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -37,18 +29,40 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    pil_torch_interpolation_mapping,
+    get_image_size,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-)
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
 from .image_processing_sam import SamImageProcessorKwargs
 
 
+if is_torch_available():
+    import torch
+    import torch.nn.functional as F
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
+
+
+def get_resize_output_image_size(
+    input_image: np.ndarray,
+    longest_edge: int,
+    input_data_format: str | ChannelDimension | None = None,
+) -> tuple[int, int]:
+    height, width = get_image_size(input_image, input_data_format)
+    if height >= width:
+        ratio = width * 1.0 / height
+        new_height = longest_edge
+        new_width = int(new_height * ratio)
+    else:
+        ratio = height * 1.0 / width
+        new_width = longest_edge
+        new_height = int(new_width * ratio)
+    return (new_height, new_width)
+
+
 @auto_docstring
-class SamImageProcessorFast(BaseImageProcessorFast):
+class SamImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -58,105 +72,13 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-
-    valid_kwargs = SamImageProcessorKwargs
-
     do_pad = True
     pad_size = {"height": 1024, "width": 1024}
     mask_pad_size = {"height": 256, "width": 256}
+    valid_kwargs = SamImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[SamImageProcessorKwargs]):
         super().__init__(**kwargs)
-
-    def _get_preprocess_shape(self, old_shape: tuple[int, int], longest_edge: int):
-        """
-        Compute the output size given input size and target long side length.
-        """
-        oldh, oldw = old_shape
-        scale = longest_edge * 1.0 / max(oldh, oldw)
-        newh, neww = oldh * scale, oldw * scale
-        newh = int(newh + 0.5)
-        neww = int(neww + 0.5)
-        return (newh, neww)
-
-    def resize(
-        self, image: "torch.Tensor", size: SizeDict, interpolation: Optional["tvF.InterpolationMode"], **kwargs
-    ) -> "torch.Tensor":
-        """
-        Resize an image to `(size["height"], size["width"])`.
-
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            size (`dict[str, int]`):
-                Dictionary in the format `{"longest_edge": int}` specifying the size of the output image. The longest
-                edge of the image will be resized to the specified size, while the other edge will be resized to
-                maintain the aspect ratio.
-            interpolation:
-                `tvF.InterpolationMode` filter to use when resizing the image e.g. `tvF.InterpolationMode.BICUBIC`.
-
-        Returns:
-            `torch.Tensor`: The resized image.
-        """
-        if not size.longest_edge:
-            raise ValueError(f"The `size` dictionary must contain the key `longest_edge`. Got {size.keys()}")
-        input_size = image.shape[-2:]
-        output_height, output_width = self._get_preprocess_shape(input_size, size.longest_edge)
-        return super().resize(
-            image, size=SizeDict(height=output_height, width=output_width), interpolation=interpolation, **kwargs
-        )
-
-    def _standardize_kwargs(
-        self,
-        size: SizeDict | None = None,
-        pad_size: SizeDict | None = None,
-        mask_size: SizeDict | None = None,
-        mask_pad_size: SizeDict | None = None,
-        default_to_square: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        data_format: ChannelDimension | None = None,
-        **kwargs,
-    ) -> dict:
-        """
-        Update kwargs that need further processing before being validated
-        Can be overridden by subclasses to customize the processing of kwargs.
-        """
-        if kwargs is None:
-            kwargs = {}
-        if size is not None:
-            size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
-        if pad_size is not None:
-            pad_size = SizeDict(**get_size_dict(pad_size, param_name="pad_size"))
-        if mask_size is not None:
-            mask_size = SizeDict(**get_size_dict(mask_size, param_name="mask_size"))
-        if mask_pad_size is not None:
-            mask_pad_size = SizeDict(**get_size_dict(mask_pad_size, param_name="mask_pad_size"))
-        if isinstance(image_mean, list):
-            image_mean = tuple(image_mean)
-        if isinstance(image_std, list):
-            image_std = tuple(image_std)
-        if data_format is None:
-            data_format = ChannelDimension.FIRST
-
-        kwargs["size"] = size
-        kwargs["pad_size"] = pad_size
-        kwargs["mask_size"] = mask_size
-        kwargs["mask_pad_size"] = mask_pad_size
-        kwargs["image_mean"] = image_mean
-        kwargs["image_std"] = image_std
-        kwargs["data_format"] = data_format
-
-        # torch resize uses interpolation instead of resample
-        # Check if resample is an int before checking if it's an instance of PILImageResampling
-        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
-        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
-        resample = kwargs.pop("resample")
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-
-        return kwargs
 
     @auto_docstring
     def preprocess(
@@ -171,28 +93,92 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         """
         return super().preprocess(images, segmentation_maps, **kwargs)
 
+    def _standardize_kwargs(
+        self,
+        mask_size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        mask_pad_size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Update kwargs that need further processing before being validated
+        Can be overridden by subclasses to customize the processing of kwargs.
+        """
+        kwargs = super()._standardize_kwargs(**kwargs)
+        if mask_size is not None and not isinstance(mask_size, SizeDict):
+            mask_size = SizeDict(**get_size_dict(mask_size, param_name="mask_size"))
+        if mask_pad_size is not None and not isinstance(mask_pad_size, SizeDict):
+            mask_pad_size = SizeDict(**get_size_dict(mask_pad_size, param_name="mask_pad_size"))
+
+        kwargs["mask_size"] = mask_size
+        kwargs["mask_pad_size"] = mask_pad_size
+
+        return kwargs
+
+    def _get_preprocess_shape(self, old_shape: tuple[int, int], longest_edge: int):
+        """
+        Compute the output size given input size and target long side length.
+        """
+        oldh, oldw = old_shape
+        scale = longest_edge * 1.0 / max(oldh, oldw)
+        newh, neww = oldh * scale, oldw * scale
+        newh = int(newh + 0.5)
+        neww = int(neww + 0.5)
+        return (newh, neww)
+
+    def resize(
+        self,
+        image: np.ndarray,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Resize an image to `(size["height"], size["width"])`.
+
+        Args:
+            image (`np.ndarray`):
+                Image to resize.
+            size (`SizeDict`):
+                Dictionary in the format `{"longest_edge": int}` specifying the size of the output image. The longest
+                edge of the image will be resized to the specified size, while the other edge will be resized to
+                maintain the aspect ratio.
+            resample (`PILImageResampling | tvF.InterpolationMode | int | None`, *optional*):
+                Resampling filter to use when resizing the image.
+
+        Returns:
+            `np.ndarray`: The resized image.
+        """
+        if not size.longest_edge:
+            raise ValueError(f"The `size` dictionary must contain the key `longest_edge`. Got {size.keys()}")
+        input_size = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+        output_height, output_width = self._get_preprocess_shape(input_size, size.longest_edge)
+        return super().resize(
+            image, size=SizeDict(height=output_height, width=output_width), resample=resample, **kwargs
+        )
+
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
         segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
+        return_tensors: str | TensorType | None,
         device: Union[str, "torch.device"] | None = None,
-        **kwargs: Unpack[SamImageProcessorKwargs],
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
         """
         images = self._prepare_image_like_inputs(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format
         )
         original_sizes = [image.shape[-2:] for image in images]
         images_kwargs = kwargs.copy()
-        image_outputs = self._preprocess(images, **images_kwargs)
+        pixel_values, reshaped_input_sizes = self._preprocess(images, **images_kwargs)
         data = {
-            "pixel_values": image_outputs.pixel_values,
+            "pixel_values": pixel_values,
             "original_sizes": original_sizes,
-            "reshaped_input_sizes": image_outputs.reshaped_input_sizes,
+            "reshaped_input_sizes": reshaped_input_sizes,
         }
 
         if segmentation_maps is not None:
@@ -208,24 +194,24 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 {
                     "do_normalize": False,
                     "do_rescale": False,
-                    "interpolation": tvF.InterpolationMode.NEAREST_EXACT,
+                    "resample": PILImageResampling.NEAREST,
                     "size": segmentation_maps_kwargs.pop("mask_size"),
                     "pad_size": segmentation_maps_kwargs.pop("mask_pad_size"),
                 }
             )
-            processed_segmentation_maps = self._preprocess(
+            processed_segmentation_maps, _ = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
             )
-            data["labels"] = processed_segmentation_maps["pixel_values"].squeeze(1).to(torch.int64)
+            data["labels"] = [m.squeeze(0).astype(np.int64) for m in processed_segmentation_maps]
 
-        return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -235,45 +221,34 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         image_std: float | list[float] | None,
         do_pad: bool | None,
         pad_size: SizeDict | None,
-        disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
         **kwargs,
-    ) -> BatchFeature:
-        # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+    ) -> tuple[list[np.ndarray], list[tuple[int, int]]]:
+        """
+        Preprocess images using PIL backend.
+        """
+        processed_images = []
+        reshaped_input_sizes = []
+        for image in images:
             if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-        reshaped_input_sizes = [image.shape[-2:] for image in resized_images]
+                image = self.resize(image=image, size=size, resample=resample)
+            reshaped_input_sizes.append(image.shape[-2:])
 
-        # Group images by size for further processing
-        # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
             if do_center_crop:
-                stacked_images = self.center_crop(stacked_images, crop_size)
-            # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            processed_images_grouped[shape] = stacked_images
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+                image = self.center_crop(image, crop_size)
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+            processed_images.append(image)
 
         if do_pad:
-            processed_images = self.pad(processed_images, pad_size=pad_size, disable_grouping=disable_grouping)
+            processed_images = self.pad(processed_images, pad_size=pad_size)
 
-        return BatchFeature(
-            data={"pixel_values": processed_images, "reshaped_input_sizes": reshaped_input_sizes},
-            tensor_type=return_tensors,
-        )
+        return processed_images, reshaped_input_sizes
 
     def generate_crop_boxes(
         self,
-        image: "torch.Tensor",
+        image: np.ndarray,
         target_size,
         crop_n_layers: int = 0,
         overlap_ratio: float = 512 / 1500,
@@ -285,7 +260,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
 
         Args:
-            image (`torch.Tensor`):
+            image (`np.ndarray`):
                 Input original image
             target_size (`int`):
                 Target size of the resized image
@@ -301,12 +276,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
             device (`torch.device`, *optional*, defaults to None):
                 Device to use for the computation. If None, cpu will be used.
-            input_data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
-            return_tensors (`str`, *optional*, defaults to `pt`):
-                If `pt`, returns `torch.Tensor`.
         """
-        image = self._process_image(image)
         crop_boxes, points_per_crop, cropped_images, input_labels = _generate_crop_boxes(
             image,
             target_size,
@@ -317,10 +287,10 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         )
         if device is None:
             device = torch.device("cpu")
-        crop_boxes = crop_boxes.to(device)
-        points_per_crop = points_per_crop.to(device)
-        # cropped_images stays as torch.Tensor
-        input_labels = input_labels.to(device)
+        crop_boxes = torch.tensor(crop_boxes, device=device)
+        points_per_crop = torch.tensor(points_per_crop, device=device)
+        # cropped_images stays as np.ndarray
+        input_labels = torch.tensor(input_labels, device=device)
 
         return crop_boxes, points_per_crop, cropped_images, input_labels
 
@@ -348,7 +318,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 List of IoU scores.
             original_size (`tuple[int,int]`):
                 Size of the original image.
-            cropped_box_image (`torch.Tensor`):
+            cropped_box_image (`np.ndarray`):
                 The cropped image.
             pred_iou_thresh (`float`, *optional*, defaults to 0.88):
                 The threshold for the iou scores.
@@ -358,8 +328,9 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 The threshold for the predicted masks.
             stability_score_offset (`float`, *optional*, defaults to 1):
                 The offset for the stability score used in the `_compute_stability_score` method.
-
         """
+        if not is_torch_available():
+            raise ImportError("PyTorch is required for filter_masks")
         original_height, original_width = original_size
         iou_scores = iou_scores.flatten(0, 1)
         masks = masks.flatten(0, 1)
@@ -434,6 +405,8 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             (`torch.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
             is given by original_size.
         """
+        if not is_torch_available():
+            raise ImportError("PyTorch is required for post_process_masks")
         pad_size = self.pad_size if pad_size is None else pad_size
         target_image_size = (pad_size["height"], pad_size["width"])
         if isinstance(original_sizes, (torch.Tensor, np.ndarray)):
@@ -482,37 +455,6 @@ def _compute_stability_score(masks: "torch.Tensor", mask_threshold: float, stabi
     unions = (masks > (mask_threshold - stability_score_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
     stability_scores = intersections / unions
     return stability_scores
-
-
-def _mask_to_rle(input_mask: "torch.Tensor"):
-    """
-    Encodes masks the run-length encoding (RLE), in the format expected by pycoco tools.
-    """
-    # Put in fortran order and flatten height and width
-    batch_size, height, width = input_mask.shape
-    input_mask = input_mask.permute(0, 2, 1).flatten(1)
-
-    # Compute change indices
-    diff = input_mask[:, 1:] ^ input_mask[:, :-1]
-    change_indices = diff.nonzero()
-
-    # Encode run length
-    out = []
-    for i in range(batch_size):
-        cur_idxs = change_indices[change_indices[:, 0] == i, 1] + 1
-        if len(cur_idxs) == 0:
-            # No changes => either all 0 or all 1
-            # If the entire mask is 0, RLE is [height*width] or if the entire mask is 1, RLE is [0, height*width].
-            if input_mask[i, 0] == 0:
-                out.append({"size": [height, width], "counts": [height * width]})
-            else:
-                out.append({"size": [height, width], "counts": [0, height * width]})
-            continue
-        btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
-        counts = [] if input_mask[i, 0] == 0 else [0]
-        counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1].item()]
-        out.append({"size": [height, width], "counts": counts})
-    return out
 
 
 def _batched_mask_to_box(masks: "torch.Tensor"):
@@ -594,7 +536,7 @@ def _pad_masks(masks, crop_box: list[int], orig_height: int, orig_width: int):
 
 def _generate_crop_boxes(
     image,
-    target_size: int,  # Is it tuple here?
+    target_size: int,
     crop_n_layers: int = 0,
     overlap_ratio: float = 512 / 1500,
     points_per_crop: int | None = 32,
@@ -604,7 +546,7 @@ def _generate_crop_boxes(
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
 
     Args:
-        image (Union[`numpy.ndarray`, `PIL.Image`, `torch.Tensor`]):
+        image (`np.ndarray`):
             Image to generate crops for.
         target_size (`int`):
             Size of the smallest crop.
@@ -618,8 +560,6 @@ def _generate_crop_boxes(
             Number of points to sample per crop.
         crop_n_points_downscale_factor (`int`, *optional*):
             The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
-        input_data_format (`str` or `ChannelDimension`, *optional*):
-            The channel dimension format of the input image. If not provided, it will be inferred.
     """
 
     if isinstance(image, list):
@@ -636,13 +576,12 @@ def _generate_crop_boxes(
     cropped_images, point_grid_per_crop = _generate_crop_images(
         crop_boxes, image, points_grid, layer_idxs, target_size, original_size
     )
-    crop_boxes = torch.tensor(crop_boxes)
-    crop_boxes = crop_boxes.float()
-    points_per_crop = torch.stack(point_grid_per_crop)
-    points_per_crop = points_per_crop.unsqueeze(0).permute(0, 2, 1, 3)
-    cropped_images = torch.stack(cropped_images)
+    crop_boxes = np.array(crop_boxes)
+    crop_boxes = crop_boxes.astype(np.float32)
+    points_per_crop = np.array([point_grid_per_crop])
+    points_per_crop = np.transpose(points_per_crop, axes=(0, 2, 1, 3))
 
-    input_labels = torch.ones_like(points_per_crop[:, :, :, 0], dtype=torch.int64)
+    input_labels = np.ones_like(points_per_crop[:, :, :, 0], dtype=np.int64)
 
     return crop_boxes, points_per_crop, cropped_images, input_labels
 
@@ -681,13 +620,13 @@ def _generate_per_layer_crops(crop_n_layers, overlap_ratio, original_size):
     return crop_boxes, layer_idxs
 
 
-def _build_point_grid(n_per_side: int) -> torch.Tensor:
+def _build_point_grid(n_per_side: int) -> np.ndarray:
     """Generates a 2D grid of points evenly spaced in [0,1]x[0,1]."""
     offset = 1 / (2 * n_per_side)
-    points_one_side = torch.linspace(offset, 1 - offset, n_per_side)
-    points_x = torch.tile(points_one_side[None, :], (n_per_side, 1))
-    points_y = torch.tile(points_one_side[:, None], (1, n_per_side))
-    points = torch.stack([points_x, points_y], dim=-1).reshape(-1, 2)
+    points_one_side = np.linspace(offset, 1 - offset, n_per_side)
+    points_x = np.tile(points_one_side[None, :], (n_per_side, 1))
+    points_y = np.tile(points_one_side[:, None], (1, n_per_side))
+    points = np.stack([points_x, points_y], axis=-1).reshape(-1, 2)
     return points
 
 
@@ -707,7 +646,7 @@ def _generate_crop_images(
         cropped_images.append(cropped_im)
 
         cropped_im_size = cropped_im.shape[-2:]
-        points_scale = torch.tensor(cropped_im_size).flip(dims=(0,)).unsqueeze(0)
+        points_scale = np.array(cropped_im_size)[None, ::-1]
 
         points = points_grid[layer_idxs[i]] * points_scale
         normalized_points = _normalize_coordinates(target_size, points, original_size)
@@ -717,8 +656,8 @@ def _generate_crop_images(
 
 
 def _normalize_coordinates(
-    target_size: int, coords: torch.Tensor, original_size: tuple[int, int], is_bounding_box=False
-) -> torch.Tensor:
+    target_size: int, coords: np.ndarray, original_size: tuple[int, int], is_bounding_box=False
+) -> np.ndarray:
     """
     Expects a numpy array of length 2 in the final dimension. Requires the original image size in (height, width)
     format.
@@ -730,7 +669,7 @@ def _normalize_coordinates(
     new_width = int(new_width + 0.5)
     new_height = int(new_height + 0.5)
 
-    coords = deepcopy(coords).float()
+    coords = deepcopy(coords).astype(float)
 
     if is_bounding_box:
         coords = coords.reshape(-1, 2, 2)
@@ -744,10 +683,10 @@ def _normalize_coordinates(
     return coords
 
 
-def _rle_to_mask(rle: dict[str, Any]) -> torch.Tensor:
+def _rle_to_mask(rle: dict[str, Any]) -> np.ndarray:
     """Compute a binary mask from an uncompressed RLE."""
     height, width = rle["size"]
-    mask = torch.empty(height * width, dtype=bool)
+    mask = np.empty(height * width, dtype=bool)
     idx = 0
     parity = False
     for count in rle["counts"]:
@@ -755,7 +694,7 @@ def _rle_to_mask(rle: dict[str, Any]) -> torch.Tensor:
         idx += count
         parity = not parity
     mask = mask.reshape(width, height)
-    return mask.transpose(0, 1)  # Reshape to original shape
+    return mask.transpose()  # Reshape to original shape
 
 
 def _post_process_for_mask_generation(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
@@ -772,6 +711,10 @@ def _post_process_for_mask_generation(rle_masks, iou_scores, mask_boxes, amg_cro
             amg_crops_nms_thresh (`float`, *optional*, defaults to 0.7):
                 NMS threshold.
     """
+    if not is_torch_available():
+        raise ImportError("PyTorch is required for post_process_for_mask_generation")
+    from torchvision.ops.boxes import batched_nms
+
     keep_by_nms = batched_nms(
         boxes=mask_boxes.float(),
         scores=iou_scores,
@@ -787,4 +730,35 @@ def _post_process_for_mask_generation(rle_masks, iou_scores, mask_boxes, amg_cro
     return masks, iou_scores, rle_masks, mask_boxes
 
 
-__all__ = ["SamImageProcessorFast"]
+def _mask_to_rle(input_mask: "torch.Tensor"):
+    """
+    Encodes masks the run-length encoding (RLE), in the format expected by pycoco tools.
+    """
+    # Put in fortran order and flatten height and width
+    batch_size, height, width = input_mask.shape
+    input_mask = input_mask.permute(0, 2, 1).flatten(1)
+
+    # Compute change indices
+    diff = input_mask[:, 1:] ^ input_mask[:, :-1]
+    change_indices = diff.nonzero()
+
+    # Encode run length
+    out = []
+    for i in range(batch_size):
+        cur_idxs = change_indices[change_indices[:, 0] == i, 1] + 1
+        if len(cur_idxs) == 0:
+            # No changes => either all 0 or all 1
+            # If the entire mask is 0, RLE is [height*width] or if the entire mask is 1, RLE is [0, height*width].
+            if input_mask[i, 0] == 0:
+                out.append({"size": [height, width], "counts": [height * width]})
+            else:
+                out.append({"size": [height, width], "counts": [0, height * width]})
+            continue
+        btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
+        counts = [] if input_mask[i, 0] == 0 else [0]
+        counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1].item()]
+        out.append({"size": [height, width], "counts": counts})
+    return out
+
+
+__all__ = ["SamImageProcessorPil"]
