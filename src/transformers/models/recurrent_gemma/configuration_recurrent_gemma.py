@@ -82,11 +82,6 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         num_key_value_heads (`16`, *optional*, defaults to 16): Number of key value heads to use GQA.
         attention_bias (`bool`, *optional*, defaults to `False`): whether or not the linear q,k,v of the Attention layer should have bias
         w_init_variance_scale (`float`, *optional*, defaults to 0.01): weight initialization variance.
-        use_associative_scan (`bool`, *optional*, defaults to `False`):
-            Whether to use PyTorch's `torch._higher_order_ops.associative_scan` for the parallel scan instead of
-            the naive sequential implementation. The associative scan is only active during `torch.compile` tracing
-            and requires torch >= 2.9.0. Both paths are tested to produce numerically identical results (see
-            `test_associative_scan_matches_sequential`). Set to `True` to enable this feature.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
 
@@ -128,7 +123,6 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         num_key_value_heads: int | None = None,
         attention_bias: str | None = False,
         w_init_variance_scale: float | None = 0.01,
-        use_associative_scan: bool = False,
         tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
@@ -152,7 +146,6 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.attention_bias = attention_bias
         self.w_init_variance_scale = w_init_variance_scale
-        self.use_associative_scan = use_associative_scan
         self.final_w_init_variance_scale = 2.0 / self.num_hidden_layers
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id

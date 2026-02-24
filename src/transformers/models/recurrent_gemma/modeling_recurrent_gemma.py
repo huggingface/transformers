@@ -30,17 +30,11 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.generic import maybe_autocast
-from ...utils.import_utils import is_torch_greater_or_equal, is_tracing
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
 
 
 logger = logging.get_logger(__name__)
 _MAX_SQRT_GRADIENT = 1000.0
-
-if is_torch_greater_or_equal("2.9.0"):
-    from torch._higher_order_ops.associative_scan import associative_scan
-else:
-    associative_scan = None
 
 
 # Copied from transformers.models.gemma.modeling_gemma.GemmaRMSNorm with Gemma->RecurrentGemma
@@ -335,7 +329,6 @@ class RecurrentGemmaRglru(nn.Module):
             torch.empty([self.num_attention_heads, self.block_width, self.block_width])
         )
         self.recurrent_gate_bias = nn.Parameter(torch.empty([self.num_attention_heads, self.block_width]))
-        self.use_associative_scan = config.use_associative_scan
         self.recurrent_states = None
 
     def forward(
@@ -420,30 +413,13 @@ class RecurrentGemmaRglru(nn.Module):
             if recurrent_states is None:
                 recurrent_states = torch.zeros(hidden_states[:, 0].shape, dtype=acc_dtype, device=hidden_states.device)
 
-            if self.use_associative_scan and associative_scan is not None and is_tracing(hidden_states):
-                # Use parallel associative scan
-                def combine_fn(left, right):
-                    a_left, b_left = left
-                    a_right, b_right = right
-                    return (a_left * a_right, a_right * b_left + b_right)
-
-                combine_mode = "pointwise" if hidden_states.device.type in ("cuda", "xpu") else "generic"
-                _, contextualized_states = associative_scan(
-                    combine_fn,
-                    (recurrent_gate.type(acc_dtype), hidden_states.type(acc_dtype)),
-                    dim=1,
-                    combine_mode=combine_mode,
+            contextualized_states = torch.zeros_like(hidden_states)
+            for t in range(hidden_states.shape[1]):
+                recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states.to(
+                    recurrent_gate.device
                 )
-                recurrent_states = contextualized_states[:, -1]
-                contextualized_states = contextualized_states.type(hidden_states.dtype)
-            else:
-                contextualized_states = torch.zeros_like(hidden_states)
-                for t in range(hidden_states.shape[1]):
-                    recurrent_states = recurrent_gate[:, t].type(acc_dtype) * recurrent_states.to(
-                        recurrent_gate.device
-                    )
-                    recurrent_states = recurrent_states + hidden_states[:, t].type(acc_dtype)
-                    contextualized_states[:, t] = recurrent_states.type(hidden_states.dtype)
+                recurrent_states = recurrent_states + hidden_states[:, t].type(acc_dtype)
+                contextualized_states[:, t] = recurrent_states.type(hidden_states.dtype)
 
         return contextualized_states, recurrent_states
 
