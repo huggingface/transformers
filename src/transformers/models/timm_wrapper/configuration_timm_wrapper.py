@@ -81,7 +81,6 @@ class TimmWrapperConfig(PreTrainedConfig, BackboneConfigMixin):
         self.initializer_range = initializer_range
         self.do_pooling = do_pooling
         self.freeze_batch_norm_2d = freeze_batch_norm_2d
-        self.model_args = model_args  # named "model_args" for BC with timm
         if model_args is None and is_backbone_config:
             model_args = {
                 "features_only": kwargs.pop("features_only", True),
@@ -89,6 +88,7 @@ class TimmWrapperConfig(PreTrainedConfig, BackboneConfigMixin):
                 "output_stride": kwargs.get("output_stride"),
             }
 
+        self.model_args = model_args  # named "model_args" for BC with timm
         super().__init__(**kwargs)
 
     @classmethod
