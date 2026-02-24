@@ -44,6 +44,48 @@ Tips:
 This model was contributed by [ybelkada](https://huggingface.co/ybelkada) and [ArthurZ](https://huggingface.co/ArthurZ).
 The original code can be found [here](https://github.com/facebookresearch/segment-anything).
 
+## Usage examples with 🤗 Transformers
+
+### Promptable Visual Segmentation Pipeline
+
+The easiest way to use SAM is through the `promptable-visual-segmentation` pipeline:
+
+```python
+>>> from transformers import pipeline
+
+>>> segmenter = pipeline(model="facebook/sam-vit-base", task="promptable-visual-segmentation")
+>>> # Single point prompt
+>>> segmenter(
+...     "http://images.cocodataset.org/val2017/000000077595.jpg",
+...     input_points=[[[[450, 600]]]],
+...     input_labels=[[[1]]],
+... )
+[[{'score': 0.87, 'mask': tensor([...])}]]
+
+>>> # Box prompt
+>>> segmenter(
+...     "http://images.cocodataset.org/val2017/000000136466.jpg",
+...     input_boxes=[[[59, 144, 76, 163]]],
+... )
+[[{'score': 0.92, 'mask': tensor([...])}]]
+
+>>> # Multiple points for refinement
+>>> segmenter(
+...     "http://images.cocodataset.org/val2017/000000136466.jpg",
+...     input_points=[[[[450, 600], [500, 620]]]],
+...     input_labels=[[[1, 0]]],  # 1=positive, 0=negative
+... )
+[[{'score': 0.85, 'mask': tensor([...])}]]
+```
+
+<Tip>
+
+**Note:** The pipeline output format differs from using the model and processor manually. The pipeline returns a standardized format (list of lists of dicts with `score` and `mask`) to ensure consistency across all transformers pipelines, while the processor's `post_process_masks()` returns raw tensors.
+
+</Tip>
+
+### Basic Usage with Model and Processor
+
 Below is an example on how to run mask generation given an image and a 2D point:
 
 ```python

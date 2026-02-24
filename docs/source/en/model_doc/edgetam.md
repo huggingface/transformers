@@ -39,14 +39,52 @@ The original code can be found [here](https://github.com/facebookresearch/EdgeTA
 
 ## Usage example
 
-### Automatic Mask Generation with Pipeline
+### Promptable Visual Segmentation Pipeline
+
+The easiest way to use EdgeTAM is through the `promptable-visual-segmentation` pipeline:
+
+```python
+>>> from transformers import pipeline
+
+>>> segmenter = pipeline(model="yonigozlan/EdgeTAM-hf", task="promptable-visual-segmentation")
+>>> # Single point prompt
+>>> segmenter(
+...     "http://images.cocodataset.org/val2017/000000077595.jpg",
+...     input_points=[[[[450, 600]]]],
+...     input_labels=[[[1]]],
+... )
+[[{'score': 0.87, 'mask': tensor([...])}]]
+
+>>> # Box prompt
+>>> segmenter(
+...     "http://images.cocodataset.org/val2017/000000136466.jpg",
+...     input_boxes=[[[59, 144, 76, 163]]],
+... )
+[[{'score': 0.92, 'mask': tensor([...])}]]
+
+>>> # Multiple points for refinement
+>>> segmenter(
+...     "http://images.cocodataset.org/val2017/000000136466.jpg",
+...     input_points=[[[[450, 600], [500, 620]]]],
+...     input_labels=[[[1, 0]]],  # 1=positive, 0=negative
+... )
+[[{'score': 0.85, 'mask': tensor([...])}]]
+```
+
+<Tip>
+
+**Note:** The pipeline output format differs from using the model and processor manually. The pipeline returns a standardized format (list of lists of dicts with `score` and `mask`) to ensure consistency across all transformers pipelines, while the processor's `post_process_masks()` returns raw tensors.
+
+</Tip>
+
+### Automatic Mask Generation Pipeline
 
 EdgeTAM can be used for automatic mask generation to segment all objects in an image using the `mask-generation` pipeline:
 
 ```python
 >>> from transformers import pipeline
 
->>> generator = pipeline("mask-generation", model="yonigozlan/edgetam-1", device=0)
+>>> generator = pipeline("mask-generation", model="yonigozlan/EdgeTAM-hf", device=0)
 >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
 >>> outputs = generator(image_url, points_per_batch=64)
 
@@ -69,8 +107,8 @@ from accelerate import Accelerator
 
 >>> device = Accelerator().device
 
->>> model = EdgeTamModel.from_pretrained("yonigozlan/edgetam-1").to(device)
->>> processor = Sam2Processor.from_pretrained("yonigozlan/edgetam-1")
+>>> model = EdgeTamModel.from_pretrained("yonigozlan/EdgeTAM-hf").to(device)
+>>> processor = Sam2Processor.from_pretrained("yonigozlan/EdgeTAM-hf")
 
 >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
 >>> raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
@@ -166,8 +204,8 @@ from accelerate import Accelerator
 
 >>> device = Accelerator().device
 
->>> model = EdgeTamModel.from_pretrained("yonigozlan/edgetam-1").to(device)
->>> processor = Sam2Processor.from_pretrained("yonigozlan/edgetam-1")
+>>> model = EdgeTamModel.from_pretrained("yonigozlan/EdgeTAM-hf").to(device)
+>>> processor = Sam2Processor.from_pretrained("yonigozlan/EdgeTAM-hf")
 
 >>> # Load multiple images
 >>> image_urls = [
