@@ -93,7 +93,7 @@ class GraniteMoeHybridModelTester(BambaModelTester):
 
         sequence_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            sequence_labels = ids_tensor([self.batch_size], self.num_labels)
 
         self._update_layer_configs()
         config = self.get_config()
