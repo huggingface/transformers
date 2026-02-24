@@ -564,6 +564,8 @@ class WhisperEncoder(WhisperPreTrainedModel):
         config: WhisperConfig
     """
 
+    input_modalities = ("audio",)
+
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
         self.dropout = config.dropout
@@ -697,6 +699,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
     """
 
     main_input_name = "input_ids"
+    input_modalities = ("text",)
 
     def __init__(self, config: WhisperConfig):
         super().__init__(config)

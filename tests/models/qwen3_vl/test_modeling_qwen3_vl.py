@@ -164,11 +164,16 @@ class Qwen3VLVisionText2TextModelTester:
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         input_ids[:, self.num_image_tokens] = self.image_token_id
         input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
+
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[:, self.num_image_tokens] = 1
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "mm_token_type_ids": mm_token_type_ids,
         }
         return config, inputs_dict
 
@@ -216,6 +221,7 @@ class Qwen3VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             with self.assertRaises(ValueError):
                 _ = model(**curr_input_dict)
 
+            model.base_model.rope_deltas = None
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
             input_ids = curr_input_dict["input_ids"][:1]
             pixel_values = curr_input_dict["pixel_values"][:one_img_length]
@@ -230,6 +236,7 @@ class Qwen3VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                     image_grid_thw=image_grid_thw,
                 )
 
+            model.base_model.rope_deltas = None
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
