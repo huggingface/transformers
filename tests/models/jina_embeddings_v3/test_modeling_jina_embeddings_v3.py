@@ -369,9 +369,5 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
                 outputs[task] = output
 
         # Ensure adapters actually change outputs
-        self.assertFalse(
-            torch.allclose(outputs["retrieval.query"], outputs["classification"])
-        )
-        self.assertFalse(
-            torch.allclose(outputs["retrieval.query"], outputs["retrieval.passage"])
-        )
+        self.assertFalse(torch.allclose(outputs["retrieval.query"], outputs["classification"]))
+        self.assertFalse(torch.allclose(outputs["retrieval.query"], outputs["retrieval.passage"]))
