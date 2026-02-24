@@ -12,6 +12,7 @@ from transformers.audio_utils import AudioInput
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin
 from transformers.tokenization_utils_base import TextInput
+from transformers.utils import auto_docstring
 
 
 class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
@@ -39,6 +40,7 @@ def _get_feat_extract_output_lengths(input_lengths):
     return output_lengths
 
 
+@auto_docstring
 class Qwen3ASRProcessor(ProcessorMixin):
     r"""
     Constructs a Qwen3ASR processor.
@@ -58,16 +60,16 @@ class Qwen3ASRProcessor(ProcessorMixin):
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
-    def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None):
-        super().__init__(
-            tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
-            chat_template=chat_template,
-        )
+    def __init__(
+        self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
+    ):
+        super().__init__(image_processor, video_processor, feature_extractor, tokenizer, chat_template=chat_template)
         self.audio_token = self.tokenizer.audio_token
+        self.vision_eos_token = self.tokenizer.vision_eos_token
         self.audio_bos_token = self.tokenizer.audio_bos_token
         self.audio_eos_token = self.tokenizer.audio_eos_token
 
+    @auto_docstring
     def __call__(
         self,
         text: TextInput = None,
@@ -185,6 +187,29 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
         return super().apply_chat_template(conversations, chat_template, **kwargs)
+
+    def post_process_multimodal_output(
+        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
+    ):
+        """
+        Post-process the output of a multimodal model to return the requested modality output.
+        If the model cannot generated the requested modality, an error will be raised.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            generation_mode (`str`, *optional*):
+                Generation mode indicated which modality to output and can be one of `["text", "image", "audio"]`.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[Inion[str, np.ndarray]]`: The decoded text or generated audio.
+        """
+        raise ValueError("Not needed.")
 
     @property
     def model_input_names(self):

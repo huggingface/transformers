@@ -40,7 +40,7 @@ from ..qwen3_omni_moe.configuration_qwen3_omni_moe import (
     Qwen3OmniMoeConfig
 )
 from ..qwen3_omni_moe.processing_qwen3_omni_moe import (
-    _get_feat_extract_output_lengths
+    _get_feat_extract_output_lengths, Qwen3OmniMoeProcessor
 )
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
@@ -368,8 +368,7 @@ class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
         },
     }
 
-
-class Qwen3ASRProcessor(ProcessorMixin):
+class Qwen3ASRProcessor(Qwen3OmniMoeProcessor):
     r"""
     Constructs a Qwen3ASR processor.
     [`Qwen3ASRProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`], and [`Qwen2TokenizerFast`]. See the
@@ -389,16 +388,19 @@ class Qwen3ASRProcessor(ProcessorMixin):
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(
-        self, feature_extractor=None, tokenizer=None, chat_template=None
-    ):
-        super().__init__(
-            tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
-            chat_template=chat_template,
-        )
-        self.audio_token = self.tokenizer.audio_token
-        self.audio_bos_token = self.tokenizer.audio_bos_token
-        self.audio_eos_token = self.tokenizer.audio_eos_token
+        self,
+        image_processor=None,
+        video_processor=None,
+        feature_extractor=None, 
+        tokenizer=None, 
+        chat_template=None
+    ):  
+        super().__init__(feature_extractor,tokenizer,chat_template)
+        
+        del self.image_token
+        del self.video_token
+        del self.vision_bos_token
+        del self.self.vision_eos_token
 
     def __call__(
         self,
@@ -483,41 +485,13 @@ class Qwen3ASRProcessor(ProcessorMixin):
             processed_text.append(sample)
         return processed_text
 
-    def get_chunked_index(self, token_indices: np.ndarray, tokens_per_chunk: int) -> list[tuple[int, int]]:
-        """
-        Splits token index list into chunks based on token value ranges.
-
-        Given a list of token indices, returns a list of (start, end) index tuples representing
-        slices of the list where the token values fall within successive ranges of `t_ntoken_per_chunk`.
-
-        For example, if `t_ntoken_per_chunk` is 1000, the function will create chunks such that:
-        - the first chunk contains token values < 1000,
-        - the second chunk contains values >= 1000 and < 2000, and so on.
-
-        Parameters:
-            token_indices (`np.ndarray`): A monotonically increasing list of token index values.
-            t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
-
-        Returns:
-            `list[tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
-                                and end (exclusive) indices of a chunk in `token_indices`.
-        """
-
-        def _iter():
-            i, start_idx = 0, 0  # skip bos token
-            current_chunk = 1
-            while i < len(token_indices):  # skip eos token
-                if token_indices[i] >= current_chunk * tokens_per_chunk:
-                    yield (start_idx, i)
-                    start_idx = i
-                    current_chunk += 1
-                i += 1
-            yield (start_idx, len(token_indices))
-
-        return list(_iter())
-
-    def apply_chat_template(self, conversations, chat_template=None, **kwargs):
-        return super().apply_chat_template(conversations, chat_template, **kwargs)
+    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
+        raise ValueError("Not needed.")
+    
+    def post_process_multimodal_output(
+        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
+    ):
+        raise ValueError("Not needed.")
 
     @property
     def model_input_names(self):
