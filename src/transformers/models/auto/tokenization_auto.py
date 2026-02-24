@@ -341,8 +341,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
 # These models will be forced to use TokenizersBackend.
 MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "arctic",
+    "deepseek_v2",
     "deepseek_vl",
-    "deepseek_vl_v2",
     "deepseek_vl_hybrid",
     "fuyu",
     "hyperclovax_vlm",
@@ -707,6 +707,12 @@ class AutoTokenizer:
                 or tokenizer_class_from_name(tokenizer_config_class + "Fast") is not None
             )
         )
+
+        # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class
+        if has_remote_code and config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
+            has_remote_code = False
+            tokenizer_auto_map = None
+
         if has_remote_code:
             # V5: Always prefer fast tokenizer (index 1), fallback to slow (index 0)
             if tokenizer_auto_map[1] is not None:
