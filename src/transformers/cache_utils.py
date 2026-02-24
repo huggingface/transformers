@@ -323,7 +323,9 @@ class StaticLayer(CacheLayerMixin):
         # Create a tensor to slice the static kv at the correct indices
         kv_length = key_states.shape[-2]
         cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
-        self.cumulative_length += kv_length
+        # Note: it is very important to update the cumulative length in-place, as otherwise we cannot use cudagraphs
+        # with mode="reduce_overhead" (it complains about overwriting the tensor)
+        self.cumulative_length.add_(kv_length)
 
         # Update the cache
         try:
