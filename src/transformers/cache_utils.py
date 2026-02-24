@@ -337,9 +337,7 @@ class StaticLayer(CacheLayerMixin):
 
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
-        # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
-        # limit the check to the first batch member and head dimension.
-        return (self.keys[0, 0].any(dim=-1)).sum() if self.is_initialized else 0
+        return self.cumulative_length
 
     def get_max_cache_shape(self) -> int:
         """Return the maximum cache shape of the cache"""
@@ -457,10 +455,6 @@ class StaticSlidingWindowLayer(StaticLayer):
             kv_length = sliding_window
 
         return kv_length, kv_offset
-
-    def get_seq_length(self) -> int:
-        """Returns the sequence length of the cached states."""
-        return self.cumulative_length
 
 
 class QuantizedLayer(DynamicLayer):
