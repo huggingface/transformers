@@ -764,6 +764,7 @@ def _preprocess_mask_arguments(
     past_key_values: Cache | None,
     position_ids: torch.Tensor | None,
     layer_idx: int | None,
+    encoder_hidden_states: torch.Tensor | None = None,
 ) -> tuple[bool, torch.Tensor | BlockMask | None, int, int]:
     """
     Perform some common pre-processing of the mask arguments we get from the modeling code. Mostly determine the
@@ -829,7 +830,9 @@ def _preprocess_mask_arguments(
         q_offset = 0
         # 1. Rely on input directly
         if attention_mask is None:
-            kv_length, kv_offset = q_length, 0
+            # For encoder-decoders, use encoder_hidden_states to infer kv_length if provided
+            kv_length = encoder_hidden_states.shape[1] if encoder_hidden_states is not None else q_length
+            kv_offset = 0
         # 2. Rely on the mask instead - needed for special cases like prefix tuning in PEFT
         #
         # This is a very unique and special case where an encoder utilizes a cache and expects its length
@@ -1002,14 +1005,14 @@ def create_bidirectional_mask(
             An optional mask function to combine with the base mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top, for example for image tokens handling.
     """
-    embeds = encoder_hidden_states if encoder_hidden_states is not None else inputs_embeds
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
-        config, embeds, attention_mask, None, None, 0
+        config, inputs_embeds, attention_mask, None, None, 0, encoder_hidden_states
     )
     if early_exit:
         return attention_mask
 
+    embeds = encoder_hidden_states if encoder_hidden_states is not None else inputs_embeds
     batch_size, dtype, device = embeds.shape[0], embeds.dtype, embeds.device
     mask_factory_function = bidirectional_mask_function
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
