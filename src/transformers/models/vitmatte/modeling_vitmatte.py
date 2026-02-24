@@ -19,9 +19,9 @@ import torch
 from torch import nn
 
 from ... import initialization as init
-from ...auto import AutoBackbone
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
+from ..auto import AutoBackbone
 from .configuration_vitmatte import VitMatteConfig
 
 

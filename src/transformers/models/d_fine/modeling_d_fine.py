@@ -28,7 +28,6 @@ from torch import Tensor
 
 from ... import initialization as init
 from ...activations import ACT2CLS
-from ...auto import AutoBackbone
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -37,6 +36,7 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoBackbone
 from .configuration_d_fine import DFineConfig
 
 

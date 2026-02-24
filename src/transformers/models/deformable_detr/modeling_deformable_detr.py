@@ -29,7 +29,6 @@ from torch import Tensor
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...auto import AutoBackbone
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
@@ -39,6 +38,7 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..auto import AutoBackbone
 from .configuration_deformable_detr import DeformableDetrConfig
 
 

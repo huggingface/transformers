@@ -24,7 +24,6 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...auto import AutoBackbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -39,6 +38,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.generic import maybe_autocast
+from ..auto import AutoBackbone
 from .configuration_oneformer import OneFormerConfig
 
 

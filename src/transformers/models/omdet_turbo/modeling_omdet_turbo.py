@@ -26,7 +26,6 @@ from torch import Tensor
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
-from ...auto import AutoBackbone
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -39,7 +38,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ..auto import AutoModel
+from ..auto import AutoBackbone, AutoModel
 from .configuration_omdet_turbo import OmDetTurboConfig
 
 

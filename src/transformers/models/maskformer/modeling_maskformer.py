@@ -23,7 +23,6 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...auto import AutoBackbone
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
@@ -39,6 +38,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ..auto import AutoBackbone
 from ..detr import DetrConfig
 from .configuration_maskformer import MaskFormerConfig
 from .configuration_maskformer_swin import MaskFormerSwinConfig

@@ -21,7 +21,6 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...auto import AutoBackbone
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
@@ -31,6 +30,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ..auto import AutoBackbone
 from .configuration_dab_detr import DabDetrConfig
 
 

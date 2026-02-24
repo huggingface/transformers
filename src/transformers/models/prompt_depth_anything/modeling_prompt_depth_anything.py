@@ -20,11 +20,11 @@
 import torch
 import torch.nn as nn
 
-from ...auto import AutoBackbone
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from ...utils.generic import torch_int
+from ..auto import AutoBackbone
 from .configuration_prompt_depth_anything import PromptDepthAnythingConfig
 
 

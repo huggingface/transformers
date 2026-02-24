@@ -19,12 +19,12 @@ import torch
 from torch import nn
 
 from ... import initialization as init
-from ...auto import AutoBackbone
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
+from ..auto import AutoBackbone
 from .configuration_vitpose import VitPoseConfig
 
 

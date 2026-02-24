@@ -16,10 +16,10 @@
 import torch
 from torch import nn
 
-from ...auto import AutoBackbone
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ..auto import AutoBackbone
 from .configuration_depth_anything import DepthAnythingConfig
 
 

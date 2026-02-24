@@ -22,7 +22,6 @@ import torch.nn as nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...auto import AutoBackbone
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -41,6 +40,7 @@ from ...utils import (
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoBackbone
 from .configuration_detr import DetrConfig
 
 

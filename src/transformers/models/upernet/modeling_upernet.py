@@ -17,10 +17,10 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ...auto import AutoBackbone
 from ...modeling_outputs import SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
+from ..auto import AutoBackbone
 from .configuration_upernet import UperNetConfig
 
 

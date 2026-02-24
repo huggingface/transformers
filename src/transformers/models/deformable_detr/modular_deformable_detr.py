@@ -21,7 +21,6 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from ... import initialization as init
-from ...auto import AutoBackbone
 from ...image_transforms import center_to_corners_format
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
@@ -37,6 +36,7 @@ from ...utils import (
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..auto import AutoBackbone
 from ..detr.image_processing_detr_fast import DetrImageProcessorFast
 from ..detr.modeling_detr import (
     DetrConvEncoder,

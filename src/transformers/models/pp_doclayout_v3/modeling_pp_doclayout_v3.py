@@ -30,7 +30,6 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
-from ...auto import AutoBackbone
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
@@ -46,6 +45,7 @@ from ...utils import (
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoBackbone
 from .configuration_pp_doclayout_v3 import PPDocLayoutV3Config
 
 

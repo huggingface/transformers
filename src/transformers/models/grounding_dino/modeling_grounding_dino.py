@@ -23,12 +23,11 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...auto import AutoBackbone
 from ...file_utils import ModelOutput
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging, torch_compilable_check
-from ..auto import AutoModel
+from ..auto import AutoBackbone, AutoModel
 from .configuration_grounding_dino import GroundingDinoConfig
 
 
