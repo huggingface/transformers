@@ -46,7 +46,6 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import set_seed
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
