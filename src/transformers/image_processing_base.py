@@ -370,15 +370,17 @@ class ImageProcessingMixin(PushToHubMixin):
         image_processor = cls(**image_processor_dict)
 
         # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)
-        to_remove = []
-        for key, value in kwargs.items():
-            # Set on instance if attribute exists and not in valid_kwargs
+        extra_keys = []
+        for key in reversed(list(kwargs.keys())):
             if hasattr(image_processor, key) and key not in cls.valid_kwargs.__annotations__:
-                setattr(image_processor, key, value)
-                to_remove.append(key)
-        # Don't return consumed kwargs as unused when return_unused_kwargs=True
-        for key in to_remove:
-            kwargs.pop(key, None)
+                setattr(image_processor, key, kwargs.pop(key, None))
+                extra_keys.append(key)
+        if extra_keys:
+            logger.warning_once(
+                f"Image processor {cls.__name__}: kwargs {extra_keys} were applied for backward compatibility. "
+                f"To avoid this warning, add them to valid_kwargs: create a custom TypedDict extending "
+                f"ImagesKwargs with these keys and set it as the `valid_kwargs` class attribute."
+            )
 
         logger.info(f"Image processor {image_processor}")
         if return_unused_kwargs:
