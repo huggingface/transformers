@@ -343,6 +343,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "arctic",
     "deepseek_vl",
     "deepseek_vl_hybrid",
+    "fuyu",
     "hyperclovax_vlm",
     "janus",
     "jamba",
