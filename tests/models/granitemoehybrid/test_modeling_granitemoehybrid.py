@@ -38,7 +38,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...models.bamba.test_modeling_bamba import BambaModelTester
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -84,8 +84,24 @@ class GraniteMoeHybridModelTester(BambaModelTester):
             layer_types=self.layer_types,
         )
 
+    def prepare_config_and_inputs_for_sequence_classification(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
+
+        sequence_labels = None
+        if self.use_labels:
+            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+
+        self._update_layer_configs()
+        config = self.get_config()
+
+        return config, input_ids, input_mask, sequence_labels
+
     def create_and_check_for_sequence_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, input_mask, sequence_labels
     ):
         config.num_labels = self.num_labels
         model = GraniteMoeHybridForSequenceClassification(config=config)
@@ -155,7 +171,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
     def test_for_sequence_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_sequence_classification()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
     def test_decoder_model_past_with_large_inputs(self):
