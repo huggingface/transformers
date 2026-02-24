@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from ... import initialization as init
-from ...backbone_utils import load_backbone
+from ...auto import AutoBackbone
 from ...image_transforms import center_to_corners_format
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
@@ -292,7 +292,7 @@ class DeformableDetrConvEncoder(DetrConvEncoder):
 
         self.config = config
 
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config=config.backbone_config)
         self.intermediate_channel_sizes = backbone.channels
 
         # replace batch norm by frozen batch norm

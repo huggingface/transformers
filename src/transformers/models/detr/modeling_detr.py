@@ -22,7 +22,7 @@ import torch.nn as nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import load_backbone
+from ...auto import AutoBackbone
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -258,7 +258,7 @@ class DetrConvEncoder(nn.Module):
 
         self.config = config
 
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config=config.backbone_config)
         self.intermediate_channel_sizes = backbone.channels
 
         # replace batch norm by frozen batch norm

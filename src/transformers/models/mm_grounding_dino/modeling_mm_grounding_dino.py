@@ -27,7 +27,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import load_backbone
+from ...auto import AutoBackbone
 from ...file_utils import ModelOutput
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
@@ -646,7 +646,7 @@ class MMGroundingDinoConvEncoder(nn.Module):
         super().__init__()
 
         self.config = config
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config=config.backbone_config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():

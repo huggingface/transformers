@@ -318,20 +318,3 @@ def consolidate_backbone_kwargs_to_config(
         backbone_config = config_class.from_dict(backbone_config)
 
     return backbone_config, kwargs
-
-
-def load_backbone(config):
-    """
-    Loads the backbone model from a config object.
-
-    If the config is from the backbone model itself, then we return a backbone model with randomly initialized
-    weights.
-
-    If the config is from the parent model of the backbone model itself, then we load the pretrained backbone weights
-    if specified.
-    """
-    from transformers import AutoBackbone
-
-    backbone_config = getattr(config, "backbone_config", None)
-    backbone = AutoBackbone.from_config(config=backbone_config)
-    return backbone

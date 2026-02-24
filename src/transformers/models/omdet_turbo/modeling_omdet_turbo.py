@@ -26,7 +26,7 @@ from torch import Tensor
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
-from ...backbone_utils import load_backbone
+from ...auto import AutoBackbone
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -279,7 +279,7 @@ class OmDetTurboVisionBackbone(nn.Module):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__()
         self.apply_layernorm_after_vision_backbone = config.apply_layernorm_after_vision_backbone
-        self.vision_backbone = load_backbone(config)
+        self.vision_backbone = AutoBackbone.from_config(config=config.backbone_config)
         self.layer_norms = nn.ModuleList(
             [nn.LayerNorm(in_channel_dim, eps=config.layer_norm_eps) for in_channel_dim in config.encoder_in_channels]
         )

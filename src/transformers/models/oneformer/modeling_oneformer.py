@@ -24,7 +24,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import load_backbone
+from ...auto import AutoBackbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -1456,7 +1456,7 @@ class OneFormerPixelLevelModule(nn.Module):
                 The configuration used to instantiate this model.
         """
         super().__init__()
-        self.encoder = load_backbone(config)
+        self.encoder = AutoBackbone.from_config(config=config.backbone_config)
         self.decoder = OneFormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> OneFormerPixelLevelModuleOutput:

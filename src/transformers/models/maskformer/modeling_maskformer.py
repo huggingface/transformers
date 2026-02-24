@@ -23,7 +23,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import load_backbone
+from ...auto import AutoBackbone
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
@@ -1352,7 +1352,7 @@ class MaskFormerPixelLevelModule(nn.Module):
             backbone_config = MaskFormerSwinConfig.from_dict(backbone_config.to_dict())
             backbone_config.out_features = ["stage1", "stage2", "stage3", "stage4"]
             config.backbone_config = backbone_config
-        self.encoder = load_backbone(config)
+        self.encoder = AutoBackbone.from_config(config=config.backbone_config)
 
         feature_channels = self.encoder.channels
         self.decoder = MaskFormerPixelDecoder(

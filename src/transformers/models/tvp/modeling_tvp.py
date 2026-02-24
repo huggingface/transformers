@@ -21,7 +21,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import load_backbone
+from ...auto import AutoBackbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -135,7 +135,7 @@ class TvpLoss(nn.Module):
 class TvpVisionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.backbone = load_backbone(config)
+        self.backbone = AutoBackbone.from_config(config=config.backbone_config)
 
         if config.backbone_config is not None:
             in_channels = config.backbone_config.hidden_sizes[-1]

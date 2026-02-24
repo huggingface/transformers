@@ -21,7 +21,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import load_backbone
+from ...auto import AutoBackbone
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -1226,7 +1226,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.backbone = load_backbone(config)
+        self.backbone = AutoBackbone.from_config(config=config.backbone_config)
 
         if hasattr(self.backbone.config, "hidden_size") and hasattr(self.backbone.config, "patch_size"):
             config.backbone_hidden_size = self.backbone.config.hidden_size

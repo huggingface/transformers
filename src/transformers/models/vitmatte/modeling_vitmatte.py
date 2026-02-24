@@ -19,7 +19,7 @@ import torch
 from torch import nn
 
 from ... import initialization as init
-from ...backbone_utils import load_backbone
+from ...auto import AutoBackbone
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
 from .configuration_vitmatte import VitMatteConfig
@@ -226,7 +226,7 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.backbone = load_backbone(config)
+        self.backbone = AutoBackbone.from_config(config=config.backbone_config)
         self.decoder = VitMatteDetailCaptureModule(config)
 
         # Initialize weights and apply final processing

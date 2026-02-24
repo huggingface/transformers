@@ -19,7 +19,7 @@ import torch
 from torch import nn
 
 from ... import initialization as init
-from ...backbone_utils import load_backbone
+from ...auto import AutoBackbone
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -191,7 +191,7 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
     def __init__(self, config: VitPoseConfig):
         super().__init__(config)
 
-        self.backbone = load_backbone(config)
+        self.backbone = AutoBackbone.from_config(config=config.backbone_config)
 
         # add backbone attributes
         if not hasattr(self.backbone.config, "hidden_size"):

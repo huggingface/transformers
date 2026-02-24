@@ -29,7 +29,7 @@ from torch import Tensor
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import load_backbone
+from ...auto import AutoBackbone
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
@@ -298,7 +298,7 @@ class DeformableDetrConvEncoder(nn.Module):
 
         self.config = config
 
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config=config.backbone_config)
         self.intermediate_channel_sizes = backbone.channels
 
         # replace batch norm by frozen batch norm
