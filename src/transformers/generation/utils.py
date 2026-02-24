@@ -2140,7 +2140,17 @@ class GenerationMixin(ContinuousMixin):
             "streamer": streamer,
         }
         get_world_size = getattr(dist, "get_world_size", None)
-        world_size = get_world_size() if callable(get_world_size) else 1
+        is_available = getattr(dist, "is_available", None)
+        is_initialized = getattr(dist, "is_initialized", None)
+        world_size = (
+            get_world_size()
+            if callable(get_world_size)
+            and callable(is_available)
+            and callable(is_initialized)
+            and is_available()
+            and is_initialized()
+            else 1
+        )
         generation_mode_kwargs["synced_gpus"] = (
             (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and world_size > 1
             if synced_gpus is None
