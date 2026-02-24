@@ -63,3 +63,8 @@ This HF implementation is contributed by [Mayank Mishra](https://huggingface.co/
 
 [[autodoc]] GraniteMoeSharedForCausalLM
     - forward
+
+## GraniteMoeSharedForSequenceClassification
+
+[[autodoc]] GraniteMoeSharedForSequenceClassification
+    - forward

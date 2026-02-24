@@ -78,3 +78,8 @@ This model was contributed by [mayank-mishra](https://huggingface.co/mayank-mish
 
 [[autodoc]] GraniteMoeForCausalLM
     - forward
+
+## GraniteMoeForSequenceClassification
+
+[[autodoc]] GraniteMoeForSequenceClassification
+    - forward
