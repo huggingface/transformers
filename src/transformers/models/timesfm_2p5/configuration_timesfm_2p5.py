@@ -153,6 +153,7 @@ class Timesfm2P5Config(PreTrainedConfig):
         # Explicitly assign params not covered by parent TimesFmConfig
         self.num_key_value_heads = num_key_value_heads
         self.attention_bias = attention_bias
+        self.layer_types = ["attention"] * num_hidden_layers
         self.output_quantile_len = output_quantile_len
         self.decode_index = decode_index
         self.use_qk_norm = use_qk_norm

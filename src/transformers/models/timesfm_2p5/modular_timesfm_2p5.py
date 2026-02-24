@@ -29,6 +29,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
+    Gemma2DecoderLayer,
     Gemma2RotaryEmbedding,
     apply_rotary_pos_emb,
 )
@@ -188,6 +189,7 @@ class Timesfm2P5Config(TimesFmConfig):
         # Explicitly assign params not covered by parent TimesFmConfig
         self.num_key_value_heads = num_key_value_heads
         self.attention_bias = attention_bias
+        self.layer_types = ["attention"] * num_hidden_layers
         self.output_quantile_len = output_quantile_len
         self.decode_index = decode_index
         self.use_qk_norm = use_qk_norm
@@ -284,8 +286,8 @@ class Timesfm2P5Attention(Gemma2Attention):
         super().__init__(config, layer_idx)
 
         if config.use_qk_norm:
-            self.query_ln = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.key_ln = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.q_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.k_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
         if config.use_per_dim_scale:
             self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
@@ -310,8 +312,8 @@ class Timesfm2P5Attention(Gemma2Attention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if self.config.use_qk_norm:
-            query_states = self.query_ln(query_states)
-            key_states = self.key_ln(key_states)
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
 
         if self.config.use_per_dim_scale:
             scale = F.softplus(self.scaling).mul(1.442695041 / math.sqrt(self.head_dim))
@@ -341,17 +343,12 @@ class Timesfm2P5Attention(Gemma2Attention):
         return attn_output, attn_weights
 
 
-class Timesfm2P5DecoderLayer(nn.Module):
-    """TimesFM 2.5 Transformer decoder layer with pre/post RMS normalization."""
+class Timesfm2P5DecoderLayer(Gemma2DecoderLayer):
+    """TimesFM 2.5 Transformer decoder layer with pre/post RMS normalization.
 
-    def __init__(self, config: Timesfm2P5Config, layer_idx: int):
-        super().__init__()
-        self.self_attn = Timesfm2P5Attention(config, layer_idx=layer_idx)
-        self.mlp = Timesfm2P5MLP(config)
-        self.pre_attn_ln = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attn_ln = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.pre_ff_ln = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_ff_ln = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+    Inherits from Gemma2DecoderLayer (which provides GradientCheckpointingLayer support) and
+    overrides forward to return `(hidden_states, attn_weights)` tuple for output capturing.
+    """
 
     def forward(
         self,
@@ -362,28 +359,28 @@ class Timesfm2P5DecoderLayer(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
-        hidden_states = self.pre_attn_ln(hidden_states)
-        hidden_states, scores = self.self_attn(
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             **kwargs,
         )
-        hidden_states = self.post_attn_ln(hidden_states) + residual
+        hidden_states = self.post_attention_layernorm(hidden_states) + residual
 
         residual = hidden_states
-        hidden_states = self.pre_ff_ln(hidden_states)
+        hidden_states = self.pre_feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_ff_ln(hidden_states) + residual
+        hidden_states = self.post_feedforward_layernorm(hidden_states) + residual
 
-        return hidden_states, scores
+        return hidden_states, attn_weights
 
 
 @auto_docstring
 class Timesfm2P5PreTrainedModel(TimesFmPreTrainedModel):
     config_class = Timesfm2P5Config
-    base_model_prefix = "timesfm_2p5"
+    base_model_prefix = "model"
     _no_split_modules = ["Timesfm2P5DecoderLayer"]
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -578,7 +575,11 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
         self.context_len = config.context_length
         self.horizon_len = config.horizon_length
 
-        self.decoder = Timesfm2P5Model(config)
+        # Remove inherited attributes from parent TimesFmModelForPrediction
+        del self.decoder
+        del self.horizon_ff_layer
+
+        self.model = Timesfm2P5Model(config)
 
         num_quantiles = len(config.quantiles) + 1
         self.output_projection_point = Timesfm2P5ResidualBlock(
@@ -640,7 +641,7 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
         Returns:
             Tuple of (point_forecast, quantile_spreads), each of shape `(batch, length, num_quantiles)`.
         """
-        model_outputs = self.decoder(
+        model_outputs = self.model(
             past_values=normalized_ts,
             past_values_padding=input_padding,
             **kwargs,
@@ -650,10 +651,10 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
         context_mu = model_outputs.context_mu
         context_sigma = model_outputs.context_sigma
 
-        point_output = self.decoder._revin(
+        point_output = self.model._revin(
             self.output_projection_point(hidden_states), context_mu, context_sigma, reverse=True
         )
-        quantile_output = self.decoder._revin(
+        quantile_output = self.model._revin(
             self.output_projection_quantiles(hidden_states), context_mu, context_sigma, reverse=True
         )
 
@@ -728,7 +729,7 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
         mu_global = input_ts.mean(dim=1, keepdim=True)
         sigma_global = input_ts.std(dim=1, keepdim=True)
         sigma_safe = torch.where(
-            sigma_global < self.decoder.tolerance,
+            sigma_global < self.model.tolerance,
             torch.ones_like(sigma_global),
             sigma_global,
         )
@@ -763,7 +764,7 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
                     + full_forecast[:, :max_quantile_horizon, median_index]
                 )
 
-        full_predictions = self.decoder._revin(full_forecast, mu_global, sigma_global, reverse=True)
+        full_predictions = self.model._revin(full_forecast, mu_global, sigma_global, reverse=True)
         decode_index = min(self.config.decode_index, full_predictions.shape[-1] - 1)
         mean_predictions = full_predictions[:, :, decode_index]
 

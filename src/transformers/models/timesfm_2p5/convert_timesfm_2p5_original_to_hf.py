@@ -98,8 +98,6 @@ def write_model(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytorch
         num_attention_heads=16,
         output_quantile_len=actual_quantile_len,
         decode_index=5,
-        use_positional_embedding=False,
-        use_rotary_embeddings=True,
         use_qk_norm=True,
         use_per_dim_scale=True,
         use_bias=False,
@@ -115,13 +113,13 @@ def write_model(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytorch
     # Mapping of the layers from the original TimesFM 2.5 model to the Transformers model
     MODEL_LAYER_MAPPING = {
         # Input projection (tokenizer) - ResidualBlock: 64 -> 1280 -> 1280
-        "tokenizer.hidden_layer.weight": "decoder.input_ff_layer.hidden_layer.weight",
-        "tokenizer.hidden_layer.bias": "decoder.input_ff_layer.hidden_layer.bias",
-        "tokenizer.output_layer.weight": "decoder.input_ff_layer.output_layer.weight",
-        "tokenizer.output_layer.bias": "decoder.input_ff_layer.output_layer.bias",
-        "tokenizer.residual_layer.weight": "decoder.input_ff_layer.residual_layer.weight",
-        "tokenizer.residual_layer.bias": "decoder.input_ff_layer.residual_layer.bias",
-        # Separate output projections for TimesFM 2.5 - these are at model level, not inside decoder
+        "tokenizer.hidden_layer.weight": "model.input_ff_layer.hidden_layer.weight",
+        "tokenizer.hidden_layer.bias": "model.input_ff_layer.hidden_layer.bias",
+        "tokenizer.output_layer.weight": "model.input_ff_layer.output_layer.weight",
+        "tokenizer.output_layer.bias": "model.input_ff_layer.output_layer.bias",
+        "tokenizer.residual_layer.weight": "model.input_ff_layer.residual_layer.weight",
+        "tokenizer.residual_layer.bias": "model.input_ff_layer.residual_layer.bias",
+        # Separate output projections for TimesFM 2.5 - these are at model level, not inside model
         # Point projection: 1280 -> 1280 -> 1280
         "output_projection_point.hidden_layer.weight": "output_projection_point.hidden_layer.weight",
         "output_projection_point.output_layer.weight": "output_projection_point.output_layer.weight",
@@ -134,30 +132,30 @@ def write_model(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytorch
 
     TRANSFORMER_LAYER_MAPPING = {
         # Attention layers - MultiHeadAttention with separate q, k, v projections
-        "stacked_xf[{i}].attn.query.weight": "decoder.layers[{i}].self_attn.q_proj.weight",
-        "stacked_xf[{i}].attn.key.weight": "decoder.layers[{i}].self_attn.k_proj.weight",
-        "stacked_xf[{i}].attn.value.weight": "decoder.layers[{i}].self_attn.v_proj.weight",
-        "stacked_xf[{i}].attn.out.weight": "decoder.layers[{i}].self_attn.o_proj.weight",
+        "stacked_xf[{i}].attn.query.weight": "model.layers[{i}].self_attn.q_proj.weight",
+        "stacked_xf[{i}].attn.key.weight": "model.layers[{i}].self_attn.k_proj.weight",
+        "stacked_xf[{i}].attn.value.weight": "model.layers[{i}].self_attn.v_proj.weight",
+        "stacked_xf[{i}].attn.out.weight": "model.layers[{i}].self_attn.o_proj.weight",
         # QK normalization layers (RMS norm) - uses 'scale' instead of 'weight'
-        "stacked_xf[{i}].attn.query_ln.scale": "decoder.layers[{i}].self_attn.query_ln.weight",
-        "stacked_xf[{i}].attn.key_ln.scale": "decoder.layers[{i}].self_attn.key_ln.weight",
+        "stacked_xf[{i}].attn.query_ln.scale": "model.layers[{i}].self_attn.q_norm.weight",
+        "stacked_xf[{i}].attn.key_ln.scale": "model.layers[{i}].self_attn.k_norm.weight",
         # Per-dimension scaling parameter
-        "stacked_xf[{i}].attn.per_dim_scale.per_dim_scale": "decoder.layers[{i}].self_attn.scaling",
+        "stacked_xf[{i}].attn.per_dim_scale.per_dim_scale": "model.layers[{i}].self_attn.scaling",
         # MLP layers (feed forward)
-        "stacked_xf[{i}].ff0.weight": "decoder.layers[{i}].mlp.ff0.weight",
-        "stacked_xf[{i}].ff1.weight": "decoder.layers[{i}].mlp.ff1.weight",
+        "stacked_xf[{i}].ff0.weight": "model.layers[{i}].mlp.ff0.weight",
+        "stacked_xf[{i}].ff1.weight": "model.layers[{i}].mlp.ff1.weight",
         # Layer normalization (RMS norm) - uses 'scale' instead of 'weight'
-        "stacked_xf[{i}].pre_attn_ln.scale": "decoder.layers[{i}].pre_attn_ln.weight",
-        "stacked_xf[{i}].post_attn_ln.scale": "decoder.layers[{i}].post_attn_ln.weight",
-        "stacked_xf[{i}].pre_ff_ln.scale": "decoder.layers[{i}].pre_ff_ln.weight",
-        "stacked_xf[{i}].post_ff_ln.scale": "decoder.layers[{i}].post_ff_ln.weight",
+        "stacked_xf[{i}].pre_attn_ln.scale": "model.layers[{i}].input_layernorm.weight",
+        "stacked_xf[{i}].post_attn_ln.scale": "model.layers[{i}].post_attention_layernorm.weight",
+        "stacked_xf[{i}].pre_ff_ln.scale": "model.layers[{i}].pre_feedforward_layernorm.weight",
+        "stacked_xf[{i}].post_ff_ln.scale": "model.layers[{i}].post_feedforward_layernorm.weight",
     }
 
     # Debug: Print both model structures
     print(f"Original model attributes: {dir(original_model)}")
     print(f"\\nTransformers model attributes: {dir(timesfm_model)}")
-    print(f"\\nTransformers decoder attributes: {dir(timesfm_model.decoder)}")
-    print(f"\\nTransformers input_ff_layer attributes: {dir(timesfm_model.decoder.input_ff_layer)}")
+    print(f"\\nTransformers model (inner) attributes: {dir(timesfm_model.model)}")
+    print(f"\\nTransformers input_ff_layer attributes: {dir(timesfm_model.model.input_ff_layer)}")
 
     # Copy model-level weights
     for old_key, new_key in MODEL_LAYER_MAPPING.items():
@@ -176,7 +174,7 @@ def write_model(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytorch
             print(f"Skipping {old_key}: {e}")
 
     # Copy transformer layer weights
-    num_layers = len(timesfm_model.decoder.layers)
+    num_layers = len(timesfm_model.model.layers)
     for i in range(num_layers):
         # Special handling for fused QKV weights
         try:
@@ -189,9 +187,9 @@ def write_model(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytorch
             q_weight, k_weight, v_weight = qkv_fused.chunk(3, dim=0)
 
             # Copy to separate projections
-            q_proj = get_nested_attr(timesfm_model, f"decoder.layers[{i}].self_attn.q_proj.weight")
-            k_proj = get_nested_attr(timesfm_model, f"decoder.layers[{i}].self_attn.k_proj.weight")
-            v_proj = get_nested_attr(timesfm_model, f"decoder.layers[{i}].self_attn.v_proj.weight")
+            q_proj = get_nested_attr(timesfm_model, f"model.layers[{i}].self_attn.q_proj.weight")
+            k_proj = get_nested_attr(timesfm_model, f"model.layers[{i}].self_attn.k_proj.weight")
+            v_proj = get_nested_attr(timesfm_model, f"model.layers[{i}].self_attn.v_proj.weight")
 
             q_proj.data.copy_(q_weight.data)
             k_proj.data.copy_(k_weight.data)

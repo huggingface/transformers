@@ -31,6 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -299,8 +300,8 @@ class Timesfm2P5Attention(nn.Module):
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
         if config.use_qk_norm:
-            self.query_ln = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.key_ln = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.q_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.k_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
         if config.use_per_dim_scale:
             self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
@@ -325,8 +326,8 @@ class Timesfm2P5Attention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if self.config.use_qk_norm:
-            query_states = self.query_ln(query_states)
-            key_states = self.key_ln(key_states)
+            query_states = self.q_norm(query_states)
+            key_states = self.k_norm(key_states)
 
         if self.config.use_per_dim_scale:
             scale = F.softplus(self.scaling).mul(1.442695041 / math.sqrt(self.head_dim))
@@ -356,17 +357,25 @@ class Timesfm2P5Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Timesfm2P5DecoderLayer(nn.Module):
-    """TimesFM 2.5 Transformer decoder layer with pre/post RMS normalization."""
+class Timesfm2P5DecoderLayer(GradientCheckpointingLayer):
+    """TimesFM 2.5 Transformer decoder layer with pre/post RMS normalization.
+
+    Inherits from Gemma2DecoderLayer (which provides GradientCheckpointingLayer support) and
+    overrides forward to return `(hidden_states, attn_weights)` tuple for output capturing.
+    """
 
     def __init__(self, config: Timesfm2P5Config, layer_idx: int):
         super().__init__()
-        self.self_attn = Timesfm2P5Attention(config, layer_idx=layer_idx)
+        self.hidden_size = config.hidden_size
+        self.config = config
+        self.attention_type = config.layer_types[layer_idx]
+        self.self_attn = Timesfm2P5Attention(config=config, layer_idx=layer_idx)
         self.mlp = Timesfm2P5MLP(config)
-        self.pre_attn_ln = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attn_ln = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.pre_ff_ln = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_ff_ln = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.pre_feedforward_layernorm = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -377,22 +386,22 @@ class Timesfm2P5DecoderLayer(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
-        hidden_states = self.pre_attn_ln(hidden_states)
-        hidden_states, scores = self.self_attn(
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             **kwargs,
         )
-        hidden_states = self.post_attn_ln(hidden_states) + residual
+        hidden_states = self.post_attention_layernorm(hidden_states) + residual
 
         residual = hidden_states
-        hidden_states = self.pre_ff_ln(hidden_states)
+        hidden_states = self.pre_feedforward_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_ff_ln(hidden_states) + residual
+        hidden_states = self.post_feedforward_layernorm(hidden_states) + residual
 
-        return hidden_states, scores
+        return hidden_states, attn_weights
 
 
 class Timesfm2P5PositionalEmbedding(nn.Module):
@@ -444,7 +453,7 @@ class Timesfm2P5PositionalEmbedding(nn.Module):
 @auto_docstring
 class Timesfm2P5PreTrainedModel(PreTrainedModel):
     config: Timesfm2P5Config
-    base_model_prefix = "timesfm_2p5"
+    base_model_prefix = "model"
     _no_split_modules = ["Timesfm2P5DecoderLayer"]
     main_input_name = "past_values"
     input_modalities = ("time",)
@@ -663,14 +672,7 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         self.context_len = config.context_length
         self.horizon_len = config.horizon_length
 
-        self.decoder = Timesfm2P5Model(config)
-
-        # quantile and mean output
-        self.horizon_ff_layer = Timesfm2P5ResidualBlock(
-            input_dims=config.hidden_size,
-            output_dims=config.horizon_length * (1 + len(config.quantiles)),
-            hidden_dims=config.intermediate_size,
-        )
+        self.model = Timesfm2P5Model(config)
 
         num_quantiles = len(config.quantiles) + 1
         self.output_projection_point = Timesfm2P5ResidualBlock(
@@ -802,7 +804,7 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         mu_global = input_ts.mean(dim=1, keepdim=True)
         sigma_global = input_ts.std(dim=1, keepdim=True)
         sigma_safe = torch.where(
-            sigma_global < self.decoder.tolerance,
+            sigma_global < self.model.tolerance,
             torch.ones_like(sigma_global),
             sigma_global,
         )
@@ -835,7 +837,7 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
                     + full_forecast[:, :max_quantile_horizon, median_index]
                 )
 
-        full_predictions = self.decoder._revin(full_forecast, mu_global, sigma_global, reverse=True)
+        full_predictions = self.model._revin(full_forecast, mu_global, sigma_global, reverse=True)
         decode_index = min(self.config.decode_index, full_predictions.shape[-1] - 1)
         mean_predictions = full_predictions[:, :, decode_index]
 
@@ -894,7 +896,7 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         Returns:
             Tuple of (point_forecast, quantile_spreads), each of shape `(batch, length, num_quantiles)`.
         """
-        model_outputs = self.decoder(
+        model_outputs = self.model(
             past_values=normalized_ts,
             past_values_padding=input_padding,
             **kwargs,
@@ -904,10 +906,10 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         context_mu = model_outputs.context_mu
         context_sigma = model_outputs.context_sigma
 
-        point_output = self.decoder._revin(
+        point_output = self.model._revin(
             self.output_projection_point(hidden_states), context_mu, context_sigma, reverse=True
         )
-        quantile_output = self.decoder._revin(
+        quantile_output = self.model._revin(
             self.output_projection_quantiles(hidden_states), context_mu, context_sigma, reverse=True
         )
 
