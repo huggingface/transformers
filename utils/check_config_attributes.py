@@ -40,7 +40,6 @@ SPECIAL_CASES_TO_ALLOW = {
     "BambaConfig": ["attn_layer_indices"],
     "Dots1Config": ["max_window_layers"],
     "JambaConfig": ["attn_layer_offset", "attn_layer_period", "expert_layer_offset", "expert_layer_period"],
-    "JetMoeConfig": ["output_router_logits"],
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],
     "XcodecConfig": ["sample_rate", "audio_channels"],
@@ -172,6 +171,8 @@ ATTRIBUTES_TO_ALLOW = (
     "vision_feature_layer",
     "vision_feature_select_strategy",
     "vision_aspect_ratio",
+    # moe attributes that are used via merge_with_config_defaults and/or capture hooks
+    "output_router_logits",
 )
 
 
