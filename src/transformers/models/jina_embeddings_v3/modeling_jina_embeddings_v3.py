@@ -809,11 +809,11 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
         self.pooler = JinaEmbeddingsV3Pooler(config) if add_pooling_layer else None
         self.rotary_emb = JinaEmbeddingsV3RotaryEmbedding(config)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
         self._setup_lora_config()
         self._register_lora()
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def _setup_lora_config(self):
         self._lora_adaptations = self.config.lora_adaptations
