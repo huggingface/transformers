@@ -46,7 +46,7 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerTextRMSNorm, rotate_half, repeat_kv, apply_rotary_pos_emb,
     eager_attention_forward, Qwen3OmniMoeThinkerTextAttention, 
     Qwen3OmniMoeThinkerTextMLP, Qwen3OmniMoeThinkerTextDecoderLayer,
-    _get_feat_extract_output_lengths
+    _get_feat_extract_output_lengths, Qwen3OmniMoePreTrainedModelForConditionalGeneration
 )
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
@@ -612,7 +612,7 @@ class Qwen3ASRThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     rope_deltas: Optional[torch.LongTensor] = None
 
 
-class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3ASRPreTrainedModel):
+class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedModelForConditionalGeneration):
     def _prepare_4d_causal_attention_mask_with_cache_position(
         self,
         attention_mask: torch.Tensor,
@@ -675,78 +675,41 @@ class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3ASRPreTrainedModel):
         return causal_mask
 
 
-    def get_chunked_index(
-        self, token_indices: torch.Tensor, tokens_per_chunk: int, remove_index: int
-    ) -> list[tuple[int, int]]:
+    def get_rope_index(
+        self,
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Splits token index list into chunks based on token value ranges.
+        Calculate the rope index in LLM.
 
-        Given a list of token indices, returns a list of (start, end) index tuples representing
-        slices of the list where the token values fall within successive ranges of `t_ntoken_per_chunk`.
+        Explanation:
+            Each embedding sequence contains text embedding.
 
-        For example, if `t_ntoken_per_chunk` is 1000, the function will create chunks such that:
-        - the first chunk contains token values < 1000,
-        - the second chunk contains values >= 1000 and < 2000, and so on.
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+                it.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
-        Parameters:
-            token_indices (`torch.Tensor` of shape `(seq_len, )`): A monotonically increasing list of
-                                token index values.
-            t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
-            remove_index (`int`) An index id to subtract from `token_indices` before chunking
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+            audio_seqlens (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+                The length of feature shape of each audio in LLM.
 
         Returns:
-            `list[tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
-                                and end (exclusive) indices of a chunk in `token_indices`.
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
+        mrope_position_deltas = []
 
-        def _iter():
-            i, start_idx = 0, 0  # skip bos token
-            current_chunk = 1
-            while i < len(token_indices):  # skip eos token
-                if token_indices[i] - remove_index >= current_chunk * tokens_per_chunk:
-                    yield (start_idx, i)
-                    start_idx = i
-                    current_chunk += 1
-                i += 1
-            yield (start_idx, len(token_indices))
+        position_ids = attention_mask.float().cumsum(-1) - 1
+        position_ids.masked_fill_(attention_mask == 0, 1)
+        position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
+        max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
+        mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
 
-        return list(_iter())
-
-    #def get_rope_index(
-    #    self,
-    #    attention_mask: Optional[torch.Tensor] = None,
-    #) -> tuple[torch.Tensor, torch.Tensor]:
-    #    """
-    #    Calculate the rope index in LLM.
-
-    #    Explanation:
-    #        Each embedding sequence contains text embedding.
-
-    #    Args:
-    #        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-    #            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-    #            it.
-    #        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-    #            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-    #            - 1 for tokens that are **not masked**,
-    #            - 0 for tokens that are **masked**.
-    #        audio_seqlens (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-    #            The length of feature shape of each audio in LLM.
-
-    #    Returns:
-    #        position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
-    #        mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
-    #    """
-    #    mrope_position_deltas = []
-
-    #    position_ids = attention_mask.float().cumsum(-1) - 1
-    #    position_ids.masked_fill_(attention_mask == 0, 1)
-    #    position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
-    #    max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
-    #    mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
-
-    #    return position_ids, mrope_position_deltas
+        return position_ids, mrope_position_deltas
 
 
 class Qwen3ASRAudioAttention(nn.Module):

@@ -291,6 +291,8 @@ class Qwen3ASRThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
 
 
 class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3ASRPreTrainedModel):
+    input_modalities = ("image", "video", "audio", "text")
+
     def _prepare_4d_causal_attention_mask_with_cache_position(
         self,
         attention_mask: torch.Tensor,
@@ -352,6 +354,26 @@ class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3ASRPreTrainedModel):
 
         return causal_mask
 
+    def get_llm_pos_ids_for_vision(
+        self,
+        start_idx: int,
+        vision_idx: int,
+        spatial_merge_size: int,
+        t_index: list[torch.Tensor],
+        grid_hs: list[torch.Tensor],
+        grid_ws: list[torch.Tensor],
+    ):
+        llm_pos_ids_list = []
+        llm_grid_h = grid_hs[vision_idx] // spatial_merge_size
+        llm_grid_w = grid_ws[vision_idx] // spatial_merge_size
+        h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(len(t_index), -1, llm_grid_w).flatten().float()
+        w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(len(t_index), llm_grid_h, -1).flatten().float()
+        t_index = torch.Tensor(t_index).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten().float()
+        _llm_pos_ids = torch.stack([t_index, h_index, w_index])
+        llm_pos_ids_list.append(_llm_pos_ids + start_idx)
+        llm_pos_ids = torch.cat(llm_pos_ids_list, dim=1)
+        return llm_pos_ids
+
     def get_chunked_index(
         self, token_indices: torch.Tensor, tokens_per_chunk: int, remove_index: int
     ) -> list[tuple[int, int]]:
@@ -389,41 +411,41 @@ class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3ASRPreTrainedModel):
 
         return list(_iter())
 
-    # def get_rope_index(
-    #    self,
-    #    attention_mask: Optional[torch.Tensor] = None,
-    # ) -> tuple[torch.Tensor, torch.Tensor]:
-    #    """
-    #    Calculate the rope index in LLM.
+    def get_rope_index(
+        self,
+        attention_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Calculate the rope index in LLM.
 
-    #    Explanation:
-    #        Each embedding sequence contains text embedding.
+        Explanation:
+            Each embedding sequence contains text embedding.
 
-    #    Args:
-    #        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-    #            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-    #            it.
-    #        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-    #            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+                it.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
-    #            - 1 for tokens that are **not masked**,
-    #            - 0 for tokens that are **masked**.
-    #        audio_seqlens (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-    #            The length of feature shape of each audio in LLM.
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+            audio_seqlens (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+                The length of feature shape of each audio in LLM.
 
-    #    Returns:
-    #        position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
-    #        mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
-    #    """
-    #    mrope_position_deltas = []
+        Returns:
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
+        """
+        mrope_position_deltas = []
 
-    #    position_ids = attention_mask.float().cumsum(-1) - 1
-    #    position_ids.masked_fill_(attention_mask == 0, 1)
-    #    position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
-    #    max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
-    #    mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
+        position_ids = attention_mask.float().cumsum(-1) - 1
+        position_ids.masked_fill_(attention_mask == 0, 1)
+        position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
+        max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
+        mrope_position_deltas = max_position_ids + 1 - torch.sum(attention_mask, dim=-1, keepdim=True)
 
-    #    return position_ids, mrope_position_deltas
+        return position_ids, mrope_position_deltas
 
 
 class Qwen3ASRAudioAttention(nn.Module):
