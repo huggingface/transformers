@@ -100,9 +100,7 @@ class GraniteMoeHybridModelTester(BambaModelTester):
 
         return config, input_ids, input_mask, sequence_labels
 
-    def create_and_check_for_sequence_classification(
-        self, config, input_ids, input_mask, sequence_labels
-    ):
+    def create_and_check_for_sequence_classification(self, config, input_ids, input_mask, sequence_labels):
         config.num_labels = self.num_labels
         model = GraniteMoeHybridForSequenceClassification(config=config)
         model.to(torch_device)
