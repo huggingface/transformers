@@ -297,7 +297,7 @@ class Trainer:
             from a new instance of the model as given by this function.
 
             The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to
-            be able to choose different architectures according to hyper parameters (such as layer count, sizes of
+            be able to choose different architectures according to hyperparameters (such as layer count, sizes of
             inner layers, dropout probabilities etc).
         compute_loss_func (`Callable`, *optional*):
             A function that accepts the raw model outputs, labels, and the number of items in the entire accumulated
