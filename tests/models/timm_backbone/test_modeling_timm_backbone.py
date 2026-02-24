@@ -42,7 +42,7 @@ class TimmBackboneModelTester:
         batch_size=3,
         image_size=32,
         num_channels=3,
-        is_training=True,
+        is_training=False,
     ):
         self.parent = parent
         self.out_indices = out_indices if out_indices is not None else [4]

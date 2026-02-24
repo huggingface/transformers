@@ -56,7 +56,6 @@ from ..paligemma.modeling_paligemma import (
     PaliGemmaModel,
     PaligemmaModelOutputWithPast,
 )
-from ..timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 
 
 logger = logging.get_logger(__name__)
@@ -444,7 +443,7 @@ class Gemma3nAudioConfig(PreTrainedConfig):
         self.sscp_conv_stride_size = sscp_conv_stride_size
 
 
-class Gemma3nVisionConfig(TimmWrapperConfig):
+class Gemma3nVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration for a timm backbone [`TimmWrapper`]. It is used to
     instantiate an timm model model according to the specified arguments, defining the model architecture.
@@ -510,6 +509,10 @@ class Gemma3nVisionConfig(TimmWrapperConfig):
         self.vocab_size = vocab_size
         self.vocab_offset = vocab_offset
         self.rms_norm_eps = rms_norm_eps
+        self.architecture = architecture
+        self.initializer_range = initializer_range
+        self.do_pooling = do_pooling
+        self.model_args = model_args  # named "model_args" for BC with timm
         super().__init__(**kwargs)
 
 

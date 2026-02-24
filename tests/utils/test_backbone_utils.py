@@ -16,11 +16,18 @@ import unittest
 
 import pytest
 
-from transformers import DetrConfig, MaskFormerConfig, PreTrainedConfig, ResNetBackbone, ResNetConfig, TimmBackbone
+from transformers import (
+    AutoBackbone,
+    DetrConfig,
+    MaskFormerConfig,
+    PreTrainedConfig,
+    ResNetBackbone,
+    ResNetConfig,
+    TimmBackbone,
+)
 from transformers.backbone_utils import (
     BackboneConfigMixin,
     BackboneMixin,
-    load_backbone,
 )
 from transformers.testing_utils import require_torch, slow
 from transformers.utils.import_utils import is_torch_available
@@ -160,7 +167,7 @@ class BackboneUtilsTester(unittest.TestCase):
         Test that load_backbone correctly loads a backbone from a backbone config.
         """
         config = MaskFormerConfig(backbone_config=ResNetConfig(out_indices=(0, 2)))
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config.backbone_config)
         self.assertEqual(backbone.out_features, ["stem", "stage2"])
         self.assertEqual(backbone.out_indices, (0, 2))
         self.assertIsInstance(backbone, ResNetBackbone)
@@ -172,7 +179,7 @@ class BackboneUtilsTester(unittest.TestCase):
         Test that load_backbone correctly loads a backbone from a checkpoint.
         """
         config = MaskFormerConfig(backbone="microsoft/resnet-18", backbone_config=None)
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config.backbone_config)
         self.assertEqual(backbone.out_indices, [4])
         self.assertEqual(backbone.out_features, ["stage4"])
         self.assertIsInstance(backbone, ResNetBackbone)
@@ -181,7 +188,7 @@ class BackboneUtilsTester(unittest.TestCase):
             backbone="resnet18",
             use_timm_backbone=True,
         )
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config.backbone_config)
         # We can't know ahead of time the exact output features and indices, or the layer names before
         # creating the timm model, so it defaults to the last layer (-1,) and has a different layer name
         self.assertEqual(backbone.out_indices, (-1,))
@@ -195,12 +202,12 @@ class BackboneUtilsTester(unittest.TestCase):
         Test that load_backbone correctly configures the loaded backbone with the provided kwargs.
         """
         config = MaskFormerConfig(backbone="resnet18", use_timm_backbone=True, backbone_kwargs={"out_indices": (0, 1)})
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config.backbone_config)
         self.assertEqual(backbone.out_indices, (0, 1))
         self.assertIsInstance(backbone, TimmBackbone)
 
         config = MaskFormerConfig(backbone="microsoft/resnet-18", backbone_kwargs={"out_indices": (0, 2)})
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config.backbone_config)
         self.assertEqual(backbone.out_indices, (0, 2))
         self.assertIsInstance(backbone, ResNetBackbone)
 
@@ -223,7 +230,7 @@ class BackboneUtilsTester(unittest.TestCase):
         class NewModel(BertPreTrainedModel):
             def __init__(self, config):
                 super().__init__(config)
-                self.backbone = load_backbone(config)
+                self.backbone = AutoBackbone.from_config(config.backbone_config)
                 self.layer_0 = torch.nn.Linear(config.hidden_size, config.hidden_size)
                 self.layer_1 = torch.nn.Linear(config.hidden_size, config.hidden_size)
 
