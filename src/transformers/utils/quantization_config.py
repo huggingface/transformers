@@ -1958,7 +1958,7 @@ class FourOverSixConfig(QuantizationConfigMixin):
             This can be used to override the default configuration for specific modules.
         modules_to_not_convert (`list[str]`, *optional*, defaults to `["lm_head"]`):
             The list of modules to exclude from quantization. By default, the `lm_head` is excluded.
-        model_config_type (`type(PretrainedConfig)`, *optional*, defaults to `None`):
+        pre_quantized_model_config_type (`str`, *optional*, defaults to `None`):
             The model config type used to get the weight conversions for pre-quantized
             models.
     """
@@ -1977,7 +1977,7 @@ class FourOverSixConfig(QuantizationConfigMixin):
         weight_scale_rule: str | None = None,
         module_config_overrides: dict[str, dict[str, Any]] | None = None,
         modules_to_not_convert: list[str] | None = ["lm_head"],
-        model_config_type: type(PretrainedConfig) | None = None,
+        pre_quantized_model_config_type: str | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.FOUR_OVER_SIX
@@ -1994,7 +1994,7 @@ class FourOverSixConfig(QuantizationConfigMixin):
         self.weight_scale_rule = weight_scale_rule
         self.module_config_overrides = module_config_overrides
         self.modules_to_not_convert = modules_to_not_convert
-        self.model_config_type = model_config_type
+        self.pre_quantized_model_config_type = pre_quantized_model_config_type
 
 
 class SinqConfig(QuantizationConfigMixin):
