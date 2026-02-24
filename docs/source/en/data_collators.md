@@ -19,9 +19,9 @@ rendered properly in your Markdown viewer.
 A data collator assembles individual dataset samples into a batch for the model. It can also dynamically pad samples to the longest sequence in *each batch*, which is more efficient than padding to a global maximum length.
 
 ```md
-Dataset[0] → {"input_ids": [101, 2003, ...], "labels": 1}
-Dataset[1] → {"input_ids": [101, 2003, 1996, ...], "labels": 0}
-Dataset[2] → {"input_ids": [101, 7592, ...], "labels": 1}
+Dataset[0] → {"input_ids": [101, 2003], "labels": 1}
+Dataset[1] → {"input_ids": [101, 2003, 1996], "labels": 0}
+Dataset[2] → {"input_ids": [101, 7592], "labels": 1}
          ↓  collator
 {
   "input_ids": tensor([[101, 2003,    0],   # padded to longest
@@ -73,9 +73,9 @@ trainer = Trainer(
 
 ## DataCollatorMixin
 
-Subclass [`DataCollatorMixin`] for full control over batch assembly and implement your own `__call__` method. Build custom padding logic, handle multiple input types, or create entirely new batch structures. The [`~trl.trainer.dpo_trainer.DataCollatorForPreference`] example below uses [`DataCollatorMixin`] because each training sample has a chosen and rejected response, and the model needs to see both.
+Subclass [`DataCollatorMixin`] for full control over batch assembly and implement your own `__call__` method. Build custom padding logic, handle multiple input types, or create entirely new batch structures. The [DataCollatorForPreference](https://github.com/huggingface/trl/blob/cfbdd3bea4448cde878c0da0de49551f553c61fe/trl/trainer/reward_trainer.py#L126) example below uses [`DataCollatorMixin`] because each training sample has a chosen and rejected response, and the model needs to see both.
 
-1. Separate `chosen_input_ids` and `rejected_input_ids` because [`~trl.trainer.utils.pad`] expects flat lists.
+1. Separate `chosen_ids` and `rejected_ids` because [`~trl.trainer.utils.pad`] expects flat lists.
 2. Concatenate the input pair into a single list.
 3. Generate `attention_mask` with [torch.ones_like](https://docs.pytorch.org/docs/stable/generated/torch.ones_like.html) instead of the tokenizer because the collator works with raw token ID lists.
 4. Pad `input_ids` and `attention_mask`.
@@ -90,8 +90,8 @@ class DataCollatorForPreference(DataCollatorMixin):
     pad_to_multiple_of: int | None = None
 
     def __call__(self, examples: list[dict]) -> dict:
-        chosen_input_ids   = [torch.tensor(ex["chosen_input_ids"])   for ex in examples]
-        rejected_input_ids = [torch.tensor(ex["rejected_input_ids"]) for ex in examples]
+        chosen_input_ids   = [torch.tensor(ex["chosen_ids"])   for ex in examples]
+        rejected_input_ids = [torch.tensor(ex["rejected_ids"]) for ex in examples]
 
         input_ids      = chosen_input_ids + rejected_input_ids
         attention_mask = [torch.ones_like(ids) for ids in input_ids]
@@ -115,3 +115,7 @@ class DataCollatorForPreference(DataCollatorMixin):
 
         return output
 ```
+
+## Next steps
+
+- See all available [data collators](./main_classes/data_collator) for common tasks like token classification.

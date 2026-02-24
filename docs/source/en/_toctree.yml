@@ -152,11 +152,6 @@
       title: Subclassing Trainer methods
     - local: trainer_callbacks
       title: Callbacks
-    title: Trainer API
-  - isExpanded: false
-    sections:
-    - local: trainer_callbacks
-      title: Callbacks
     - local: data_collators
       title: Data collators
     - local: optimizers
@@ -164,11 +159,6 @@
     - local: hpo_train
       title: Hyperparameter search
     title: Customization
-  - isExpanded: false
-    sections:
-    - local: model_memory_anatomy
-      title: Model training anatomy
-    title: Performance
   - isExpanded: false
     sections:
     - local: accelerator_selection
@@ -198,6 +188,8 @@
       title: Intel Gaudi
     - local: perf_hardware
       title: Build your own machine
+    - local: model_memory_anatomy
+      title: Model training anatomy
     title: Hardware
   - local: peft
     title: PEFT

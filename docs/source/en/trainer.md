@@ -26,3 +26,5 @@ Underneath, [`Trainer`] handles batching, shuffling, and padding your dataset in
 
 - Start with the [fine-tuning](./training) tutorial for an introduction to training a large language model with [`Trainer`].
 - Check the [Subclassing Trainer methods](./trainer_customize) guide for examples of how to subclass [`Trainer`] methods.
+- See the [Data collators](./data_collators) guide to learn how to create a data collator for custom batch assembly.
+- See the [Callbacks](./trainer_callbacks) guide to learn how to hook into training events.

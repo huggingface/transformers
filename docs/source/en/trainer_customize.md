@@ -96,3 +96,4 @@ def compute_loss(
 ## Next steps
 
 - For more real-world examples, see how [`~trl.GRPOTrainer`] and [`~trl.DPOTrainer`] extend [`Trainer`] in TRL, or how [Axolotl](https://github.com/axolotl-ai-cloud/axolotl/tree/main/src/axolotl/core/trainers) builds custom trainers on top of it.
+- Check the [Callbacks](./trainer_callbacks) guide if you only need to customize what happens during a training event such as logging metrics at the end of a training step. 

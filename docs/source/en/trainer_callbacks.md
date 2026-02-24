@@ -84,7 +84,7 @@ trainer = Trainer(
 
 ## Built-in callbacks
 
-Transformers includes several built-in callbacks that are active by default. Additional [integrated callbacks](./main_classes/callback#available-callbacks) log to platforms like [Trackio](https://huggingface.co/docs/trackio/en/index) and [CodeCarbon](https://mlco2.github.io/codecarbon/).
+Transformers includes several built-in callbacks that are active by default. Additional [integrated callbacks](./main_classes/callback#available-callbacks) log to platforms like [Trackio](https://huggingface.co/docs/trackio/en/index).
 
 ### DefaultFlowCallback
 
@@ -92,17 +92,14 @@ Transformers includes several built-in callbacks that are active by default. Add
 
 Overriding this callback is the main way to customize *when* logging, evaluation, or saving happens.
 
-### ProgressCallback
+### ProgressCallback and PrinterCallback
 
-[`ProgressCallback`] displays a progress bar during training and a separate bar during evaluation or prediction. On each `on_log` event, it prints the latest metrics alongside the bar. During distributed training, it only runs on the main process to avoid duplicate output.
+[`Trainer`] automatically picks between these two callbacks based on the [disable_tqdm](https://huggingface.co/docs/transformers/en/main_classes/trainer#transformers.TrainingArguments.disable_tqdm) field in [`TrainingArguments`].
 
-Replace with [`PrinterCallback`] if you want printed logs instead of a progress bar.
+- [`ProgressCallback`] is used by default. It displays a tqdm progress bar during training and a separate bar during evaluation or prediction, and prints the latest metrics on each `on_log` event. During distributed training, it only runs on the main process to avoid duplicate output.
+- [`PrinterCallback`] is used when `disable_tqdm=True`. It prints the log dictionary to stdout on every `on_log` event with no progress bar.
 
-### PrinterCallback
-
-[`PrinterCallback`] prints the log dictionary to stdout on every `on_log` event with no progress bar.
-
-Use [`~Trainer.remove_callback`] and [`~Trainer.add_callback`] to replace a callback.
+You can also swap them manually with [`~Trainer.remove_callback`] and [`~Trainer.add_callback`].
 
 ```py
 from transformers import PrinterCallback
@@ -132,5 +129,5 @@ trainer = Trainer(
 
 ## Next steps
 
-- The [Customizing the Trainer](./trainer_customize) guide covers subclassing [`Trainer`] methods for deeper control.
->>>>>>> e7737441a1 (callbacks and collators)
+- See all available [integrated callbacks](./main_classes/callback#available-callbacks) for logging to experiment trackers.
+- The [Subclassing Trainer methods](./trainer_customize) guide covers overriding [`Trainer`] methods when you need to change what the training loop computes.
