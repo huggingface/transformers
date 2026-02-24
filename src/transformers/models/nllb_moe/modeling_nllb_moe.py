@@ -1085,13 +1085,9 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_router_logits: bool | None = None,
         cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | Seq2SeqMoEOutput:
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
         if labels is not None:
             if decoder_input_ids is None:
                 decoder_input_ids = shift_tokens_right(
@@ -1108,8 +1104,8 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            output_router_logits=output_router_logits,
             cache_position=cache_position,
+            return_dict=True,
             **kwargs,
         )
         lm_logits = self.lm_head(outputs[0])
@@ -1122,7 +1118,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             # todo check in the config if router loss enables
 
-            if output_router_logits:
+            if outputs.router_logits is not None:
                 encoder_router_logits = outputs.encoder_router_logits
                 decoder_router_logits = outputs.decoder_router_logits
                 encoder_aux_loss = load_balancing_loss_func(
@@ -1134,7 +1130,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
 
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 
-            if output_router_logits and labels is not None:
+            if outputs.router_logits is not None and labels is not None:
                 aux_loss = self.router_aux_loss_coef * (encoder_aux_loss + decoder_aux_loss)
                 loss = loss + aux_loss
 
