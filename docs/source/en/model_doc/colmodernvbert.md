@@ -13,8 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-10-01 and added to Hugging Face Transformers on .*
-*This model was released on 2025-10-01 and added to Hugging Face Transformers on .*
+*This model was released on 2025-10-01 and added to Hugging Face Transformers on 2026-02-23.*
 
 # ColModernVBert
 
