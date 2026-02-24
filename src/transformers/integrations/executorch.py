@@ -557,6 +557,9 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             The adapter matches the model's forward signature with that in `executorch/extension/llm/runner`,
             ensuring that the exported model can be executed in `ExecuTorch` out-of-the-box.
         """
+        # Start by resetting static cache
+        self.static_cache.reset()
+
         past_key_values = self.static_cache
 
         outs = self.model(
@@ -715,6 +718,9 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         Returns:
             torch.Tensor: Logits output from the model.
         """
+        # Start by resetting static cache
+        self.cache.reset()
+
         # Forward pass with the model
         outputs = self.model(
             input_ids=input_ids,
@@ -843,6 +849,9 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             self.register_buffer(f"value_cache_{i}", self.static_cache.layers[i].values, persistent=False)
 
     def forward(self, decoder_input_ids, encoder_hidden_states, cache_position):
+        # Start by resetting static cache
+        self.cache.reset()
+
         # Get outputs from decoder
         outputs = self.decoder(
             input_ids=decoder_input_ids,
