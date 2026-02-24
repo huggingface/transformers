@@ -1844,9 +1844,7 @@ class Serve:
         logger.info(f"Loaded model {model_id_and_revision}")
         return model, data_processor
 
-    def load_model_and_processor(
-        self, model_id_and_revision: str
-    ) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
+    def load_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
         """
         Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
 
