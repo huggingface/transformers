@@ -19,7 +19,8 @@ from typing import Any
 
 import numpy as np
 import torch
-from sklearn import preprocessing
+
+from ...utils import is_sklearn_available
 
 
 _Category = int | str
@@ -213,6 +214,10 @@ class _BatchedInContextXRegBase:
             x_test = [(x_test - x_mean) / x_std]
 
         # Process categorical features
+        if not is_sklearn_available():
+            raise ImportError("sklearn is required for covariate support. Install it with: pip install scikit-learn")
+        from sklearn import preprocessing
+
         one_hot_encoder = preprocessing.OneHotEncoder(
             drop=one_hot_encoder_drop,
             sparse_output=False,

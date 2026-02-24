@@ -20,6 +20,7 @@ import torch
 
 from transformers import TimesFmConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.utils import is_sklearn_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
@@ -191,6 +192,7 @@ class TimesFmModelIntegrationTests(unittest.TestCase):
 
 
 @require_torch
+@unittest.skipUnless(is_sklearn_available(), "test requires scikit-learn")
 class TimesFmCovariatesTest(unittest.TestCase):
     """Test TimesFM covariates functionality."""
 
