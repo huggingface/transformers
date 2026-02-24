@@ -268,7 +268,7 @@ class _BaseAutoModelClass:
 
         # Always load a pretrained model when `from_pretrained` is called
         kwargs.pop("use_pretrained_backbone", None)
-        return super().from_config(config, pretrained=True, **kwargs)
+        return cls.from_config(config, pretrained=True, **kwargs)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike[str], *model_args, **kwargs):
