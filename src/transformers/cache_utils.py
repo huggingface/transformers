@@ -41,7 +41,7 @@ class CacheLayerMixin(ABC):
 
     @abstractmethod
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, **kwargs
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]: ...
 
     @abstractmethod
@@ -100,7 +100,7 @@ class DynamicLayer(CacheLayerMixin):
         self.is_initialized = True
 
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, **kwargs
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -182,7 +182,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         self._sliding_window_tensor = self._sliding_window_tensor.to(self.device)
 
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, **kwargs
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -304,7 +304,7 @@ class StaticLayer(CacheLayerMixin):
         self.is_initialized = True
 
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, **kwargs
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -374,7 +374,7 @@ class StaticSlidingWindowLayer(StaticLayer):
         self.cumulative_length = 0
 
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, **kwargs
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -499,7 +499,7 @@ class QuantizedLayer(DynamicLayer):
         self.cumulative_length = 0
 
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, **kwargs
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -735,7 +735,7 @@ class Cache:
             self.layers[layer_idx].offload()
 
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int, **kwargs
+        self, key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
@@ -761,7 +761,7 @@ class Cache:
             torch.cuda.default_stream(key_states.device).wait_stream(self.prefetch_stream)
             self.prefetch(layer_idx + 1, self.only_non_sliding)
 
-        keys, values = self.layers[layer_idx].update(key_states, value_states, **kwargs)
+        keys, values = self.layers[layer_idx].update(key_states, value_states, *args, **kwargs)
 
         if self.offloading:
             self.offload(layer_idx, self.only_non_sliding)
