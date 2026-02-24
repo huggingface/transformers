@@ -50,7 +50,7 @@ from transformers.trainer_callback import CallbackHandler, ExportableState, Trai
 if is_torch_available():
     from transformers.trainer import DEFAULT_CALLBACKS, TRAINER_STATE_NAME
 
-    from .test_trainer import RegressionDataset, RegressionModelConfig, RegressionPreTrainedModel
+    from .trainer_test_utils import RegressionDataset, RegressionModelConfig, RegressionPreTrainedModel
 
 
 # =============================================================================
