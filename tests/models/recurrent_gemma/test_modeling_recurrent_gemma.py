@@ -168,9 +168,6 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @unittest.skip(
-        reason="Flaky: Nan/Infs detected causing cuda device errors when sampling, corrupting state for all other tests"
-    )
     def test_2b_sample(self):
         set_seed(42)
         expectations = Expectations(
