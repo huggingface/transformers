@@ -16,6 +16,7 @@
 
 from typing import Any
 
+from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
 from ...utils import is_timm_available, logging, requires_backends
 
@@ -27,7 +28,7 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 
-class TimmWrapperConfig(PreTrainedConfig):
+class TimmWrapperConfig(PreTrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration for a timm backbone [`TimmWrapper`].
 
@@ -46,6 +47,8 @@ class TimmWrapperConfig(PreTrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         do_pooling (`bool`, *optional*, defaults to `True`):
             Whether to do pooling for the last_hidden_state in `TimmWrapperModel` or not.
+        freeze_batch_norm_2d (`bool`, *optional*, defaults to `False`):
+            Converts all `BatchNorm2d` and `SyncBatchNorm` layers of provided module into `FrozenBatchNorm2d`.
         model_args (`dict[str, Any]`, *optional*):
             Additional keyword arguments to pass to the `timm.create_model` function. e.g. `model_args={"depth": 3}`
             for `timm/vit_base_patch32_clip_448.laion2b_ft_in12k_in1k` to create a model with 3 blocks. Defaults to `None`.
@@ -69,12 +72,14 @@ class TimmWrapperConfig(PreTrainedConfig):
         architecture: str = "resnet50",
         initializer_range: float = 0.02,
         do_pooling: bool = True,
+        freeze_batch_norm_2d=False,
         model_args: dict[str, Any] | None = None,
         **kwargs,
     ):
         self.architecture = architecture
         self.initializer_range = initializer_range
         self.do_pooling = do_pooling
+        self.freeze_batch_norm_2d = freeze_batch_norm_2d
         self.model_args = model_args  # named "model_args" for BC with timm
         super().__init__(**kwargs)
 
@@ -128,6 +133,32 @@ class TimmWrapperConfig(PreTrainedConfig):
         output.pop("id2label", None)
         output.pop("label2id", None)
         return output
+
+    @property
+    def out_indices(self):
+        return self._out_indices
+
+    @out_indices.setter
+    def out_indices(self, out_indices: tuple[int, ...] | list[int]):
+        """
+        Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
+        """
+        self._out_indices = list(out_indices) if out_indices is not None else out_indices
+        if getattr(self, "stage_names", None) is not None:
+            self.set_output_features_output_indices(out_features=None, out_indices=out_indices)
+
+    @property
+    def out_features(self):
+        return self._out_features
+
+    @out_features.setter
+    def out_features(self, out_features: list[str]):
+        """
+        Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
+        """
+        self._out_features = out_features
+        if getattr(self, "stage_names", None) is not None:
+            self.set_output_features_output_indices(out_features=out_features, out_indices=None)
 
 
 __all__ = ["TimmWrapperConfig"]

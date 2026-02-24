@@ -91,7 +91,7 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         self.config_class = TimmBackboneConfig
         self.model_tester = TimmBackboneModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=self.config_class, has_text_modality=False, common_properties=["num_channels"]
+            self, config_class=self.config_class, has_text_modality=False, common_properties=["architecture"]
         )
 
     def test_config(self):

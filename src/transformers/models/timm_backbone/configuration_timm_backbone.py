@@ -14,15 +14,14 @@
 
 """Configuration for Backbone models"""
 
-from ...backbone_utils import BackboneConfigMixin
-from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
+from ..timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
+class TimmBackboneConfig(TimmWrapperConfig):
     r"""
     This is the configuration class to store the configuration for a timm backbone [`TimmBackbone`].
 
@@ -69,42 +68,43 @@ class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
         out_indices=None,
         freeze_batch_norm_2d=False,
         output_stride=None,
+        architecture=None,
+        do_pooling=False,
+        model_args=None,
         **kwargs,
     ):
-        self.backbone = backbone
-        self.num_channels = num_channels
-        self.features_only = features_only
         self.out_indices = out_indices if out_indices is not None else [-1]
-        self.output_stride = output_stride
-        self.freeze_batch_norm_2d = freeze_batch_norm_2d
+        architecture = backbone if backbone is not None else architecture
+        if model_args is None:
+            model_args = {
+                "features_only": features_only,
+                "in_chans": num_channels,
+                "output_stride": output_stride,
+            }
+        super().__init__(
+            architecture=architecture,
+            do_pooling=do_pooling,
+            model_args=model_args,
+            freeze_batch_norm_2d=freeze_batch_norm_2d,
+            **kwargs,
+        )
 
-        super().__init__(**kwargs)
+    # TODO: just override getattr/setattr instead and add a warning
+    @property
+    def backbone(self):
+        return self.architecture
 
     @property
-    def out_indices(self):
-        return self._out_indices
-
-    @out_indices.setter
-    def out_indices(self, out_indices: tuple[int, ...] | list[int]):
-        """
-        Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
-        """
-        self._out_indices = list(out_indices) if out_indices is not None else out_indices
-        if getattr(self, "stage_names", None) is not None:
-            self.set_output_features_output_indices(out_features=None, out_indices=out_indices)
+    def num_channels(self):
+        return self.model_args["in_chans"]
 
     @property
-    def out_features(self):
-        return self._out_features
+    def output_stride(self):
+        return self.model_args["output_stride"]
 
-    @out_features.setter
-    def out_features(self, out_features: list[str]):
-        """
-        Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
-        """
-        self._out_features = out_features
-        if getattr(self, "stage_names", None) is not None:
-            self.set_output_features_output_indices(out_features=out_features, out_indices=None)
+    @property
+    def features_only(self):
+        return self.model_args["features_only"]
 
 
 __all__ = ["TimmBackboneConfig"]
