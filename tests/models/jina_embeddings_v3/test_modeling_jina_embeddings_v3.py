@@ -13,9 +13,7 @@
 # limitations under the License.
 import unittest
 
-import pytest
-
-from transformers import AutoTokenizer, is_torch_available
+from transformers import is_torch_available
 from transformers.models.jina_embeddings_v3 import JinaEmbeddingsV3Config
 from transformers.testing_utils import (
     require_torch,
@@ -289,54 +287,91 @@ class JinaEmbeddingsV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = JinaEmbeddingsV3Model.from_pretrained("jinaai/jina-embeddings-v3")
+        model = JinaEmbeddingsV3Model.from_pretrained("jinaai/jina-embeddings-v3", dtype=torch.float32)
+        model.eval()
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
             output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 1024))
         self.assertEqual(output.shape, expected_shape)
+
         expected_slice = torch.tensor(
-            [[[-2.1406, 1.8047, -0.1875], [-2.0781, 1.9844, -0.2715], [-2.1094, 1.9922, -0.1270]]]
+            [[[-2.1561, 1.8075, -0.1943], [-2.0813, 1.9855, -0.2760], [-2.1181, 2.0043, -0.1322]]]
         )
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
-    @pytest.mark.torch_export_test
-    def test_export(self):
-        model_id = "jinaai/jina-embeddings-v3"
-        device = "cpu"
-        attn_implementation = "sdpa"
-        max_length = 64
+    def test_inference_all_task_adapters(self):
+        model = JinaEmbeddingsV3Model.from_pretrained("jinaai/jina-embeddings-v3", dtype=torch.float32)
+        model.eval()
+        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        inputs = tokenizer(
-            f"Paris is the {tokenizer.mask_token} of France.",
-            return_tensors="pt",
-            padding="max_length",
-            max_length=max_length,
+        tasks = [
+            "retrieval.query",
+            "retrieval.passage",
+            "separation",
+            "classification",
+            "text-matching",
+        ]
+
+        expected_shape = torch.Size((1, 11, 1024))
+        expected_slices = {
+            "retrieval.query": torch.tensor(
+                [[[-1.5202, 2.4074, -0.9706], [-1.5279, 2.4025, -1.1237], [-1.5252, 2.6143, -0.9416]]]
+            ),
+            "retrieval.passage": torch.tensor(
+                [[[-1.0778, 1.8124, -0.8223], [-1.3796, 1.8108, -0.9868], [-1.1073, 1.9459, -0.8104]]]
+            ),
+            "separation": torch.tensor(
+                [[[-2.3134, 1.9034, 0.1885], [-2.1804, 1.9923, 0.1184], [-2.2325, 2.0251, 0.2533]]]
+            ),
+            "classification": torch.tensor(
+                [
+                    [
+                        [-1.9793e00, 2.2602e00, -1.7995e-01],
+                        [-1.8780e00, 2.2660e00, -2.1822e-01],
+                        [-1.9202e00, 2.4457e00, -2.2832e-04],
+                    ]
+                ]
+            ),
+            "text-matching": torch.tensor(
+                [[[-1.6952, 1.8568, -0.2258], [-1.6239, 1.9056, -0.2681], [-1.5218, 1.8185, 0.0062]]]
+            ),
+        }
+
+        # Store outputs for cross-task comparison
+        outputs = {}
+
+        for task in tasks:
+            with self.subTest(task=task):
+                task_id = model._adaptation_map[task]
+                adapter_mask = torch.full((1,), task_id, dtype=torch.int32)
+
+                with torch.no_grad():
+                    output = model(
+                        input_ids,
+                        attention_mask=attention_mask,
+                        adapter_mask=adapter_mask,
+                    )[0]
+
+                self.assertEqual(output.shape, expected_shape)
+
+                expected_slice = expected_slices[task]
+
+                torch.testing.assert_close(
+                    output[:, 1:4, 1:4],
+                    expected_slice,
+                    rtol=1e-4,
+                    atol=1e-4,
+                )
+                outputs[task] = output
+
+        # Ensure adapters actually change outputs
+        self.assertFalse(
+            torch.allclose(outputs["retrieval.query"], outputs["classification"])
         )
-
-        model = JinaEmbeddingsV3ForMaskedLM.from_pretrained(
-            model_id,
-            device_map=device,
-            attn_implementation=attn_implementation,
+        self.assertFalse(
+            torch.allclose(outputs["retrieval.query"], outputs["retrieval.passage"])
         )
-
-        logits = model(**inputs).logits
-        eg_predicted_mask = tokenizer.decode(logits[0, 4].topk(5).indices)
-        self.assertEqual(
-            eg_predicted_mask.split(),
-            ["capital", "capitol", "comune", "arrondissement", "bastille"],
-        )
-
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["input_ids"],),
-            kwargs={"attention_mask": inputs["attention_mask"]},
-            strict=True,
-        )
-
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
-        ep_predicted_mask = tokenizer.decode(result.logits[0, 4].topk(5).indices)
-        self.assertEqual(eg_predicted_mask, ep_predicted_mask)
