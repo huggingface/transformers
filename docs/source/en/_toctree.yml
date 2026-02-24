@@ -211,6 +211,8 @@
     title: FBGEMM
   - local: quantization/finegrained_fp8
     title: Fine-grained FP8
+  - local: quantization/fouroversix
+    title: Four Over Six
   - local: quantization/fp_quant
     title: FP-Quant
   - local: gguf
