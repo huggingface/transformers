@@ -39,10 +39,6 @@ from ..xlm_roberta.modeling_xlm_roberta import (
 logger = logging.get_logger(__name__)
 
 """
-maskedlm head tie-weights update and fix
-
-conversion_mapping.py use? Fix failure, test_reverse_loading_mapping, pooler
-
 Add integration tests for all task_id's, check the last export test.
 
 post_init() vs lora parameterization order,
@@ -1002,7 +998,7 @@ class JinaEmbeddingsV3LMHead(XLMRobertaLMHead):
 @auto_docstring
 class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.weight",
+        "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.parametrizations.weight.original",
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
