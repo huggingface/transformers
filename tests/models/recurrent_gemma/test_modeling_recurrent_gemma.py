@@ -131,6 +131,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     model_id = "google/recurrentgemma-2b"
 
     def setup(self):
+        set_seed(42)
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
@@ -228,7 +229,6 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         inputs = tokenizer(self.input_long_text, return_tensors="pt").to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         output_text = tokenizer.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
-        print(output_text)
         self.assertEqual(output_text, EXPECTED_GENERATION)
 
     def test_longer_than_window(self):
