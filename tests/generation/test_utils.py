@@ -3820,7 +3820,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # 2. If we pass input ids by themselves, we should get back the same input ids
         model_inputs = model.prepare_inputs_for_generation(input_ids)
-        self.assertListEqual(model_inputs["input_ids"].tolist() == input_ids.tolist())
+        self.assertListEqual(model_inputs["input_ids"].tolist(), input_ids.tolist())
 
         # 3. `use_cache` (and other kwargs) are forwarded
         self.assertFalse("use_cache" in model_inputs)  # From the previous input, there is no `use_cache`
@@ -3840,7 +3840,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             position_ids=position_ids,
         )
         self.assertTrue("past_key_values" in model_inputs)
-        self.assertListEqual(model_inputs["cache_position"].tolist() == init_cache_position.tolist())
+        self.assertListEqual(model_inputs["cache_position"].tolist(), init_cache_position.tolist())
         self.assertEqual(model_inputs["input_ids"].shape[-1], input_ids.shape[1])
         self.assertEqual(model_inputs["position_ids"].shape[-1], input_ids.shape[1])
         self.assertEqual(model_inputs["attention_mask"].shape[-1], input_ids.shape[1])
