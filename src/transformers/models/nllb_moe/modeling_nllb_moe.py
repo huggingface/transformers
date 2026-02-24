@@ -1118,7 +1118,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             # todo check in the config if router loss enables
 
-            if outputs.router_logits is not None:
+            if outputs.encoder_router_logits is not None:
                 encoder_router_logits = outputs.encoder_router_logits
                 decoder_router_logits = outputs.decoder_router_logits
                 encoder_aux_loss = load_balancing_loss_func(
@@ -1130,7 +1130,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
 
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 
-            if outputs.router_logits is not None and labels is not None:
+            if outputs.encoder_router_logits is not None and labels is not None:
                 aux_loss = self.router_aux_loss_coef * (encoder_aux_loss + decoder_aux_loss)
                 loss = loss + aux_loss
 
