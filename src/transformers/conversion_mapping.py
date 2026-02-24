@@ -319,28 +319,34 @@ def _build_checkpoint_conversion_mapping():
             # Encoder Layers Renaming
             WeightRenaming(
                 r"encoder.layers.(\d+).attn.out_proj.weight",
-                r"layers.\1.attention.o_proj.weight",
+                r"layers.\1.self_attn.o_proj.weight",
             ),
             WeightRenaming(
                 r"encoder.layers.(\d+).mlp.fc11.weight",
-                r"layers.\1.intermediate.gate_proj.weight",
+                r"layers.\1.mlp.gate_proj.weight",
             ),
             WeightRenaming(
                 r"encoder.layers.(\d+).mlp.fc12.weight",
-                r"layers.\1.intermediate.up_proj.weight",
+                r"layers.\1.mlp.up_proj.weight",
             ),
-            WeightRenaming(r"encoder.layers.(\d+).mlp.fc2.weight", r"layers.\1.intermediate.down_proj.weight"),
+            WeightRenaming(r"encoder.layers.(\d+).mlp.fc2.weight", r"layers.\1.mlp.down_proj.weight"),
             WeightRenaming(
                 r"encoder.layers.(\d+).norm1",
-                r"layers.\1.norm1",
+                r"layers.\1.post_attention_layernorm",
             ),
             WeightRenaming(
                 r"encoder.layers.(\d+).norm2",
-                r"layers.\1.norm2",
+                r"layers.\1.post_mlp_layernorm",
             ),
-            WeightRenaming(
-                r"encoder.layers.(\d+).attn.Wqkv.weight",
-                r"layers.\1.attention.Wqkv.weight",
+            WeightRenaming("encoder.layers.", "nomic_bert.layers."),
+            WeightConverter(
+                source_patterns=["attn.Wqkv.weight"],
+                target_patterns=[
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
             ),
         ],
     }

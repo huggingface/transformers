@@ -66,6 +66,8 @@ class NomicBertConfig(PreTrainedConfig):
             The token ID used for the beginning-of-sequence token.
         eos_token_id (`int`, *optional*):
             The token ID used for the end-of-sequence token.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            The token ID used for padding.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie the input and output word embeddings. If set to `True`, the same embedding matrix
             is used for both input embeddings and output logits.
@@ -74,10 +76,7 @@ class NomicBertConfig(PreTrainedConfig):
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        pad_token_id (`int`, *optional*, defaults to 0):
-            The token ID used for padding.
+            The maximum sequence length that this model might ever be used with.
         head_dim (`int`, *optional*):
             The dimension of the attention heads.
 
@@ -114,15 +113,15 @@ class NomicBertConfig(PreTrainedConfig):
         type_vocab_size=2,
         bos_token_id=None,
         eos_token_id=None,
+        pad_token_id=0,
         tie_word_embeddings=True,
         rope_parameters: RopeParameters | None = None,
         max_position_embeddings=2048,
-        pad_token_id=0,
         head_dim=None,
         **kwargs,
     ):
         self.head_dim = head_dim if head_dim is not None else hidden_size // num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
+        self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
         self.rope_parameters = rope_parameters
         self.pad_token_id = pad_token_id
 

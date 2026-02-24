@@ -86,6 +86,7 @@ class NomicBertEmbeddings(nn.Module):
 
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
+                # NOTE: We assume either pos ids to have bsz == 1 (broadcastable) or bsz == effective bsz (input_shape[0])
                 buffered_token_type_ids = self.token_type_ids.expand(position_ids.shape[0], -1)
                 buffered_token_type_ids = torch.gather(buffered_token_type_ids, dim=1, index=position_ids)
                 token_type_ids = buffered_token_type_ids.expand(batch_size, seq_length)
@@ -168,48 +169,11 @@ class NomicBertRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 @use_kernel_func_from_hub("rotary_pos_emb")
@@ -238,46 +202,66 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
-class NomicBertSelfAttention(nn.Module):
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
-    Self-Attention mechanism for NomicBERT is essentially Llama attention without caching logic.
-    Key Difference: Replaces standard BERT absolute position embeddings with
-    Rotary Positional Embeddings (RoPE) applied directly to Q and K.
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+@use_kernelized_func(apply_rotary_pos_emb)
+class NomicBertAttention(nn.Module):
+    """
+    Self-Attention mechanism is essentially Llama attention without caching.
     """
 
     def __init__(self, config, layer_idx=None):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({config.num_attention_heads})"
-            )
         self.config = config
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.scaling = self.attention_head_size**-0.5
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
 
-        self.num_kv_heads = (
-            config.num_key_value_heads if config.num_key_value_heads is not None else config.num_attention_heads
-        )
-        self.num_key_value_groups = self.num_attention_heads // self.num_kv_heads
-        self.Wqkv = nn.Linear(
-            config.hidden_size,
-            (self.num_attention_heads + 2 * self.num_kv_heads) * self.attention_head_size,
-            bias=False,
-        )
+        self.attention_dropout = config.attention_probs_dropout_prob
 
-        self.o_proj = nn.Linear(
-            config.hidden_size,
-            config.hidden_size,
-            bias=False,
-        )
+        self.is_causal = False
+
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
     def forward(
         self,
@@ -285,28 +269,14 @@ class NomicBertSelfAttention(nn.Module):
         attention_mask=None,
         position_embeddings=None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         # get all proj
-        qkv = self.Wqkv(hidden_states)
-
-        q_size = self.num_attention_heads * self.attention_head_size
-        kv_size = self.num_kv_heads * self.attention_head_size
-
-        query_states, key_states, value_states = torch.split(
-            qkv,
-            [q_size, kv_size, kv_size],
-            dim=-1,
-        )
-
-        query_states = query_states.view(*input_shape, self.num_attention_heads, self.attention_head_size).transpose(
-            1, 2
-        )
-
-        key_states = key_states.view(*input_shape, self.num_kv_heads, self.attention_head_size).transpose(1, 2)
-
-        value_states = value_states.view(*input_shape, self.num_kv_heads, self.attention_head_size).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Apply Rotary Position Embeddings
         cos, sin = position_embeddings
@@ -322,7 +292,7 @@ class NomicBertSelfAttention(nn.Module):
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0 if not self.training else self.dropout.p,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
         )
@@ -332,7 +302,7 @@ class NomicBertSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class NomicBertIntermediate(nn.Module):
+class NomicBertMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -351,10 +321,12 @@ class NomicBertIntermediate(nn.Module):
 class NomicBertLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
-        self.attention = NomicBertSelfAttention(config, layer_idx=layer_idx)
-        self.intermediate = NomicBertIntermediate(config)
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.self_attn = NomicBertAttention(config, layer_idx=layer_idx)
+        self.mlp = NomicBertMLP(config)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.post_mlp_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_mlp_dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def forward(
         self,
@@ -364,19 +336,19 @@ class NomicBertLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ):
         residual = hidden_states
-        hidden_states, _ = self.attention(
+        hidden_states, _ = self.self_attn(
             hidden_states,
             attention_mask,
             position_embeddings=position_embeddings,
             **kwargs,
         )
 
-        hidden_states = self.norm1(residual + hidden_states)
+        hidden_states = self.post_attention_layernorm(self.post_attention_dropout(residual) + hidden_states)
 
         residual = hidden_states
-        hidden_states = self.intermediate(hidden_states)
+        hidden_states = self.mlp(hidden_states)
 
-        hidden_states = self.norm2(residual + hidden_states)
+        hidden_states = self.post_mlp_layernorm(self.post_mlp_dropout(residual) + hidden_states)
 
         return hidden_states
 
@@ -423,7 +395,7 @@ class NomicBertPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": NomicBertLayer,
-        "attentions": NomicBertSelfAttention,
+        "attentions": NomicBertAttention,
     }
     _keys_to_ignore_on_load_unexpected = ["inv_freq", "original_inv_freq"]
 
@@ -472,12 +444,12 @@ class NomicBertPredictionHeadTransform(nn.Module):
         else:
             self.transform_act_fn = config.hidden_act
         # Use layer_norm rather than LayerNorm to avoid bert legacy mappings weights and bias to gamma and beta
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.layernorm(hidden_states)
         return hidden_states
 
 
@@ -545,9 +517,12 @@ class NomicBertModel(NomicBertPreTrainedModel):
             inputs_embeds=inputs_embeds,
         )
 
-        if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_length), device=device)
-        attention_mask = self.get_extended_attention_mask(attention_mask, (batch_size, seq_length))
+        if attention_mask is not None:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=attention_mask,
+            )
 
         hidden_states = embedding_output
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
