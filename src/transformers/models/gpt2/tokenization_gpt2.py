@@ -106,18 +106,19 @@ class GPT2Tokenizer(TokenizersBackend):
         self.add_prefix_space = add_prefix_space
         self._vocab = vocab if vocab is not None else {}
         self._merges = merges or []
-        self._tokenizer = Tokenizer(
-            BPE(
-                vocab=self._vocab,
-                merges=self._merges,
-                dropout=None,
-                continuing_subword_prefix="",
-                end_of_word_suffix="",
-                fuse_unk=False,
+        if "tokenizer_object" not in kwargs:
+            self._tokenizer = Tokenizer(
+                BPE(
+                    vocab=self._vocab,
+                    merges=self._merges,
+                    dropout=None,
+                    continuing_subword_prefix="",
+                    end_of_word_suffix="",
+                    fuse_unk=False,
+                )
             )
-        )
-        self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
-        self._tokenizer.decoder = decoders.ByteLevel()
+            self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
+            self._tokenizer.decoder = decoders.ByteLevel()
         super().__init__(
             errors=errors,
             unk_token=unk_token,

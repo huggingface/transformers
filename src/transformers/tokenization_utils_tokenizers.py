@@ -116,7 +116,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # we extract vocab / merges from the tokenizer file to pass them to __init__
-            processor = TokenizerFast.from_file(fast_tokenizer_file).post_processor
+            fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
+            processor = fast_tokenizer.post_processor
+            local_kwargs["tokenizer_object"] = fast_tokenizer
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
             vocab = tokenizer_json.get("model", {}).get("vocab", None)
@@ -245,7 +247,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         merges = kwargs.get("merges")
 
         fast_tokenizer = None
-        if tokenizer_object is not None:
+        if tokenizer_object is not None and self._tokenizer is None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # We have a serialization from tokenizers which let us directly build the backend
