@@ -45,7 +45,7 @@ from ..qwen3_omni_moe.processing_qwen3_omni_moe import (
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerTextRMSNorm, rotate_half, repeat_kv, apply_rotary_pos_emb,
     eager_attention_forward, Qwen3OmniMoeThinkerTextAttention, 
-    Qwen3OmniMoeThinkerTextMLP
+    Qwen3OmniMoeThinkerTextMLP, Qwen3OmniMoeThinkerTextDecoderLayer
 )
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
@@ -572,9 +572,9 @@ class Qwen3ASRTextMLP(Qwen3OmniMoeThinkerTextMLP):
     pass
 
 
-class Qwen3ASRThinkerTextDecoderLayer(GradientCheckpointingLayer):
+class Qwen3ASRThinkerTextDecoderLayer(Qwen3OmniMoeThinkerTextDecoderLayer):
     def __init__(self, config: Qwen3ASRConfig, layer_idx: int):
-        super().__init__()
+        GradientCheckpointingLayer.__init__()
         self.hidden_size = config.hidden_size
 
         self.self_attn = Qwen3ASRTextAttention(config=config, layer_idx=layer_idx)
@@ -582,40 +582,6 @@ class Qwen3ASRThinkerTextDecoderLayer(GradientCheckpointingLayer):
         self.mlp = Qwen3ASRTextMLP(config)
         self.input_layernorm = Qwen3ASRTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen3ASRTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-        return hidden_states
 
 
 @auto_docstring
