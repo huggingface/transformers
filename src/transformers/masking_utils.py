@@ -857,7 +857,8 @@ def create_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    cache_position: torch.Tensor,  # not used anymore but kept for BC
+    cache_position: torch.Tensor | None = None,  # not used anymore but kept for BC
+    *,
     past_key_values: Cache | None,
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
@@ -1061,7 +1062,8 @@ def create_sliding_window_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    cache_position: torch.Tensor,  # not used anymore but kept for BC
+    cache_position: torch.Tensor | None = None,  # not used anymore but kept for BC
+    *,
     past_key_values: Cache | None,
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
@@ -1257,7 +1259,8 @@ def create_chunked_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    cache_position: torch.Tensor,  # not used anymore but kept for BC
+    cache_position: torch.Tensor | None = None,  # not used anymore but kept for BC
+    *,
     past_key_values: Cache | None,
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
