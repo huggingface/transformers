@@ -693,7 +693,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         self.dt_bias = nn.Parameter(inv_dt)
 
         # Output norm - NOTE: FLA's FusedRMSNormGated uses eps=1e-5 by default
-        self.norm = (
+        self.o_norm = (
             OlmoHybridRMSNormGated(self.head_v_dim, eps=1e-5)
             if FusedRMSNormGated is None
             else FusedRMSNormGated(
