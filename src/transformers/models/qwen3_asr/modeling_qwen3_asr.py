@@ -7,6 +7,7 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 import torch
@@ -30,8 +31,13 @@ from transformers.utils.generic import TransformersKwargs, check_model_inputs
 
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...utils.generic import is_flash_attention_requested
-from .configuration_qwen3_asr import Qwen3ASRAudioEncoderConfig, Qwen3ASRConfig, Qwen3ASRThinkerConfig
+from ...utils.generic import is_flash_attention_requested, maybe_autocast
+from .configuration_qwen3_asr import (
+    Qwen3ASRAudioEncoderConfig,
+    Qwen3ASRConfig,
+    Qwen3ASRTextConfig,
+    Qwen3ASRThinkerConfig,
+)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -809,52 +815,49 @@ class Qwen3ASRThinkerTextRotaryEmbedding(nn.Module):
 
     def __init__(self, config: Qwen3ASRConfig, device=None):
         super().__init__()
-        ### the following overrides rope_type since "default" was removed in transformers v5
-        # Normalize rope_scaling
-        rope_scaling = config.rope_scaling or {}
-
-        # rope_type: default to linear since "default" was removed in v5
-        self.rope_type = rope_scaling.get("rope_type", "linear")
-
-        if self.rope_type == "default":
-            self.rope_type = "linear"
-
-        # linear expects 'factor'
-        if self.rope_type == "linear":
-            rope_scaling.setdefault("factor", 1.0)
-
-        # write back normalized dict
-        config.rope_scaling = rope_scaling
-        ###
-
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        self.rope_type = config.rope_scaling.get("rope_type", "linear")
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
         self.mrope_section = config.rope_scaling.get("mrope_section", [24, 20, 20])
 
-    def apply_interleaved_mrope(self, freqs, mrope_section):
-        """Apply interleaved MRoPE to 3D rotary embeddings.
-        Reorganizes frequency layout from chunked [TTT...HHH...WWW] to
-        interleaved [THTHWHTHW...TT], preserving frequency continuity.
-        args:
-            x: (3, bs, seq_len, head_dim // 2)
-            mrope_section: (3,)
-        returns:
-            x_t: (bs, seq_len, head_dim // 2)
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Qwen3ASRTextConfig | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
         """
-        freqs_t = freqs[0]  # just overwrite the first dimension T
-        for dim, offset in enumerate((1, 2), start=1):  # H, W
-            length = mrope_section[dim] * 3
-            idx = slice(offset, length, 3)
-            freqs_t[..., idx] = freqs[dim, ..., idx]
-        return freqs_t
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -867,7 +870,7 @@ class Qwen3ASRThinkerTextRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             freqs = self.apply_interleaved_mrope(freqs, self.mrope_section)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -875,6 +878,23 @@ class Qwen3ASRThinkerTextRotaryEmbedding(nn.Module):
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    def apply_interleaved_mrope(self, freqs, mrope_section):
+        """Apply interleaved MRoPE to 3D rotary embeddings.
+        Reorganizes frequency layout from chunked [TTT...HHH...WWW] to
+        interleaved [THWTHWTHW...TT], preserving frequency continuity.
+        args:
+            x: (3, bs, seq_len, head_dim // 2)
+            mrope_section: (3,)
+        returns:
+            x_t: (bs, seq_len, head_dim // 2)
+        """
+        freqs_t = freqs[0]  # just overwrite the first dimension T
+        for dim, offset in enumerate((1, 2), start=1):  # H, W
+            length = mrope_section[dim] * 3
+            idx = slice(offset, length, 3)
+            freqs_t[..., idx] = freqs[dim, ..., idx]
+        return freqs_t
 
 
 class Qwen3ASRThinkerTextMLP(nn.Module):
