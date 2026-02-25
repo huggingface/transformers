@@ -85,7 +85,7 @@ _deps = [
     "filelock",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "hf-doc-builder>=0.3.0",
+    "hf-doc-builder @ git+https://github.com/huggingface/doc-builder.git@add-runnable-block-processing",
     "huggingface-hub>=1.5.0,<2.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
@@ -230,6 +230,7 @@ extras["testing"] = (
         "rjieba",
         "beautifulsoup4",
         "tensorboard",
+        "hf-doc-builder",
         "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
         "filelock",  # filesystem locks, e.g., to prevent parallel downloads
     )

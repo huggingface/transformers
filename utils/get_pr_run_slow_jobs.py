@@ -28,7 +28,10 @@ def get_jobs_to_run():
     # files in a model directory but not necessary a modeling file
     re_5 = re.compile(r"src/transformers/(models/.*)/.*\.py")
 
-    regexes = [re_1, re_2, re_3, re_4, re_5]
+    # model documentation files (runnable doc tests)
+    re_6 = re.compile(r"docs/source/en/model_doc/(.*)\.md")
+
+    regexes = [re_1, re_2, re_3, re_4, re_5, re_6]
 
     jobs_to_run = []
     for pr_file in pr_files:
@@ -37,6 +40,9 @@ def get_jobs_to_run():
             if len(matched) > 0:
                 item = matched[0]
                 item = item.replace("quantizers/quantizer_", "quantization/")
+                # doc file matches yield bare model name — prefix with models/
+                if regex is re_6:
+                    item = f"models/{item}"
                 # TODO: for files in `quantizers`, the processed item above may not exist. Try using a fuzzy matching
                 if item in repo_content:
                     jobs_to_run.append(item)
