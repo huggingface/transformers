@@ -1951,7 +1951,7 @@ class Trainer:
             return_outputs (`bool`, *optional*, defaults to `False`):
                 Whether to return the model outputs along with the loss.
             num_items_in_batch (Optional[torch.Tensor], *optional*):
-                The number of items in the batch. If not passed, the loss is computed 
+                The number of items in the batch. If not passed, the loss is computed
                 using the default batch size reduction logic.
 
         Returns:
