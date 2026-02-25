@@ -21,6 +21,7 @@ import math
 import os
 import tempfile
 from functools import partial
+from unittest.mock import patch
 
 import datasets
 import numpy as np
@@ -54,6 +55,7 @@ from transformers.testing_utils import (
     backend_device_count,
     execute_subprocess_async,
     require_bitsandbytes,
+    require_liger_kernel,
     require_non_hpu,
     require_peft,
     require_torch,
@@ -62,6 +64,7 @@ from transformers.testing_utils import (
     require_torch_fp16,
     require_torch_gpu,
     require_torch_multi_accelerator,
+    require_torch_non_multi_accelerator,
     require_torch_tf32,
     run_first,
     slow,
@@ -726,6 +729,19 @@ class TrainerMetricsTest(TestCasePlus):
             trainer.train()
             self.assertEqual(trainer.state.num_input_tokens_seen, total_tokens)
 
+    def test_get_num_trainable_parameters(self):
+        model = nn.Sequential(nn.Linear(128, 64), nn.Linear(64, 32))
+        # in_features * out_features + bias
+        layer_1 = 128 * 64 + 64
+        layer_2 = 64 * 32 + 32
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            self.assertEqual(trainer.get_num_trainable_parameters(), layer_1 + layer_2)
+            # Freeze the last layer
+            for param in model[-1].parameters():
+                param.requires_grad = False
+            self.assertEqual(trainer.get_num_trainable_parameters(), layer_1)
+
 
 # ---------------------------------------------------------------------------
 # Step counting and training loss tests
@@ -901,6 +917,243 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
 
 # ---------------------------------------------------------------------------
+# Torch compile tests
+# ---------------------------------------------------------------------------
+
+
+@require_torch
+class TrainerTorchCompileTest(TestCasePlus):
+    @pytest.mark.torch_compile_test
+    def test_torch_compile_loss_func_compatibility(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            per_device_train_batch_size=2,
+            torch_compile=True,
+            max_steps=1,  # compile happens on the first step
+            report_to="none",
+        )
+        trainer = Trainer(model=tiny_llama, args=args, train_dataset=train_dataset)  # noqa
+        trainer.train()
+
+    @require_peft
+    @require_bitsandbytes
+    @pytest.mark.torch_compile_test
+    def test_bnb_compile(self):
+        from peft import LoraConfig, get_peft_model
+
+        # Simply tests if initializing a Trainer with a PEFT + compiled model works out of the box
+        # QLoRA + torch compile is not really supported yet, but we should at least support the model
+        # loading and let torch throw the
+        tiny_model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-LlamaForCausalLM",
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+        )
+
+        peft_config = LoraConfig(
+            r=8,
+            lora_alpha=32,
+            target_modules=["q_proj", "k_proj", "v_proj"],
+            lora_dropout=0.05,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+        tiny_model = get_peft_model(tiny_model, peft_config)
+
+        tiny_model = torch.compile(tiny_model)
+
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+        )
+        with self.assertRaises(ValueError):
+            _ = Trainer(tiny_model, args, train_dataset=train_dataset)  # noqa
+
+    @require_torch_accelerator
+    @pytest.mark.torch_compile_test
+    def test_torch_compile_train(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(output_dir=tmp_dir)
+            metrics = trainer.train()
+            original_train_loss = metrics.training_loss
+
+            trainer = get_regression_trainer(torch_compile=True, output_dir=tmp_dir)
+            metrics = trainer.train()
+            self.assertAlmostEqual(metrics.training_loss, original_train_loss)
+
+    @require_torch_accelerator
+    @pytest.mark.torch_compile_test
+    def test_torch_compile_eval(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(output_dir=tmp_dir)
+            metrics = trainer.evaluate()
+            original_eval_loss = metrics["eval_loss"]
+
+            trainer = get_regression_trainer(torch_compile=True, output_dir=tmp_dir)
+            metrics = trainer.evaluate()
+
+            self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss, delta=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Early stopping tests
+# ---------------------------------------------------------------------------
+
+
+@require_torch
+class TrainerEarlyStoppingTest(TestCasePlus):
+    def test_early_stopping_callback(self):
+        # early stopping stops training before num_training_epochs
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                num_train_epochs=20,
+                gradient_accumulation_steps=1,
+                per_device_train_batch_size=16,
+                load_best_model_at_end=True,
+                eval_strategy=IntervalStrategy.EPOCH,
+                save_strategy=IntervalStrategy.EPOCH,
+                compute_metrics=AlmostAccuracy(),
+                metric_for_best_model="accuracy",
+            )
+            trainer.add_callback(EarlyStoppingCallback(1, 0.0001))
+            train_output = trainer.train()
+            self.assertLess(train_output.global_step, 20 * 64 / 16)
+
+        # Invalid inputs to trainer with early stopping callback result in assertion error
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                num_train_epochs=20,
+                gradient_accumulation_steps=1,
+                per_device_train_batch_size=16,
+                eval_strategy=IntervalStrategy.EPOCH,
+                compute_metrics=AlmostAccuracy(),
+                metric_for_best_model="accuracy",
+            )
+            trainer.add_callback(EarlyStoppingCallback(1))
+            self.assertEqual(trainer.state.global_step, 0)
+            try:
+                trainer.train()
+            except AssertionError:
+                self.assertEqual(trainer.state.global_step, 0)
+
+        # even if load_best_model_at_end is False, `best_model_checkpoint` should be set
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                num_train_epochs=20,
+                gradient_accumulation_steps=1,
+                per_device_train_batch_size=16,
+                load_best_model_at_end=False,
+                eval_strategy=IntervalStrategy.EPOCH,
+                save_strategy=IntervalStrategy.EPOCH,
+                compute_metrics=AlmostAccuracy(),
+                metric_for_best_model="accuracy",
+            )
+            trainer.add_callback(EarlyStoppingCallback(1, 0.0001))
+            train_output = trainer.train()
+            self.assertIsNotNone(trainer.state.best_model_checkpoint)
+
+
+# ---------------------------------------------------------------------------
+# Liger kernel tests
+# ---------------------------------------------------------------------------
+
+
+@require_torch
+class TrainerLigerKernelTest(TestCasePlus):
+    @require_liger_kernel
+    def test_use_liger_kernel_patching(self):
+        # Ensure any monkey patching is cleaned up for subsequent tests
+        with patch("transformers.models.llama.modeling_llama"):
+            from liger_kernel.transformers import liger_rotary_pos_emb
+
+            from transformers.models.llama import modeling_llama
+
+            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+            tiny_llama = LlamaForCausalLM(config)
+
+            # Spot check that modeling code and model instance variables are not yet patched
+            self.assertNotEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
+            self.assertFalse("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
+
+            args = TrainingArguments(self.get_auto_remove_tmp_dir(), use_liger_kernel=True)
+            Trainer(tiny_llama, args)
+
+            # Spot check that modeling code and model instance variables are patched
+            self.assertEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
+            self.assertTrue("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
+
+    @require_liger_kernel
+    def test_use_liger_kernel_custom_config_patching(self):
+        # Ensure any monkey patching is cleaned up for subsequent tests
+        with patch("transformers.models.llama.modeling_llama"):
+            from liger_kernel.transformers import LigerRMSNorm
+
+            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+            tiny_llama = LlamaForCausalLM(config)
+
+            args = TrainingArguments(
+                self.get_auto_remove_tmp_dir(),
+                use_liger_kernel=True,
+                liger_kernel_config={"rms_norm": False},  # Don't apply Liger's RMSNorm
+            )
+            Trainer(tiny_llama, args)
+
+            # Check that the RMSNorm kernel is not applied as specified in the config
+            self.assertFalse(isinstance(tiny_llama.model.norm, LigerRMSNorm))
+
+    @require_liger_kernel
+    @require_torch_accelerator
+    @require_torch_non_multi_accelerator  # Don't work with DP
+    def test_use_liger_kernel_trainer(self):
+        # Ensure any monkey patching is cleaned up for subsequent tests
+        with patch("transformers.models.llama.modeling_llama"):
+            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+            tiny_llama = LlamaForCausalLM(config)
+            x = torch.randint(0, 100, (128,))
+            train_dataset = RepeatDataset(x)
+            args = TrainingArguments(
+                self.get_auto_remove_tmp_dir(),
+                learning_rate=1e-2,
+                logging_steps=5,
+                max_steps=20,
+                use_liger_kernel=True,
+            )
+            Trainer(tiny_llama, args, train_dataset=train_dataset).train()
+
+    @require_liger_kernel
+    @require_torch_accelerator
+    @require_torch_non_multi_accelerator  # don't work with DP
+    def test_use_liger_kernel_custom_config_trainer(self):
+        # Ensure any monkey patching is cleaned up for subsequent tests
+        with patch("transformers.models.llama.modeling_llama"):
+            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+            tiny_llama = LlamaForCausalLM(config)
+            x = torch.randint(0, 100, (128,))
+            train_dataset = RepeatDataset(x)
+            args = TrainingArguments(
+                self.get_auto_remove_tmp_dir(),
+                learning_rate=1e-2,
+                logging_steps=5,
+                max_steps=20,
+                use_liger_kernel=True,
+                liger_kernel_config={"rms_norm": False, "cross_entropy": True, "fused_linear_cross_entropy": False},
+            )
+            Trainer(tiny_llama, args, train_dataset=train_dataset).train()
+
+
+# ---------------------------------------------------------------------------
 # Miscellaneous integration tests
 # ---------------------------------------------------------------------------
 
@@ -1049,152 +1302,3 @@ class TrainerIntegrationTest(TestCasePlus):
         trainer.train()
         model_wrapped_after = trainer.model_wrapped
         self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
-
-
-# ---------------------------------------------------------------------------
-# Torch compile tests
-# ---------------------------------------------------------------------------
-
-
-@require_torch
-class TrainerTorchCompileTest(TestCasePlus):
-    @pytest.mark.torch_compile_test
-    def test_torch_compile_loss_func_compatibility(self):
-        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-        tiny_llama = LlamaForCausalLM(config)
-
-        x = torch.randint(0, 100, (128,))
-        train_dataset = RepeatDataset(x)
-
-        args = TrainingArguments(
-            self.get_auto_remove_tmp_dir(),
-            per_device_train_batch_size=2,
-            torch_compile=True,
-            max_steps=1,  # compile happens on the first step
-            report_to="none",
-        )
-        trainer = Trainer(model=tiny_llama, args=args, train_dataset=train_dataset)  # noqa
-        trainer.train()
-
-    @require_peft
-    @require_bitsandbytes
-    @pytest.mark.torch_compile_test
-    def test_bnb_compile(self):
-        from peft import LoraConfig, get_peft_model
-
-        # Simply tests if initializing a Trainer with a PEFT + compiled model works out of the box
-        # QLoRA + torch compile is not really supported yet, but we should at least support the model
-        # loading and let torch throw the
-        tiny_model = AutoModelForCausalLM.from_pretrained(
-            "hf-internal-testing/tiny-random-LlamaForCausalLM",
-            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-        )
-
-        peft_config = LoraConfig(
-            r=8,
-            lora_alpha=32,
-            target_modules=["q_proj", "k_proj", "v_proj"],
-            lora_dropout=0.05,
-            bias="none",
-            task_type="CAUSAL_LM",
-        )
-        tiny_model = get_peft_model(tiny_model, peft_config)
-
-        tiny_model = torch.compile(tiny_model)
-
-        x = torch.randint(0, 100, (128,))
-        train_dataset = RepeatDataset(x)
-
-        args = TrainingArguments(
-            self.get_auto_remove_tmp_dir(),
-            learning_rate=1e-9,
-            logging_steps=5,
-        )
-        with self.assertRaises(ValueError):
-            _ = Trainer(tiny_model, args, train_dataset=train_dataset)  # noqa
-
-    @require_torch_accelerator
-    @pytest.mark.torch_compile_test
-    def test_torch_compile_train(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(output_dir=tmp_dir)
-            metrics = trainer.train()
-            original_train_loss = metrics.training_loss
-
-            trainer = get_regression_trainer(torch_compile=True, output_dir=tmp_dir)
-            metrics = trainer.train()
-            self.assertAlmostEqual(metrics.training_loss, original_train_loss)
-
-    @require_torch_accelerator
-    @pytest.mark.torch_compile_test
-    def test_torch_compile_eval(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(output_dir=tmp_dir)
-            metrics = trainer.evaluate()
-            original_eval_loss = metrics["eval_loss"]
-
-            trainer = get_regression_trainer(torch_compile=True, output_dir=tmp_dir)
-            metrics = trainer.evaluate()
-
-            self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss, delta=1e-6)
-
-
-# ---------------------------------------------------------------------------
-# Early stopping tests
-# ---------------------------------------------------------------------------
-
-
-@require_torch
-class TrainerEarlyStoppingTest(TestCasePlus):
-    def test_early_stopping_callback(self):
-        # early stopping stops training before num_training_epochs
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(
-                output_dir=tmp_dir,
-                num_train_epochs=20,
-                gradient_accumulation_steps=1,
-                per_device_train_batch_size=16,
-                load_best_model_at_end=True,
-                eval_strategy=IntervalStrategy.EPOCH,
-                save_strategy=IntervalStrategy.EPOCH,
-                compute_metrics=AlmostAccuracy(),
-                metric_for_best_model="accuracy",
-            )
-            trainer.add_callback(EarlyStoppingCallback(1, 0.0001))
-            train_output = trainer.train()
-            self.assertLess(train_output.global_step, 20 * 64 / 16)
-
-        # Invalid inputs to trainer with early stopping callback result in assertion error
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(
-                output_dir=tmp_dir,
-                num_train_epochs=20,
-                gradient_accumulation_steps=1,
-                per_device_train_batch_size=16,
-                eval_strategy=IntervalStrategy.EPOCH,
-                compute_metrics=AlmostAccuracy(),
-                metric_for_best_model="accuracy",
-            )
-            trainer.add_callback(EarlyStoppingCallback(1))
-            self.assertEqual(trainer.state.global_step, 0)
-            try:
-                trainer.train()
-            except AssertionError:
-                self.assertEqual(trainer.state.global_step, 0)
-
-        # even if load_best_model_at_end is False, `best_model_checkpoint` should be set
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(
-                output_dir=tmp_dir,
-                num_train_epochs=20,
-                gradient_accumulation_steps=1,
-                per_device_train_batch_size=16,
-                load_best_model_at_end=False,
-                eval_strategy=IntervalStrategy.EPOCH,
-                save_strategy=IntervalStrategy.EPOCH,
-                compute_metrics=AlmostAccuracy(),
-                metric_for_best_model="accuracy",
-            )
-            trainer.add_callback(EarlyStoppingCallback(1, 0.0001))
-            train_output = trainer.train()
-            self.assertIsNotNone(trainer.state.best_model_checkpoint)

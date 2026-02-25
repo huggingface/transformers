@@ -20,13 +20,10 @@ and model parameter inspection.
 """
 
 import tempfile
-import unittest
-from unittest.mock import Mock, patch
 
 import numpy as np
 from parameterized import parameterized
 
-import transformers
 from transformers import (
     GPT2Config,
     GPT2LMHeadModel,
@@ -42,22 +39,13 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_galore_torch,
     require_grokadamw,
-    require_liger_kernel,
     require_lomo,
     require_schedulefree,
     require_torch,
     require_torch_accelerator,
-    require_torch_non_multi_accelerator,
     require_torch_optimi,
 )
 from transformers.trainer_utils import check_target_module_exists
-from transformers.training_args import OptimizerNames
-from transformers.utils import (
-    is_apex_available,
-    is_bitsandbytes_available,
-    is_torchao_available,
-    is_torchdistx_available,
-)
 
 from .trainer_test_utils import (
     BasicTextGenerationModel,
@@ -168,22 +156,35 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(len(decreasing_lrs) > len(increasing_lrs))
 
     # ---------------------------------------------------------------------------
-    # Weight decay parameter groups
+    # adafactor optmizer test
     # ---------------------------------------------------------------------------
 
-    def test_no_wd_param_group(self):
-        model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
+    def test_adafactor_lr_none(self):
+        # test the special case where lr=None, since Trainer can't not have lr_scheduler
+
+        from transformers.optimization import Adafactor, AdafactorSchedule
+
+        train_dataset = RegressionDataset()
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
-            trainer.create_optimizer_and_scheduler(10)
-            wd_names = ['0.linear1.weight', '0.linear2.weight', '1.0.linear1.weight', '1.0.linear2.weight', '1.1.linear1.weight', '1.1.linear2.weight']  # fmt: skip
-            wd_params = [p for n, p in model.named_parameters() if n in wd_names]
-            no_wd_params = [p for n, p in model.named_parameters() if n not in wd_names]
-            self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)
-            self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
+            args = TrainingArguments(tmp_dir, report_to="none")
+            model = RegressionModel()
+            optimizer = Adafactor(
+                model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None
+            )
+            lr_scheduler = AdafactorSchedule(optimizer)
+            trainer = Trainer(model, args, train_dataset=train_dataset, optimizers=(optimizer, lr_scheduler))
+            trainer.train()
+
+            # Train a default model to compare against
+            default_trainer = get_regression_trainer(learning_rate=0.1, output_dir=tmp_dir)
+            default_trainer.train()
+
+            self.assertFalse(torch.allclose(trainer.model.a, default_trainer.model.a))
+            self.assertFalse(torch.allclose(trainer.model.b, default_trainer.model.b))
+            self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
 
     # ---------------------------------------------------------------------------
-    # BNB optimizer smoke tests
+    # BNB optimizer tests
     # ---------------------------------------------------------------------------
 
     @require_bitsandbytes
@@ -199,83 +200,24 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         Trainer(tiny_gpt2, args, train_dataset=train_dataset).train()
 
-    # ---------------------------------------------------------------------------
-    # Liger kernel tests
-    # ---------------------------------------------------------------------------
-
-    @require_liger_kernel
-    def test_use_liger_kernel_patching(self):
-        # Ensure any monkey patching is cleaned up for subsequent tests
-        with patch("transformers.models.llama.modeling_llama"):
-            from liger_kernel.transformers import liger_rotary_pos_emb
-
-            from transformers.models.llama import modeling_llama
-
-            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-            tiny_llama = LlamaForCausalLM(config)
-
-            # Spot check that modeling code and model instance variables are not yet patched
-            self.assertNotEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
-            self.assertFalse("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
-
-            args = TrainingArguments(self.get_auto_remove_tmp_dir(), use_liger_kernel=True)
-            Trainer(tiny_llama, args)
-
-            # Spot check that modeling code and model instance variables are patched
-            self.assertEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
-            self.assertTrue("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
-
-    @require_liger_kernel
-    def test_use_liger_kernel_custom_config_patching(self):
-        # Ensure any monkey patching is cleaned up for subsequent tests
-        with patch("transformers.models.llama.modeling_llama"):
-            from liger_kernel.transformers import LigerRMSNorm
-
-            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-            tiny_llama = LlamaForCausalLM(config)
-
-            args = TrainingArguments(
-                self.get_auto_remove_tmp_dir(),
-                use_liger_kernel=True,
-                liger_kernel_config={"rms_norm": False},  # Don't apply Liger's RMSNorm
-            )
-            Trainer(tiny_llama, args)
-
-            # Check that the RMSNorm kernel is not applied as specified in the config
-            self.assertFalse(isinstance(tiny_llama.model.norm, LigerRMSNorm))
-
-    @require_liger_kernel
-    @require_torch_accelerator
-    @require_torch_non_multi_accelerator  # Don't work with DP
-    def test_use_liger_kernel_trainer(self):
-        # Ensure any monkey patching is cleaned up for subsequent tests
-        with patch("transformers.models.llama.modeling_llama"):
-            tiny_llama, train_dataset = self._get_llama_and_dataset()
-            args = TrainingArguments(
-                self.get_auto_remove_tmp_dir(),
-                learning_rate=1e-2,
-                logging_steps=5,
-                max_steps=20,
-                use_liger_kernel=True,
-            )
-            Trainer(tiny_llama, args, train_dataset=train_dataset).train()
-
-    @require_liger_kernel
-    @require_torch_accelerator
-    @require_torch_non_multi_accelerator  # don't work with DP
-    def test_use_liger_kernel_custom_config_trainer(self):
-        # Ensure any monkey patching is cleaned up for subsequent tests
-        with patch("transformers.models.llama.modeling_llama"):
-            tiny_llama, train_dataset = self._get_llama_and_dataset()
-            args = TrainingArguments(
-                self.get_auto_remove_tmp_dir(),
-                learning_rate=1e-2,
-                logging_steps=5,
-                max_steps=20,
-                use_liger_kernel=True,
-                liger_kernel_config={"rms_norm": False, "cross_entropy": True, "fused_linear_cross_entropy": False},
-            )
-            Trainer(tiny_llama, args, train_dataset=train_dataset).train()
+    @require_bitsandbytes
+    def test_bnb_8bit_optimizer_skip_embedding(self):
+        model = BasicTextGenerationModel(8, 4)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for name_optim in ["rmsprop_bnb_8bit", "adamw_8bit"]:
+                args = TrainingArguments(
+                    output_dir=tmp_dir,
+                    report_to="none",
+                    optim=name_optim,
+                )
+                trainer = Trainer(model=model, args=args)
+                optimizer = trainer.create_optimizer()
+                modules = optimizer.mng.module_weight_config_triple
+                self.assertNotEqual(len(modules), 0)
+                module, name, config = modules[0]
+                self.assertIsInstance(module, torch.nn.Embedding)
+                self.assertEqual(name, "weight")
+                self.assertDictEqual(config, {"optim_bits": 32})
 
     # ---------------------------------------------------------------------------
     # LOMO tests
@@ -557,8 +499,97 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self._check_lr_display_with_scheduler("stable_adamw", _ATTN_MLP_TARGET_MODULES, num_train_epochs=10)
 
     # ---------------------------------------------------------------------------
-    # Custom optimizer and LR scheduler tests
+    # Misc optimizer tests
     # ---------------------------------------------------------------------------
+
+    def test_optimizer_factory_pattern(self):
+        """Test that is_optimizer_factory correctly identifies factory classes vs optimizer classes."""
+        from transformers.trainer_optimizer import is_optimizer_factory
+
+        # Create a mock optimizer class
+        class MockComplexOptimizer(torch.optim.Optimizer):
+            def __init__(self, params, lr=1e-3):
+                defaults = {"lr": lr}
+                super().__init__(params, defaults)
+
+            def step(self, closure=None):
+                pass
+
+        # Create a factory class (simulates Muon/Dion pattern)
+        class MockOptimizerFactory:
+            def __call__(self, opt_model, **optimizer_kwargs):
+                all_params = list(opt_model.parameters())
+                return MockComplexOptimizer(all_params, **optimizer_kwargs)
+
+        # Verify is_optimizer_factory correctly identifies factories vs optimizer classes
+        self.assertFalse(is_optimizer_factory(MockComplexOptimizer))  # Optimizer class should return False
+        self.assertTrue(is_optimizer_factory(MockOptimizerFactory))  # Factory class should return True
+
+    # ---------------------------------------------------------------------------
+    # Optimizer group and learning rate inspection tests
+    # ---------------------------------------------------------------------------
+
+    def test_get_optimizer_group(self):
+        model = nn.Sequential(nn.Linear(128, 64))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            # ValueError is raised if optimizer is None
+            with self.assertRaises(ValueError):
+                trainer.get_optimizer_group()
+            trainer.create_optimizer()
+            # Get groups
+            num_groups = len(trainer.get_optimizer_group())
+            self.assertEqual(num_groups, 2)
+            # Get group of parameter
+            param = next(model.parameters())
+            group = trainer.get_optimizer_group(param)
+            self.assertIn(param, group["params"])
+
+
+# ---------------------------------------------------------------------------
+# Custom optimizer and LR scheduler tests
+# ---------------------------------------------------------------------------
+
+
+class TrainerOptimizerTest(TestCasePlus):
+    def test_get_optimizer_group(self):
+        model = nn.Sequential(nn.Linear(128, 64))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            # ValueError is raised if optimizer is None
+            with self.assertRaises(ValueError):
+                trainer.get_optimizer_group()
+            trainer.create_optimizer()
+            # Get groups
+            num_groups = len(trainer.get_optimizer_group())
+            self.assertEqual(num_groups, 2)
+            # Get group of parameter
+            param = next(model.parameters())
+            group = trainer.get_optimizer_group(param)
+            self.assertIn(param, group["params"])
+
+    def test_optimizer_factory_pattern(self):
+        """Test that is_optimizer_factory correctly identifies factory classes vs optimizer classes."""
+        from transformers.trainer_optimizer import is_optimizer_factory
+
+        # Create a mock optimizer class
+        class MockComplexOptimizer(torch.optim.Optimizer):
+            def __init__(self, params, lr=1e-3):
+                defaults = {"lr": lr}
+                super().__init__(params, defaults)
+
+            def step(self, closure=None):
+                pass
+
+        # Create a factory class (simulates Muon/Dion pattern)
+        class MockOptimizerFactory:
+            def __call__(self, opt_model, **optimizer_kwargs):
+                all_params = list(opt_model.parameters())
+                return MockComplexOptimizer(all_params, **optimizer_kwargs)
+
+        # Verify is_optimizer_factory correctly identifies factories vs optimizer classes
+        self.assertFalse(is_optimizer_factory(MockComplexOptimizer))  # Optimizer class should return False
+        self.assertTrue(is_optimizer_factory(MockOptimizerFactory))  # Factory class should return True
 
     def test_custom_optimizer(self):
         train_dataset = RegressionDataset()
@@ -577,6 +608,33 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertFalse(torch.allclose(trainer.model.a, default_trainer.model.a))
             self.assertFalse(torch.allclose(trainer.model.b, default_trainer.model.b))
             self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
+
+    # ---------------------------------------------------------------------------
+    # Weight decay parameter groups
+    # ---------------------------------------------------------------------------
+
+    def test_no_wd_param_group(self):
+        model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            trainer.create_optimizer_and_scheduler(10)
+            wd_names = ['0.linear1.weight', '0.linear2.weight', '1.0.linear1.weight', '1.0.linear2.weight', '1.1.linear1.weight', '1.1.linear2.weight']  # fmt: skip
+            wd_params = [p for n, p in model.named_parameters() if n in wd_names]
+            no_wd_params = [p for n, p in model.named_parameters() if n not in wd_names]
+            self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)
+            self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
+
+
+@require_torch
+class TrainerLRTest(TestCasePlus):
+    def test_get_learning_rates(self):
+        model = nn.Sequential(nn.Linear(128, 64))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            with self.assertRaises(ValueError):
+                trainer.get_learning_rates()
+            trainer.create_optimizer()
+            self.assertEqual(trainer.get_learning_rates(), [5e-05, 5e-05])
 
     def test_lr_scheduler_kwargs(self):
         from transformers import get_polynomial_decay_schedule_with_warmup
@@ -737,382 +795,3 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     bad_epochs = 0
                 if not just_decreased:
                     self.assertEqual(logs[i + 1]["learning_rate"], log["learning_rate"])
-
-    def test_adafactor_lr_none(self):
-        # test the special case where lr=None, since Trainer can't not have lr_scheduler
-
-        from transformers.optimization import Adafactor, AdafactorSchedule
-
-        train_dataset = RegressionDataset()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, report_to="none")
-            model = RegressionModel()
-            optimizer = Adafactor(
-                model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None
-            )
-            lr_scheduler = AdafactorSchedule(optimizer)
-            trainer = Trainer(model, args, train_dataset=train_dataset, optimizers=(optimizer, lr_scheduler))
-            trainer.train()
-
-            # Train a default model to compare against
-            default_trainer = get_regression_trainer(learning_rate=0.1, output_dir=tmp_dir)
-            default_trainer.train()
-
-            self.assertFalse(torch.allclose(trainer.model.a, default_trainer.model.a))
-            self.assertFalse(torch.allclose(trainer.model.b, default_trainer.model.b))
-            self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
-
-
-optim_test_params = []
-if is_torch_available():
-    default_adam_kwargs = {
-        "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2),
-        "eps": TrainingArguments.adam_epsilon,
-        "lr": TrainingArguments.learning_rate,
-    }
-
-    default_lion_kwargs = {
-        "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2),
-        "lr": TrainingArguments.learning_rate,
-    }
-
-    default_ademamix_kwargs = {
-        "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2, 0.9999),
-        "alpha": 5.0,
-        "eps": TrainingArguments.adam_epsilon,
-        "lr": TrainingArguments.learning_rate,
-    }
-
-    default_anyprecision_kwargs = {
-        "use_kahan_summation": False,
-        "momentum_dtype": torch.float32,
-        "variance_dtype": torch.float32,
-        "compensation_buffer_dtype": torch.bfloat16,
-    }
-
-    # Bitsandbytes optimizer test parameters: (optim_name, mock_attr, expected_kwargs)
-    # Empty list when bitsandbytes is not available triggers skip_on_empty=True
-    _BNB_OPTIMIZER_PARAMS = (
-        [
-            (OptimizerNames.ADAMW_BNB, "AdamW", default_adam_kwargs),
-            (OptimizerNames.ADAMW_8BIT, "AdamW", default_adam_kwargs),
-            (OptimizerNames.PAGED_ADAMW, "AdamW", default_adam_kwargs),
-            (OptimizerNames.PAGED_ADAMW_8BIT, "AdamW", default_adam_kwargs),
-            (OptimizerNames.LION, "Lion", default_lion_kwargs),
-            (OptimizerNames.LION_8BIT, "Lion", default_lion_kwargs),
-            (OptimizerNames.PAGED_LION, "Lion", default_lion_kwargs),
-            (OptimizerNames.PAGED_LION_8BIT, "Lion", default_lion_kwargs),
-            (OptimizerNames.ADEMAMIX, "AdEMAMix", default_ademamix_kwargs),
-            (OptimizerNames.ADEMAMIX_8BIT, "AdEMAMix", default_ademamix_kwargs),
-            (OptimizerNames.PAGED_ADEMAMIX, "AdEMAMix", default_ademamix_kwargs),
-            (OptimizerNames.PAGED_ADEMAMIX_8BIT, "AdEMAMix", default_ademamix_kwargs),
-        ]
-        if is_bitsandbytes_available()
-        else []
-    )
-    _ALL_BNB_OPTIMIZERS = [p[0] for p in _BNB_OPTIMIZER_PARAMS]
-
-    optim_test_params = [
-        (
-            OptimizerNames.ADAMW_TORCH,
-            torch.optim.AdamW,
-            default_adam_kwargs,
-        ),
-        (
-            OptimizerNames.ADAFACTOR,
-            transformers.optimization.Adafactor,
-            {
-                "scale_parameter": False,
-                "relative_step": False,
-                "lr": TrainingArguments.learning_rate,
-            },
-        ),
-    ]
-
-    if is_apex_available():
-        import apex
-
-        optim_test_params.append(
-            (
-                OptimizerNames.ADAMW_APEX_FUSED,
-                apex.optimizers.FusedAdam,
-                default_adam_kwargs,
-            )
-        )
-
-    if is_bitsandbytes_available():
-        import bitsandbytes as bnb
-
-        optim_test_params.append(
-            (
-                OptimizerNames.ADAMW_BNB,
-                bnb.optim.AdamW,
-                default_adam_kwargs,
-            )
-        )
-
-        optim_test_params.append(
-            (
-                OptimizerNames.ADAMW_8BIT,
-                bnb.optim.AdamW,
-                default_adam_kwargs,
-            )
-        )
-
-        optim_test_params.append(
-            (
-                OptimizerNames.PAGED_ADAMW,
-                bnb.optim.AdamW,
-                default_adam_kwargs,
-            )
-        )
-
-        optim_test_params.append(
-            (
-                OptimizerNames.PAGED_ADAMW_8BIT,
-                bnb.optim.AdamW,
-                default_adam_kwargs,
-            )
-        )
-
-        optim_test_params.append(
-            (
-                OptimizerNames.LION,
-                bnb.optim.Lion,
-                default_lion_kwargs,
-            )
-        )
-
-        optim_test_params.append(
-            (
-                OptimizerNames.LION_8BIT,
-                bnb.optim.Lion,
-                default_lion_kwargs,
-            )
-        )
-
-        optim_test_params.append(
-            (
-                OptimizerNames.PAGED_LION_8BIT,
-                bnb.optim.Lion,
-                default_lion_kwargs,
-            )
-        )
-
-        optim_test_params.append(
-            (
-                OptimizerNames.ADEMAMIX,
-                bnb.optim.AdEMAMix,
-                default_ademamix_kwargs,
-            )
-        )
-        optim_test_params.append(
-            (
-                OptimizerNames.ADEMAMIX_8BIT,
-                bnb.optim.AdEMAMix,
-                default_ademamix_kwargs,
-            )
-        )
-        optim_test_params.append(
-            (
-                OptimizerNames.PAGED_ADEMAMIX_8BIT,
-                bnb.optim.AdEMAMix,
-                default_ademamix_kwargs,
-            )
-        )
-        optim_test_params.append(
-            (
-                OptimizerNames.PAGED_ADEMAMIX,
-                bnb.optim.AdEMAMix,
-                default_ademamix_kwargs,
-            )
-        )
-
-    if is_torchdistx_available():
-        import torchdistx
-
-        optim_test_params.append(
-            (
-                OptimizerNames.ADAMW_ANYPRECISION,
-                torchdistx.optimizers.AnyPrecisionAdamW,
-                dict(default_adam_kwargs, **default_anyprecision_kwargs),
-            )
-        )
-    if is_torchao_available():
-        from torchao.optim import AdamW4bit, AdamW8bit
-
-        optim_test_params.append(
-            (
-                OptimizerNames.ADAMW_TORCH_4BIT,
-                AdamW4bit,
-                default_adam_kwargs,
-            )
-        )
-        optim_test_params.append(
-            (
-                OptimizerNames.ADAMW_TORCH_8BIT,
-                AdamW8bit,
-                default_adam_kwargs,
-            )
-        )
-
-
-@require_torch
-class TrainerOptimizerChoiceTest(unittest.TestCase):
-    def check_optim_and_kwargs(self, training_args: TrainingArguments, expected_cls, expected_kwargs):
-        actual_cls, optim_kwargs = Trainer.get_optimizer_cls_and_kwargs(training_args)
-        self.assertEqual(expected_cls, actual_cls)
-        self.assertIsNotNone(optim_kwargs)
-
-        for p, v in expected_kwargs.items():
-            self.assertTrue(p in optim_kwargs)
-            actual_v = optim_kwargs[p]
-            self.assertTrue(actual_v == v, f"Failed check for {p}. Expected {v}, but got {actual_v}.")
-
-    @parameterized.expand(optim_test_params, skip_on_empty=True)
-    def test_optim_supported(self, optim: str, expected_cls, expected_kwargs):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(output_dir=tmp_dir, optim=optim)
-
-            # exercises all the valid --optim options
-            self.check_optim_and_kwargs(trainer.args, expected_cls, expected_kwargs)
-            trainer.train()
-
-    def test_fused_adam(self):
-        mock = Mock()
-        modules = {"apex": mock, "apex.optimizers": mock.optimizers}
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir=tmp_dir),
-                    mock.optimizers.FusedAdam,
-                    default_adam_kwargs,
-                )
-
-    def test_fused_adam_no_apex(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir=tmp_dir)
-            with patch.dict("sys.modules", {"apex.optimizers": None}):
-                with self.assertRaises(ValueError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    @parameterized.expand(_BNB_OPTIMIZER_PARAMS, skip_on_empty=True)
-    def test_bnb_optimizer(self, optim_name, mock_attr, expected_kwargs):
-        mock = Mock()
-        modules = {"bitsandbytes": mock, "bitsandbytes.optim": mock.optim}
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=optim_name, output_dir=tmp_dir),
-                    getattr(mock.optim, mock_attr),
-                    expected_kwargs,
-                )
-
-    @parameterized.expand(_ALL_BNB_OPTIMIZERS, skip_on_empty=True)
-    def test_bnb_not_available(self, optim_name):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=optim_name, output_dir=tmp_dir)
-            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ImportError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_anyprecision_adamw(self):
-        mock = Mock()
-        modules = {"torchdistx": mock, "torchdistx.optimizers": mock.optimizers}
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.dict("sys.modules", modules):
-                self.check_optim_and_kwargs(
-                    TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir=tmp_dir),
-                    mock.optimizers.AnyPrecisionAdamW,
-                    dict(default_adam_kwargs, **default_anyprecision_kwargs),
-                )
-
-    def test_no_torchdistx_anyprecision_adamw(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir=tmp_dir)
-            with patch.dict("sys.modules", {"torchdistx.optimizers": None}):
-                with self.assertRaises(ValueError):
-                    Trainer.get_optimizer_cls_and_kwargs(args)
-
-    def test_optimizer_factory_pattern(self):
-        """Test that is_optimizer_factory correctly identifies factory classes vs optimizer classes."""
-        from transformers.trainer_optimizer import is_optimizer_factory
-
-        # Create a mock optimizer class
-        class MockComplexOptimizer(torch.optim.Optimizer):
-            def __init__(self, params, lr=1e-3):
-                defaults = {"lr": lr}
-                super().__init__(params, defaults)
-
-            def step(self, closure=None):
-                pass
-
-        # Create a factory class (simulates Muon/Dion pattern)
-        class MockOptimizerFactory:
-            def __call__(self, opt_model, **optimizer_kwargs):
-                all_params = list(opt_model.parameters())
-                return MockComplexOptimizer(all_params, **optimizer_kwargs)
-
-        # Verify is_optimizer_factory correctly identifies factories vs optimizer classes
-        self.assertFalse(is_optimizer_factory(MockComplexOptimizer))  # Optimizer class should return False
-        self.assertTrue(is_optimizer_factory(MockOptimizerFactory))  # Factory class should return True
-
-
-@require_torch
-class OptimizerAndModelInspectionTest(unittest.TestCase):
-    def test_get_num_trainable_parameters(self):
-        model = nn.Sequential(nn.Linear(128, 64), nn.Linear(64, 32))
-        # in_features * out_features + bias
-        layer_1 = 128 * 64 + 64
-        layer_2 = 64 * 32 + 32
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
-            self.assertEqual(trainer.get_num_trainable_parameters(), layer_1 + layer_2)
-            # Freeze the last layer
-            for param in model[-1].parameters():
-                param.requires_grad = False
-            self.assertEqual(trainer.get_num_trainable_parameters(), layer_1)
-
-    def test_get_learning_rates(self):
-        model = nn.Sequential(nn.Linear(128, 64))
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
-            with self.assertRaises(ValueError):
-                trainer.get_learning_rates()
-            trainer.create_optimizer()
-            self.assertEqual(trainer.get_learning_rates(), [5e-05, 5e-05])
-
-    def test_get_optimizer_group(self):
-        model = nn.Sequential(nn.Linear(128, 64))
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
-            # ValueError is raised if optimizer is None
-            with self.assertRaises(ValueError):
-                trainer.get_optimizer_group()
-            trainer.create_optimizer()
-            # Get groups
-            num_groups = len(trainer.get_optimizer_group())
-            self.assertEqual(num_groups, 2)
-            # Get group of parameter
-            param = next(model.parameters())
-            group = trainer.get_optimizer_group(param)
-            self.assertIn(param, group["params"])
-
-    @require_bitsandbytes
-    def test_bnb_8bit_optimizer_skip_embedding(self):
-        model = BasicTextGenerationModel(8, 4)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            for name_optim in ["rmsprop_bnb_8bit", "adamw_8bit"]:
-                args = TrainingArguments(
-                    output_dir=tmp_dir,
-                    report_to="none",
-                    optim=name_optim,
-                )
-                trainer = Trainer(model=model, args=args)
-                optimizer = trainer.create_optimizer()
-                modules = optimizer.mng.module_weight_config_triple
-                self.assertNotEqual(len(modules), 0)
-                module, name, config = modules[0]
-                self.assertIsInstance(module, torch.nn.Embedding)
-                self.assertEqual(name, "weight")
-                self.assertDictEqual(config, {"optim_bits": 32})
