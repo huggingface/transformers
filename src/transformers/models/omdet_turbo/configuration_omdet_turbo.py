@@ -187,9 +187,13 @@ class OmDetTurboConfig(PreTrainedConfig):
     ):
         # Init timm backbone with hardcoded values for BC
         timm_default_kwargs = {
+            "model_args": {
+                "img_size": image_size,
+                "features_only": True,
+                "pretrained": False,
+                "always_partition": True,
+            },
             "out_indices": [1, 2, 3],
-            "img_size": image_size,
-            "always_partition": True,
         }
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,

@@ -422,7 +422,6 @@ def get_model_conversion_mapping(
             for k, v in model._checkpoint_conversion_mapping.items()
         ]
 
-    # weight_conversions = get_weight_conversions_resursively(model, weight_conversions=weight_conversions)
     model_type = getattr(model.config, "model_type", None)
     if model_type is not None:
         model_specific_conversions = get_checkpoint_conversion_mapping(model_type)

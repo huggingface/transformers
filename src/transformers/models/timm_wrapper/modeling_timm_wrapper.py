@@ -316,7 +316,10 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         pixel_values = pixel_values.to(self.device)
 
         if self.features_only:
-            # TODO: ideally features only should be used with `BackboneModel`, deprecate here!
+            logger.warning(
+                f"Using a `features_only` mode in {self.__class__.__name__} is deprecated and will be removed in v5.20.0"
+                "Instead please use `TimmWrapperBackboneModel` to obtain feature maps."
+            )
             last_hidden_state = self.timm_model.forward(pixel_values)
             hidden_states = last_hidden_state if output_hidden_states else None
             pooler_output = None
