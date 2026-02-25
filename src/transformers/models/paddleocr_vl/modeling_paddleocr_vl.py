@@ -23,6 +23,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -1060,44 +1061,97 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.embed_tokens = value
 
+    def get_vision_position_ids(
+        self,
+        start_position: int,
+        grid_thw: list[int, int, int] | torch.Tensor,
+        temp_merge_size: int = 1,
+        spatial_merge_size: int = 1,
+        time_interval: int = 1,
+        device: str | torch.device | None = None,
+    ):
+        """
+        Compute 3D positional indices for vision tokens derived from a single image or video input.
+
+        The positions are generated from the input grid defined by temporal (T), height (H), and
+        width (W) dimensions. Temporal and spatial dimensions can be downscaled according to the
+        merge sizes used in the vision backbone. The resulting positions are offset by `start_position`.
+
+        Args:
+            start_position (`int`):
+                Offset added to all computed positional indices.
+            grid_thw (`Sequence[int]` or `torch.Tensor` of shape `(3,)`):
+                The (T, H, W) grid representing the feature layout of the current image or video after patch embedding.
+            temp_merge_size (`int`, *optional*):
+                Factor by which the temporal dimension is reduced in the backbone. The temporal grid size is divided
+                by this value. Defaults to 1.
+            spatial_merge_size (`int`, *optional*):
+                Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
+                by this value. Defaults to 1.
+            time_interval (`int`, *optional*):
+                Spacing factor applied between consecutive temporal position indices.Defaults to 1.
+            device (`str` or `torch.device`, *optional*):
+                Device on which the resulting tensor is allocated. If `None`, uses the current default device.
+
+        Returns:
+            torch.LongTensor of shape (3, sequence_length):
+                Positional indices for temporal, height, and width dimensions,
+                flattened into sequence form and offset by `start_position`.
+        """
+        llm_grid_t, llm_grid_h, llm_grid_w = (
+            grid_thw[0].item() // temp_merge_size,
+            grid_thw[1].item() // spatial_merge_size,
+            grid_thw[2].item() // spatial_merge_size,
+        )
+
+        image_seq_length = llm_grid_h * llm_grid_w * llm_grid_t
+        position_width = torch.arange(start_position, start_position + llm_grid_w, device=device).repeat(
+            llm_grid_h * llm_grid_t
+        )
+        position_height = torch.arange(start_position, start_position + llm_grid_h, device=device).repeat_interleave(
+            llm_grid_w * llm_grid_t
+        )
+        position_temporal = torch.full((image_seq_length,), start_position, device=device, dtype=torch.long)
+        position_temporal = position_temporal * time_interval
+        vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
+
+        return vision_position_ids
+
     def get_rope_index(
         self,
-        input_ids: torch.LongTensor | None = None,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Calculate the 3D rope index based on image and video's temporal, height and width in LLM.
+        Calculate the 3D rope index based on image and video's sizes. The utility expects a `vision + text`
+        sequence and will error out otherwise. For pure text sequence, please rely on model's auto-inferred
+        position ids. In a mixed vision + text sequence, vision tokens use 3D RoPE (temporal, height, width)
+        while text tokens use standard 1D RoPE.
 
-        Explanation:
-            Each embedding sequence contains vision embedding and text embedding or just contains text embedding.
+        Example:
+            Temporal patches: 3; Height patches: 2; Width patches: 2
+            Each vision input results in (temporal x height × width) positions. Here: 3 x 2 × 2 = 12 positions total.
 
-            For pure text embedding sequence, the rotary position embedding has no difference with modern LLMs.
-            Examples:
-                input_ids: [T T T T T], here T is for text.
-                temporal position_ids: [0, 1, 2, 3, 4]
-                height position_ids: [0, 1, 2, 3, 4]
-                width position_ids: [0, 1, 2, 3, 4]
+            Temporal position IDs are spaced by:
+                `interval = tokens_per_second * temporal_patch_size / fps`
 
-            For vision and text embedding sequence, we calculate 3D rotary position embedding for vision part
-            and 1D rotary position embedding for text part.
-            Examples:
-                Assume we have a video input with 3 temporal patches, 2 height patches and 2 width patches.
-                input_ids: [V V V V V V V V V V V V T T T T T], here V is for vision.
-                vision temporal position_ids: [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2]
-                vision height position_ids: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
-                vision width position_ids: [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
-                text temporal position_ids: [3, 4, 5, 6, 7]
-                text height position_ids: [3, 4, 5, 6, 7]
-                text width position_ids: [3, 4, 5, 6, 7]
-                Here we calculate the text start position_ids as the max vision position_ids plus 1.
+                If fps = 1; tokens_per_second = 25; temporal_patch_size = 2, temporal IDs increase by 50 for each temporal patch:
+                `[0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]`
+
+            Height IDs repeat per row: `[0, 0, 1, 1, ...]`
+            Width IDs alternate per column: `[0, 1, 0, 1, ...]`
+            Text tokens follow standard 1D RoPE and the position IDs grow consequently with a step of `1`
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
                 it.
+            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
             video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
@@ -1113,79 +1167,58 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
         spatial_merge_size = self.config.vision_config.spatial_merge_size
-        image_token_id = self.config.image_token_id
-        video_token_id = self.config.video_token_id
-        vision_start_token_id = self.config.vision_start_token_id
-        mrope_position_deltas = []
 
-        total_input_ids = input_ids
-        if attention_mask is None:
-            attention_mask = torch.ones_like(total_input_ids)
+        mrope_position_deltas = []
         position_ids = torch.zeros(
-            3, input_ids.shape[0], input_ids.shape[1], dtype=input_ids.dtype, device=input_ids.device
+            3,
+            input_ids.shape[0],
+            input_ids.shape[1],
+            dtype=input_ids.dtype,
+            device=input_ids.device,
         )
-        image_index, video_index = 0, 0
-        for i, input_ids in enumerate(total_input_ids):
-            input_ids = input_ids[attention_mask[i].to(input_ids.device) == 1]
-            image_nums, video_nums = 0, 0
-            vision_start_indices = torch.argwhere(input_ids == vision_start_token_id).squeeze(1)
-            vision_tokens = input_ids[vision_start_indices + 1]
-            image_nums = (vision_tokens == image_token_id).sum()
-            video_nums = (vision_tokens == video_token_id).sum()
-            input_tokens = input_ids.tolist()
-            llm_pos_ids_list: list = []
-            st = 0
-            remain_images, remain_videos = image_nums, video_nums
-            for _ in range(image_nums + video_nums):
-                if image_token_id in input_tokens and remain_images > 0:
-                    ed_image = input_tokens.index(image_token_id, st)
-                else:
-                    ed_image = len(input_tokens) + 1
-                if video_token_id in input_tokens and remain_videos > 0:
-                    ed_video = input_tokens.index(video_token_id, st)
-                else:
-                    ed_video = len(input_tokens) + 1
-                if ed_image < ed_video:
-                    t, h, w = (
-                        image_grid_thw[image_index][0],
-                        image_grid_thw[image_index][1],
-                        image_grid_thw[image_index][2],
+        grid_iters = {
+            1: iter(image_grid_thw) if image_grid_thw is not None else None,
+            2: iter(video_grid_thw) if video_grid_thw is not None else None,
+        }
+
+        for batch_idx, current_input_ids in enumerate(input_ids):
+            input_token_type = mm_token_type_ids[batch_idx]
+            if attention_mask is not None:
+                current_input_ids = current_input_ids[attention_mask[batch_idx].bool()]
+                input_token_type = input_token_type[attention_mask[batch_idx].bool()]
+
+            input_type_group = []
+            for key, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
+                group = list(group)
+                start_index = group[0][0]
+                end_index = group[-1][0] + 1
+                input_type_group.append((key, start_index, end_index))
+
+            current_pos = 0
+            llm_pos_ids_list = []
+            for modality_type, start_idx, end_idx in input_type_group:
+                # text == 0
+                if modality_type == 0:
+                    text_len = end_idx - start_idx
+                    llm_pos_ids_list.append(
+                        torch.arange(text_len, device=input_ids.device).view(1, -1).expand(3, -1) + current_pos
                     )
-                    image_index += 1
-                    remain_images -= 1
-                    ed = ed_image
+                    current_pos += text_len
+                # image == 1, video == 2
                 else:
-                    t, h, w = (
-                        video_grid_thw[video_index][0],
-                        video_grid_thw[video_index][1],
-                        video_grid_thw[video_index][2],
+                    grid_thw = next(grid_iters[modality_type])
+                    vision_position_ids = self.get_vision_position_ids(
+                        current_pos, grid_thw, 1, spatial_merge_size, device=input_ids.device
                     )
-                    video_index += 1
-                    remain_videos -= 1
-                    ed = ed_video
-                llm_grid_t, llm_grid_h, llm_grid_w = (
-                    t.item(),
-                    h.item() // spatial_merge_size,
-                    w.item() // spatial_merge_size,
-                )
-                text_len = ed - st
-                st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-                llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
-                t_index = torch.arange(llm_grid_t).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
-                h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
-                w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
-                llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + text_len + st_idx)
-                st = ed + llm_grid_t * llm_grid_h * llm_grid_w
-            if st < len(input_tokens):
-                st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-                text_len = len(input_tokens) - st
-                llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
+                    llm_pos_ids_list.append(vision_position_ids)
+                    current_pos += max(grid_thw[1], grid_thw[2]) // spatial_merge_size
             llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-            position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
-            mrope_position_deltas.append(max(llm_positions.max() + 1 - len(total_input_ids[i]), 0))
-        mrope_position_deltas = torch.tensor(
-            mrope_position_deltas, dtype=torch.long, device=input_ids.device
-        ).unsqueeze(1)
+            if attention_mask is not None:
+                position_ids[:, batch_idx, attention_mask[batch_idx].bool()] = llm_positions.to(position_ids.device)
+            else:
+                position_ids[:, batch_idx] = llm_positions.to(position_ids.device)
+            mrope_position_deltas.append(llm_positions.max() + 1 - len(current_input_ids))
+        mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
     @can_return_tuple
@@ -1257,9 +1290,14 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         video_grid_thw: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: torch.Tensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
     ) -> torch.Tensor | None:
         past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-        can_compute_mrope = input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None)
+        can_compute_mrope = (
+            input_ids is not None
+            and mm_token_type_ids is not None
+            and (image_grid_thw is not None or video_grid_thw is not None)
+        )
 
         if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
             position_ids, rope_deltas = self.get_rope_index(
@@ -1267,6 +1305,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
                 image_grid_thw=image_grid_thw,
                 video_grid_thw=video_grid_thw,
                 attention_mask=attention_mask,
+                mm_token_type_ids=mm_token_type_ids,
             )
             self.rope_deltas = rope_deltas
         # Use pre-calculated rope-deltas to infer correct 3D position ids
@@ -1280,7 +1319,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
                 position_ids = torch.arange(past_key_values_length, past_key_values_length + seq_length)
                 position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1).to(inputs_embeds.device)
             delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
-            position_ids = position_ids + delta.to(device=position_ids.device)
+            position_ids = position_ids + delta.to(device=inputs_embeds.device)
         else:
             # Can't build correct 3D positions. Let the model infer it from `cache_position`
             position_ids = None
@@ -1297,6 +1336,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs,
@@ -1323,6 +1363,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
+                mm_token_type_ids=mm_token_type_ids,
             )
 
         outputs = self.language_model(
@@ -1398,6 +1439,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -1458,6 +1500,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
             use_cache=use_cache,
             pixel_values=pixel_values,
             rope_deltas=rope_deltas,
+            mm_token_type_ids=mm_token_type_ids,
             cache_position=cache_position,
             **kwargs,
         )
@@ -1539,8 +1582,10 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
             inputs_tensor = model_kwargs["input_ids"]
 
         is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
-        if is_input_ids and (
-            model_kwargs.get("image_grid_thw") is not None or model_kwargs.get("video_grid_thw") is not None
+        if (
+            is_input_ids
+            and model_kwargs.get("mm_token_type_ids") is not None
+            and (model_kwargs.get("image_grid_thw") is not None or model_kwargs.get("video_grid_thw") is not None)
         ):
             model_kwargs = {k: v for k, v in model_kwargs.items() if k != "input_ids"}
             vision_positions, rope_deltas = self.model.get_rope_index(inputs_tensor, **model_kwargs)

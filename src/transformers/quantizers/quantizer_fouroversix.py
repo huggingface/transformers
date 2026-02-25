@@ -54,14 +54,12 @@ class FourOverSixHfQuantizer(HfQuantizer):
         from fouroversix import QuantizedModule
 
         module, tensor_name = get_module_from_name(model, param_name)
-        
-        if not QuantizedModule.is_quantized_module_type(type(module)):
-            return False
-        
-        if hasattr(module, "parameters_to_quantize"):
-            return tensor_name in module.parameters_to_quantize
-        
-        return False
+
+        return (
+            QuantizedModule.is_quantized_module_type(type(module))
+            and hasattr(module, "parameters_to_quantize")
+            and tensor_name in module.parameters_to_quantize
+        )
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for buffers that are created during quantization

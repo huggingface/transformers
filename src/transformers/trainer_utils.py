@@ -15,6 +15,7 @@
 PyTorch-independent utilities for the Trainer class.
 """
 
+import contextlib
 import copy
 import functools
 import gc
@@ -26,10 +27,10 @@ import re
 import shutil
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sized
 from functools import partial
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, TypeGuard
 
 import numpy as np
 
@@ -612,6 +613,7 @@ class TrainerMemoryTracker:
         "__init__": "init",
         "train": "train",
         "_inner_training_loop": "train",
+        "_finalize_training": "train",
         "evaluate": "eval",
         "predict": "test",
     }
@@ -890,7 +892,7 @@ class TrainerMemoryTracker:
             self.update_metrics(stage, metrics)
 
 
-def has_length(dataset):
+def has_length(dataset: Any) -> TypeGuard[Sized]:
     """
     Checks if the dataset implements __len__() and it doesn't raise an error
     """
@@ -1236,3 +1238,15 @@ def align_special_tokens(model, processing_class):
             "The model config and generation config were aligned accordingly, being updated with the tokenizer's "
             f"values. Updated tokens: {updated_tokens}."
         )
+
+
+@contextlib.contextmanager
+def suppress_progress_bars():
+    """Context manager that suppresses huggingface_hub progress bars."""
+    import huggingface_hub.utils as hf_hub_utils
+
+    hf_hub_utils.disable_progress_bars()
+    try:
+        yield
+    finally:
+        hf_hub_utils.enable_progress_bars()
