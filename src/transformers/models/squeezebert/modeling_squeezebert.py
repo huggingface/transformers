@@ -495,7 +495,6 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
 
@@ -559,7 +558,6 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
 
@@ -670,7 +668,6 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
 
@@ -727,7 +724,6 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
 
@@ -779,7 +775,6 @@ class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
 
