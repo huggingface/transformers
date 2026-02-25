@@ -42,6 +42,8 @@ class FourOverSixQuantize(ConversionOps):
         parameter = input_dict[full_parameter_name][0]
         quantized_parameters = module.get_quantized_parameters(parameter_name, parameter)
 
+        # Delete the high-precision parameters from the module after we used them to create
+        # the quantized parameters
         for parameter_name in module.parameters_to_quantize:
             delattr(module, parameter_name)
 
