@@ -27,13 +27,14 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..gemma2.modeling_gemma2 import (
-    Gemma2Attention,
-    Gemma2DecoderLayer,
-    Gemma2RotaryEmbedding,
+from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaDecoderLayer,
+    LlamaRMSNorm,
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
+    eager_attention_forward,
 )
-from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
 from ...modeling_rope_utils import RopeParameters
 from ..timesfm.configuration_timesfm import TimesFmConfig
 from ..timesfm.modeling_timesfm import (
@@ -164,9 +165,6 @@ class Timesfm2P5Config(TimesFmConfig):
         self.use_continuous_quantile_head = use_continuous_quantile_head
         self.force_flip_invariance = force_flip_invariance
         self.infer_is_positive = infer_is_positive
-        # Gemma2-compatible: needed by Gemma2Attention.__init__
-        self.query_pre_attn_scalar = 256.0
-        self.attn_logit_softcapping = None
         self.max_position_embeddings = max_position_embeddings
         self.rope_parameters = rope_parameters
 
@@ -266,18 +264,15 @@ class Timesfm2P5RMSNorm(LlamaRMSNorm):
     pass
 
 
-class Timesfm2P5RotaryEmbedding(Gemma2RotaryEmbedding):
+class Timesfm2P5RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class Timesfm2P5Attention(Gemma2Attention):
+class Timesfm2P5Attention(LlamaAttention):
     """TimesFM 2.5 attention with QK normalization and learnable per-dimension query scaling."""
 
     def __init__(self, config: Timesfm2P5Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        # TimesFM 2.5 always uses full attention, never sliding window
-        self.layer_type = None
-        self.sliding_window = None
 
         if config.use_qk_norm:
             self.q_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -337,17 +332,16 @@ class Timesfm2P5Attention(Gemma2Attention):
         return attn_output, attn_weights
 
 
-class Timesfm2P5DecoderLayer(Gemma2DecoderLayer):
+class Timesfm2P5DecoderLayer(LlamaDecoderLayer):
     """TimesFM 2.5 Transformer decoder layer with pre/post RMS normalization.
 
-    Inherits from Gemma2DecoderLayer (which provides GradientCheckpointingLayer support) and
-    overrides forward to return `(hidden_states, attn_weights)` tuple for output capturing.
+    Inherits from LlamaDecoderLayer and adds pre/post feedforward layernorms.
     """
 
     def __init__(self, config: Timesfm2P5Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        # TimesFM 2.5 always uses full attention
-        self.attention_type = "attention"
+        self.pre_feedforward_layernorm = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,

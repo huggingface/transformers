@@ -141,9 +141,6 @@ class Timesfm2P5Config(PreTrainedConfig):
         self.use_continuous_quantile_head = use_continuous_quantile_head
         self.force_flip_invariance = force_flip_invariance
         self.infer_is_positive = infer_is_positive
-        # Gemma2-compatible: needed by Gemma2Attention.__init__
-        self.query_pre_attn_scalar = 256.0
-        self.attn_logit_softcapping = None
         self.max_position_embeddings = max_position_embeddings
         self.rope_parameters = rope_parameters
         self.patch_length = patch_length
