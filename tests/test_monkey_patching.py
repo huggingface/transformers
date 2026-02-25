@@ -17,13 +17,13 @@ import threading
 import unittest
 
 from transformers import is_torch_available
-from transformers.monkey_patch import (
-    apply_monkey_patches,
-    clear_monkey_patch_mapping,
-    get_monkey_patch_mapping,
+from transformers.monkey_patching import (
+    apply_patches,
+    clear_patch_mapping,
+    get_patch_mapping,
     patch_output_recorders,
-    register_monkey_patch_mapping,
-    unregister_monkey_patch_mapping,
+    register_patch_mapping,
+    unregister_patch_mapping,
 )
 from transformers.testing_utils import require_torch
 from transformers.utils.output_capturing import OutputRecorder
@@ -37,23 +37,23 @@ if is_torch_available():
 class MonkeyPatchTest(unittest.TestCase):
     def setUp(self):
         """Clear any existing patches before each test."""
-        clear_monkey_patch_mapping()
+        clear_patch_mapping()
 
     def tearDown(self):
         """Clean up patches after each test."""
-        clear_monkey_patch_mapping()
+        clear_patch_mapping()
 
-    def test_register_monkey_patch_mapping(self):
+    def test_register_patch_mapping(self):
         """Test basic registration of monkey patches."""
 
         class CustomModule(nn.Module):
             pass
 
         # Register a patch
-        register_monkey_patch_mapping(mapping={"TestModule": CustomModule})
+        register_patch_mapping(mapping={"TestModule": CustomModule})
 
         # Verify it was registered
-        mapping = get_monkey_patch_mapping()
+        mapping = get_patch_mapping()
         self.assertIn("TestModule", mapping)
         self.assertEqual(mapping["TestModule"], CustomModule)
 
@@ -67,13 +67,13 @@ class MonkeyPatchTest(unittest.TestCase):
             pass
 
         # Register initial patch
-        register_monkey_patch_mapping(mapping={"TestModule": CustomModule1})
+        register_patch_mapping(mapping={"TestModule": CustomModule1})
 
         # Overwrite with new patch
-        register_monkey_patch_mapping(mapping={"TestModule": CustomModule2}, overwrite=True)
+        register_patch_mapping(mapping={"TestModule": CustomModule2}, overwrite=True)
 
         # Verify the new patch is registered
-        mapping = get_monkey_patch_mapping()
+        mapping = get_patch_mapping()
         self.assertEqual(mapping["TestModule"], CustomModule2)
 
     def test_register_non_nn_module_raises_error(self):
@@ -84,34 +84,34 @@ class MonkeyPatchTest(unittest.TestCase):
 
         # Try to register a non-nn.Module class
         with self.assertRaises(TypeError) as context:
-            register_monkey_patch_mapping(mapping={"TestModule": NotAModule})
+            register_patch_mapping(mapping={"TestModule": NotAModule})
 
         self.assertIn("must be a subclass of nn.Module", str(context.exception))
 
-    def test_unregister_monkey_patch_mapping(self):
+    def test_unregister_patch_mapping(self):
         """Test unregistering monkey patches."""
 
         class CustomModule(nn.Module):
             pass
 
         # Register and then unregister
-        register_monkey_patch_mapping(mapping={"TestModule": CustomModule})
-        unregister_monkey_patch_mapping(["TestModule"])
+        register_patch_mapping(mapping={"TestModule": CustomModule})
+        unregister_patch_mapping(["TestModule"])
 
         # Verify it was unregistered
-        mapping = get_monkey_patch_mapping()
+        mapping = get_patch_mapping()
         self.assertNotIn("TestModule", mapping)
 
     def test_unregister_nonexistent_class(self):
         """Test unregistering a class that doesn't exist raises an error."""
         # This should raise an error
         with self.assertRaises(ValueError) as context:
-            unregister_monkey_patch_mapping(["NonexistentModule"])
+            unregister_patch_mapping(["NonexistentModule"])
 
         self.assertIn("not found in monkey patch mapping cache", str(context.exception))
         self.assertIn("Cannot unregister", str(context.exception))
 
-    def test_clear_monkey_patch_mapping(self):
+    def test_clear_patch_mapping(self):
         """Test clearing all monkey patches."""
 
         class CustomModule1(nn.Module):
@@ -121,33 +121,33 @@ class MonkeyPatchTest(unittest.TestCase):
             pass
 
         # Register multiple patches
-        register_monkey_patch_mapping(mapping={"TestModule1": CustomModule1, "TestModule2": CustomModule2})
+        register_patch_mapping(mapping={"TestModule1": CustomModule1, "TestModule2": CustomModule2})
 
         # Clear all patches
-        clear_monkey_patch_mapping()
+        clear_patch_mapping()
 
         # Verify all were cleared
-        mapping = get_monkey_patch_mapping()
+        mapping = get_patch_mapping()
         self.assertEqual(len(mapping), 0)
 
-    def test_get_monkey_patch_mapping_returns_copy(self):
-        """Test that get_monkey_patch_mapping returns a copy, not the original."""
+    def test_get_patch_mapping_returns_copy(self):
+        """Test that get_patch_mapping returns a copy, not the original."""
 
         class CustomModule(nn.Module):
             pass
 
-        register_monkey_patch_mapping(mapping={"TestModule": CustomModule})
+        register_patch_mapping(mapping={"TestModule": CustomModule})
 
         # Get mapping and modify it
-        mapping = get_monkey_patch_mapping()
+        mapping = get_patch_mapping()
         mapping["NewModule"] = CustomModule
 
         # Verify the internal cache was not modified
-        internal_mapping = get_monkey_patch_mapping()
+        internal_mapping = get_patch_mapping()
         self.assertNotIn("NewModule", internal_mapping)
 
-    def test_apply_monkey_patches_context_manager(self):
-        """Test that apply_monkey_patches context manager works correctly."""
+    def test_apply_patches_context_manager(self):
+        """Test that apply_patches context manager works correctly."""
 
         class CustomLinear(nn.Linear):
             pass
@@ -161,13 +161,13 @@ class MonkeyPatchTest(unittest.TestCase):
 
         try:
             # Register patch
-            register_monkey_patch_mapping(mapping={"Linear": CustomLinear})
+            register_patch_mapping(mapping={"Linear": CustomLinear})
 
             # Outside context, original class should be used
             self.assertEqual(test_module.Linear, nn.Linear)
 
             # Inside context, patched class should be used
-            with apply_monkey_patches():
+            with apply_patches():
                 self.assertEqual(test_module.Linear, CustomLinear)
 
             # Outside context again, original class should be restored
@@ -187,13 +187,13 @@ class MonkeyPatchTest(unittest.TestCase):
 
         def read_mapping():
             for _ in range(100):
-                mapping = get_monkey_patch_mapping()
+                mapping = get_patch_mapping()
                 results.append(len(mapping))
 
         def write_mapping():
             for i in range(100):
                 mapping = {f"Module{i}": CustomModule}
-                register_monkey_patch_mapping(mapping=mapping)
+                register_patch_mapping(mapping=mapping)
 
         # Create threads for reading and writing
         read_thread = threading.Thread(target=read_mapping)
@@ -228,7 +228,7 @@ class MonkeyPatchTest(unittest.TestCase):
         model = TestModel()
 
         # Register patch
-        register_monkey_patch_mapping(mapping={"OriginalModule": ReplacementModule})
+        register_patch_mapping(mapping={"OriginalModule": ReplacementModule})
 
         # Patch output recorders
         patch_output_recorders(model)
@@ -257,7 +257,7 @@ class MonkeyPatchTest(unittest.TestCase):
         model = TestModel()
 
         # Register patch
-        register_monkey_patch_mapping(mapping={"OriginalModule": ReplacementModule})
+        register_patch_mapping(mapping={"OriginalModule": ReplacementModule})
 
         # Patch output recorders
         patch_output_recorders(model)
@@ -272,7 +272,7 @@ class MonkeyPatchTest(unittest.TestCase):
             pass
 
         # Register with pattern
-        register_monkey_patch_mapping(mapping={".*Attention": CustomAttention})
+        register_patch_mapping(mapping={".*Attention": CustomAttention})
 
         # Create test modules with different attention classes
         import types
@@ -285,7 +285,7 @@ class MonkeyPatchTest(unittest.TestCase):
         sys.modules["transformers.test_pattern"] = test_module
 
         try:
-            with apply_monkey_patches():
+            with apply_patches():
                 # All *Attention classes should be patched
                 self.assertEqual(test_module.BertAttention, CustomAttention)
                 self.assertEqual(test_module.GPT2Attention, CustomAttention)
@@ -305,8 +305,8 @@ class MonkeyPatchTest(unittest.TestCase):
             pass
 
         # Register both pattern and exact match
-        register_monkey_patch_mapping(mapping={".*Attention": PatternReplacement})
-        register_monkey_patch_mapping(mapping={"BertAttention": ExactReplacement})
+        register_patch_mapping(mapping={".*Attention": PatternReplacement})
+        register_patch_mapping(mapping={"BertAttention": ExactReplacement})
 
         import types
 
@@ -316,7 +316,7 @@ class MonkeyPatchTest(unittest.TestCase):
         sys.modules["transformers.test_precedence"] = test_module
 
         try:
-            with apply_monkey_patches():
+            with apply_patches():
                 # Exact match should take precedence
                 self.assertEqual(test_module.BertAttention, ExactReplacement)
                 # Pattern should still match others
@@ -343,7 +343,7 @@ class MonkeyPatchTest(unittest.TestCase):
         model = TestModel()
 
         # Register with pattern
-        register_monkey_patch_mapping(mapping={".*Attention": ReplacementAttention})
+        register_patch_mapping(mapping={".*Attention": ReplacementAttention})
 
         # Patch output recorders
         patch_output_recorders(model)

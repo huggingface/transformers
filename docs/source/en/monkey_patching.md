@@ -28,7 +28,7 @@ Here's a simple example showing how to replace a model component:
 ```python
 from transformers import AutoModelForCausalLM
 from transformers.models.llama.modeling_llama import LlamaAttention
-from transformers.monkey_patch import register_monkey_patch_mapping
+from transformers.monkey_patching import register_patch_mapping
 
 
 # Define your replacement class (must inherit from nn.Module)
@@ -40,7 +40,7 @@ class CustomLlamaAttention(LlamaAttention):
 
 
 # Register the patch globally (only applies to transformers modeling modules)
-register_monkey_patch_mapping(mapping={"LlamaAttention": CustomLlamaAttention})
+register_patch_mapping(mapping={"LlamaAttention": CustomLlamaAttention})
 
 # Load a model - the patch is automatically applied during initialization
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-1B")
@@ -53,13 +53,13 @@ print(type(model.model.layers[0].self_attn))  # <class '__main__.CustomLlamaAtte
 
 Monkey patches work through a two-step process:
 
-1. **Registration**: Call [`register_monkey_patch_mapping`] to add mappings to a global registry.
+1. **Registration**: Call [`register_patch_mapping`] to add mappings to a global registry.
 
 2. **Application**: Patches are automatically applied during model initialization:
    - **`from_pretrained` / `from_config`**: Patches are **automatically** applied via an internal context manager. No additional action needed!
-   - **Manual construction** (e.g., `Model(config)`): You must use the [`apply_monkey_patches`] context manager manually.
+   - **Manual construction** (e.g., `Model(config)`): You must use the [`apply_patches`] context manager manually.
 
-Once patches are registered, they persist and affect all subsequent model loads until you clear them with [`clear_monkey_patch_mapping`].
+Once patches are registered, they persist and affect all subsequent model loads until you clear them with [`clear_patch_mapping`].
 
 **Important limitations**:
 
@@ -68,18 +68,18 @@ Once patches are registered, they persist and affect all subsequent model loads 
 
 ## Global registration
 
-Use [`register_monkey_patch_mapping`] to register mappings globally:
+Use [`register_patch_mapping`] to register mappings globally:
 
 ```python
-from transformers.monkey_patch import register_monkey_patch_mapping
+from transformers.monkey_patching import register_patch_mapping
 
 # Register a single patch
-register_monkey_patch_mapping(
+register_patch_mapping(
     mapping={"Qwen2MoeExperts": SequentialExperts}
 )
 
 # Register multiple patches at once
-register_monkey_patch_mapping(
+register_patch_mapping(
     mapping={
         "Qwen2MoeExperts": SequentialExperts,
         "Qwen2MoeAttention": CustomAttention,
@@ -94,15 +94,15 @@ register_monkey_patch_mapping(
 You can use regular expressions to match multiple classes with a single pattern:
 
 ```python
-from transformers.monkey_patch import register_monkey_patch_mapping
+from transformers.monkey_patching import register_patch_mapping
 
 # Match all classes containing "Attention"
-register_monkey_patch_mapping(
+register_patch_mapping(
     mapping={".*Attention": CustomAttention}
 )
 
 # More examples
-register_monkey_patch_mapping(
+register_patch_mapping(
     mapping={
         ".*MoeExperts$": CustomExperts,           # Ends with "MoeExperts"
         "^Llama\\d+Attention$": CustomAttention,  # Llama2Attention, Llama3Attention, etc.
@@ -115,51 +115,51 @@ register_monkey_patch_mapping(
 > [!WARNING]
 > **Regex patterns can silently break models.** A broad pattern like `".*Attention"` will match *every* class whose name contains "Attention" — including container classes that wrap the attention you actually want to replace. For example, BERT has three attention-related classes: `BertSelfAttention` and `BertCrossAttention` (the inner attention implementations) and `BertAttention` (an outer module that *contains* one of those inner classes). Patching all three with the same custom attention layer produces a broken model because the outer `BertAttention` no longer wraps the inner one — it *is* one, eliminating expected sub-modules like `self` and `output`. Prefer narrow patterns (e.g., `".*SelfAttention$"`) or exact class names to avoid unintended matches.
 
-To unregister patches, use [`unregister_monkey_patch_mapping`]:
+To unregister patches, use [`unregister_patch_mapping`]:
 
 ```python
-from transformers.monkey_patch import unregister_monkey_patch_mapping
+from transformers.monkey_patching import unregister_patch_mapping
 
 # Unregister a single patch (use exact name or pattern from registration)
-unregister_monkey_patch_mapping(keys=["Qwen2MoeExperts"])
+unregister_patch_mapping(keys=["Qwen2MoeExperts"])
 
 # Unregister multiple patches at once
-unregister_monkey_patch_mapping(keys=["Qwen2MoeExperts", "Qwen2MoeAttention"])
+unregister_patch_mapping(keys=["Qwen2MoeExperts", "Qwen2MoeAttention"])
 
 # Unregister a pattern
-unregister_monkey_patch_mapping(keys=[".*Attention"])
+unregister_patch_mapping(keys=[".*Attention"])
 ```
 
-To clear all registered patches, use [`clear_monkey_patch_mapping`]:
+To clear all registered patches, use [`clear_patch_mapping`]:
 
 ```python
-from transformers.monkey_patch import clear_monkey_patch_mapping
+from transformers.monkey_patching import clear_patch_mapping
 
-clear_monkey_patch_mapping()
+clear_patch_mapping()
 ```
 
-To view currently registered patches, use [`get_monkey_patch_mapping`]:
+To view currently registered patches, use [`get_patch_mapping`]:
 
 ```python
-from transformers.monkey_patch import get_monkey_patch_mapping
+from transformers.monkey_patching import get_patch_mapping
 
-current_patches = get_monkey_patch_mapping()
+current_patches = get_patch_mapping()
 print(current_patches)
 ```
 
 ## Manual model construction
 
-The [`apply_monkey_patches`] context manager is only needed when you're constructing models **manually** (e.g., `Model(config)`) without using `from_pretrained` or `from_config`:
+The [`apply_patches`] context manager is only needed when you're constructing models **manually** (e.g., `Model(config)`) without using `from_pretrained` or `from_config`:
 
 ```python
 from transformers import LlamaModel, LlamaConfig
-from transformers.monkey_patch import register_monkey_patch_mapping, apply_monkey_patches
+from transformers.monkey_patching import register_patch_mapping, apply_patches
 
 # Register patch globally
-register_monkey_patch_mapping(mapping={"LlamaAttention": CustomAttention})
+register_patch_mapping(mapping={"LlamaAttention": CustomAttention})
 
 # For manual construction, you need the context manager
-with apply_monkey_patches():
+with apply_patches():
     model = LlamaModel(LlamaConfig())  # Uses CustomAttention
 
 # Without the context manager, manual construction uses original classes
@@ -173,7 +173,7 @@ model = LlamaModel.from_pretrained("meta-llama/Llama-3.2-1B")  # Uses CustomAtte
 
 - **Weight handling**: Monkey patching only replaces classes, not weights. If your patched class has a different weights layout, you'll need to handle [weight conversions](./weightconverter) separately to ensure compatibility with pretrained weights. See the [Complete example](#complete-example) below for how to combine monkey patches with weight conversion mappings.
 
-- **Global effect**: Patches registered with [`register_monkey_patch_mapping`] are applied globally to all models loaded after registration. Always use [`clear_monkey_patch_mapping`] to clean up when done, especially in tests, notebooks, or long-running applications.
+- **Global effect**: Patches registered with [`register_patch_mapping`] are applied globally to all models loaded after registration. Always use [`clear_patch_mapping`] to clean up when done, especially in tests, notebooks, or long-running applications.
 
 - **Class validation**: The API automatically validates that replacement classes are `nn.Module` subclasses. If you pass an invalid class, you'll get a clear error message.
 
@@ -189,16 +189,16 @@ model = LlamaModel.from_pretrained("meta-llama/Llama-3.2-1B")  # Uses CustomAtte
 
 ```python
 # For exact names - must match exactly (case-sensitive)
-register_monkey_patch_mapping(mapping={"LlamaAttention": CustomAttention})
+register_patch_mapping(mapping={"LlamaAttention": CustomAttention})
 
 # For patterns - use valid regex
-register_monkey_patch_mapping(mapping={".*Attention": CustomAttention})
+register_patch_mapping(mapping={".*Attention": CustomAttention})
 ```
 
-**Verify registration**: Use [`get_monkey_patch_mapping`] to confirm your mapping is registered:
+**Verify registration**: Use [`get_patch_mapping`] to confirm your mapping is registered:
 
 ```python
-print(get_monkey_patch_mapping())
+print(get_patch_mapping())
 # Shows all registered mappings: {'LlamaAttention': <class 'CustomAttention'>, '.*MLP': <class 'CustomMLP'>}
 ```
 
@@ -231,9 +231,9 @@ If your patched class has different weight shapes, register a weight conversion:
 
 ```python
 from transformers.conversion_mapping import register_checkpoint_conversion_mapping, WeightConverter
-from transformers.monkey_patch import register_monkey_patch_mapping
+from transformers.monkey_patching import register_patch_mapping
 
-register_monkey_patch_mapping(
+register_patch_mapping(
     mapping={
         "LlamaAttention": LlamaFusedAttention,
     }
@@ -259,14 +259,14 @@ register_checkpoint_conversion_mapping(
 Always clean up patches when you're done to avoid affecting other code:
 
 ```python
-from transformers.monkey_patch import register_monkey_patch_mapping, clear_monkey_patch_mapping
+from transformers.monkey_patching import register_patch_mapping, clear_patch_mapping
 
 try:
-    register_monkey_patch_mapping(mapping={"LlamaAttention": CustomAttention})
+    register_patch_mapping(mapping={"LlamaAttention": CustomAttention})
     model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
     # ... use model ...
 finally:
-    clear_monkey_patch_mapping()  # Always clean up
+    clear_patch_mapping()  # Always clean up
 ```
 
 ## Complete example
@@ -289,7 +289,7 @@ from transformers.cache_utils import Cache
 from transformers.conversion_mapping import register_checkpoint_conversion_mapping
 from transformers.integrations.sdpa_attention import sdpa_attention_forward
 from transformers.models.qwen2_moe.modeling_qwen2_moe import apply_rotary_pos_emb
-from transformers.monkey_patch import register_monkey_patch_mapping
+from transformers.monkey_patching import register_patch_mapping
 from transformers.utils.generic import TransformersKwargs
 
 
@@ -397,7 +397,7 @@ class FusedQKVAttention(nn.Module):
 
 
 # Registering monkey patches for the new attention and experts modules.
-register_monkey_patch_mapping(
+register_patch_mapping(
     mapping={
         "Qwen2MoeExperts": ModuleListExperts,
         "Qwen2MoeAttention": FusedQKVAttention,
@@ -424,12 +424,12 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B")
 
 ## API reference
 
-[[autodoc]] transformers.monkey_patch.register_monkey_patch_mapping
+[[autodoc]] transformers.monkey_patching.register_patch_mapping
 
-[[autodoc]] transformers.monkey_patch.unregister_monkey_patch_mapping
+[[autodoc]] transformers.monkey_patching.unregister_patch_mapping
 
-[[autodoc]] transformers.monkey_patch.clear_monkey_patch_mapping
+[[autodoc]] transformers.monkey_patching.clear_patch_mapping
 
-[[autodoc]] transformers.monkey_patch.get_monkey_patch_mapping
+[[autodoc]] transformers.monkey_patching.get_patch_mapping
 
-[[autodoc]] transformers.monkey_patch.apply_monkey_patches
+[[autodoc]] transformers.monkey_patching.apply_patches

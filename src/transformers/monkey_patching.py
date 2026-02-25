@@ -82,10 +82,10 @@ def _find_replacement_class(class_name: str, mapping: dict[str, type[nn.Module]]
     return None
 
 
-def register_monkey_patch_mapping(mapping: dict[str, type[nn.Module]], overwrite: bool = False) -> None:
+def register_patch_mapping(mapping: dict[str, type[nn.Module]], overwrite: bool = False) -> None:
     """
     Register patch mappings to enable automatic patching during model creation using `from_pretrained`,
-    `from_config` or within the `apply_monkey_patches` context manager.
+    `from_config` or within the `apply_patches` context manager.
 
     Use this to register class replacements that will be automatically applied when loading any model.
     This is useful for quantization library compatibility, structural optimizations, and architectural
@@ -95,7 +95,7 @@ def register_monkey_patch_mapping(mapping: dict[str, type[nn.Module]], overwrite
         mapping (`Dict[str, type[nn.Module]]`):
             Mapping from original class names (or regex patterns) to replacement classes. Supports:
             - Exact class names: `"Qwen2MoeExperts"` → `CustomExperts`
-            - Regex patterns: `".*Attention"` matches `BertAttention`, `GPT2Attention`, etc.,
+            - Regex patterns: `".*Attention"` matches `LlamaAttention`, `MistralAttention`, etc.,
             or `"^Llama\\d+Attention$"` matches `Llama2Attention`, `Llama3Attention`, etc.
 
             Exact matches take precedence over patterns. Patterns are matched using `re.search()`,
@@ -106,29 +106,29 @@ def register_monkey_patch_mapping(mapping: dict[str, type[nn.Module]], overwrite
     Example:
         ```python
         from transformers import AutoModelForCausalLM
-        from transformers.monkey_patch import register_monkey_patch_mapping
+        from transformers.monkey_patching import register_patch_mapping
 
         # Define custom expert implementation
         class SequentialExperts(nn.Module):
             ...
 
         # Register exact class name
-        register_monkey_patch_mapping(
+        register_patch_mapping(
             mapping={"Qwen2MoeExperts": SequentialExperts}
         )
 
         # Register with regex pattern to match multiple classes
-        register_monkey_patch_mapping(
-            mapping={".*Attention": CustomAttention}  # Matches BertAttention, GPT2Attention, etc.
+        register_patch_mapping(
+            mapping={".*Attention": CustomAttention}  # Matches LlamaAttention, MistralAttention, etc.
         )
 
         # Match specific model versions
-        register_monkey_patch_mapping(
+        register_patch_mapping(
             mapping={"^Llama\\d+Attention$": CustomLlamaAttention}  # Matches Llama2Attention, Llama3Attention
         )
 
         # The patch will be automatically applied during loading
-        model = AutoModelForCausalLM.from_pretrained("bert-base-uncased")
+        model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-1B")
         ```
 
     Note:
@@ -155,7 +155,7 @@ def register_monkey_patch_mapping(mapping: dict[str, type[nn.Module]], overwrite
             _monkey_patch_mapping_cache[class_name] = replacement_class
 
 
-def unregister_monkey_patch_mapping(keys: list[str]) -> None:
+def unregister_patch_mapping(keys: list[str]) -> None:
     """
     Unregister patch mappings to disable automatic patching.
 
@@ -170,15 +170,15 @@ def unregister_monkey_patch_mapping(keys: list[str]) -> None:
     Example:
         ```python
         from transformers import AutoModelForCausalLM
-        from transformers.monkey_patch import register_monkey_patch_mapping, unregister_monkey_patch_mapping
+        from transformers.monkey_patching import register_patch_mapping, unregister_patch_mapping
 
         # Register a patch
-        register_monkey_patch_mapping(
+        register_patch_mapping(
             mapping={"Qwen2MoeExperts": CustomExperts}
         )
 
         # Unregister the patch
-        unregister_monkey_patch_mapping(["Qwen2MoeExperts"])
+        unregister_patch_mapping(["Qwen2MoeExperts"])
 
         # The patch will no longer be applied during loading
         model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B")
@@ -195,7 +195,7 @@ def unregister_monkey_patch_mapping(keys: list[str]) -> None:
             del _monkey_patch_mapping_cache[key]
 
 
-def get_monkey_patch_mapping() -> dict[str, type[nn.Module]]:
+def get_patch_mapping() -> dict[str, type[nn.Module]]:
     """
     Get all registered patch mappings.
 
@@ -206,7 +206,7 @@ def get_monkey_patch_mapping() -> dict[str, type[nn.Module]]:
         return _monkey_patch_mapping_cache.copy()
 
 
-def clear_monkey_patch_mapping() -> None:
+def clear_patch_mapping() -> None:
     """
     Clear all registered patch mappings.
 
@@ -214,15 +214,15 @@ def clear_monkey_patch_mapping() -> None:
 
     Example:
         ```python
-        from transformers.monkey_patch import register_monkey_patch_mapping, clear_monkey_patch_mapping
+        from transformers.monkey_patching import register_patch_mapping, clear_patch_mapping
 
         # Register some patches
-        register_monkey_patch_mapping(
+        register_patch_mapping(
             mapping={"Qwen2MoeExperts": CustomExperts}
         )
 
         # Clear all patches
-        clear_monkey_patch_mapping()
+        clear_patch_mapping()
         ```
     """
     global _monkey_patch_mapping_cache
@@ -231,7 +231,7 @@ def clear_monkey_patch_mapping() -> None:
 
 
 @contextmanager
-def apply_monkey_patches():
+def apply_patches():
     """
     Context manager to apply registered monkey patches within a block of code.
 
@@ -240,15 +240,15 @@ def apply_monkey_patches():
     Example:
         ```python
         from transformers import Qwen2MoeModel, Qwen2MoeConfig
-        from transformers.monkey_patch import register_monkey_patch_mapping, apply_monkey_patches
+        from transformers.monkey_patching import register_patch_mapping, apply_patches
 
         # Register a patch
-        register_monkey_patch_mapping(
+        register_patch_mapping(
             mapping={"Qwen2MoeExperts": CustomExperts}
         )
 
         # Apply patches within the context
-        with apply_monkey_patches():
+        with apply_patches():
             # The model will use CustomExperts instead of Qwen2MoeExperts
             model = Qwen2MoeModel(Qwen2MoeConfig())
 
@@ -257,7 +257,7 @@ def apply_monkey_patches():
         model = Qwen2MoeModel(Qwen2MoeConfig())
         ```
     """
-    mapping = get_monkey_patch_mapping()
+    mapping = get_patch_mapping()
     if not mapping:
         yield
         return
@@ -327,10 +327,10 @@ def patch_output_recorders(model: nn.Module) -> None:
     Example:
         ```python
         from transformers import AutoModelForCausalLM
-        from transformers.monkey_patch import register_monkey_patch_mapping, patch_output_recorders
+        from transformers.monkey_patching import register_patch_mapping, patch_output_recorders
 
         # Register a patch
-        register_monkey_patch_mapping(mapping={"Qwen2MoeExperts": CustomExperts})
+        register_patch_mapping(mapping={"Qwen2MoeExperts": CustomExperts})
 
         # If you construct a model manually (without from_pretrained), patch recorders
         model = Qwen2MoeModel(config)
@@ -338,7 +338,7 @@ def patch_output_recorders(model: nn.Module) -> None:
         ```
     """
 
-    mapping = get_monkey_patch_mapping()
+    mapping = get_patch_mapping()
     if not mapping:
         return
 
