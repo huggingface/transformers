@@ -34,8 +34,8 @@ from ...utils import TransformersKwargs, logging
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import is_flash_linear_attention_available
 from ...utils.output_capturing import capture_outputs
+from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer
-from ..olmo3.configuration_olmo3 import Olmo3Config
 from ..olmo3.modeling_olmo3 import (
     Olmo3Attention,
     Olmo3DecoderLayer,
@@ -72,7 +72,7 @@ is_fast_path_available = all(
 logger = logging.get_logger(__name__)
 
 
-class OlmoHybridConfig(Olmo3Config):
+class OlmoHybridConfig(LlamaConfig):
     r"""
     This is the configuration class to store the configuration of a [`OlmoHybridModel`]. It is used to instantiate
     an OLMo Hybrid model according to the specified arguments, defining the model architecture. Instantiating a
@@ -170,6 +170,15 @@ class OlmoHybridConfig(Olmo3Config):
     """
 
     model_type = "olmo_hybrid"
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.k_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.v_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the added norm on q and k
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
 
     def __init__(
         self,
@@ -216,35 +225,12 @@ class OlmoHybridConfig(Olmo3Config):
                 layer_types[-1] = "full_attention"
 
         layer_type_validation(layer_types, num_hidden_layers)
-
         if "linear_attention" not in layer_types:
             raise ValueError("OLMoHybrid expects at least one 'linear_attention' layer.")
         if all(t == "linear_attention" for t in layer_types):
             raise ValueError("OLMoHybrid expects at least one attention layer.")
 
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            rms_norm_eps=rms_norm_eps,
-            layer_types=layer_types,
-            rope_parameters=rope_parameters,
-            **kwargs,
-        )
-        del self.sliding_window
+        self.layer_types = layer_types
 
         if linear_num_key_heads is None:
             linear_num_key_heads = num_attention_heads
@@ -266,6 +252,31 @@ class OlmoHybridConfig(Olmo3Config):
         self.linear_dt_init_floor = linear_dt_init_floor
         self.linear_conv_kernel_dim = linear_conv_kernel_dim
         self.linear_allow_neg_eigval = linear_allow_neg_eigval
+
+        super().__init__(
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_key_value_heads=num_key_value_heads,
+            hidden_act=hidden_act,
+            max_position_embeddings=max_position_embeddings,
+            initializer_range=initializer_range,
+            use_cache=use_cache,
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            attention_bias=attention_bias,
+            attention_dropout=attention_dropout,
+            rms_norm_eps=rms_norm_eps,
+            rope_parameters=rope_parameters,
+            **kwargs,
+        )
+        del self.pretraining_tp
+        del self.mlp_bias
+        del self.head_dim
 
 
 class OlmoHybridDynamicCache(Qwen3NextDynamicCache):
@@ -359,7 +370,7 @@ class OlmoHybridShortConvolution(nn.Conv1d):
         use_precomputed: bool = False,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, seq_len, dim = hidden_states.shape
+        seq_len, dim = hidden_states.shape[-2:]
 
         hidden_states = hidden_states.transpose(1, 2)
 
@@ -542,10 +553,16 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         self.dt_bias = nn.Parameter(inv_dt)
 
         # Output norm - NOTE: FLA's FusedRMSNormGated uses eps=1e-5 by default
-        o_norm_eps = 1e-5
-        NormClass = FusedRMSNormGated if FusedRMSNormGated is not None else OlmoHybridRMSNormGated
-
-        self.o_norm = NormClass(self.head_v_dim, eps=o_norm_eps)
+        self.norm = (
+            OlmoHybridRMSNormGated(self.head_v_dim, eps=1e-5)
+            if FusedRMSNormGated is None
+            else FusedRMSNormGated(
+                self.head_v_dim,
+                eps=1e-5,
+                device=torch.cuda.current_device(),
+                dtype=config.dtype if config.dtype is not None else torch.get_default_dtype(),
+            )
+        )
 
         self.chunk_gated_delta_rule = chunk_gated_delta_rule or torch_chunk_gated_delta_rule
         self.recurrent_gated_delta_rule = fused_recurrent_gated_delta_rule or torch_recurrent_gated_delta_rule
@@ -660,12 +677,14 @@ class OlmoHybridAttentionDecoderLayer(Olmo3DecoderLayer):
         self.self_attn = OlmoHybridAttention(config=config, layer_idx=layer_idx)
 
 
-class OlmoHybridLinearDecoderLayer(LlamaDecoderLayer):
+class OlmoHybridLinearAttentionDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: OlmoHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.layer_type = "linear_attention"
         del self.self_attn
         self.linear_attn = OlmoHybridGatedDeltaNet(config, layer_idx=layer_idx)
+        self.input_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = OlmoHybridMLP(config)
 
     def forward(
@@ -682,6 +701,7 @@ class OlmoHybridLinearDecoderLayer(LlamaDecoderLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
+        # Main difference to llama - signature (`cache_params`) and linear attention
         hidden_states = self.linear_attn(
             hidden_states=hidden_states,
             cache_params=past_key_values,
@@ -700,9 +720,9 @@ class OlmoHybridLinearDecoderLayer(LlamaDecoderLayer):
 
 class OlmoHybridPreTrainedModel(Qwen3NextPreTrainedModel):
     _is_stateful = True
-    _no_split_modules = ["OlmoHybridAttentionDecoderLayer", "OlmoHybridLinearDecoderLayer"]
+    _no_split_modules = ["OlmoHybridAttentionDecoderLayer", "OlmoHybridLinearAttentionDecoderLayer"]
     _can_record_outputs = {
-        "hidden_states": (OlmoHybridAttentionDecoderLayer, OlmoHybridLinearDecoderLayer),
+        "hidden_states": (OlmoHybridAttentionDecoderLayer, OlmoHybridLinearAttentionDecoderLayer),
         "attentions": OlmoHybridAttention,
     }
 
@@ -729,7 +749,7 @@ class OlmoHybridModel(Qwen3NextModel):
         super().__init__(config)
         self.layers = nn.ModuleList(
             [
-                OlmoHybridLinearDecoderLayer(config, layer_idx)
+                OlmoHybridLinearAttentionDecoderLayer(config, layer_idx)
                 if config.layer_types[layer_idx] == "linear_attention"
                 else OlmoHybridAttentionDecoderLayer(config, layer_idx)
                 for layer_idx in range(config.num_hidden_layers)
@@ -784,6 +804,7 @@ class OlmoHybridModel(Qwen3NextModel):
         linear_attn_mask = self._update_linear_attn_mask(attention_mask, cache_position)
 
         hidden_states = inputs_embeds
+        # RoPE or NoPE
         position_embeddings = self.rotary_emb(hidden_states, position_ids) if self.rotary_emb is not None else None
 
         for decoder_layer in self.layers:
@@ -818,6 +839,4 @@ __all__ = [
     "OlmoHybridForCausalLM",
     "OlmoHybridModel",
     "OlmoHybridPreTrainedModel",
-    "OlmoHybridLinearDecoderLayer",
-    "OlmoHybridAttentionDecoderLayer",
 ]

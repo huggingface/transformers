@@ -180,44 +180,12 @@ class OlmoHybridConfig(PreTrainedConfig):
                 layer_types[-1] = "full_attention"
 
         layer_type_validation(layer_types, num_hidden_layers)
-
         if "linear_attention" not in layer_types:
             raise ValueError("OLMoHybrid expects at least one 'linear_attention' layer.")
         if all(t == "linear_attention" for t in layer_types):
             raise ValueError("OLMoHybrid expects at least one attention layer.")
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-
-        self.rms_norm_eps = rms_norm_eps
         self.layer_types = layer_types
-        if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention" if (i + 1) % 4 != 0 else "full_attention" for i in range(self.num_hidden_layers)
-            ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
-
-        self.rope_parameters = rope_parameters
-
-        super().__init__(**kwargs)
 
         if linear_num_key_heads is None:
             linear_num_key_heads = num_attention_heads
@@ -239,6 +207,31 @@ class OlmoHybridConfig(PreTrainedConfig):
         self.linear_dt_init_floor = linear_dt_init_floor
         self.linear_conv_kernel_dim = linear_conv_kernel_dim
         self.linear_allow_neg_eigval = linear_allow_neg_eigval
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.rope_parameters = rope_parameters
+
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["OlmoHybridConfig"]

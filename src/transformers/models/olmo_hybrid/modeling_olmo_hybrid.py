@@ -227,7 +227,7 @@ class OlmoHybridShortConvolution(nn.Conv1d):
         use_precomputed: bool = False,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, seq_len, dim = hidden_states.shape
+        seq_len, dim = hidden_states.shape[-2:]
 
         hidden_states = hidden_states.transpose(1, 2)
 
@@ -357,7 +357,6 @@ class OlmoHybridAttention(nn.Module):
         )
         self.q_norm = OlmoHybridRMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
         self.k_norm = OlmoHybridRMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
-        assert config.layer_types is not None
 
     def forward(
         self,
@@ -694,10 +693,16 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         self.dt_bias = nn.Parameter(inv_dt)
 
         # Output norm - NOTE: FLA's FusedRMSNormGated uses eps=1e-5 by default
-        o_norm_eps = 1e-5
-        NormClass = FusedRMSNormGated if FusedRMSNormGated is not None else OlmoHybridRMSNormGated
-
-        self.o_norm = NormClass(self.head_v_dim, eps=o_norm_eps)
+        self.norm = (
+            OlmoHybridRMSNormGated(self.head_v_dim, eps=1e-5)
+            if FusedRMSNormGated is None
+            else FusedRMSNormGated(
+                self.head_v_dim,
+                eps=1e-5,
+                device=torch.cuda.current_device(),
+                dtype=config.dtype if config.dtype is not None else torch.get_default_dtype(),
+            )
+        )
 
         self.chunk_gated_delta_rule = chunk_gated_delta_rule or torch_chunk_gated_delta_rule
         self.recurrent_gated_delta_rule = fused_recurrent_gated_delta_rule or torch_recurrent_gated_delta_rule
@@ -861,34 +866,13 @@ class OlmoHybridAttentionDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class OlmoHybridLinearRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        OlmoHybridLinearRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class OlmoHybridLinearDecoderLayer(GradientCheckpointingLayer):
+class OlmoHybridLinearAttentionDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: OlmoHybridConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.mlp = OlmoHybridMLP(config)
-        self.input_layernorm = OlmoHybridLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = OlmoHybridLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_type = "linear_attention"
         self.linear_attn = OlmoHybridGatedDeltaNet(config, layer_idx=layer_idx)
 
@@ -906,6 +890,7 @@ class OlmoHybridLinearDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
+        # Main difference to llama - signature (`cache_params`) and linear attention
         hidden_states = self.linear_attn(
             hidden_states=hidden_states,
             cache_params=past_key_values,
@@ -926,13 +911,13 @@ class OlmoHybridPreTrainedModel(PreTrainedModel):
     config: OlmoHybridConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["OlmoHybridAttentionDecoderLayer", "OlmoHybridLinearDecoderLayer"]
+    _no_split_modules = ["OlmoHybridAttentionDecoderLayer", "OlmoHybridLinearAttentionDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
     _can_record_outputs = {
-        "hidden_states": (OlmoHybridAttentionDecoderLayer, OlmoHybridLinearDecoderLayer),
+        "hidden_states": (OlmoHybridAttentionDecoderLayer, OlmoHybridLinearAttentionDecoderLayer),
         "attentions": OlmoHybridAttention,
     }
     _is_stateful = True
@@ -961,7 +946,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
         self.layers = nn.ModuleList(
             [
-                OlmoHybridLinearDecoderLayer(config, layer_idx)
+                OlmoHybridLinearAttentionDecoderLayer(config, layer_idx)
                 if config.layer_types[layer_idx] == "linear_attention"
                 else OlmoHybridAttentionDecoderLayer(config, layer_idx)
                 for layer_idx in range(config.num_hidden_layers)
@@ -1019,6 +1004,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
         linear_attn_mask = self._update_linear_attn_mask(attention_mask, cache_position)
 
         hidden_states = inputs_embeds
+        # RoPE or NoPE
         position_embeddings = self.rotary_emb(hidden_states, position_ids) if self.rotary_emb is not None else None
 
         for decoder_layer in self.layers:
@@ -1132,10 +1118,4 @@ class OlmoHybridForCausalLM(OlmoHybridPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = [
-    "OlmoHybridForCausalLM",
-    "OlmoHybridModel",
-    "OlmoHybridPreTrainedModel",
-    "OlmoHybridLinearDecoderLayer",
-    "OlmoHybridAttentionDecoderLayer",
-]
+__all__ = ["OlmoHybridForCausalLM", "OlmoHybridModel", "OlmoHybridPreTrainedModel"]
