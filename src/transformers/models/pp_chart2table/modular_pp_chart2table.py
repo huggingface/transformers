@@ -110,6 +110,7 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         global_attn_indexes: Optional[list] = None,
         window_size: int = 14,
         output_channels: int = 256,
+        net_channels: int = 512,
         attention_dropout: float = 0.0,
         **kwargs,
     ):
@@ -129,6 +130,7 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         self.global_attn_indexes = global_attn_indexes if global_attn_indexes is not None else [2, 5, 8, 11]
         self.window_size = window_size
         self.output_channels = output_channels
+        self.net_channels = net_channels
         self.attention_dropout = attention_dropout
 
         super().__init__(**kwargs)
@@ -340,16 +342,24 @@ class PPChart2TableConfig(PreTrainedConfig):
     """
 
     model_type = "pp_chart2table"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {"vision_config": PPChart2TableVisionConfig, "text_config": PPChart2TableTextConfig}
 
     def __init__(
         self,
         vision_config: dict | None = None,
         text_config: dict | None = None,
-        im_start_token: int = 151857,
-        im_patch_token: int = 151859,
+        image_token_index: Optional[int] = 151859,
+        image_seq_length: Optional[int] = 576,
+        pad_token_id: Optional[int] = -1,
         **kwargs,
     ):
+        self.image_token_index = image_token_index
+        self.image_seq_length = image_seq_length
+        self.pad_token_id = pad_token_id
+
         if vision_config is None:
             vision_config = {}
         self.vision_config = PPChart2TableVisionConfig(**vision_config)
@@ -359,9 +369,6 @@ class PPChart2TableConfig(PreTrainedConfig):
         self.text_config = PPChart2TableTextConfig(**text_config)
 
         self.model_type = "pp_chart2table"
-
-        self.im_start_token = im_start_token
-        self.im_patch_token = im_patch_token
 
         text_config_keys = [
             "attention_dropout",
@@ -779,8 +786,8 @@ class PPChart2TableVisionModel(PPChart2TableVisionPreTrainedModel):
 
         self.neck = PPChart2TableVisionNeck(config)
 
-        self.net_2 = nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1, bias=False)
-        self.net_3 = nn.Conv2d(512, config.hidden_size, kernel_size=3, stride=2, padding=1, bias=False)
+        self.net_2 = nn.Conv2d(config.output_channels, config.net_channels, kernel_size=3, stride=2, padding=1, bias=False)
+        self.net_3 = nn.Conv2d(config.net_channels, config.hidden_size, kernel_size=3, stride=2, padding=1, bias=False)
 
         self.post_init()
 
@@ -832,6 +839,7 @@ class PPChart2TableModelOutputWithPast(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -860,6 +868,7 @@ class PPChart2TableCausalLMOutputWithPast(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
 
 
 class PPChart2TablePreTrainedModel(PreTrainedModel):
@@ -969,7 +978,7 @@ class PPChart2TableModel(PPChart2TablePreTrainedModel):
 
     def get_image_features(
         self,
-        images: Optional[torch.Tensor],
+        pixel_values: torch.FloatTensor,
     ) -> list[torch.Tensor]:
         r"""
         Extract and project chart image features to text embedding space.
@@ -983,10 +992,10 @@ class PPChart2TableModel(PPChart2TablePreTrainedModel):
                 List of projected image features (one per image), each with shape `[1, num_patches, text_hidden_size]`.
         """
         image_features = []
-        for image in images:
-            image = image.unsqueeze(0)
+        for pixel_value in pixel_values:
+            pixel_value = pixel_value.unsqueeze(0)
             with torch.no_grad():
-                cnn_feature = self.vision_tower_high(image)
+                cnn_feature = self.vision_tower_high(pixel_value)
                 cnn_feature = cnn_feature.flatten(2).transpose(2, 1)
             image_feature = self.mm_projector_vary(cnn_feature)
             image_features.append(image_feature)
@@ -996,51 +1005,27 @@ class PPChart2TableModel(PPChart2TablePreTrainedModel):
         return image_features
 
     def get_placeholder_mask(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        image_features: Optional[torch.FloatTensor] = None,
-    ) -> torch.BoolTensor:
-        r"""
-        Generate mask to locate image placeholder tokens in input embeddings.
-
-        This mask identifies the `<imgpad>` tokens in the input sequence, which will be replaced with
-        projected image features for multimodal fusion.
-
-        Args:
-            input_ids (`torch.LongTensor`, optional):
-                Tokenized input text (used if `inputs_embeds` is None).
-            inputs_embeds (`torch.FloatTensor`, optional):
-                Precomputed input embeddings (used if `input_ids` is None).
-            image_features (`torch.FloatTensor`):
-                Projected image features (used to validate token-feature count match).
-
-        Returns:
-            `torch.BoolTensor`:
-                Boolean mask (shape: `[B, seq_len, text_hidden_size]`) where `True` indicates image placeholder tokens.
-
-        Raises:
-            ValueError: If the number of image tokens does not match the number of image features.
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
-            start_token_embed = self.get_input_embeddings()(
-                torch.tensor(self.config.im_start_token, dtype=torch.long, device=inputs_embeds.device)
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            special_image_mask = inputs_embeds == start_token_embed
             special_image_mask = special_image_mask.all(-1)
         else:
-            special_image_mask = input_ids == self.config.im_patch_token
+            special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-
-        n_image_features = image_features.numel() // image_features.shape[-1]
-        if n_image_tokens != n_image_features:
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
             raise ValueError(
                 f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
             )
-
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
         return special_image_mask
 
     @can_return_tuple
@@ -1056,20 +1041,23 @@ class PPChart2TableModel(PPChart2TablePreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ):
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
         if inputs_embeds is None:
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values)
-            image_mask = self.get_placeholder_mask(
+            image_features = self.get_image_features(pixel_values=pixel_values.to(inputs_embeds.dtype))
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         outputs = self.language_model(
-            input_ids=None,
-            position_ids=position_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -1077,14 +1065,13 @@ class PPChart2TableModel(PPChart2TablePreTrainedModel):
             **kwargs,
         )
 
-        output = PPChart2TableModelOutputWithPast(
+        return PPChart2TableModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
         )
-
-        return output
 
 
 class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, GenerationMixin):
@@ -1123,7 +1110,6 @@ class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, Genera
         super().__init__(config)
         self.model = PPChart2TableModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1131,44 +1117,23 @@ class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, Genera
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
-
-    def prepare_inputs_for_generation(
+    
+    def get_output_embeddings(self) -> nn.Module:
+        return self.lm_head
+    
+    def get_image_features(
         self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        is_first_iteration=False,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
         **kwargs,
     ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
-            position_ids=position_ids,
+        return self.model.get_image_features(
             pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
             **kwargs,
         )
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-
-        return model_inputs
 
     @can_return_tuple
     def forward(
@@ -1194,18 +1159,18 @@ class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, Genera
             use_cache=use_cache,
             past_key_values=past_key_values,
             cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
-        logits = self.lm_head(hidden_states)
 
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
+        loss = None
         if labels is not None:
-            raise ValueError(
-                "The PPChart2TableForConditionalGeneration model only supports inference, and training is not allowed!\n"
-                "If you need to train this model, please implement the corresponding loss calculation logic, or use the inference-only mode (do not pass the `labels` parameter)."
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
         return PPChart2TableCausalLMOutputWithPast(
@@ -1215,6 +1180,40 @@ class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, Genera
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        attention_mask=None,
+        cache_position=None,
+        logits_to_keep=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            # Pixel values are used only in the first iteration if available
+            # In subsquent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
+            model_inputs["pixel_values"] = pixel_values
+
+        return model_inputs
 
 
 __all__ = [

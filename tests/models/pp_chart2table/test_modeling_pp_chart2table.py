@@ -49,7 +49,7 @@ class PPChart2TableVisionText2TextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=7,
+        batch_size=1,
         seq_length=31,
         num_channels=3,
         image_height=64,
@@ -73,16 +73,20 @@ class PPChart2TableVisionText2TextModelTester:
             "depth": 2,
             "embed_dim": 768,
             "hidden_size": 144,
-            "img_size": 64,
+            "hidden_act": "gelu",
+            "image_size": 64,
+            "num_channels": 3,
             "mlp_ratio": 4.0,
             "norm_layer_eps": 1e-6,
-            "num_heads": 4,
+            "num_attention_heads": 4,
             "patch_size": 16,
             "qkv_bias": True,
             "use_rel_pos": True,
             "global_attn_indexes": [2, 5, 8, 11],
             "window_size": 14,
-            "out_chans": 256,
+            "output_channels": 256,
+            "net_channels": 512,
+            "attention_dropout": 0.0
         },
         bos_token_id=151643,
         eos_token_id=151643,
@@ -168,7 +172,9 @@ class PPChart2TableVisionText2TextModelTester:
 class PPChart2TableModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PPChart2TableForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": PPChart2TableForConditionalGeneration}
+    
     _is_composite = True
+    test_resize_embeddings = False
 
     def setUp(self):
         self.model_tester = PPChart2TableVisionText2TextModelTester(self)

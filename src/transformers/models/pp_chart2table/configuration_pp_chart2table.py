@@ -85,6 +85,7 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         global_attn_indexes: Optional[list] = None,
         window_size: int = 14,
         output_channels: int = 256,
+        net_channels: int = 512,
         attention_dropout: float = 0.0,
         **kwargs,
     ):
@@ -104,6 +105,7 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         self.global_attn_indexes = global_attn_indexes if global_attn_indexes is not None else [2, 5, 8, 11]
         self.window_size = window_size
         self.output_channels = output_channels
+        self.net_channels = net_channels
         self.attention_dropout = attention_dropout
 
         super().__init__(**kwargs)
@@ -315,16 +317,24 @@ class PPChart2TableConfig(PreTrainedConfig):
     """
 
     model_type = "pp_chart2table"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {"vision_config": PPChart2TableVisionConfig, "text_config": PPChart2TableTextConfig}
 
     def __init__(
         self,
         vision_config: dict | None = None,
         text_config: dict | None = None,
-        im_start_token: int = 151857,
-        im_patch_token: int = 151859,
+        image_token_index: Optional[int] = 151859,
+        image_seq_length: Optional[int] = 576,
+        pad_token_id: Optional[int] = -1,
         **kwargs,
     ):
+        self.image_token_index = image_token_index
+        self.image_seq_length = image_seq_length
+        self.pad_token_id = pad_token_id
+
         if vision_config is None:
             vision_config = {}
         self.vision_config = PPChart2TableVisionConfig(**vision_config)
@@ -334,9 +344,6 @@ class PPChart2TableConfig(PreTrainedConfig):
         self.text_config = PPChart2TableTextConfig(**text_config)
 
         self.model_type = "pp_chart2table"
-
-        self.im_start_token = im_start_token
-        self.im_patch_token = im_patch_token
 
         text_config_keys = [
             "attention_dropout",
