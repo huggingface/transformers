@@ -4066,8 +4066,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # instantiated model, as the flags can be modified by instances sometimes)
         dtype_plan = model._get_dtype_plan(dtype)
 
-        # Obtain the weight conversion mapping for this model if any are registered
-        weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
+        # Obtain the weight conversion mapping for this model if any are registered and appy to all submodels recursively
+        weight_conversions = cls.get_weight_conversions_recursively(
+            model, key_mapping, hf_quantizer, weight_conversions=[]
+        )
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
             model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
@@ -4264,6 +4266,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         return loading_info
+
+    @classmethod
+    def get_weight_conversions_recursively(cls, model, key_mapping, hf_quantizer, weight_conversions):
+        for submodule in model.modules():
+            if (
+                submodule is not model
+                and isinstance(submodule, PreTrainedModel)
+                and submodule.config.__class__ != model.config.__class__
+            ):
+                weight_conversions_submodel = get_model_conversion_mapping(
+                    submodule, key_mapping, hf_quantizer, weight_conversions
+                )
+                weight_conversions.extend(weight_conversions_submodel)
+        return weight_conversions
 
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
         module_keys = {".".join(key.split(".")[:-1]) for key in names}

@@ -295,13 +295,13 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
-        "timm_wrapper": [
-            # Simply add the prefix `timm_model`
-            # TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
+        "timm_backbone": [
+            # For BC with backbone model after deprecating `TimmBackbone` model class
+            # TODO: the conversion mapping doesn't work well with literal dots (r'\.') in source
             WeightRenaming(
-                source_patterns=r"(.+)",
-                target_patterns=r"timm_model.\1",
-            )
+                source_patterns=r"(?<!text)(?<!vision)(?<!audio)(?<!image)_backbone",
+                target_patterns=r"timm_model",
+            ),
         ],
         "legacy": [
             WeightRenaming(
@@ -422,7 +422,7 @@ def get_model_conversion_mapping(
             for k, v in model._checkpoint_conversion_mapping.items()
         ]
 
-    # TODO: should be checked recursively on submodels!!
+    # weight_conversions = get_weight_conversions_resursively(model, weight_conversions=weight_conversions)
     model_type = getattr(model.config, "model_type", None)
     if model_type is not None:
         model_specific_conversions = get_checkpoint_conversion_mapping(model_type)
