@@ -1523,7 +1523,7 @@ if __name__ == "__main__":
     if not args.all and not args.model_types:
         raise ValueError("Please provide at least one model type or pass `--all` to export all architectures.")
 
-    os.environ["HF_TOKEN"] = args.token
+    # os.environ["HF_TOKEN"] = args.token
 
     create_tiny_models(
         args.output_path,
