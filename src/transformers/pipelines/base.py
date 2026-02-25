@@ -713,17 +713,13 @@ PIPELINE_INIT_ARGS = build_pipeline_init_args(
 SUPPORTED_PEFT_TASKS = {
     "document-question-answering": ["PeftModelForQuestionAnswering"],
     "feature-extraction": ["PeftModelForFeatureExtraction", "PeftModel"],
-    "question-answering": ["PeftModelForQuestionAnswering"],
     "summarization": ["PeftModelForSeq2SeqLM"],
     "table-question-answering": ["PeftModelForQuestionAnswering"],
-    "text2text-generation": ["PeftModelForSeq2SeqLM"],
     "text-classification": ["PeftModelForSequenceClassification"],
     "sentiment-analysis": ["PeftModelForSequenceClassification"],
     "text-generation": ["PeftModelForCausalLM"],
     "token-classification": ["PeftModelForTokenClassification"],
     "ner": ["PeftModelForTokenClassification"],
-    "translation": ["PeftModelForSeq2SeqLM"],
-    "translation_xx_to_yy": ["PeftModelForSeq2SeqLM"],
     "zero-shot-classification": ["PeftModelForSequenceClassification"],
 }
 

@@ -124,6 +124,7 @@ class Qwen2_5_VLVisionText2TextModelTester:
                 "spatial_patch_size": 14,
                 "spatial_merge_size": 1,
                 "temporal_patch_size": 2,
+                "tokens_per_second": 1,
             }
         self.vision_config = vision_config
         self.text_config = {
@@ -178,11 +179,16 @@ class Qwen2_5_VLVisionText2TextModelTester:
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         input_ids[:, self.num_image_tokens] = self.image_token_id
         input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
+
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[:, self.num_image_tokens] = 1
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "mm_token_type_ids": mm_token_type_ids,
         }
         return config, inputs_dict
 
@@ -230,6 +236,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
+            model.base_model.rope_deltas = None
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
             input_ids = curr_input_dict["input_ids"][:1]
             pixel_values = curr_input_dict["pixel_values"][:one_img_length]
@@ -244,6 +251,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                     image_grid_thw=image_grid_thw,
                 )
 
+            model.base_model.rope_deltas = None
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
@@ -353,6 +361,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                     input_ids=inputs_dict["input_ids"],
                     image_grid_thw=inputs_dict["image_grid_thw"],
                     attention_mask=inputs_dict["attention_mask"],
+                    mm_token_type_ids=inputs_dict["mm_token_type_ids"],
                 )  # [3, bs, padded-seq-len]
                 vision_padfree_positions = vision_position_ids[:, dummy_attention_mask.bool()].view(
                     3, -1

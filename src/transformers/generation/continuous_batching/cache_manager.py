@@ -378,13 +378,18 @@ class FullAttentionCacheAllocator(CacheAllocator):
         block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
+        # Compute auxiliary variable so we can perform only two loops
+        total_length = past_length + query_length
+        num_full_blocks = total_length // self.block_size
+        remainder = total_length % self.block_size
         # Compute the physical indices
         physical_indices = []
-        for i in range(past_length + query_length):
-            block_idx = i // self.block_size
-            block_offset = i % self.block_size
-            physical_index = block_table[block_idx] * self.block_size + block_offset
-            physical_indices.append(physical_index)
+        for b in range(num_full_blocks):
+            start = block_table[b] * self.block_size
+            physical_indices.extend(range(start, start + self.block_size))
+        if remainder:
+            start = block_table[num_full_blocks] * self.block_size
+            physical_indices.extend(range(start, start + remainder))
         return physical_indices
 
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
@@ -393,13 +398,19 @@ class FullAttentionCacheAllocator(CacheAllocator):
         block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
+        # Compute auxiliary variables so we can perform only one loop
+        start_block = past_length // self.block_size
+        start_offset = past_length % self.block_size
+        end_pos = past_length + query_length
+        end_block = (end_pos - 1) // self.block_size  # -1 because if end_pos == block_size, we still end on block 0
         # Compute the physical indices
         physical_indices = []
-        for i in range(past_length, past_length + query_length):
-            block_idx = i // self.block_size
-            block_offset = i % self.block_size
-            physical_index = block_table[block_idx] * self.block_size + block_offset
-            physical_indices.append(physical_index)
+        for b in range(start_block, end_block + 1):
+            block_start = block_table[b] * self.block_size
+            # First block may start mid-block, last block may end mid-block
+            local_start = start_offset if b == start_block else 0
+            local_end = (end_pos - 1) % self.block_size + 1 if b == end_block else self.block_size
+            physical_indices.extend(range(block_start + local_start, block_start + local_end))
         return physical_indices
 
 
