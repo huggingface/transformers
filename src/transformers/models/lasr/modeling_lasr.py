@@ -555,17 +555,14 @@ class LasrEncoder(LasrPreTrainedModel):
 
 
 @dataclass
-class LasrGenerateOutput(ModelOutput):
+class LasrCTCGenerateOutput(ModelOutput):
     """
-    Outputs of Lasr models.
+    Outputs of Lasr CTC model generation.
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        token_timestamps (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Token-level timestamps in seconds indicating when each token was emitted. Only returned by TDT models
-            when `return_timestamps=True` is passed to `generate()`.
         logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
             Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
@@ -579,7 +576,6 @@ class LasrGenerateOutput(ModelOutput):
     """
 
     sequences: torch.LongTensor
-    token_timestamps: torch.FloatTensor | None = None
     logits: tuple[torch.FloatTensor] | None = None
     attentions: tuple[tuple[torch.FloatTensor]] | None = None
     hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
@@ -681,7 +677,7 @@ class LasrForCTC(LasrPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         return_dict_in_generate: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> LasrGenerateOutput | torch.LongTensor:
+    ) -> LasrCTCGenerateOutput | torch.LongTensor:
         r"""
         Example:
 
@@ -719,7 +715,7 @@ class LasrForCTC(LasrPreTrainedModel):
             sequences[~attention_mask] = self.config.pad_token_id
 
         if return_dict_in_generate:
-            return LasrGenerateOutput(
+            return LasrCTCGenerateOutput(
                 sequences=sequences,
                 logits=outputs.logits,
                 attentions=outputs.attentions,
