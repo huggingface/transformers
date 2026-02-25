@@ -38,18 +38,20 @@ The example below demonstrates how to classify image with PP-Chart2Table using [
 <hfoption id="Pipeline">
 
 ```py
-from transformers import pipeline
+import requests
 from PIL import Image
+from transformers import pipeline
 model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
 pipe = pipeline("image-text-to-text", model=model_path)
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
 result = pipe(
-    images=image,
-    text="",
-    do_sample=False,
+    images=image, 
+    text="", 
+    do_sample=False, 
     max_new_tokens=256
 )
 print(result)
+
 ```
 
 </hfoption>
@@ -85,6 +87,7 @@ Here is how you can do it with PP-Chart2Table using [`Pipeline`] or the [`AutoMo
 <hfoption id="Pipeline">
 
 ```py
+import requests
 from transformers import pipeline
 from PIL import Image
 model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
