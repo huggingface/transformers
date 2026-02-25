@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
@@ -79,6 +80,13 @@ class ProducerConfig:
             optimisation steps.  Maps to the GRPO *μ* parameter.
         async_prefetch: If ``True``, the next dataset is produced in a
             background thread while the current one is being trained on.
+        prefetch_depth: How many rollouts to produce ahead of training when
+            ``async_prefetch`` is enabled.  With depth *N*, the producer
+            keeps *N* rollouts queued.  Higher values keep the GPU more
+            saturated but increase off-policy staleness — each additional
+            rollout in the queue was generated with a model that is
+            ``~steps_per_generation × num_iterations`` more optimizer
+            steps behind.  Default is 1 (one rollout ahead).
         eval_during_produce: Switch the model to ``eval()`` mode during
             ``produce()``.  Recommended for generation quality.
         empty_cache_before_produce: Call ``torch.cuda.empty_cache()`` before
@@ -92,6 +100,7 @@ class ProducerConfig:
     steps_per_generation: int | None = None
     num_iterations: int = 1
     async_prefetch: bool = False
+    prefetch_depth: int = 1
     eval_during_produce: bool = True
     empty_cache_before_produce: bool = False
     empty_cache_after_produce: bool = False
@@ -105,6 +114,8 @@ class ProducerConfig:
             raise ValueError(f"num_iterations must be >= 1, got {self.num_iterations}")
         if self.steps_per_generation is not None and self.steps_per_generation < 1:
             raise ValueError(f"steps_per_generation must be >= 1 or None, got {self.steps_per_generation}")
+        if self.prefetch_depth < 1:
+            raise ValueError(f"prefetch_depth must be >= 1, got {self.prefetch_depth}")
 
 
 # ---------------------------------------------------------------------------
@@ -176,31 +187,61 @@ class AsyncDataProducer:
     """Wraps a synchronous :class:`DataProducer` for background-thread data
     generation.
 
-    While the Trainer trains on the current rollout, this wrapper produces the
-    next dataset in a background thread.  The first call to :meth:`produce` is
-    synchronous; subsequent calls return the prefetched result and start the
-    next prefetch.
+    While the Trainer trains on the current rollout, this wrapper produces
+    upcoming datasets in a background thread.  The ``prefetch_depth``
+    (from :class:`ProducerConfig`) controls how many rollouts are queued
+    ahead of training:
+
+    * ``prefetch_depth=1`` (default): one rollout is produced in the
+      background while the current one is trained on.  This is the
+      sweet spot for most setups — it hides generation latency without
+      introducing off-policy staleness.
+    * ``prefetch_depth=N``: *N* rollouts are queued.  Useful when
+      generation is much faster than training (e.g. vLLM server mode)
+      and you want to keep the GPU fully saturated, at the cost of
+      increased off-policy staleness.
+
+    The first call to :meth:`produce` is synchronous; it returns the
+    first dataset and seeds the prefetch queue.
     """
 
     def __init__(self, inner: DataProducer):
         self._inner = inner
+        self._depth = inner.config.prefetch_depth
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="async-producer")
-        self._pending: Future | None = None
+        self._queue: deque[Future] = deque()
+        self._initialized = False
 
     @property
     def config(self) -> ProducerConfig:
         return self._inner.config
 
     def produce(self, model: Any, global_step: int, **kwargs) -> Dataset:
-        """Return the prefetched dataset (blocking) and start prefetching the
-        next one.  On the very first call, produces synchronously."""
-        if self._pending is not None:
-            dataset = self._pending.result()
-        else:
-            dataset = self._inner.produce(model, global_step, **kwargs)
+        """Return the next dataset, blocking if the prefetch hasn't finished.
 
-        # Start prefetching the next dataset
-        self._pending = self._executor.submit(self._inner.produce, model, global_step + 1, **kwargs)
+        On the very first call, the current dataset is produced synchronously
+        and the prefetch queue is seeded with ``prefetch_depth`` futures.
+        Subsequent calls pop the oldest future from the queue and submit a
+        new one to maintain the queue at ``prefetch_depth``.
+        """
+        if not self._initialized:
+            # First call: produce synchronously, then seed the queue
+            dataset = self._inner.produce(model, global_step, **kwargs)
+            for i in range(1, self._depth + 1):
+                self._queue.append(
+                    self._executor.submit(self._inner.produce, model, global_step + i, **kwargs)
+                )
+            self._initialized = True
+            return dataset
+
+        # Subsequent calls: consume oldest prefetched result
+        dataset = self._queue.popleft().result()
+
+        # Submit a new future to keep the queue full
+        next_step = global_step + self._depth
+        self._queue.append(
+            self._executor.submit(self._inner.produce, model, next_step, **kwargs)
+        )
         return dataset
 
     def on_rollout_begin(self, global_step: int) -> None:
@@ -212,10 +253,10 @@ class AsyncDataProducer:
             self._inner.on_rollout_end(dataset, global_step)
 
     def shutdown(self) -> None:
-        """Shut down the background thread pool."""
-        if self._pending is not None:
-            self._pending.cancel()
-            self._pending = None
+        """Shut down the background thread pool and cancel pending futures."""
+        for future in self._queue:
+            future.cancel()
+        self._queue.clear()
         self._executor.shutdown(wait=False)
 
 
