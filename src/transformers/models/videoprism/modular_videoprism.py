@@ -14,10 +14,11 @@ from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
 from ..llava_onevision.video_processing_llava_onevision import LlavaOnevisionVideoProcessor
 from ..qwen3_next.modeling_qwen3_next import l2norm
-from ..siglip.configuration_siglip import SiglipConfig
+from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig
 from ..t5.tokenization_t5 import T5Tokenizer
 from ..vivit.configuration_vivit import VivitConfig
 from ..vivit.modeling_vivit import (
+    VivitSelfAttention,
     VivitAttention,
     VivitEmbeddings,
     VivitEncoder,
@@ -141,95 +142,18 @@ class VideoPrismVisionConfig(VivitConfig):
         del self.num_hidden_layers
 
 
-class VideoPrismTextConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`VideoPrismTextModel`]. It is used to instantiate a
-    VideoPrism text encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the VideoPrism
-    [google/videoprism-base-f16r288](https://huggingface.co/google/videoprism-base-f16r288) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_text_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the text Transformer encoder.
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the text model. Defines the number of different tokens that can be represented by the
-            `input_ids` passed when calling [`VideoPrismTextModel`].
-        apply_l2_norm (`bool`, *optional*, defaults to `True`):
-            Whether to apply L2 normalization to the output text embeddings.
-        hidden_act (`str` or `function`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the query, key, and value projections in the attention layers.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
-            Softcapping constant for attention logits.
-
-    Example:
-
-    ```python
-    >>> from transformers import VideoPrismTextConfig, VideoPrismTextModel
-
-    >>> # Initializing a VideoPrismTextConfig with default values
-    >>> configuration = VideoPrismTextConfig()
-
-    >>> # Initializing a VideoPrismTextModel (with random weights) from the configuration
-    >>> model = VideoPrismTextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "videoprism_text_model"
-    base_config_key = "text_config"
-
-    def __init__(
-        self,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_attention_heads=12,
-        num_text_layers=12,
-        vocab_size=32000,
-        apply_l2_norm=True,
-        hidden_act="relu",
-        attention_probs_dropout_prob=0.0,
-        qkv_bias=True,
-        hidden_dropout_prob=0.0,
-        layer_norm_eps=1e-06,
-        initializer_range=0.02,
-        attn_logit_softcapping=50.0,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_attention_heads = num_attention_heads
-        self.num_text_layers = num_text_layers
-        self.vocab_size = vocab_size
-        self.apply_l2_norm = apply_l2_norm
-        self.hidden_act = hidden_act
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.qkv_bias = qkv_bias
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
-        self.attn_logit_softcapping = attn_logit_softcapping
-
+class VideoPrismTextConfig(SiglipTextConfig):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            del self.pad_token_id
+            del self.bos_token_id
+            del self.eos_token_id
+            del self.projection_size
+            self.apply_l2_norm=True
+            self.hidden_act="relu"
+            self.qkv_bias=True
+            self.attn_logit_softcapping=50.0
+            
 
 class VideoPrismConfig(SiglipConfig):
     r"""
@@ -246,8 +170,6 @@ class VideoPrismConfig(SiglipConfig):
             Configuration for the text model.
         vision_config (`VideoPrismVisionConfig`, *optional*):
             Configuration for the vision model.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
 
     Example:
 
@@ -342,7 +264,6 @@ class VideoPrismVideoProcessor(LlavaOnevisionVideoProcessor):
 
     size = {"height": 288, "width": 288}
     do_normalize = False
-    do_sample_frames = True
 
 
 class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
@@ -385,20 +306,20 @@ class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
     Base class for model outputs that include spatial and temporal states.
 
     Args:
-        last_hidden_state (Optional[torch.FloatTensor]):
+        last_hidden_state (`torch.FloatTensor`):
             The last hidden state of the model, typically of shape
             (batch_size, num_patches * num_frames, hidden_size).
 
-        temporal_hidden_state (Optional[torch.FloatTensor]):
+        temporal_hidden_state (`torch.FloatTensor`, *optional*):
             The last hidden_state of the temporal encoder, typically of shape
             (batch_size * num_patches, num_frames, hidden_size).
 
-        spatial_hidden_state (Optional[torch.FloatTensor]):
+        spatial_hidden_state (`torch.FloatTensor`, *optional*):
             The last hidden_state of the spatial encoder, typically of shape
             (batch_size * num_frames, num_patches, hidden_size).
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor
     temporal_hidden_state: torch.FloatTensor | None = None
     spatial_hidden_state: torch.FloatTensor | None = None
 
@@ -407,13 +328,31 @@ class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
 class VideoPrismClipOutput(ModelOutput):
     """
     Base class for VideoPrismClip model outputs.
+    logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
+        The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
+        similarity scores.
+    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
+        The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-image
+        similarity scores.
+    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The image embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismVideoModel`].
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The text embeddings obtained by applying the projection layer to the pooled output of [`VideoPrismTextModel`].
+    vision_model_output (`VideoPrismVideoOutput`):
+        The output of the [`VideoPrismVideoModel`].
+    text_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`VideoPrismTextModel`].
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for image-text similarity.
     """
 
-    logits_per_video: torch.FloatTensor | None = None
-    logits_per_text: torch.FloatTensor | None = None
-    video_embeds: torch.FloatTensor | None = None
-    text_embeds: torch.FloatTensor | None = None
-
+    logits_per_video: torch.FloatTensor
+    logits_per_text: torch.FloatTensor
+    video_embeds: torch.FloatTensor
+    text_embeds: torch.FloatTensor
+    vision_model_output: BaseModelOutputWithSpatialAndTemporalStates
+    text_model_output: BaseModelOutput
+    loss: torch.FloatTensor | None = None
 
 @dataclass
 class VideoPrismVideoOutput(ModelOutput):
@@ -421,14 +360,13 @@ class VideoPrismVideoOutput(ModelOutput):
     Base class for VideoPrismVideo model outputs.
     """
 
-    video_last_hidden_state: torch.FloatTensor | None = None
+    video_last_hidden_state: torch.FloatTensor
     auxiliary_output: torch.FloatTensor | None = None
     attention_pooling_output: torch.FloatTensor | None = None
 
 
 class VideoPrismTubeletEmbeddings(VivitTubeletEmbeddings):
     def __init__(self, config: VideoPrismVisionConfig):
-        self.config = config
         super().__init__(config)
         del self.num_patches
         self.image_size = (
@@ -447,7 +385,6 @@ class VideoPrismTubeletEmbeddings(VivitTubeletEmbeddings):
             )
         # permute to (batch_size, num_channels, num_frames, height, width)
         pixel_values_videos = pixel_values_videos.permute(0, 2, 1, 3, 4)
-
         hidden_states = self.projection(pixel_values_videos)
         # flatten the spatial part and permute to (B, T, num_patches, dim)
         hidden_states = hidden_states.flatten(3).permute(0, 2, 3, 1)
@@ -510,13 +447,14 @@ class VideoPrismSpatialEmbeddings(VivitEmbeddings):
     def forward(
         self, pixel_values_videos: torch.Tensor, interpolate_pos_encoding: bool | None = False
     ) -> torch.Tensor:
-        b, t, c, h, w = pixel_values_videos.shape
-        assert h == w, "Input image height and width must be the same"
+        batch, frames, channel, height, width = pixel_values_videos.shape
+        if height != width:
+            raise ValueError(f"Height:{height} and Width:{width} of the input video frames must be the same.")
         embeddings = self.patch_embeddings(pixel_values_videos, interpolate_pos_encoding)
 
         # add positional encoding to each token
         if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, h, w)
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
         else:
             embeddings = embeddings + self.position_embeddings
 
@@ -568,11 +506,11 @@ class VideoPrismTemporalEmbeddings(VivitEmbeddings):
         interpolate_pos_encoding: bool | None = False,
     ) -> torch.Tensor:
         if input_shape is not None:
-            b, t, c, h, w = input_shape
+            batch, frames, channel, height, width = input_shape
         _, features, dim = pixel_values_videos.shape
-        hidden_states = pixel_values_videos.view(b, t, features, dim)
+        hidden_states = pixel_values_videos.view(batch, frames, features, dim)
         hidden_states = hidden_states.permute(0, 2, 1, 3)
-        embeddings = hidden_states.reshape(b * features, t, dim)
+        embeddings = hidden_states.reshape(batch * features, frames, dim)
 
         # add positional encoding to each token
         if interpolate_pos_encoding:
@@ -612,24 +550,10 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class VideoPrismSelfAttention(nn.Module):
+class VideoPrismSelfAttention(VivitSelfAttention):
     def __init__(self, config: VideoPrismVisionConfig | VideoPrismTextConfig):
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
-
-        self.config = config
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.dropout_prob = config.attention_probs_dropout_prob
-        self.scale = self.attention_head_size**-0.5
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        super().__init__(config)
+        del self.is_causal
 
     def forward(
         self,
@@ -653,7 +577,7 @@ class VideoPrismSelfAttention(nn.Module):
             key,
             value,
             attention_mask,
-            scaling=self.scale,
+            scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
             softcap=self.config.attn_logit_softcapping,
             **kwargs,
@@ -681,7 +605,6 @@ class VideoPrismLayerNorm(nn.LayerNorm):
 
 class VideoPrismLayer(VivitLayer):
     def __init__(self, config: VideoPrismVisionConfig | VideoPrismTextConfig):
-        self.config = config
         super().__init__(config)
         del self.chunk_size_feed_forward
         del self.seq_len_dim
@@ -790,6 +713,7 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+        #todo nn.Embedding + nn.Parameter + buffer (softplus + pos_embeds), also decide if super() could help here
 
 
 @auto_docstring(
@@ -959,26 +883,20 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         self.cls_emb = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.normalize = config.apply_l2_norm
+        self.register_buffer("position_embeddings", self.create_sinusoidal_positions(config.max_position_embeddings, config.hidden_size), persistent=False)
         self.post_init()
 
     def create_sinusoidal_positions(self, num_pos: int, dim: int) -> torch.Tensor:
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / (dim - 2)))
         sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
         return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
-
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        r"""
-        Args:
-            input_ids (`torch.Tensor`):
-                Input token IDs.
-            attention_mask (`torch.Tensor`, *optional*):
-                Attention mask to avoid performing attention on padding token indices.
-        """
         batch_size, seq_length = input_ids.shape
         hidden_states = self.token_embeddings(input_ids)
         hidden_states = hidden_states * (self.config.hidden_size**0.5)
@@ -995,8 +913,8 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
                 cache_position=torch.arange(hidden_states.shape[1] + 1, device=hidden_states.device),
                 past_key_values=None,
             )
-
-        features = hidden_states + self.create_sinusoidal_positions(seq_length, self.config.hidden_size)
+        #todo error should be raised if the number of pos embeds is not same as that of the hidden_states
+        features = hidden_states + self.position_embeddings
         cls_emb = self.cls_emb * (self.config.hidden_size**0.5)
         cls_emb = cls_emb.expand(features.shape[0], -1, -1)
         features = torch.cat((features, cls_emb), dim=1)
@@ -1032,20 +950,14 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
 
     def get_input_embeddings(self):
         return self.backbone.spatial_embeddings.patch_embeddings
-
+    @auto_docstring
     def forward(
         self,
         pixel_values_videos: torch.FloatTensor,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> VideoPrismVideoOutput:
-        r"""
-        Args:
-            pixel_values_videos (`torch.FloatTensor`):
-                Pixel values of the video frames.
-            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-                Whether to interpolate positional encodings to match input size.
-        """
+
         backbone_outputs = self.backbone(
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
@@ -1072,13 +984,10 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
 class VideoPrismClipModel(VideoPrismPreTrainedModel):
     def __init__(self, config: VideoPrismConfig):
         super().__init__(config)
-        self.config = config
-        self.vision_config = config.vision_config
-        self.text_config = config.text_config
-        self.video_model = VideoPrismVideoModel(self.vision_config)
-        self.text_model = VideoPrismTextModel(self.text_config)
+        self.video_model = VideoPrismVideoModel(config.vision_config)
+        self.text_model = VideoPrismTextModel(config.text_config)
         self.post_init()
-
+    @auto_docstring
     def forward(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -1088,37 +997,7 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         temperature: float | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> VideoPrismClipOutput:
-        r"""
-        Args:
-            pixel_values_videos (`torch.FloatTensor`):
-                Pixel values of the video frames.
-            input_ids (`torch.Tensor`):
-                Input token IDs for text.
-            attention_mask (`torch.Tensor`, *optional*):
-                Attention mask for text inputs.
-            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-                Whether to interpolate positional encodings.
-            temperature (`float`, *optional*):
-                Temperature parameter for scaling similarity scores.
 
-        Example:
-
-        ```python
-        >>> from transformers import VideoPrismProcessor, VideoPrismClipModel
-        >>> import torch
-
-        >>> processor = VideoPrismProcessor.from_pretrained("google/videoprism-base-f16r288")
-        >>> model = VideoPrismClipModel.from_pretrained("google/videoprism-base-f16r288")
-
-        >>> video = "sample_video.mp4"
-        >>> texts = ["a dog", "a cat"]
-        >>> inputs = processor(videos=video, texts=texts, return_tensors="pt", padding=True)
-
-        >>> with torch.no_grad():
-        ...     outputs = model(**inputs)
-        ...     logits_per_video = outputs.logits_per_video
-        ```
-        """
         video_model_outputs = self.video_model(
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
@@ -1126,8 +1005,11 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
 
         video_embeddings = video_model_outputs.video_last_hidden_state
         text_embeddings = text_model_outputs.last_hidden_state
-        emb_dim = video_embeddings[0].shape[-1]
+        video_emb_dim = video_embeddings[0].shape[-1]
+        text_emb_dim = text_embeddings[0].shape[-1]
         assert emb_dim == text_embeddings[0].shape[-1]
+        if video_emb_dim != text_emb_dim:
+            raise ValueError(f"Dimension of video ({video_emb_dim}) and text ({text_emb_dim}) embeddings must match for similarity computation.")
 
         video_embeds = video_embeddings.reshape(-1, emb_dim)
         text_embeds = text_embeddings.reshape(-1, emb_dim)
@@ -1140,6 +1022,8 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         logits_per_text = logits_per_video.T
         logits_per_video = logits_per_video / torch.sum(logits_per_video, dim=0, keepdims=True)
         logits_per_text = logits_per_text / torch.sum(logits_per_text, dim=0, keepdims=True)
+
+        #todo compute loss + pass the whole hidden states of both video and text 
 
         return VideoPrismClipOutput(
             logits_per_video=logits_per_video,
@@ -1168,6 +1052,7 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
     def get_input_embeddings(self):
         return self.encoder.spatial_embeddings.patch_embeddings
 
+    @auto_docstring
     def forward(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -1175,32 +1060,7 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
-        r"""
-        Args:
-            pixel_values_videos (`torch.FloatTensor`):
-                Pixel values of the video frames.
-            labels (`torch.LongTensor`, *optional*):
-                Video classification labels.
-            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-                Whether to interpolate positional encodings.
 
-        Example:
-
-        ```python
-        >>> from transformers import VideoPrismVideoProcessor, VideoPrismForVideoClassification
-        >>> import torch
-
-        >>> processor = VideoPrismVideoProcessor("google/videoprism-base-f16r288")
-        >>> model = VideoPrismForVideoClassification.from_pretrained("google/videoprism-base-f16r288", num_labels=1000)
-
-        >>> video = "sample_video.mp4"
-        >>> inputs = processor(videos=video, return_tensors="pt")
-
-        >>> with torch.no_grad():
-        ...     outputs = model(**inputs)
-        ...     logits = outputs.logits
-        ```
-        """
         encoder_outputs = self.encoder(
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )

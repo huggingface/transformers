@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2024-02-20 and added to Hugging Face Transformers on 2026-02-10.*
+*This model was released on 2024-02-20 and added to Hugging Face Transformers on 2026-02-26.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -48,8 +48,7 @@ The snippet below shows how to load the VideoPrismVisionModel for feature extrac
 
 ```py
 import torch
-from torchcodec.decoders import VideoDecoder
-import numpy as np
+from transformers import AutoModel, AutoVideoProcessor
 
 processor = AutoVideoProcessor.from_pretrained("MHRDYN7/videoprism-base-f16r288")
 model = AutoModel.from_pretrained(
@@ -61,20 +60,18 @@ model = AutoModel.from_pretrained(
 
 video_url = "https://huggingface.co/datasets/nateraw/kinetics-mini/resolve/main/val/archery/-Qz25rXdMjE_000014_000024.mp4"
 
-vr = VideoDecoder(video_url)
-frame_idx = np.arange(0, 64) # choosing some frames. here, you can define more complex sampling strategy
-video = vr.get_frames_at(indices=frame_idx).data  # T x C x H x W
-
-# automatically samples 16 frames by default for the base model
-video = processor(video, return_tensors="pt").to(model.device)
-outputs = model(**video)
+# when do_sample_frames=True, 16/8 frames will be sampled by default depending on the checkpoint size base/large.
+processed_video_inputs = processor(videos=[video_url], return_metadata=True, do_sample_frames=True)
+video_metadata = processed_video_inputs["video_metadata"]
+video_inputs = processed_video_inputs["pixel_values_videos"]
+outputs = model(video_inputs)
 
 # VideoPrism encoder outputs
 encoder_outputs = outputs.last_hidden_state
 
 ```
 
-You may also use the original video processing function provided in the VideoPrism repository examples. However, this will be slower than using torchcodec with VideoPrismVideoProcessor for large batches of videos.
+You may also use the original video processing function provided in the VideoPrism repository examples. However, this will be slower than using the torchcodec based VideoPrismVideoProcessor for large batches of videos.
 
 ```python
 import numpy as np

@@ -34,7 +34,7 @@ from transformers.utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -166,7 +166,7 @@ class VideoPrismVisionModelTester:
 
 
 @require_vision
-class VideoPrismVisionModelTest(unittest.TestCase):
+class VideoPrismVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as VideoPrismVisionModel does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -193,23 +193,7 @@ class VideoPrismVisionModelTest(unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_get_set_embeddings(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-            self.assertEqual(arg_names[0], "pixel_values_videos")
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -316,7 +300,7 @@ class VideoPrismTextModelTester:
 
 
 @require_vision
-class VideoPrismTextModelTest(unittest.TestCase):
+class VideoPrismTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (VideoPrismTextModel,) if is_torch_available() else ()
 
     def setUp(self):
@@ -417,7 +401,7 @@ class VideoPrismClipModelTester:
 
 
 @require_vision
-class VideoPrismClipModelTest(unittest.TestCase):
+class VideoPrismClipModelTest(ModelTesterMixin, unittest.TestCase):
     # additional_model_inputs = ["pixel_values"]
     all_model_classes = (VideoPrismClipModel,) if is_torch_available() else ()
 
@@ -481,7 +465,7 @@ class VideoPrismClipModelTest(unittest.TestCase):
 
 
 @require_vision
-class VideoPrismForVideoClassificationModelTester(VideoPrismVisionModelTester):
+class VideoPrismForVideoClassificationModelTester(ModelTesterMixin, VideoPrismVisionModelTester):
     def __init__(self, parent, vision_kwargs=None, is_training=True):
         if vision_kwargs is None:
             vision_kwargs = {}
@@ -524,7 +508,7 @@ class VideoPrismForVideoClassificationModelTester(VideoPrismVisionModelTester):
 
 
 @require_vision
-class VideoPrismForVideoClassificationTest(unittest.TestCase):
+class VideoPrismForVideoClassificationTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as VideoPrismVisionModel does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -548,7 +532,7 @@ class VideoPrismForVideoClassificationTest(unittest.TestCase):
 
 def prepare_video(video_type="water_bottle_drumming"):
     """
-    Returns input video array proprocessed using the original repo's processor if frames=True, else returns the original video file.
+    Returns the input video array preprocessed using the original repo's processor if frames=True, else returns the original video file.
     """
 
     api = HfApi()
@@ -582,15 +566,14 @@ def prepare_texts():
 class VideoPrismModelIntegrationTest(unittest.TestCase):
     @slow
     def test_videoprism_vision_model(self):
-        model = VideoPrismVisionModel.from_pretrained("MHRDYN7/videoprism-base-f16r288").to(torch_device)
-        model.config._attn_implementation = "eager"
+        model = VideoPrismVisionModel.from_pretrained("MHRDYN7/videoprism-base-f16r288", attn_implementation="eager").to(torch_device)
         frames = torch.tensor(prepare_video("water_bottle_drumming_frames")).unsqueeze(0).permute(0, 1, 4, 2, 3)
         input_vids = torch.cat([frames, frames], dim=0)  # batch size 2
         model.eval()
         with torch.inference_mode():
             outputs = model(input_vids).last_hidden_state
 
-        assert torch.equal(outputs[0], outputs[1]), (
+        self.assertListEqual(outputs[0], outputs[1]), (
             "Outputs of the batches are not identical for identical input batches"
         )
         expectations = torch.tensor(
@@ -601,9 +584,7 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
             ]
         )
         expected_slice = outputs[0, :3, :3]
-        print(expected_slice)
         torch.testing.assert_close(expected_slice, expectations, rtol=1e-5, atol=1e-5)
-        return
 
     @slow
     def test_videoprism_clip_model(self):
