@@ -1075,6 +1075,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # we reconstruct that into a single dict while loading them.
             self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
+        self.response_schema = kwargs.pop("response_schema", None)
+
         model_specific_tokens = {**auto_model_specific_tokens, **explicit_model_specific_tokens}
         if model_specific_tokens:
             self._set_model_specific_special_tokens(special_tokens=model_specific_tokens)
@@ -2028,6 +2030,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         tokenizer_config, saved_raw_chat_template_files = self.save_chat_templates(
             save_directory, tokenizer_config, filename_prefix, save_jinja_files
         )
+
+        if getattr(self, "response_schema", None) is not None:
+            tokenizer_config["response_schema"] = self.response_schema
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
