@@ -76,7 +76,7 @@ class SamHQVisionConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`SamHQVisionModel`]. It is used to instantiate a SAM_HQ
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     defaults will yield a similar configuration to that of the SAM_HQ ViT-h
-    [facebook/sam_hq-vit-huge](https://huggingface.co/facebook/sam_hq-vit-huge) architecture.
+    [syscv-community/sam-hq-vit-base](syscv-community/sam-hq-vit-base) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -261,7 +261,7 @@ class SamHQConfig(PreTrainedConfig):
     [`SamHQConfig`] is the configuration class to store the configuration of a [`SamHQModel`]. It is used to instantiate a
     SAM-HQ model according to the specified arguments, defining the vision model, prompt-encoder model and mask decoder
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    SAM-HQ-ViT-H [sushmanth/sam_hq_vit_h](https://huggingface.co/sushmanth/sam_hq_vit_h) architecture.
+    SAM-HQ-ViT-H [syscv-community/sam-hq-vit-base](https://huggingface.co/syscv-community/sam-hq-vit-base) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
