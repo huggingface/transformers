@@ -18,11 +18,7 @@ from typing import Any
 
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils import is_timm_available, logging
-
-
-if is_timm_available():
-    pass
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

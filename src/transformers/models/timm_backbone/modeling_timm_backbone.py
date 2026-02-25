@@ -21,6 +21,12 @@ logger = logging.get_logger(__name__)
 
 
 class TimmBackbone(TimmWrapperBackboneModel):
+    """
+    Wrapper class for timm models to be used as backbones. This enables using the timm models interchangeably with the
+    other models in the library keeping the same API.
+    Note that the model is deprecated, use `TimmWrapperBackboneModel` instead!
+    """
+
     def __init__(self, *args, **kwargs):
         logger.warning(
             "`TimmBackbone` is deprecate and will be removed in future versions. Use a "

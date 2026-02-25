@@ -30,6 +30,8 @@ class TimmBackboneConfig(TimmWrapperConfig):
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
+    Note that the config class is deprecated, use `TimmWrapperConfig` instead!
+
     Args:
         backbone (`str`, *optional*):
             The timm checkpoint to load.
