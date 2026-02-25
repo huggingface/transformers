@@ -415,7 +415,8 @@ class MixtralForCausalLM(MistralForCausalLM):
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         aux_loss = None
-        if output_router_logits:
+        # Compute auxiliary load balancing loss when router_aux_loss_coef != 0, regardless of output_router_logits
+        if self.router_aux_loss_coef != 0 and outputs.router_logits is not None:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,
