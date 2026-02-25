@@ -18,11 +18,11 @@ from typing import Any
 
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils import is_timm_available, logging, requires_backends
+from ...utils import is_timm_available, logging
 
 
 if is_timm_available():
-    from timm.data import ImageNetInfo, infer_imagenet_subset
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -98,17 +98,6 @@ class TimmWrapperConfig(PreTrainedConfig, BackboneConfigMixin):
 
         label_names = config_dict.get("label_names")
         is_custom_model = "num_labels" in kwargs or "id2label" in kwargs
-
-        # if no labels added to config, use imagenet labeller in timm
-        if label_names is None and not is_custom_model:
-            requires_backends(cls, ["timm"])
-            imagenet_subset = infer_imagenet_subset(config_dict)
-            if imagenet_subset:
-                dataset_info = ImageNetInfo(imagenet_subset)
-                synsets = dataset_info.label_names()
-                label_descriptions = dataset_info.label_descriptions(as_dict=True)
-                label_names = [label_descriptions[synset] for synset in synsets]
-
         if label_names is not None and not is_custom_model:
             kwargs["id2label"] = dict(enumerate(label_names))
 
@@ -120,17 +109,13 @@ class TimmWrapperConfig(PreTrainedConfig, BackboneConfigMixin):
 
         # timm config stores the `num_classes` attribute in both the root of config and in the "pretrained_cfg" dict.
         # We are removing these attributes in order to have the native `transformers` num_labels attribute in config
-        # and to avoid duplicate attributes
-        num_labels_in_kwargs = kwargs.pop("num_labels", None)
-        num_labels_in_dict = config_dict.pop("num_classes", None)
+        # and to avoid duplicate attributes. Noe that `num_labels` has priority over `num_classes` in config_dict
+        if config_dict.get("num_classes") is not None and kwargs.get("num_labels") is None:
+            kwargs["num_labels"] = config_dict.pop("num_classes", None)
 
-        # passed num_labels has priority over num_classes in config_dict
-        kwargs["num_labels"] = num_labels_in_kwargs or num_labels_in_dict
-
-        # pop num_classes from "pretrained_cfg",
-        # it is not necessary to have it, only root one is used in timm
-        if "pretrained_cfg" in config_dict and "num_classes" in config_dict["pretrained_cfg"]:
-            config_dict["pretrained_cfg"].pop("num_classes", None)
+            # Pop in nested `pretrained_cfg` as well
+            if "pretrained_cfg" in config_dict and "num_classes" in config_dict["pretrained_cfg"]:
+                config_dict["pretrained_cfg"].pop("num_classes", None)
 
         return super().from_dict(config_dict, **kwargs)
 
