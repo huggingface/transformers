@@ -61,11 +61,22 @@ class Qwen3ASRProcessor(ProcessorMixin):
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(
-        self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
+        self,
+        # image_processor=None,
+        # video_processor=None,
+        feature_extractor=None,
+        tokenizer=None,
+        chat_template=None,
     ):
-        super().__init__(image_processor, video_processor, feature_extractor, tokenizer, chat_template=chat_template)
+        # super().__init__(feature_extractor,tokenizer,chat_template)
+
+        # del self.image_token
+        # del self.video_token
+        # del self.vision_bos_token
+        # del self.self.vision_eos_token
+
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
         self.audio_token = self.tokenizer.audio_token
-        self.vision_eos_token = self.tokenizer.vision_eos_token
         self.audio_bos_token = self.tokenizer.audio_bos_token
         self.audio_eos_token = self.tokenizer.audio_eos_token
 

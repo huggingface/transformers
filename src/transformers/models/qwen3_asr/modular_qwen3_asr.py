@@ -49,7 +49,8 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoePreTrainedModelForConditionalGeneration, Qwen3OmniMoeAudioAttention,
     SinusoidsPositionEmbedding, Qwen3OmniMoeAudioEncoderLayer, Qwen3OmniMoeAudioEncoder,
     Qwen3OmniMoeThinkerTextRotaryEmbedding, Qwen3OmniMoeThinkerTextMLP, 
-    Qwen3OmniMoeThinkerTextRMSNorm, Qwen3OmniMoeThinkerTextModel
+    Qwen3OmniMoeThinkerTextRMSNorm, Qwen3OmniMoeThinkerTextModel, 
+    Qwen3OmniMoeThinkerForConditionalGeneration
 )
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
@@ -398,18 +399,26 @@ class Qwen3ASRProcessor(Qwen3OmniMoeProcessor):
 
     def __init__(
         self,
-        image_processor=None,
-        video_processor=None,
+        #image_processor=None,
+        #video_processor=None,
         feature_extractor=None, 
         tokenizer=None, 
         chat_template=None
     ):  
-        super().__init__(feature_extractor,tokenizer,chat_template)
+        #super().__init__(feature_extractor,tokenizer,chat_template)
         
-        del self.image_token
-        del self.video_token
-        del self.vision_bos_token
-        del self.self.vision_eos_token
+        #del self.image_token
+        #del self.video_token
+        #del self.vision_bos_token
+        #del self.self.vision_eos_token
+        
+        ProcessorMixin.__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        self.audio_token = self.tokenizer.audio_token
+        self.audio_bos_token = self.tokenizer.audio_bos_token
+        self.audio_eos_token = self.tokenizer.audio_eos_token
+
+
+
 
     def __call__(
         self,
@@ -848,16 +857,7 @@ class Qwen3ASRThinkerTextModel(Qwen3OmniMoeThinkerTextModel):
     The Qwen3ASRThinker model which consists of a audio backbone and a language model.
     """
 )
-class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditionalGeneration, GenerationMixin):
-    config: Qwen3ASRThinkerConfig
-    base_model_prefix = "thinker"
-    _tied_weights_keys = {
-        "lm_head.weight": "model.embed_tokens.weight"
-    }    
-    _no_split_modules = [
-        "Qwen3ASRAudioEncoderLayer",
-        "Qwen3ASRThinkerTextDecoderLayer",
-    ]
+class Qwen3ASRThinkerForConditionalGeneration(Qwen3OmniMoeThinkerForConditionalGeneration):
     _can_record_outputs = {
         "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
         "attentions": Qwen3ASRTextAttention,
@@ -865,13 +865,8 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
 
     def __init__(self, config):
         super().__init__(config)
-        self.audio_tower = Qwen3ASRAudioEncoder._from_config(config.audio_config)
-        self.vocab_size = config.text_config.vocab_size
-        self.model = Qwen3ASRThinkerTextModel._from_config(config.text_config)
         if "forced_aligner" in config.model_type:
             self.lm_head = nn.Linear(config.text_config.hidden_size, config.classify_num, bias=False)
-        else:
-            self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         ###
         if getattr(config.text_config, "tie_word_embeddings", False):
             self.lm_head.weight = self.model.get_input_embeddings().weight
@@ -881,14 +876,12 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
             if self.config.text_config.pad_token_id is not None
             else -1
         )        
-        self.rope_deltas = None
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
+        del self.visual
+        del self.spatial_merge_size 
+        del self.num_experts
+        del self.num_experts_per_tok 
+        del self.router_aux_loss_coef
 
     def get_audio_features(
         self,
@@ -925,6 +918,22 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         audio_features = torch.cat(audio_features, dim=0)
 
         return audio_features
+
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        raise ValueError("Not needed.")
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        raise ValueError("Not needed.")
 
     def get_placeholder_mask(
         self,
@@ -1001,7 +1010,8 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         else:
             audio_feature_lengths = None
 
-        ### Old implementation
+        ### Changed the following in order to pass test_generate_from_inputs_embeds_with_static_cache
+        ### old
         #if attention_mask is not None and position_ids is None:
         #    if (
         #        cache_position is None
@@ -1021,7 +1031,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         #        position_ids = position_ids.view(1, -1).expand(batch_size, -1)
         #        position_ids = position_ids.add(delta)
         #        position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-
+        ### new
         # Determine batch and sequence length early
         batch_size, seq_length = inputs_embeds.shape[:2]
 
@@ -1113,7 +1123,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         feature_attention_mask=None,
         **kwargs,
     ):
-        model_inputs = super().prepare_inputs_for_generation(
+        model_inputs = GenerationMixin.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,

@@ -1128,6 +1128,17 @@ class Qwen3ASRThinkerTextModel(Qwen3ASRPreTrainedModel):
         raise ValueError("Not needed.")
 
 
+@dataclass
+@auto_docstring
+class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
+    r"""
+    deepstack_features (`List[torch.FloatTensor]`, *optional*):
+        List of hidden-states (feature maps) from deepstack layers.
+    """
+
+    deepstack_features: list[torch.FloatTensor] | None = None
+
+
 @auto_docstring(
     custom_intro="""
     The Qwen3ASRThinker model which consists of a audio backbone and a language model.
@@ -1151,10 +1162,10 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         self.audio_tower = Qwen3ASRAudioEncoder._from_config(config.audio_config)
         self.vocab_size = config.text_config.vocab_size
         self.model = Qwen3ASRThinkerTextModel._from_config(config.text_config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.rope_deltas = None
         if "forced_aligner" in config.model_type:
             self.lm_head = nn.Linear(config.text_config.hidden_size, config.classify_num, bias=False)
-        else:
-            self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         ###
         if getattr(config.text_config, "tie_word_embeddings", False):
             self.lm_head.weight = self.model.get_input_embeddings().weight
@@ -1162,7 +1173,6 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         self.pad_token_id = (
             self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
         )
-        self.rope_deltas = None
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1171,12 +1181,46 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @can_return_tuple
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        raise ValueError("Not needed.")
+
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
+        raise ValueError("Not needed.")
+
+    @can_return_tuple
+    @auto_docstring
     def get_audio_features(
         self,
         input_features: torch.FloatTensor,
         feature_attention_mask: torch.LongTensor | None = None,
         audio_feature_lengths: torch.LongTensor | None = None,
-    ):
+    ) -> tuple | BaseModelOutputWithPooling:
         """
         Encodes audios into continuous embeddings that can be forwarded to the language model.
 
@@ -1282,7 +1326,8 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         else:
             audio_feature_lengths = None
 
-        ### Old implementation
+        ### Changed the following in order to pass test_generate_from_inputs_embeds_with_static_cache
+        ### old
         # if attention_mask is not None and position_ids is None:
         #    if (
         #        cache_position is None
@@ -1302,7 +1347,7 @@ class Qwen3ASRThinkerForConditionalGeneration(Qwen3ASRPreTrainedModelForConditio
         #        position_ids = position_ids.view(1, -1).expand(batch_size, -1)
         #        position_ids = position_ids.add(delta)
         #        position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-
+        ### new
         # Determine batch and sequence length early
         batch_size, seq_length = inputs_embeds.shape[:2]
 
