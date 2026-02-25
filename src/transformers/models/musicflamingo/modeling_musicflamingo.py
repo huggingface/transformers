@@ -45,7 +45,7 @@ logger = logging.get_logger(__name__)
 
 
 class MusicFlamingoRotaryEmbedding(nn.Module):
-    freqs: torch.Tensor
+    inv_freq: torch.Tensor
 
     def __init__(self, config: MusicFlamingoConfig, device=None):
         super().__init__()
@@ -54,10 +54,10 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         self.dim = getattr(config, "rotary_dim", 256)
         self.max_time = getattr(config, "rotary_max_time", 1200.0)
 
-        freqs = self.compute_default_rote_parameters(config, device=device)
-        self.freqs = nn.Parameter(freqs, requires_grad=False)
+        inv_freq = self.compute_default_rote_parameters(config, device=device)
+        self.inv_freq = nn.Parameter(inv_freq, requires_grad=False)
 
-        cached_freqs = self._build_cached_freqs(freqs)
+        cached_freqs = self._build_cached_freqs(inv_freq, device=device)
         self.register_buffer("cached_freqs", cached_freqs, persistent=False)
 
     @staticmethod
@@ -65,50 +65,51 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         dim = getattr(config, "rotary_dim", 256)
         max_time = getattr(config, "rotary_max_time", 1200.0)
         theta = max_time / (2 * pi) if max_time is not None else 50000
-        freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
         if device is not None:
-            freqs = freqs.to(device=device)
-        return freqs
+            inv_freq = inv_freq.to(device=device)
+        return inv_freq
 
-    def _build_cached_freqs(self, freqs, device=None, dtype=None):
+    def _build_cached_freqs(self, inv_freq, device=None, dtype=None):
         if self.max_time is None:
             return None
 
-        positions = torch.arange(int(self.max_time), device=device, dtype=dtype if dtype is not None else freqs.dtype)
+        positions = torch.arange(
+            int(self.max_time), device=device, dtype=dtype if dtype is not None else inv_freq.dtype
+        )
         positions = positions / self.max_time * (2 * pi)
-        cached_freqs = positions.unsqueeze(-1) * freqs
+        cached_freqs = positions.unsqueeze(-1) * inv_freq
         return torch.repeat_interleave(cached_freqs, 2, dim=-1)
 
-    def get_axial_freqs(self, *dims):
-        Colon = slice(None)
-        all_freqs = []
-
-        for ind, dim in enumerate(dims):
-            pos = torch.arange(dim, device=self.freqs.device)
-
-            freqs = self.forward(pos, seq_len=dim)
-
-            all_axis = [None] * len(dims)
-            all_axis[ind] = Colon
-
-            new_axis_slice = (Ellipsis, *all_axis, Colon)
-            all_freqs.append(freqs[new_axis_slice])
-
-        all_freqs = broadcast_tensors(*all_freqs)
-        return torch.cat(all_freqs, dim=-1)
-
     @autocast("cuda", enabled=False)
-    def forward(self, t: Tensor, seq_len=None, offset=0):
+    def forward(self, t: Tensor | tuple[int, ...], seq_len=None, offset=0):
+        if isinstance(t, tuple):
+            Colon = slice(None)
+            all_freqs = []
+
+            for ind, dim in enumerate(t):
+                pos = torch.arange(dim, device=self.inv_freq.device)
+                freqs = self.forward(pos, seq_len=dim)
+
+                all_axis = [None] * len(t)
+                all_axis[ind] = Colon
+
+                new_axis_slice = (Ellipsis, *all_axis, Colon)
+                all_freqs.append(freqs[new_axis_slice])
+
+            all_freqs = broadcast_tensors(*all_freqs)
+            return torch.cat(all_freqs, dim=-1)
+
         if seq_len is not None and self.cached_freqs is not None and (offset + seq_len) <= self.cached_freqs.shape[0]:
             return self.cached_freqs[offset : (offset + seq_len)].detach()
 
-        freqs = self.freqs
+        inv_freq = self.inv_freq
 
         # Scale time to keep t * freq <= 2pi
         if self.max_time is not None:
             t = t / self.max_time * (2 * pi)
 
-        freqs = t.type(freqs.dtype).unsqueeze(-1) * freqs
+        freqs = t.type(inv_freq.dtype).unsqueeze(-1) * inv_freq
         freqs = torch.repeat_interleave(freqs, 2, dim=-1)
 
         return freqs
@@ -132,13 +133,13 @@ class MusicFlamingoPreTrainedModel(PreTrainedModel):
         parent_init_weights(module)
 
         if isinstance(module, MusicFlamingoRotaryEmbedding):
-            # Reinitialize freqs parameter
-            freqs = module.compute_default_rote_parameters(module.config)
+            # Reinitialize inverse frequencies parameter
+            inv_freq = module.compute_default_rote_parameters(module.config)
 
-            module.freqs.data = freqs
+            module.inv_freq.data = inv_freq
 
             module.cached_freqs = module._build_cached_freqs(
-                module.freqs, device=module.freqs.device, dtype=module.freqs.dtype
+                module.inv_freq, device=module.inv_freq.device, dtype=module.inv_freq.dtype
             )
 
 
@@ -426,6 +427,10 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Ignore copy
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
     def _freeze_parameters(self):
         for param in self.parameters():
             param.requires_grad = False
@@ -491,7 +496,7 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
 
         if audio_times is not None:
             times = audio_times.to(hidden_states.device)
-            freqs = self.pos_emb.get_axial_freqs(times.shape[0], hidden_states.shape[-2]).to(self.conv1.weight.device)
+            freqs = self.pos_emb((times.shape[0], hidden_states.shape[-2])).to(self.conv1.weight.device)
             angle = (-times * 2 * pi).to(self.conv1.weight.device)
             angle_expanded = angle.unsqueeze(2).expand(times.shape[0], hidden_states.shape[-2], freqs.shape[-1])
             freqs = freqs * angle_expanded

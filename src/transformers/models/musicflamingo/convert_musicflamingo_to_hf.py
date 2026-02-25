@@ -197,7 +197,7 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
         "multi_modal_projector.layers.0.bias": "multi_modal_projector.linear_1.bias",
         "multi_modal_projector.layers.2.weight": "multi_modal_projector.linear_2.weight",
         "multi_modal_projector.layers.2.bias": "multi_modal_projector.linear_2.bias",
-        "audio_tower.sound_tower.pos_emb.freqs": "audio_tower.pos_emb.freqs",
+        "audio_tower.sound_tower.pos_emb.freqs": "audio_tower.pos_emb.inv_freq",
     }
     for old_key, new_key in projector_key_mapping.items():
         if old_key in state:
