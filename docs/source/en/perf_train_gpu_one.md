@@ -293,3 +293,56 @@ from transformers import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", attn_implementation="sdpa")
 ```
+
+## Liger
+
+[Liger Kernel](https://github.com/linkedin/Liger-Kernel) is a collection of layers such as RMSNorm, RoPE, SwiGLU, CrossEntropy, FusedLinearCrossEntropy, and more that have been fused into a single Triton kernel for training LLMs. These kernels are also compatible with FlashAttention, FSDP, and DeepSpeed. As a result, Liger Kernel can increase multi-GPU training throughput and reduce memory usage. This is useful for multi-head training and supporting larger vocabulary sizes, larger batch sizes, and longer context lengths.
+
+```bash
+pip install liger-kernel
+```
+
+Enable Liger Kernel for training by setting `use_liger_kernel=True` in [`TrainingArguments`]. This patches the corresponding layers in the model with Ligers kernels.
+
+> [!TIP]
+> Liger Kernel supports Llama, Gemma, Mistral, and Mixtral models. Refer to the [patching](https://github.com/linkedin/Liger-Kernel#patching) list for the latest list of supported models.
+
+```py
+from transformers import TrainingArguments
+
+training_args = TrainingArguments(
+    ...,
+    use_liger_kernel=True
+)
+```
+
+You can also configure which specific kernels to apply using the `liger_kernel_config` parameter. This dict is passed as keyword arguments to the `_apply_liger_kernel_to_instance` function, allowing fine-grained control over kernel usage. Available options vary by model but typically include: `rope`, `swiglu`, `cross_entropy`, `fused_linear_cross_entropy`, `rms_norm`, etc.
+
+```py
+from transformers import TrainingArguments
+
+# Apply only specific kernels
+training_args = TrainingArguments(
+    ...,
+    use_liger_kernel=True,
+    liger_kernel_config={
+        "rope": True,
+        "cross_entropy": True,
+        "rms_norm": False,  # Don't apply Liger's RMSNorm kernel
+        "swiglu": True,
+    }
+)
+```
+
+## NEFTune
+
+[NEFTune](https://hf.co/papers/2310.05914) adds noise to the embedding vectors during training to improve model performance. Enable it in [`Trainer`] with the `neftune_noise_alpha` parameter in [`TrainingArguments`] to control how much noise is added.
+
+```py
+from transformers import TrainingArguments, Trainer
+
+training_args = TrainingArguments(..., neftune_noise_alpha=0.1)
+trainer = Trainer(..., args=training_args)
+```
+
+The original embedding layer is restored after training to avoid any unexpected behavior.
