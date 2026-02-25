@@ -47,8 +47,6 @@ from transformers import Timesfm2P5ModelForPrediction
 
 model = Timesfm2P5ModelForPrediction.from_pretrained(
     "google/timesfm-2.5-200m-transformers",
-    attn_implementation="sdpa",
-    dtype=torch.float32,
     device_map="auto",
 )
 
