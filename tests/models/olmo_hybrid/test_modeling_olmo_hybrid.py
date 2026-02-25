@@ -158,7 +158,7 @@ class OlmoHybridIntegrationTest(unittest.TestCase):
     @slow
     def test_model_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = OlmoHybridForCausalLM.from_pretrained("yanhong-l/olmo-3.5-test").to(torch_device, dtype=torch.bfloat16)
+        model = OlmoHybridForCausalLM.from_pretrained("hf-internal-testing/olmo-hybrid").to(torch_device, dtype=torch.bfloat16)
         out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
 
         rtol = 3e-2
@@ -234,9 +234,9 @@ class OlmoHybridIntegrationTest(unittest.TestCase):
         )
         EXPECTED_TEXT_COMPLETION = expectations.get_expectation()
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = AutoTokenizer.from_pretrained("yanhong-l/olmo-3.5-test")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/olmo-hybrid")
         model = OlmoHybridForCausalLM.from_pretrained(
-            "yanhong-l/olmo-3.5-test", device_map="auto", torch_dtype=torch.bfloat16
+            "hf-internal-testing/olmo-hybrid", device_map="auto", torch_dtype=torch.bfloat16
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
