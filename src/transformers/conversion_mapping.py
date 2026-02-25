@@ -372,7 +372,6 @@ def register_checkpoint_conversion_mapping(
 VLMS = [
     "aria",
     "ayavision",
-    "colpali",
     "emu3",
     "fuyu",
     "gotocr2",

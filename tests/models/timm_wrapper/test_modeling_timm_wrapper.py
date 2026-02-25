@@ -193,13 +193,14 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         self.assertIsNotNone(output.pooler_output)
 
     def test_timm_config_labels(self):
-        # test timm config with no labels
+        # test timm config with no labels, default labels are created for 100 classes
         checkpoint = "timm/resnet18.a1_in1k"
         config = TimmWrapperConfig.from_pretrained(checkpoint)
-        self.assertIsNone(config.label2id)
+        self.assertIsInstance(config.label2id, dict)
         self.assertIsInstance(config.id2label, dict)
+        self.assertEqual(len(config.id2label), len(config.label2id))
         self.assertEqual(len(config.id2label), 1000)
-        self.assertEqual(config.id2label[1], "goldfish, Carassius auratus")
+        self.assertEqual(config.id2label[1], "LABEL_1")
 
         # test timm config with labels in config
         checkpoint = "timm/eva02_large_patch14_clip_336.merged2b_ft_inat21"

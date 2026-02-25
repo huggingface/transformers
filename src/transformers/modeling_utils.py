@@ -4067,7 +4067,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         dtype_plan = model._get_dtype_plan(dtype)
 
         # Obtain the weight conversion mapping for this model if any are registered and appy to all submodels recursively
-        weight_conversions = cls.get_weight_conversions_recursively(model, key_mapping, hf_quantizer)
+        weight_conversions = model.get_weight_conversions_recursively(key_mapping, hf_quantizer)
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
             model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
@@ -4265,19 +4265,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return loading_info
 
-    @classmethod
-    def get_weight_conversions_recursively(cls, model, key_mapping, hf_quantizer):
+    def get_weight_conversions_recursively(self, key_mapping=None, hf_quantizer=None, add_legacy=True):
         conversions = []
-        conversions.extend(get_model_conversion_mapping(model, key_mapping, hf_quantizer))
+        conversions.extend(get_model_conversion_mapping(self, key_mapping, hf_quantizer))
 
-        for submodule in model.modules():
+        for submodule in self.children():
             if (
-                submodule is not model
+                submodule is not self
                 and isinstance(submodule, PreTrainedModel)
-                and submodule.config.__class__ != model.config.__class__
+                and submodule.config.__class__ != self.config.__class__
             ):
-                conversions.extend(get_model_conversion_mapping(submodule, key_mapping, hf_quantizer))
-                conversions.extend(cls.get_weight_conversions_recursively(submodule, key_mapping, hf_quantizer))
+                conversions.extend(get_model_conversion_mapping(submodule, key_mapping, hf_quantizer, add_legacy))
+                conversions.extend(submodule.get_weight_conversions_recursively(key_mapping, hf_quantizer, add_legacy))
         return conversions
 
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
