@@ -57,9 +57,6 @@ from ...video_utils import (
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs, smart_resize
-from ..qwen2_vl.image_processing_qwen2_vl_fast import (
-    Qwen2VLImageProcessorFast,
-)
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLForConditionalGeneration,
     Qwen2VLModel,
@@ -1441,7 +1438,7 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-class VideoLlama3ImageProcessorFast(Qwen2VLImageProcessorFast):
+class VideoLlama3ImageProcessorFast(Qwen2VLImageProcessor):
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     temporal_patch_size = 1

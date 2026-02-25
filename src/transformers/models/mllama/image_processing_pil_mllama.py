@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team.
+# Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,58 +11,53 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
+"""PIL Image processor class for Mllama."""
 
-import torch
-import torchvision.transforms.v2.functional as tvF
-from PIL import Image
+from typing import Optional
 
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    BatchFeature,
-    ImageInput,
-    SizeDict,
-    TensorType,
-    Unpack,
-    group_images_by_shape,
-    reorder_images,
-)
-from ...image_transforms import split_to_tiles
+import numpy as np
+
+from ...image_processing_backends import PilBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import PaddingMode, get_image_size
+from ...image_transforms import pad as np_pad
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
+    ChannelDimension,
+    ImageInput,
     PILImageResampling,
+    SizeDict,
     make_nested_list_of_images,
 )
-from ...utils import auto_docstring
+from ...processing_utils import Unpack
+from ...utils import TensorType, auto_docstring
 from .image_processing_mllama import (
     MllamaImageProcessorKwargs,
+    _validate_mllama_preprocess_arguments,
+    convert_to_rgb,
     get_all_supported_aspect_ratios,
     get_image_size_fit_to_canvas,
     get_optimal_tiled_canvas,
 )
 
 
-def _validate_size(size: SizeDict) -> None:
-    if not (size.height and size.width):
-        raise ValueError(f"Argument `size` must be a dictionary with keys 'height' and 'width'. Got: {size}")
-    if size.height != size.width:
-        raise ValueError(f"Argument `size` must have the same height and width, got {size}")
+def split_to_tiles_np(image: np.ndarray, num_tiles_height: int, num_tiles_width: int) -> np.ndarray:
+    """Split an image into tiles (numpy version)."""
+    num_channels, height, width = image.shape
+    tile_height = height // num_tiles_height
+    tile_width = width // num_tiles_width
+
+    image = image.reshape(num_channels, num_tiles_height, tile_height, num_tiles_width, tile_width)
+    image = image.transpose(1, 3, 0, 2, 4)
+    image = image.reshape(num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width)
+
+    return np.ascontiguousarray(image)
 
 
-def _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles):
-    if not do_pad:
-        raise ValueError("MllamaImageProcessor doesn't support `do_pad=False` mode.")
-    if not do_resize:
-        raise ValueError("MllamaImageProcessor doesn't support `do_resize=False` mode.")
-    if max_image_tiles is None or max_image_tiles <= 0:
-        raise ValueError(f"MllamaImageProcessor `max_image_tiles` must be a positive integer, got {max_image_tiles}.")
-    _validate_size(size)
-
-
-def build_aspect_ratio_mask(aspect_ratios: list[tuple[int, int]], max_image_tiles: int) -> "torch.Tensor":
+def build_aspect_ratio_mask_np(aspect_ratios: list[list[tuple[int, int]]], max_image_tiles: int) -> np.ndarray:
     """
-    Builds a mask for the aspect ratios of the images.
+    Build aspect ratio mask (numpy version).
 
     Args:
         aspect_ratios (`List[List[Tuple[int, int]]]`):
@@ -72,14 +67,13 @@ def build_aspect_ratio_mask(aspect_ratios: list[tuple[int, int]], max_image_tile
             The maximum number of tiles any image can be split into.
 
     Returns:
-        `torch.Tensor`: A 3D torch.Tensor of shape (batch_size, max_num_images, max_image_tiles).
+        `np.ndarray`: A 3D array of shape (batch_size, max_num_images, max_image_tiles).
             The mask contains 1s for valid tiles and 0s for padding.
     """
     batch_size = len(aspect_ratios)
     max_num_images = max(len(row) for row in aspect_ratios)
 
-    aspect_ratio_mask = torch.zeros((batch_size, max_num_images, max_image_tiles), dtype=torch.long)
-
+    aspect_ratio_mask = np.zeros((batch_size, max_num_images, max_image_tiles), dtype=np.int64)
     # Set the first tile to 1 for all aspect ratios
     # because in original implementation aspect ratios are padded with (1, 1),
     # but original code examples are not built to handle batches, so we might remove it later
@@ -93,34 +87,33 @@ def build_aspect_ratio_mask(aspect_ratios: list[tuple[int, int]], max_image_tile
     return aspect_ratio_mask
 
 
-def pad_batches_and_tiles(
-    batch_images: list[list["torch.Tensor"]],
+def pack_images(
+    batch_images: list[list[np.ndarray]],
     max_image_tiles: int,
-) -> tuple["torch.Tensor", list[list[int]]]:
+) -> tuple[np.ndarray, list[list[int]]]:
     """
-    Stack a list of lists of images with variable lengths into a torch.Tensor, applying zero padding as needed.
+    Stack nested image tiles into a padded array.
     Each list in the input represents a batch sample, and each image within a list is expected to be
     pre-split into tiles. The resulting array will have a shape of
     (batch_size, max_num_images, max_image_tiles, channels, tile_height, tile_width).
 
     Args:
-        batch_images (`List[List[torch.Tensor]]`):
+        batch_images (`List[List[np.ndarray]]`):
             A list of lists of image tiles. Each inner list represents
             a batch sample containing multiple images, where each image is pre-split into tiles.
             The shape of each tile array is (num_tiles, channels, tile_height, tile_width).
         max_image_tiles (int):
-            The maximum number of tiles any image was potantially split.
+            The maximum number of tiles any image was potentially split.
 
     Returns:
-        `Tuple[torch.Tensor, List[List[int]]]`: A tuple containing:
-            - stacked_images (`torch.Tensor`):
-                A numpy array of stacked images with shape
+        `Tuple[np.ndarray, List[List[int]]]`: A tuple containing:
+            - stacked_images (`np.ndarray`):
+                An array of stacked images with shape
                 (batch_size, max_num_images, max_image_tiles, channels, tile_height, tile_width).
             - all_num_tiles (`List[List[int]]`):
                 A list of lists containing the number of tiles
                 for each image in each batch sample.
     """
-
     # Determine output shape
     batch_size = len(batch_images)
     max_num_images = max(len(images) for images in batch_images)
@@ -128,9 +121,9 @@ def pad_batches_and_tiles(
     _, channels, tile_height, tile_width = shapes[0]
 
     # Initialize the stacked images array with zeros
-    stacked_images = torch.zeros(
+    stacked_images = np.zeros(
         (batch_size, max_num_images, max_image_tiles, channels, tile_height, tile_width),
-        dtype=torch.float32,
+        dtype=np.float32,
     )
 
     # Fill the stacked images array with the tiled images from the batch
@@ -146,9 +139,9 @@ def pad_batches_and_tiles(
     return stacked_images, all_num_tiles
 
 
-def convert_aspect_ratios_to_ids(aspect_ratios: list[list[tuple[int, int]]], max_image_tiles: int) -> "torch.Tensor":
+def convert_aspect_ratios_to_ids_np(aspect_ratios: list[list[tuple[int, int]]], max_image_tiles: int) -> np.ndarray:
     """
-    Convert aspect ratio tuples to unique ids.
+    Convert aspect ratio tuples to ids (numpy version).
 
     For batch padding we use 0, because there might be different number of images in each batch.
     The aspect ratio ids start from 1, with 1 corresponding to the first supported aspect ratio.
@@ -160,49 +153,24 @@ def convert_aspect_ratios_to_ids(aspect_ratios: list[list[tuple[int, int]]], max
             The maximum number of tiles any image can be split into.
 
     Returns:
-        `torch.Tensor`:
-            The aspect ratios ids as a numpy array with shape (batch_size, max_num_images).
+        `np.ndarray`:
+            The aspect ratios ids as an array with shape (batch_size, max_num_images).
             Each id corresponds to the index of the aspect ratio in the list of supported aspect ratios,
             offset by 1 (so 0 can be used for padding).
     """
-
     batch_size = len(aspect_ratios)
     max_num_images = max(len(row) for row in aspect_ratios)
     supported_aspect_ratios = get_all_supported_aspect_ratios(max_image_tiles)
 
-    aspect_ratios_ids = torch.zeros((batch_size, max_num_images), dtype=torch.long)
+    aspect_ratios_ids = np.zeros((batch_size, max_num_images), dtype=np.int64)
     for i, sample_aspect_ratios in enumerate(aspect_ratios):
         for j, (num_tiles_h, num_tiles_w) in enumerate(sample_aspect_ratios):
             aspect_ratios_ids[i, j] = supported_aspect_ratios.index((num_tiles_h, num_tiles_w)) + 1
     return aspect_ratios_ids
 
 
-# Copied from transformers.models.idefics2.image_processing_idefics2.convert_to_rgb
-def convert_to_rgb(image: ImageInput) -> ImageInput:
-    """
-    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
-    as is.
-    Args:
-        image (Image):
-            The image to convert.
-    """
-    if not isinstance(image, Image.Image):
-        return image
-
-    # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background
-    # for transparent images. The call to `alpha_composite` handles this case
-    if image.mode == "RGB":
-        return image
-
-    image_rgba = image.convert("RGBA")
-    background = Image.new("RGBA", image_rgba.size, (255, 255, 255))
-    alpha_composite = Image.alpha_composite(background, image_rgba)
-    alpha_composite = alpha_composite.convert("RGB")
-    return alpha_composite
-
-
 @auto_docstring
-class MllamaImageProcessorFast(BaseImageProcessorFast):
+class MllamaImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -218,78 +186,71 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[MllamaImageProcessorKwargs]):
         super().__init__(**kwargs)
+        _validate_mllama_preprocess_arguments(self.do_resize, self.size, self.do_pad, self.max_image_tiles)
+
+    def _validate_preprocess_kwargs(self, **kwargs):
+        super()._validate_preprocess_kwargs(**kwargs)
+        _validate_mllama_preprocess_arguments(self.do_resize, self.size, self.do_pad, self.max_image_tiles)
 
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[MllamaImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
-        """
-        Prepare a nested images structure for processing.
-        """
+        """Prepare a nested images structure for processing."""
         images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
 
-    def convert_to_rgb(
-        self,
-        image: ImageInput,
-    ) -> ImageInput:
-        """
-        Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
-        as is.
-        Args:
-            image (ImageInput):
-                The image to convert.
-
-        Returns:
-            ImageInput: The converted image.
-        """
+    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
+        """Converts an image to RGB format."""
         return convert_to_rgb(image)
 
     def pad(
         self,
-        image: "torch.Tensor",
+        image: np.ndarray,
         size: dict[str, int],
         aspect_ratio: tuple[int, int],
-    ) -> "torch.Tensor":
+    ) -> np.ndarray:
         """
         Pad an image to the `size` x `aspect_ratio`. For example, if size is {height: 224, width: 224} and aspect ratio is
         (1, 2), the image will be padded to 224x448.
 
         Args:
-            image (`torch.Tensor`):
-                Image to resize.
+            image (`np.ndarray`):
+                Image to pad.
             size (`Dict[str, int]`):
                 Size of the output image.
             aspect_ratio (`Tuple[int, int]`):
                 The aspect ratio of the image.
 
         Returns:
-            `torch.Tensor`: The padded image.
+            `np.ndarray`: The padded image.
         """
-
-        image_height, image_width = image.shape[-2:]
+        image_height, image_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
         num_tiles_height, num_tiles_width = aspect_ratio
-        padded_height = num_tiles_height * size.height
-        padded_width = num_tiles_width * size.width
-        pad_size = (0, 0, padded_width - image_width, padded_height - image_height)
+        padded_height = num_tiles_height * size["height"]
+        padded_width = num_tiles_width * size["width"]
+        # Spatial padding: ((height_before, height_after), (width_before, width_after))
+        # np_pad will add channel dimension padding for channels_first
+        padding = ((0, padded_height - image_height), (0, padded_width - image_width))
 
-        image = tvF.pad(
+        image = np_pad(
             image,
-            pad_size,
-            fill=0,
+            padding,
+            mode=PaddingMode.CONSTANT,
+            constant_values=0,
+            data_format="channels_first",
+            input_data_format="channels_first",
         )
-
         return image
 
     def resize(
         self,
-        image: "torch.Tensor",
+        image: np.ndarray,
         size: SizeDict,
         max_image_tiles: int,
-        interpolation: "tvF.InterpolationMode" = None,
-        antialias: bool = True,
-    ) -> Union["torch.Tensor", tuple[int, int]]:
+        resample: Optional[PILImageResampling] = None,
+    ) -> tuple[np.ndarray, tuple[int, int]]:
         """
         Resizes an image to fit within a tiled canvas while maintaining its aspect ratio.
         The optimal canvas size is calculated based on the maximum number of tiles and the tile size.
@@ -305,16 +266,15 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
                 Size of the output image.
             max_image_tiles (`int`):
                 The maximum number of tiles to split the image into.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resizing the image.
 
         Returns:
             `Union[np.ndarray, Tuple[int, int]]`: The resized image and a tuple containing the number of tiles
             along the height and width dimensions.
         """
-
-        image_height, image_width = image.shape[-2:]
-        tile_size = size.height
+        image_height, image_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+        tile_size = size.height if hasattr(size, "height") else size["height"]
 
         canvas_height, canvas_width = get_optimal_tiled_canvas(
             image_height=image_height,
@@ -333,15 +293,14 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
             tile_size=tile_size,
         )
 
-        image = tvF.resize(image, (new_height, new_width), interpolation=interpolation, antialias=antialias)
-
+        image = super().resize(image, SizeDict(height=new_height, width=new_width), resample=resample)
         return image, (num_tiles_height, num_tiles_width)
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[list[np.ndarray]],
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: Optional[PILImageResampling],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -349,46 +308,42 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
         image_std: float | list[float] | None,
         max_image_tiles: int | None,
         return_tensors: str | TensorType | None,
-        disable_grouping: bool | None,
         **kwargs,
     ) -> BatchFeature:
-        # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(
-            images, is_nested=True, disable_grouping=disable_grouping
-        )
-        split_images_grouped = {}
-        aspect_ratio_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            stacked_images, aspect_ratio = self.resize(
-                image=stacked_images, size=size, interpolation=interpolation, max_image_tiles=max_image_tiles
-            )
-            stacked_images = self.pad(
-                image=stacked_images,
-                size=size,
-                aspect_ratio=aspect_ratio,
-            )
-            num_tiles_height, num_tiles_width = aspect_ratio
-            aspect_ratio_grouped[shape] = [aspect_ratio] * len(stacked_images)
-            # same aspect ratio for all images in the batch
-            split_images = split_to_tiles(stacked_images, num_tiles_height, num_tiles_width)
+        batch_images = []
+        batch_aspect_ratios = []
 
-            # Fused rescale and normalize
-            split_images = self.rescale_and_normalize(
-                split_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            split_images_grouped[shape] = split_images
+        size_dict = size if isinstance(size, dict) else {"height": size.height, "width": size.width}
 
-        split_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
-        aspect_ratios = reorder_images(aspect_ratio_grouped, grouped_images_index, is_nested=True)
+        for sample_images in images:
+            sample_tiles = []
+            sample_aspect_ratios = []
 
-        split_images, num_tiles = pad_batches_and_tiles(split_images, max_image_tiles)
+            for image in sample_images:
+                image, aspect_ratio = self.resize(image, size=size, max_image_tiles=max_image_tiles, resample=resample)
+                image = self.pad(image, size=size_dict, aspect_ratio=aspect_ratio)
 
-        aspect_ratio_ids = convert_aspect_ratios_to_ids(aspect_ratios, max_image_tiles=max_image_tiles)
-        aspect_ratio_mask = build_aspect_ratio_mask(aspect_ratios, max_image_tiles=max_image_tiles)
+                # Rescale and normalize
+                if do_rescale:
+                    image = self.rescale(image, rescale_factor)
+                if do_normalize:
+                    image = self.normalize(image, image_mean, image_std)
+
+                num_tiles_height, num_tiles_width = aspect_ratio
+                tiles = split_to_tiles_np(image, num_tiles_height, num_tiles_width)
+                sample_tiles.append(tiles)
+                sample_aspect_ratios.append(aspect_ratio)
+
+            batch_images.append(sample_tiles)
+            batch_aspect_ratios.append(sample_aspect_ratios)
+
+        stacked_images, num_tiles = pack_images(batch_images, max_image_tiles)
+        aspect_ratio_ids = convert_aspect_ratios_to_ids_np(batch_aspect_ratios, max_image_tiles)
+        aspect_ratio_mask = build_aspect_ratio_mask_np(batch_aspect_ratios, max_image_tiles)
 
         encoded_inputs = BatchFeature(
             data={
-                "pixel_values": split_images,
+                "pixel_values": stacked_images,
                 "aspect_ratio_ids": aspect_ratio_ids,
                 "aspect_ratio_mask": aspect_ratio_mask,
             },
@@ -399,4 +354,4 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
         return encoded_inputs
 
 
-__all__ = ["MllamaImageProcessorFast"]
+__all__ = ["MllamaImageProcessorPil"]

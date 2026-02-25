@@ -18,7 +18,7 @@ import warnings
 from collections.abc import Callable
 from copy import deepcopy
 from functools import partial
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from huggingface_hub import create_repo, is_offline_mode
@@ -29,6 +29,7 @@ from .image_processing_backends import TorchvisionBackend
 from .image_processing_utils import BatchFeature, get_size_dict
 from .image_utils import (
     ChannelDimension,
+    PILImageResampling,
     SizeDict,
     validate_kwargs,
 )
@@ -402,7 +403,7 @@ class BaseVideoProcessor(TorchvisionBackend):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -420,7 +421,7 @@ class BaseVideoProcessor(TorchvisionBackend):
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
-                stacked_videos = self.resize(stacked_videos, size=size, interpolation=interpolation)
+                stacked_videos = self.resize(stacked_videos, size=size, resample=resample)
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 

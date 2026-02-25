@@ -1,9 +1,4 @@
-# Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+# Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,44 +11,36 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for Qwen2-VL."""
+"""PIL Image processor class for Qwen2-VL."""
 
-from typing import Optional, Union
+from typing import Iterable
 
-import torch
-import torchvision.transforms.v2.functional as tvF
+import numpy as np
 
+from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    group_images_by_shape,
-    reorder_images,
-)
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
-    ChannelDimension,
     ImageInput,
     PILImageResampling,
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    logging,
-)
+from ...utils import TensorType, auto_docstring, is_torchvision_available
 from .image_processing_qwen2_vl import Qwen2VLImageProcessorKwargs, smart_resize
 
 
-logger = logging.get_logger(__name__)
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 @auto_docstring
-class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
+class Qwen2VLImageProcessorPil(PilBackend):
     do_resize = True
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
+    default_to_square = False
     do_rescale = True
     do_normalize = True
     image_mean = OPENAI_CLIP_MEAN
@@ -84,26 +71,18 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
 
     def _standardize_kwargs(
         self,
-        size: SizeDict | None = None,
+        size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
         min_pixels: int | None = None,
         max_pixels: int | None = None,
         **kwargs,
     ) -> dict:
-        """
-        Update kwargs that need further processing before being validated
-        Can be overridden by subclasses to customize the processing of kwargs.
-        """
         if min_pixels is not None and max_pixels is not None:
-            size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
-        elif size is not None:
-            if "shortest_edge" not in size or "longest_edge" not in size:
-                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-            min_pixels = size["shortest_edge"]
-            max_pixels = size["longest_edge"]
-        else:
-            size = {**self.size}
-
-        return super()._standardize_kwargs(size=size, **kwargs)
+            size = SizeDict(shortest_edge=min_pixels, longest_edge=max_pixels)
+        kwargs = super()._standardize_kwargs(size=size, **kwargs)
+        size = kwargs.get("size", self.size)
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+        return kwargs
 
     @auto_docstring
     def preprocess(
@@ -113,33 +92,12 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
-    def _preprocess_image_like_inputs(
-        self,
-        images: ImageInput,
-        do_convert_rgb: bool,
-        input_data_format: ChannelDimension,
-        device: Union[str, "torch.device"] | None = None,
-        **kwargs: Unpack[Qwen2VLImageProcessorKwargs],
-    ) -> BatchFeature:
-        """
-        Preprocess image-like inputs.
-        To be overridden by subclasses when image-like inputs other than images should be processed.
-        It can be used for segmentation maps, depth maps, etc.
-        """
-        # Prepare input images
-        batch_feature = BatchFeature()
-        images = self._prepare_image_like_inputs(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
-        batch_feature = self._preprocess(images, **kwargs)
-        return batch_feature
-
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -148,53 +106,48 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         patch_size: int,
         temporal_patch_size: int,
         merge_size: int,
-        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
-    ):
-        # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            height, width = stacked_images.shape[-2:]
+    ) -> BatchFeature:
+        all_patches = []
+        all_grids = []
+
+        for image in images:
+            height, width = image.shape[-2:]
             if do_resize:
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=size["shortest_edge"],
-                    max_pixels=size["longest_edge"],
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
                 )
-                stacked_images = self.resize(
-                    image=stacked_images,
+                image = self.resize(
+                    image,
                     size=SizeDict(height=resized_height, width=resized_width),
-                    interpolation=interpolation,
+                    resample=resample,
                 )
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+            else:
+                resized_height, resized_width = height, width
 
-        # Group images by size for further processing
-        # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        processed_grids = {}
-        for shape, stacked_images in grouped_images.items():
-            resized_height, resized_width = stacked_images.shape[-2:]
-            # Fused rescale and normalize
-            patches = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+
+            patches = np.expand_dims(image, axis=0)
             if patches.ndim == 4:
-                # add a temporal dimension if we have images
-                patches = patches.unsqueeze(1)
+                patches = np.expand_dims(patches, axis=1)
             if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
-            batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // temporal_patch_size
+                repeats = np.repeat(
+                    patches[:, -1:], temporal_patch_size - (patches.shape[1] % temporal_patch_size), axis=1
+                )
+                patches = np.concatenate([patches, repeats], axis=1)
+
+            batch_size, grid_t, channel = patches.shape[0], patches.shape[1] // temporal_patch_size, patches.shape[2]
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
-            patches = patches.view(
+            patches = patches.reshape(
                 batch_size,
                 grid_t,
                 temporal_patch_size,
@@ -206,22 +159,23 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 merge_size,
                 patch_size,
             )
-            # Reorder dimensions to group grid and patch information for subsequent flattening.
-            # (batch, grid_t, grid_h, grid_w, merge_h, merge_w, channel, temp_patch_size, patch_h, patch_w)
-            patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
+            patches = patches.transpose(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
             flatten_patches = patches.reshape(
-                batch_size,
-                grid_t * grid_h * grid_w,
+                batch_size * grid_t * grid_h * grid_w,
                 channel * temporal_patch_size * patch_size * patch_size,
             )
 
-            processed_images_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            all_patches.append(flatten_patches)
+            all_grids.append([grid_t, grid_h, grid_w])
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_grids = reorder_images(processed_grids, grouped_images_index)
-        pixel_values = torch.cat(processed_images, dim=0)
-        image_grid_thw = torch.tensor(processed_grids)
+        pixel_values = np.concatenate(all_patches, axis=0)
+        image_grid_thw = np.array(all_grids, dtype=np.int64)
+
+        if return_tensors == "pt":
+            import torch
+
+            pixel_values = torch.from_numpy(pixel_values)
+            image_grid_thw = torch.from_numpy(image_grid_thw)
 
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
@@ -257,4 +211,4 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         return grid_h * grid_w
 
 
-__all__ = ["Qwen2VLImageProcessorFast"]
+__all__ = ["Qwen2VLImageProcessorPil"]

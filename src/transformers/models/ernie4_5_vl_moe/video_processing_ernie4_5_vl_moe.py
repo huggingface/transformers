@@ -45,7 +45,7 @@ from ...utils import (
     safe_load_json_file,
 )
 from ...utils.hub import cached_file
-from ...utils.import_utils import is_tracing, requires
+from ...utils.import_utils import is_torchvision_available, is_tracing, requires
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import (
     VideoInput,
@@ -55,6 +55,10 @@ from ...video_utils import (
     reorder_videos,
 )
 from .image_processing_ernie4_5_vl_moe import smart_resize
+
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -448,7 +452,7 @@ class Ernie4_5_VL_MoeVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict | None = None,
-        interpolation: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
@@ -479,7 +483,7 @@ class Ernie4_5_VL_MoeVideoProcessor(BaseVideoProcessor):
                 stacked_videos = self.resize(
                     image=stacked_videos,
                     size=SizeDict(height=resized_height, width=resized_width),
-                    interpolation=interpolation,
+                    resample=resample,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)

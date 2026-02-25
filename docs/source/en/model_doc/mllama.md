@@ -114,9 +114,9 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] MllamaImageProcessor
 
-## MllamaImageProcessorFast
+## MllamaImageProcessorPil
 
-[[autodoc]] MllamaImageProcessorFast
+[[autodoc]] MllamaImageProcessorPil
 
 ## MllamaForConditionalGeneration
 

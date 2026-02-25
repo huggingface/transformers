@@ -19,7 +19,6 @@
 """video processor class for Qwen2-VL."""
 
 import math
-from typing import Optional
 
 import torch
 import torchvision.transforms.v2.functional as tvF
@@ -203,7 +202,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         videos: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -232,7 +231,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                 stacked_videos = self.resize(
                     image=stacked_videos,
                     size=SizeDict(height=resized_height, width=resized_width),
-                    interpolation=interpolation,
+                    resample=resample,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
