@@ -17,9 +17,11 @@ Image/Text processor class for ALIGN
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
+from ..efficientnet.image_processing_efficientnet import EfficientNetImageProcessorKwargs
 
 
 class AlignProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: EfficientNetImageProcessorKwargs
     # see processing_utils.ProcessingKwargs documentation for usage.
     _defaults = {
         "text_kwargs": {

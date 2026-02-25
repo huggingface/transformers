@@ -28,12 +28,14 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from .image_processing_llava_next import LlavaNextImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
 
 
 class LlavaNextProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: LlavaNextImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,

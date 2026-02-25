@@ -30,6 +30,7 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
+from .image_processing_grounding_dino import GroundingDinoImageProcessorKwargs
 
 
 AnnotationType = dict[str, int | str | list[dict]]
@@ -98,6 +99,7 @@ class DictWithDeprecationWarning(dict):
 
 
 class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: GroundingDinoImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,

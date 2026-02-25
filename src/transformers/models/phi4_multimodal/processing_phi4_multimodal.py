@@ -24,12 +24,14 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, logging
+from .image_processing_phi4_multimodal_fast import Phi4MultimodalImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
 
 
 class Phi4MultimodalProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Phi4MultimodalImageProcessorKwargs
     _defaults = {
         "audio_kwargs": {
             "device": "cpu",

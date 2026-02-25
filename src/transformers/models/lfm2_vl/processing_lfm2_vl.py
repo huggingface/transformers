@@ -23,6 +23,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import auto_docstring, logging
+from .image_processing_lfm2_vl_fast import Lfm2VlImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
@@ -40,6 +41,7 @@ class Lfm2VlTextKwargs(TextKwargs, total=False):
 
 
 class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Lfm2VlImageProcessorKwargs
     text_kwargs: Lfm2VlTextKwargs
     _defaults = {
         "images_kwargs": {

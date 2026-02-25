@@ -27,12 +27,14 @@ from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
+from .image_processing_glm46v import Glm46VImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
 
 
 class Glm46VProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Glm46VImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,

@@ -26,9 +26,11 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ChannelDimension, ImageInput, get_image_size
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ..pixtral.image_processing_pixtral import PixtralImageProcessorKwargs
 
 
 class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: PixtralImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,

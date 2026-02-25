@@ -17,9 +17,11 @@ Processor class for ViLT.
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
+from .image_processing_vilt import ViltImageProcessorKwargs
 
 
 class ViltProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: ViltImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,

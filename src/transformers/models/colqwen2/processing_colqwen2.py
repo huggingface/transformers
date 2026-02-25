@@ -29,9 +29,11 @@ from ...utils import auto_docstring, is_torch_available
 
 if is_torch_available():
     import torch
+from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessorKwargs
 
 
 class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Qwen2VLImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": "longest",

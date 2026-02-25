@@ -31,6 +31,7 @@ from ...utils import auto_docstring, is_torch_available
 
 if is_torch_available():
     import torch
+from .image_processing_idefics import IdeficsImageProcessorKwargs
 
 
 IMAGE_TOKEN = "<image>"
@@ -52,6 +53,7 @@ class IdeficsTextKwargs(TextKwargs, total=False):
 
 
 class IdeficsProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: IdeficsImageProcessorKwargs
     text_kwargs: IdeficsTextKwargs
     _defaults = {
         "text_kwargs": {

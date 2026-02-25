@@ -20,9 +20,11 @@ from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
+from ..got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessorKwargs
 
 
 class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: GotOcr2ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding_side": "left",
