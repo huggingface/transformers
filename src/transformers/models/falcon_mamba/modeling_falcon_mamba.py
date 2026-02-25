@@ -34,7 +34,11 @@ from ...integrations import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
+from ...utils.import_utils import (
+    is_mambapy_available,
+    is_torchdynamo_compiling,
+    resolve_internal_import,
+)
 from .configuration_falcon_mamba import FalconMambaConfig
 
 
@@ -220,22 +224,16 @@ class FalconMambaMixer(nn.Module):
 
         global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
         causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update, causal_conv1d_fn = (
-            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-            if causal_conv1d is not None
-            else (None, None)
-        )
+        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+
         global falcon_mamba_ssm, selective_state_update, selective_scan_fn, falcon_mamba_inner_fn
         falcon_mamba_ssm = lazy_load_kernel("falcon_mamba-ssm")
-        selective_state_update, selective_scan_fn, falcon_mamba_inner_fn = (
-            (
-                falcon_mamba_ssm.selective_state_update,
-                falcon_mamba_ssm.selective_scan_fn,
-                falcon_mamba_ssm.falcon_mamba_inner_fn,
-            )
-            if falcon_mamba_ssm is not None
-            else (None, None, None)
+        selective_state_update = resolve_internal_import(
+            falcon_mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
         )
+        selective_scan_fn = getattr(falcon_mamba_ssm, "selective_scan_fn", None)
+        falcon_mamba_inner_fn = getattr(falcon_mamba_ssm, "falcon_mamba_inner_fn", None)
 
         self.warn_slow_implementation()
 
