@@ -28,7 +28,7 @@ class VaultGemmaConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`VaultGemmaModel`]. It is used to instantiate an VaultGemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the VaultGemma-7B.
-    e.g. [google/vaultgemma-7b](https://huggingface.co/google/vaultgemma-7b)
+    e.g. [google/vaultgemma-1b](https://huggingface.co/google/vaultgemma-1b)
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
