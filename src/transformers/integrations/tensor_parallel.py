@@ -786,7 +786,7 @@ class MlaKvAProjParallel(TensorParallelLayer):
     """
 
     def _prepare_output_fn(self, mod, output, device_mesh):
-        rope_dim = mod._rope_dim
+        rope_dim = mod.config.qk_rope_head_dim
         pass_output, rope_output = output.split([output.shape[-1] - rope_dim, rope_dim], dim=-1)
         rope_output = all_reduce_backward(rope_output, device_mesh)
         return torch.cat([pass_output, rope_output], dim=-1)
@@ -795,8 +795,7 @@ class MlaKvAProjParallel(TensorParallelLayer):
         return param[...].to(device=device, dtype=dtype)
 
     def prepare_module_tp(self, module, device_mesh, config=None, **kwargs):
-        if config is not None and hasattr(config, "qk_rope_head_dim"):
-            module._rope_dim = config.qk_rope_head_dim
+        module.config = config
         distribute_module(module, device_mesh, output_fn=self._prepare_output_fn)
 
 
