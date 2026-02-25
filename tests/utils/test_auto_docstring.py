@@ -275,7 +275,7 @@ class DummyForTestModel(PreTrainedModel):
         pass
 
 
-class ComplexProcessingKwargs(ProcessingKwargs, total=False):
+class ComplexProcessorKwargs(ProcessingKwargs, total=False):
     r"""
     custom_processing_mode (`str`, *optional*, defaults to `"standard"`):
         Custom processing mode for advanced text/image processing. Can be 'standard', 'enhanced', or 'experimental'.
@@ -322,7 +322,7 @@ class DummyProcessorForTest(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[ComplexProcessingKwargs],
+        **kwargs: Unpack[ComplexProcessorKwargs],
     ) -> BatchFeature:
         r"""
         Example:
