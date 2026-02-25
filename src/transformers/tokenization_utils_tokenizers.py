@@ -247,6 +247,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         gguf_file = kwargs.pop("gguf_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
+        _spm_precompiled_charsmap = kwargs.pop("_spm_precompiled_charsmap", None)
         # Note: added_tokens_decoder is NOT popped - it's passed to super().__init__() for processing
         added_tokens_decoder = kwargs.get("added_tokens_decoder", {})
         # Store add_prefix_space before super().__init__() to ensure it's not overridden
@@ -300,6 +301,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if self._tokenizer is None:
             raise ValueError("The backend tokenizer is not correctly initialized.")
+
+        # Apply the precompiled_charsmap normalizer extracted from an SPM proto when the
+        # tokenizer was built from a raw .model file and has no normalizer set yet.
+        # This ensures the correct normalizer (e.g. NFKC + lower-casing table for ALBERT)
+        # is used instead of the Python-level do_lower_case / keep_accents heuristic.
+        if _spm_precompiled_charsmap is not None and self._tokenizer.normalizer is None:
+            from tokenizers import normalizers as _normalizers
+
+            self._tokenizer.normalizer = _normalizers.Precompiled(_spm_precompiled_charsmap)
 
         _truncation = self._tokenizer.truncation or _json_truncation
 

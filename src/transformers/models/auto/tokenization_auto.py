@@ -63,7 +63,7 @@ REGISTERED_FAST_ALIASES: dict[str, type[Any]] = {}
 TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
     [
         ("aimv2", "CLIPTokenizer" if is_tokenizers_available() else None),
-        ("albert", "AlbertTokenizer" if is_tokenizers_available() else None),
+        ("albert", "TokenizersBackend" if is_tokenizers_available() else None),
         ("align", "BertTokenizer" if is_tokenizers_available() else None),
         ("audioflamingo3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("aya_vision", "CohereTokenizer" if is_tokenizers_available() else None),
