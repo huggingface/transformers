@@ -686,7 +686,8 @@ class SpmConverter(Converter):
             )
 
         elif model_type == 2:
-            _, merges = self.SpmExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
+            result = self.SpmExtractor(self.original_tokenizer.vocab_file).extract(None)
+            merges = result["merges"]
             bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
             tokenizer = Tokenizer(
                 BPE(
@@ -1771,7 +1772,8 @@ class ParakeetConverter(SpmConverter):
     def tokenizer(self, proto):
         vocab_scores = self.vocab(proto)
 
-        _, merges = self.SpmExtractor(self.vocab_file).extract(vocab_scores)
+        result = self.SpmExtractor(self.vocab_file).extract(None)
+        merges = result["merges"]
         bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
         tokenizer = Tokenizer(
             BPE(

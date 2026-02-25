@@ -433,6 +433,25 @@ def main(
     write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_id)
 
 
+"""
+CTC conversion example:
+```bash
+python src/transformers/models/parakeet/convert_nemo_to_hf.py \
+    --hf_repo_id nvidia/parakeet-ctc-1.1b \
+    --model_type ctc \
+    --output_dir OUTPUT_DIR  \
+    --push_to_repo_id USERNAME/parakeet-ctc-1.1b
+```
+
+TDT conversion example:
+```bash
+python src/transformers/models/parakeet/convert_nemo_to_hf.py \
+    --hf_repo_id nvidia/parakeet-tdt-0.6b-v3 \
+    --model_type tdt \
+    --output_dir OUTPUT_DIR  \
+    --push_to_repo_id USERNAME/parakeet-tdt-0.6b-v3-hf
+```
+"""
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--hf_repo_id", required=True, help="Model repo on huggingface.co")

@@ -234,7 +234,7 @@ class ParakeetTDTConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`ParakeetForTDT`]. It is used to instantiate a
     Parakeet TDT model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Parakeet TDT
-    [nvidia/parakeet-tdt-0.6b-v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) architecture.
+    [nvidia/parakeet-tdt-0.6b-v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -307,11 +307,9 @@ class ParakeetTDTConfig(PreTrainedConfig):
             self.encoder_config = encoder_config
 
         self.initializer_range = self.encoder_config.initializer_range
+        self.pad_token_id = pad_token_id
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     @classmethod
     def from_encoder_config(cls, encoder_config: ParakeetEncoderConfig, **kwargs):

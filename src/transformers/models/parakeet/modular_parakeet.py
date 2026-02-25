@@ -121,9 +121,7 @@ class ParakeetEncoderAttention(LlamaAttention):
         super().__init__(config, layer_idx=layer_idx)
         self.is_causal = False
         # W_{k,R} projection
-        self.relative_k_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
+        self.relative_k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         # global content bias
         self.bias_u = nn.Parameter(torch.zeros(config.num_attention_heads, self.head_dim))
         # global positional bias

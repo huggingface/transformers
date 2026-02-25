@@ -282,9 +282,7 @@ class ParakeetEncoderAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         # W_{k,R} projection
-        self.relative_k_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
+        self.relative_k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         # global content bias
         self.bias_u = nn.Parameter(torch.zeros(config.num_attention_heads, self.head_dim))
         # global positional bias

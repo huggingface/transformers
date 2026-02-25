@@ -294,6 +294,9 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
 
     @slow
     def test_1b_model_integration(self):
+        """
+        reproducer: https://gist.github.com/ebezzam/6382bdabfc64bb2541ca9f77deb7678d#file-reproducer_single-py
+        """
         RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_results_single.json"
         with open(RESULTS_PATH, "r") as f:
             raw_data = json.load(f)
@@ -314,6 +317,9 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
 
     @slow
     def test_1b_model_integration_batched(self):
+        """
+        reproducer: https://gist.github.com/ebezzam/6382bdabfc64bb2541ca9f77deb7678d#file-reproducer_batched-py
+        """
         RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_results_batch.json"
         with open(RESULTS_PATH, "r") as f:
             raw_data = json.load(f)
@@ -487,9 +493,13 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUp(cls):
-        cls.checkpoint_name = "nvidia/parakeet-tdt-0.6b-v3"
+        # cls.checkpoint_name = "nvidia/parakeet-tdt-0.6b-v3"
+        # cls.dtype = torch.bfloat16
+        # cls.processor = AutoProcessor.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
+
+        cls.checkpoint_name = "bezzam/parakeet-tdt-0.6b-v3-hf"
         cls.dtype = torch.bfloat16
-        cls.processor = AutoProcessor.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
+        cls.processor = AutoProcessor.from_pretrained("bezzam/parakeet-tdt-0.6b-v3-hf")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -510,6 +520,15 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
 
     @slow
     def test_tdt_model_integration(self):
+        """
+        reproducer: https://gist.github.com/ebezzam/6382bdabfc64bb2541ca9f77deb7678d#file-reproducer_single_tdt-py
+        """
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_results_single_tdt.json"
+        with open(RESULTS_PATH, "r") as f:
+            raw_data = json.load(f)
+        EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
+        EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
+
         samples = self._load_datasamples(1)
         model = ParakeetForTDT.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device)
         model.eval()
@@ -518,6 +537,29 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         inputs = self.processor(samples)
         inputs.to(torch_device, dtype=self.dtype)
         output = model.generate(**inputs, return_dict_in_generate=True)
+        torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
         predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
-        self.assertTrue(len(predicted_transcripts) > 0)
-        self.assertTrue(len(predicted_transcripts[0]) > 0)
+        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+
+    @slow
+    def test_tdt_model_integration_batched(self):
+        """
+        reproducer: https://gist.github.com/ebezzam/6382bdabfc64bb2541ca9f77deb7678d#file-reproducer_batch_tdt-py
+        """
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_results_batch_tdt.json"
+        with open(RESULTS_PATH, "r") as f:
+            raw_data = json.load(f)
+        EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
+        EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
+
+        samples = self._load_datasamples(5)
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device)
+        model.eval()
+        model.to(torch_device)
+
+        inputs = self.processor(samples)
+        inputs.to(torch_device, dtype=self.dtype)
+        output = model.generate(**inputs, return_dict_in_generate=True)
+        torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
+        predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
+        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)

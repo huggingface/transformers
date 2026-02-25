@@ -43,11 +43,11 @@ Parakeet models, [introduced by NVIDIA NeMo](https://developer.nvidia.com/blog/p
 The original implementation can be found in [NVIDIA NeMo](https://github.com/NVIDIA/NeMo).
 Model checkpoints are to be found under [the NVIDIA organization](https://huggingface.co/nvidia/models?search=parakeet).
 
-This model was contributed by [Nithin Rao Koluguri](https://huggingface.co/nithinraok), [Eustache Le Bihan](https://huggingface.co/eustlb) and [Eric Bezzam](https://huggingface.co/bezzam).
+This model was contributed by [Nithin Rao Koluguri](https://huggingface.co/nithinraok), [Eustache Le Bihan](https://huggingface.co/eustlb), [Eric Bezzam](https://huggingface.co/bezzam), [Maksym Lypivskyi](https://huggingface.co/MaksL), and [Hainan Xu](https://huggingface.co/hainanx).
 
 ## Usage
 
-### Basic usage
+### `ParakeetForCTC` usage
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -86,7 +86,7 @@ print(processor.batch_decode(outputs))
 </hfoption>
 </hfoptions>
 
-### TDT usage
+### `ParakeetForTDT` usage
 
 <hfoptions id="tdt-usage">
 <hfoption id="Pipeline">
