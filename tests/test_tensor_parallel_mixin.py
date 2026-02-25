@@ -381,7 +381,7 @@ class TensorParallelTesterMixin(ABC):
         model_class = self._get_tp_model_class()
         atol = self.tensor_parallel_atol
         rtol = self.tensor_parallel_rtol
-        max_new_tokens = 10
+        max_new_tokens = 25
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             model = model_class(config)
