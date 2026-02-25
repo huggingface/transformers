@@ -35,7 +35,6 @@ from threading import Thread
 from typing import Optional, TypeVar, get_type_hints
 from zipfile import is_zipfile
 
-from pyhmll import safetensors, dtype, Device
 
 import torch
 from huggingface_hub import create_repo, is_offline_mode, split_torch_state_dict_into_shards
@@ -50,9 +49,13 @@ from . import initialization as init
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import (
+    HmllLoadSpec,
+    NativeLoadSpec,
     WeightConverter,
     WeightRenaming,
+    _compute_tp_elem_ranges,
     convert_and_load_state_dict_in_model,
+    rename_source_key,
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
@@ -147,6 +150,13 @@ if is_sagemaker_mp_enabled():
     IS_SAGEMAKER_MP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
 else:
     IS_SAGEMAKER_MP_POST_1_10 = False
+
+try:
+    from pyhmll import safetensors
+    from pyhmll.torch import as_dtype, device_to_hmll
+    _HMLL_USE_PYHMLL = is_env_variable_true("HMLL_USE_PYHMLL")
+except ImportError:
+    _HMLL_USE_PYHMLL = False
 
 
 logger = logging.get_logger(__name__)
@@ -4226,11 +4236,82 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     source, is_shared = checkpoint_files[0], False
                 else:
                     source, is_shared = Path(checkpoint_files[0]).parent.joinpath("model.safetensors.index.json"), True
-                with safetensors(source, Device.CUDA, is_shared) as registry: # TODO : dynamic
+                meta_model_state_dict = model.state_dict()
+                device = (
+                    get_device(device_map, next(iter(meta_model_state_dict)))
+                    if device_map
+                    else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                )
+                with safetensors(source, device_to_hmll(device), is_shared) as registry:
                     merged_state_dict = {}
+                    weight_mapping_list = weight_mapping or []
+                    renamings = [e for e in weight_mapping_list if isinstance(e, WeightRenaming)]
+                    converters = [e for e in weight_mapping_list if isinstance(e, WeightConverter)]
+                    prefix = model.base_model_prefix
+                    tp_plan = getattr(model, "_tp_plan", None)
+                    rank = device_mesh.get_local_rank() if device_mesh is not None else 0
 
-                    for name in registry.names():
-                        merged_state_dict[name] = partial(registry.fetch, name)  # TODO: needs to happen in the same thread
+                    for (name, specs) in registry.items():
+                        original_key = name
+                        renamed_key, _ = rename_source_key(
+                            original_key, renamings, converters, prefix, meta_model_state_dict
+                        )
+                        full_shape = tuple(specs.shape)
+                        dtype_torch = as_dtype(specs.dtype) if getattr(specs, "dtype", None) is not None else torch.float32
+                        nbytes = specs.end - specs.start
+                        numel = 1
+                        for s in full_shape:
+                            numel *= s
+                        elem_size_bytes = nbytes // numel if numel else 2
+
+                        use_tp_load_spec = (
+                            device_mesh is not None
+                            and tp_plan is not None
+                            and renamed_key in meta_model_state_dict
+                        )
+                        if use_tp_load_spec:
+                            tp_style = _get_parameter_tp_plan(renamed_key, tp_plan)
+                            elem_ranges = []
+                            if tp_style:
+                                try:
+                                    elem_ranges = _compute_tp_elem_ranges(
+                                        full_shape, device_mesh, rank, tp_style
+                                    )
+                                except ValueError:
+                                    tp_style = None
+                            if tp_style:
+                                empty_param = meta_model_state_dict[renamed_key]
+                                shard_shape = tuple(empty_param.shape)
+                                dst = torch.empty(
+                                    shard_shape,
+                                    dtype=dtype_torch,
+                                    device=device,
+                                )
+                                merged_state_dict[original_key] = HmllLoadSpec(
+                                    registry=registry,
+                                    name=original_key,
+                                    elem_ranges=elem_ranges,
+                                    dst=dst,
+                                )
+                                continue
+                        dst = torch.empty(
+                            full_shape,
+                            dtype=dtype_torch,
+                            device=device,
+                        )
+                        merged_state_dict[original_key] = NativeLoadSpec(
+                            dst=dst,
+                            fetch=partial(
+                                registry.fetch,
+                                original_key,
+                                dst.data_ptr(),
+                                dst.numel() * elem_size_bytes,
+                            ),
+                        )
+
+            # User passed an explicit state_dict
+            elif state_dict is not None:
+                merged_state_dict = state_dict
             # Checkpoints are .bin
             elif checkpoint_files is not None:
                 merged_state_dict = {}

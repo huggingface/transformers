@@ -18,6 +18,7 @@ from __future__ import annotations
 import math
 import os
 import re
+from abc import ABC, abstractmethod
 import traceback
 from abc import abstractmethod
 from collections import defaultdict
@@ -32,7 +33,12 @@ from typing import TYPE_CHECKING, Any, Tuple
 import torch
 
 from .integrations.accelerate import get_device, offload_weight
-from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
+from .integrations.tensor_parallel import (
+    ALL_PARALLEL_STYLES,
+    _get_parameter_tp_plan,
+    compute_flattened_tensor_shard_slices,
+    get_shard_dim_for_tp_style,
+)
 from .utils import is_env_variable_true, logging
 from .utils.loading_report import LoadStateDictInfo
 
@@ -654,6 +660,9 @@ class WeightTransform:
             # Sync loading
             elif callable(tensors[0]):
                 tensors = [func() for func in tensors]
+            # Deferred load (HmllLoadSpec or NativeLoadSpec)
+            elif isinstance(tensors[0], DeferredLoadSpec):
+                tensors = [spec.execute() for spec in tensors]
             # Add them to the new dictionary
             collected_tensors[key] = tensors
 
@@ -781,6 +790,61 @@ class WeightConverter(WeightTransform):
 GLOBAL_WORKERS = min(4, os.cpu_count() or 4)
 
 
+class DeferredLoadSpec(ABC):
+    """Base for deferred tensor loading strategies. Subclasses must implement execute()."""
+
+    @abstractmethod
+    def execute(self) -> torch.Tensor:
+        """Load data into the destination tensor and return it."""
+        ...
+
+
+@dataclass(slots=True, frozen=True)
+class NativeLoadSpec(DeferredLoadSpec):
+    """
+    Deferred load of a full tensor via a fetch callable (e.g. registry.fetch).
+    execute() runs the fetch then returns the destination tensor.
+    """
+
+    dst: torch.Tensor
+    fetch: Callable[[], int]
+
+    def execute(self) -> torch.Tensor:
+        if self.fetch() <= 0:
+            raise RuntimeError("Failed to fetch tensor")
+        return self.dst
+
+
+@dataclass(slots=True, frozen=True)
+class HmllLoadSpec(DeferredLoadSpec):
+    """
+    Deferred load of tensor slices via hmll fetchv.
+    Used for TP when each rank loads only its shard; no partial, execute() runs the fetch.
+    """
+
+    registry: Any  # SafetensorsAccessor
+    name: str
+    ranges: list[tuple[int, int]]  # element (start, end) per slice
+    dst: torch.Tensor
+
+    def execute(self) -> torch.Tensor:
+        self.registry.fetchv(self.name, self.ranges, self.dst.data_ptr())
+        return self.dst
+
+
+def _compute_tp_elem_ranges(
+    full_shape: tuple[int, ...],
+    device_mesh: Any,
+    rank: int,
+    tp_style: str,
+) -> list[tuple[int, int]]:
+    """Compute element ranges for this rank's shard for slice-based loading (fetchv)."""
+    ndim = len(full_shape)
+    dim = get_shard_dim_for_tp_style(tp_style, ndim)
+    # empty_param must have full shape for compute_flattened_tensor_shard_slices
+    full_param = torch.empty(full_shape, device="meta")
+    return compute_flattened_tensor_shard_slices(full_param, device_mesh, rank, dim, tensor_idx=None)
+
 def _materialize_copy(fetch: Tuple[torch.Tensor, Callable[int]], device=None, dtype=None) -> torch.Tensor:
     dst, fetch = fetch
     if fetch() <= 0:
@@ -789,12 +853,17 @@ def _materialize_copy(fetch: Tuple[torch.Tensor, Callable[int]], device=None, dt
     return dst
 
 def spawn_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, device=None, dtype=None
+    thread_pool: ThreadPoolExecutor | None,
+    tensor: torch.Tensor | DeferredLoadSpec | Tuple[torch.Tensor, Callable[[], int]],
+    device=None,
+    dtype=None,
 ) -> Future | Callable:
     """Materialize a tensor from file asynchronously if `thread_pool` is provided, or return a Callable that will
     load the tensor synchronously when called."""
 
     def _job():
+        if isinstance(tensor, DeferredLoadSpec):
+            return tensor.execute()
         return _materialize_copy(tensor, device, dtype)
 
     if thread_pool is not None:
@@ -806,19 +875,36 @@ def spawn_materialize(
 
 
 def spawn_tp_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, device=None, dtype=None
+    thread_pool: ThreadPoolExecutor | None,
+    tensor: torch.Tensor | DeferredLoadSpec,
+    sharding_method,
+    tensor_idx,
+    device=None,
+    dtype=None,
 ) -> Future | Callable:
     """Materialize and shard a tensor (according to the TP-plan) from file asynchronously if `thread_pool` is provided, or
-    return a Callable that will load the tensor synchronously when called."""
+    return a Callable that will load the tensor synchronously when called.
+    When tensor is a DeferredLoadSpec (e.g. HmllLoadSpec or NativeLoadSpec), just execute it; no shard_tensor needed."""
 
-    def _job():
-        return sharding_method.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
+    if isinstance(tensor, DeferredLoadSpec):
+        _job = tensor.execute
+    else:
+        def _job():
+            # May need to materialize (dst, fetch) first then shard
+            if isinstance(tensor, tuple) and len(tensor) == 2 and callable(tensor[1]):
+                dst, fetch = tensor
+                if fetch() <= 0:
+                    raise RuntimeError("Failed to fetch tensor")
+                tensor_materialized = dst
+            else:
+                tensor_materialized = tensor
+            return sharding_method.shard_tensor(
+                tensor_materialized, tensor_idx=tensor_idx, device=device, dtype=dtype
+            )
 
     if thread_pool is not None:
         return thread_pool.submit(_job)
     else:
-        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
-        # memory during Conversion
         return _job
 
 

@@ -317,6 +317,21 @@ def repack_weights(
     return final_ordered_tensor
 
 
+def get_shard_dim_for_tp_style(tp_style: str, ndim: int) -> int:
+    """
+    Return the shard dimension for a given TP style and tensor ndim.
+    Used to compute slice ranges for direct shard loading (e.g. fetchv).
+    """
+    colwise_styles = ("colwise", "colwise_rep", "local_colwise")
+    rowwise_styles = ("rowwise", "rowwise_rep", "local_rowwise")
+    if tp_style in colwise_styles:
+        return -1 if ndim == 1 else -2
+    if tp_style in rowwise_styles:
+        return -1
+    # Replicate, gather, local, etc. — no sharding along a single dim for slice loading
+    raise ValueError(f"TP style {tp_style!r} does not support slice-based loading or ndim={ndim}")
+
+
 def compute_tensor_shard_slices(empty_param, device_mesh, rank, dim, tensor_idx: int | None = None):
     """
     Compute the slice ranges for sharding a tensor across a multi-dimensional device mesh.
