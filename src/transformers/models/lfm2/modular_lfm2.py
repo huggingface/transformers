@@ -335,16 +335,16 @@ class Lfm2ShortConv(nn.Module):
 
         Bx = B * x
 
-        if past_key_values is not None and past_key_values.get_seq_length() > 0:
+        # Note: we may or may not have to substract the current seq_len here as the cache may or may not be already updated
+        # by the current layer
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        # In this case, the cache was already updated and we need to subtract seq_len to get the correct past length
+        if "full_attention" in self.config.layer_types[: self.layer_idx]:
+            past_seen_tokens = past_seen_tokens - seqlen
+
+        if past_key_values is not None and past_seen_tokens > 0:
             conv_state = past_key_values.conv_cache[self.layer_idx]
-            # Note: we may or may not have to substract the current seq_len here as the cache may or may not be already updated
-            # by the current layer
-            past_length = past_key_values.get_seq_length()
-            start, end = past_length, past_length + seqlen
-            # In this case, the cache was already updated and we need to subtract seq_len
-            if "full_attention" in self.config.layer_types[: self.layer_idx]:
-                start, end = start - seqlen, end - seqlen
-            cache_position = torch.arange(start, end, device=x.device)
+            cache_position = torch.arange(seqlen, device=conv_state.device) + past_seen_tokens
             cache_position = cache_position.clamp(0, self.L_cache - 1)
             conv_state = conv_state.roll(shifts=-1, dims=-1)
             conv_state[:, :, cache_position] = Bx.to(device=conv_state.device, dtype=conv_state.dtype)
