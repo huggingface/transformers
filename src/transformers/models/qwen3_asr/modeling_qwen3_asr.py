@@ -934,6 +934,7 @@ class Qwen3ASRThinkerTextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Qwen3ASRThinkerTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -967,7 +968,6 @@ class Qwen3ASRThinkerTextAttention(nn.Module):
         )  # thus post q_norm does not need reshape
         self.sliding_window = None
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -992,9 +992,9 @@ class Qwen3ASRThinkerTextAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1015,9 +1015,9 @@ class Qwen3ASRThinkerTextAttention(nn.Module):
 
 @auto_docstring(custom_intro=("Text part of Qwen3ASRThinker, "))
 class Qwen3ASRThinkerTextModel(Qwen3ASRPreTrainedModel):
-    config: Qwen3ASRConfig
+    config: Qwen3ASRTextConfig
     _no_split_modules = ["Qwen3ASRThinkerTextDecoderLayer"]
-    config_class = Qwen3ASRConfig
+    config_class = Qwen3ASRTextConfig
     _can_record_outputs = {
         "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
         "attentions": Qwen3ASRTextAttention,
@@ -1052,6 +1052,14 @@ class Qwen3ASRThinkerTextModel(Qwen3ASRPreTrainedModel):
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        visual_pos_masks (`torch.Tensor` of shape `(batch_size, seqlen)`, *optional*):
+            The mask of the visual positions.
+        deepstack_visual_embeds (`list[torch.Tensor]`, *optional*):
+            The deepstack visual embeddings. The shape is (num_layers, visual_seqlen, embed_dim).
+            The feature is extracted from the different visual encoder layers, and fed to the decoder
+            hidden states. It's from the paper DeepStack(https://arxiv.org/abs/2406.04334).
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1113,6 +1121,11 @@ class Qwen3ASRThinkerTextModel(Qwen3ASRPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
+
+    def _deepstack_process(
+        self, hidden_states: torch.Tensor, visual_pos_masks: torch.Tensor, visual_embeds: torch.Tensor
+    ):
+        raise ValueError("Not needed.")
 
 
 @auto_docstring(
