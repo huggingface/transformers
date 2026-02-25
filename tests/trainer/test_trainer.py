@@ -48,6 +48,7 @@ from transformers import (
     set_seed,
 )
 from transformers.integrations import activate_neftune
+from transformers.loss.loss_utils import ForCausalLMLoss
 from transformers.testing_utils import (
     CaptureLogger,
     LoggingLevel,
@@ -77,7 +78,6 @@ from .trainer_test_utils import (
     RTOL,
     AlmostAccuracy,
     BasicTextGenerationModel,
-    ForCausalLMLoss,
     RegressionDataset,
     RegressionModel,
     RepeatDataset,
@@ -294,11 +294,11 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         model = AutoModelForCausalLM.from_pretrained(model_name)
 
         def compute_loss(logits, labels, vocab_size, num_items_in_batch, disable_num_items_in_batch=False):
-            return ForCausalLMLoss(
-                logits["logits"], labels, vocab_size, num_items_in_batch, disable_num_items_in_batch
-            )
+            if disable_num_items_in_batch:
+                num_items_in_batch = None
+            return ForCausalLMLoss(logits["logits"], labels, vocab_size, num_items_in_batch)
 
-        loss_fn = partial(compute_loss, vocab_size=model.config.vocab_size, disable_num_items_in_batch=False)
+        loss_fn = partial(compute_loss, vocab_size=model.config.vocab_size)
 
         base_loss_callback = StoreLossCallback()
 
@@ -348,6 +348,8 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             set_seed(42)
             model = AutoModelForCausalLM.from_pretrained(model_name)
             broken_loss_callback = StoreLossCallback()
+            # we need to disable num_items_in_batch because since we are passing a custom loss,
+            # we make the assumption that num_items_in_batch is handled correctly
             loss_fn = partial(compute_loss, vocab_size=model.config.vocab_size, disable_num_items_in_batch=True)
             trainer = Trainer(
                 model,

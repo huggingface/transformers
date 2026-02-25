@@ -123,26 +123,6 @@ class MockCudaOOMCallback(TrainerCallback):
             raise RuntimeError("CUDA out of memory.")
 
 
-def ForCausalLMLoss(logits, labels, vocab_size, num_items_in_batch, disable_num_items_in_batch=False):
-    # Upcast to float if we need to compute the loss to avoid potential precision issues
-    logits = logits.float()
-    # Shift so that tokens < n predict n
-    shift_logits = logits[..., :-1, :].contiguous()
-    shift_labels = labels[..., 1:].contiguous()
-
-    # Flatten the tokens
-    shift_logits = shift_logits.view(-1, vocab_size)
-    shift_labels = shift_labels.view(-1)
-    # Enable model parallelism
-    shift_labels = shift_labels.to(shift_logits.device)
-    if num_items_in_batch is None or disable_num_items_in_batch:
-        loss = nn.functional.cross_entropy(shift_logits, shift_labels, ignore_index=-100, reduction="mean")
-    else:
-        loss = nn.functional.cross_entropy(shift_logits, shift_labels, ignore_index=-100, reduction="sum")
-        loss = loss / num_items_in_batch
-    return loss
-
-
 class RegressionDataset:
     def __init__(self, a=2, b=3, length=64, seed=42, label_names=None):
         np.random.seed(seed)
