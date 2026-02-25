@@ -251,7 +251,6 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": AlbertModel,
             "fill-mask": AlbertForMaskedLM,
-            "question-answering": AlbertForQuestionAnswering,
             "text-classification": AlbertForSequenceClassification,
             "token-classification": AlbertForTokenClassification,
             "zero-shot": AlbertForSequenceClassification,
