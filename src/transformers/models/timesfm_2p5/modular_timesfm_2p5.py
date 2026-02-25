@@ -34,6 +34,7 @@ from ..gemma2.modeling_gemma2 import (
     apply_rotary_pos_emb,
 )
 from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
+from ...modeling_rope_utils import RopeParameters
 from ..timesfm.configuration_timesfm import TimesFmConfig
 from ..timesfm.modeling_timesfm import (
     TimesFmModelForPrediction,
@@ -105,8 +106,8 @@ class Timesfm2P5Config(TimesFmConfig):
             Whether to clamp forecasts to non-negative values when the input minimum is non-negative.
         max_position_embeddings (`int`, *optional*, defaults to 16384):
             Maximum sequence length supported by the rotary position encoding.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters` or `dict[str, RopeParameters]`, *optional*):
+            Dictionary containing the RoPE configuration. Uses default rope type with theta=10000.0 when not set.
 
     Example:
 
@@ -147,11 +148,28 @@ class Timesfm2P5Config(TimesFmConfig):
         force_flip_invariance: bool = True,
         infer_is_positive: bool = True,
         max_position_embeddings: int = 16384,
-    rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
-        # Set before super().__init__() so PreTrainedConfig detects it and populates rope_parameters
-        self.rope_parameters = None
+        # Set all attributes before super().__init__() so RotaryEmbeddingConfigMixin
+        # can find rope_parameters and max_position_embeddings during initialization.
+        self.num_key_value_heads = num_key_value_heads
+        self.attention_bias = attention_bias
+        self.output_quantile_len = output_quantile_len
+        self.decode_index = decode_index
+        self.use_qk_norm = use_qk_norm
+        self.use_per_dim_scale = use_per_dim_scale
+        self.use_bias = use_bias
+        self.activation = activation
+        self.use_continuous_quantile_head = use_continuous_quantile_head
+        self.force_flip_invariance = force_flip_invariance
+        self.infer_is_positive = infer_is_positive
+        # Gemma2-compatible: needed by Gemma2Attention.__init__
+        self.query_pre_attn_scalar = 256.0
+        self.attn_logit_softcapping = None
+        self.max_position_embeddings = max_position_embeddings
+        self.rope_parameters = rope_parameters
+
         super().__init__(
             patch_length=patch_length,
             context_length=context_length,
@@ -168,8 +186,6 @@ class Timesfm2P5Config(TimesFmConfig):
             initializer_range=initializer_range,
             num_hidden_layers=num_hidden_layers,
             use_positional_embedding=False,
-            layer_types=["attention"] * num_hidden_layers,
-            sliding_window=None,
             **kwargs,
         )
         # Delete inherited attributes that TimesFM 2.5 does not use
@@ -181,25 +197,6 @@ class Timesfm2P5Config(TimesFmConfig):
         del self.use_rotary_embeddings
         del self.min_timescale
         del self.max_timescale
-
-        # Explicitly assign params not covered by parent TimesFmConfig
-        self.num_key_value_heads = num_key_value_heads
-        self.attention_bias = attention_bias
-        self.layer_types = ["attention"] * num_hidden_layers
-        self.output_quantile_len = output_quantile_len
-        self.decode_index = decode_index
-        self.use_qk_norm = use_qk_norm
-        self.use_per_dim_scale = use_per_dim_scale
-        self.use_bias = use_bias
-        self.activation = activation
-        self.use_continuous_quantile_head = use_continuous_quantile_head
-        self.force_flip_invariance = force_flip_invariance
-        self.infer_is_positive = infer_is_positive
-        # Gemma2-compatible: needed by Gemma2Attention.__init__
-        self.query_pre_attn_scalar = 256.0
-        self.attn_logit_softcapping = None
-        self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
 
 
 @dataclass
@@ -278,6 +275,9 @@ class Timesfm2P5Attention(Gemma2Attention):
 
     def __init__(self, config: Timesfm2P5Config, layer_idx: int):
         super().__init__(config, layer_idx)
+        # TimesFM 2.5 always uses full attention, never sliding window
+        self.layer_type = None
+        self.sliding_window = None
 
         if config.use_qk_norm:
             self.q_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -343,6 +343,11 @@ class Timesfm2P5DecoderLayer(Gemma2DecoderLayer):
     Inherits from Gemma2DecoderLayer (which provides GradientCheckpointingLayer support) and
     overrides forward to return `(hidden_states, attn_weights)` tuple for output capturing.
     """
+
+    def __init__(self, config: Timesfm2P5Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        # TimesFM 2.5 always uses full attention
+        self.attention_type = "attention"
 
     def forward(
         self,

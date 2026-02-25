@@ -18,8 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 
 
 class Timesfm2P5Config(PreTrainedConfig):
@@ -81,8 +81,8 @@ class Timesfm2P5Config(PreTrainedConfig):
             Whether to clamp forecasts to non-negative values when the input minimum is non-negative.
         max_position_embeddings (`int`, *optional*, defaults to 16384):
             Maximum sequence length supported by the rotary position encoding.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters` or `dict[str, RopeParameters]`, *optional*):
+            Dictionary containing the RoPE configuration. Uses default rope type with theta=10000.0 when not set.
 
     Example:
 
@@ -125,11 +125,27 @@ class Timesfm2P5Config(PreTrainedConfig):
         force_flip_invariance: bool = True,
         infer_is_positive: bool = True,
         max_position_embeddings: int = 16384,
-        rope_theta: float = 10000.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
-        # Set before super().__init__() so PreTrainedConfig detects it and populates rope_parameters
-        self.rope_parameters = None
+        # Set all attributes before super().__init__() so RotaryEmbeddingConfigMixin
+        # can find rope_parameters and max_position_embeddings during initialization.
+        self.num_key_value_heads = num_key_value_heads
+        self.attention_bias = attention_bias
+        self.output_quantile_len = output_quantile_len
+        self.decode_index = decode_index
+        self.use_qk_norm = use_qk_norm
+        self.use_per_dim_scale = use_per_dim_scale
+        self.use_bias = use_bias
+        self.activation = activation
+        self.use_continuous_quantile_head = use_continuous_quantile_head
+        self.force_flip_invariance = force_flip_invariance
+        self.infer_is_positive = infer_is_positive
+        # Gemma2-compatible: needed by Gemma2Attention.__init__
+        self.query_pre_attn_scalar = 256.0
+        self.attn_logit_softcapping = None
+        self.max_position_embeddings = max_position_embeddings
+        self.rope_parameters = rope_parameters
         self.patch_length = patch_length
         self.context_length = context_length
         self.horizon_length = horizon_length
@@ -145,25 +161,6 @@ class Timesfm2P5Config(PreTrainedConfig):
 
         kwargs["is_encoder_decoder"] = self.is_encoder_decoder
         super().__init__(**kwargs)
-
-        # Explicitly assign params not covered by parent TimesFmConfig
-        self.num_key_value_heads = num_key_value_heads
-        self.attention_bias = attention_bias
-        self.layer_types = ["attention"] * num_hidden_layers
-        self.output_quantile_len = output_quantile_len
-        self.decode_index = decode_index
-        self.use_qk_norm = use_qk_norm
-        self.use_per_dim_scale = use_per_dim_scale
-        self.use_bias = use_bias
-        self.activation = activation
-        self.use_continuous_quantile_head = use_continuous_quantile_head
-        self.force_flip_invariance = force_flip_invariance
-        self.infer_is_positive = infer_is_positive
-        # Gemma2-compatible: needed by Gemma2Attention.__init__
-        self.query_pre_attn_scalar = 256.0
-        self.attn_logit_softcapping = None
-        self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
 
 
 __all__ = ["Timesfm2P5Config"]

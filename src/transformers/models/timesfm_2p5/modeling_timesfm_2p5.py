@@ -272,7 +272,8 @@ class Timesfm2P5Attention(nn.Module):
 
     def __init__(self, config: Timesfm2P5Config, layer_idx: int):
         super().__init__()
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        # TimesFM 2.5 always uses full attention, never sliding window
+        self.layer_type = None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -294,7 +295,7 @@ class Timesfm2P5Attention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
-        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.sliding_window = None
 
         if config.use_qk_norm:
             self.q_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -365,7 +366,8 @@ class Timesfm2P5DecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.config = config
-        self.attention_type = config.layer_types[layer_idx]
+        # TimesFM 2.5 always uses full attention
+        self.attention_type = "attention"
         self.self_attn = Timesfm2P5Attention(config=config, layer_idx=layer_idx)
         self.mlp = Timesfm2P5MLP(config)
         self.input_layernorm = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
