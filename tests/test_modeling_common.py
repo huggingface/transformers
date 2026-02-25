@@ -43,7 +43,6 @@ from transformers import (
     logging,
     set_seed,
 )
-from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.core_model_loading import WeightRenaming, process_target_pattern
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
@@ -4673,7 +4672,7 @@ class ModelTesterMixin:
             with self.subTest(model_class.__name__):
                 model = model_class(copy.deepcopy(config))
                 # Skip if no conversions
-                conversions = get_model_conversion_mapping(model, add_legacy=False)
+                conversions = model.get_weight_conversions_recursively(add_legacy=False)
                 if len(conversions) == 0:
                     self.skipTest("No conversion found for this model")
 
@@ -4707,7 +4706,7 @@ class ModelTesterMixin:
                         self.assertTrue(
                             num_matches > 0,
                             f"`{source_pattern}` in `{conversion}` did not match any of the source keys. "
-                            "This indicates whether that the pattern is not properly written, ot that it could not be reversed correctly",
+                            "This indicates whether that the pattern is not properly written, or that it could not be reversed correctly",
                         )
 
                 # If everything is still good at this point, let's test that we perform the same operations both when
@@ -4742,7 +4741,7 @@ class ModelTesterMixin:
                 model = model_class(copy.deepcopy(config))
 
                 # Skip if no conversions
-                conversions = get_model_conversion_mapping(model, add_legacy=False)
+                conversions = model.get_weight_conversions_recursively(add_legacy=False)
                 if len(conversions) == 0:
                     self.skipTest("No conversion found for this model")
 

@@ -67,6 +67,10 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "paligemma": [
+            WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
+            WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
+        ],
         "qwen3_5_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
         ],
@@ -380,7 +384,6 @@ VLMS = [
     "llava",  # all llava prefixed models fall under this check
     "mistral3",
     "mllama",
-    "paligemma",
     "shieldgemma2",
     "qwen2vl",
     "qwen2_5_vl",

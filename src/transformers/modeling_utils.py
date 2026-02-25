@@ -4267,7 +4267,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def get_weight_conversions_recursively(self, key_mapping=None, hf_quantizer=None, add_legacy=True):
         conversions = []
-        conversions.extend(get_model_conversion_mapping(self, key_mapping, hf_quantizer))
+        conversions.extend(get_model_conversion_mapping(self, key_mapping, hf_quantizer, add_legacy))
 
         for submodule in self.children():
             if (
