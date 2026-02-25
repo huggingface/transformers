@@ -72,6 +72,8 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
             The vocabulary size of the `token_type_ids`.
         vocab_size (`int`, *optional*, defaults to 4):
             Vocabulary size of the model. Defines the number of different tokens that can be represented by the `inputs_ids`.
+        initializer_range (`float`, *optional*, defaults to 0.01):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         start_token_id (`int`, *optional*, defaults to 0):
             Token id representing the start of a sequence.
         pad_token_id (`int`, *optional*, defaults to 1):
@@ -118,6 +120,7 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         max_2d_position_embeddings=1024,
         type_vocab_size=1,
         vocab_size=4,
+        initializer_range=0.01,
         start_token_id=0,
         pad_token_id=1,
         end_token_id=2,
@@ -150,6 +153,7 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         self.max_2d_position_embeddings = max_2d_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.vocab_size = vocab_size
+        self.initializer_range = initializer_range
         self.start_token_id = start_token_id
         self.pad_token_id = pad_token_id
         self.end_token_id = end_token_id

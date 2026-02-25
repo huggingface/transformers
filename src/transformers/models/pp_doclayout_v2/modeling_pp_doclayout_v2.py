@@ -22,6 +22,7 @@ import math
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -32,9 +33,10 @@ from ...activations import ACT2CLS, ACT2FN
 from ...backbone_utils import load_backbone
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...integrations import use_kernel_forward_from_hub
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModuleUtilsMixin, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward, compile_compatible_method_lru_cache
 from ...utils import (
@@ -71,14 +73,49 @@ class PPDocLayoutV2GlobalPointer(nn.Module):
 
 
 class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
-    def __init__(self, config):
+    inv_freq: torch.Tensor
+
+    def __init__(self, config, device=None):
         super().__init__()
+        self.config = config
         self.embed_dim = config.relation_bias_embed_dim
-        self.temperature = config.relation_bias_temperature
         self.scale = config.relation_bias_scale
         self.pos_proj = nn.Conv2d(
             in_channels=self.embed_dim * 4, out_channels=config.num_attention_heads, kernel_size=1
         )
+        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: PPDocLayoutV2Config | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.relation_bias_temperature
+        dim = config.relation_bias_embed_dim
+        half_dim = dim // 2
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / half_dim)
+        )
+        return inv_freq, attention_factor
 
     def box_relative_encoding(
         self, source_boxes: torch.Tensor, target_boxes: torch.Tensor = None, epsilon: float = 1e-5
@@ -95,15 +132,9 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
 
         return relative_encoding
 
-    def get_sine_position_embedding(
-        self, x: torch.Tensor, embed_dim: int, temperature: float = 10000.0, scale: float = 100.0
-    ):
-        half_dim = embed_dim // 2
-        dim = torch.arange(half_dim, dtype=x.dtype, device=x.device)
-        dim = temperature ** (2 * dim / half_dim)
-        x_scaled = (x * scale).unsqueeze(-1)
-        embedding = x_scaled / dim
-        embedding = torch.cat((embedding.sin(), embedding.cos()), dim=-1).flatten(start_dim=-2)
+    def get_position_embedding(self, x: torch.Tensor, scale: float = 100.0):
+        embedding = (x * scale).unsqueeze(-1) * self.inv_freq
+        embedding = torch.cat((embedding.sin(), embedding.cos()), dim=-1).flatten(start_dim=-2).to(x.dtype)
 
         return embedding
 
@@ -112,9 +143,7 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
             target_boxes = source_boxes
         with torch.no_grad():
             relative_encoding = self.box_relative_encoding(source_boxes, target_boxes)
-            position_embedding = self.get_sine_position_embedding(
-                relative_encoding, self.embed_dim, self.temperature, self.scale
-            )
+            position_embedding = self.get_position_embedding(relative_encoding, self.scale)
             position_embedding = position_embedding.permute(0, 3, 1, 2)
         out = self.pos_proj(position_embedding)
         return out
@@ -217,8 +246,8 @@ class PPDocLayoutV2ReadingOrderSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -246,8 +275,8 @@ class PPDocLayoutV2ReadingOrderOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -399,9 +428,9 @@ class PPDocLayoutV2ReadingOrderEncoder(nn.Module):
         center_x = (x_min + x_max) * 0.5
         center_y = (y_min + y_max) * 0.5
 
-        center_wh_bbox = torch.stack([center_x, center_y, width, height], dim=-1)
+        center_width_height_bbox = torch.stack([center_x, center_y, width, height], dim=-1)
 
-        result = self.rel_bias_module(center_wh_bbox)
+        result = self.rel_bias_module(center_width_height_bbox)
 
         return result
 
@@ -563,17 +592,16 @@ class PPDocLayoutV2TextEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
         embeddings = inputs_embeds + token_type_embeddings
+
         position_embeddings = self.position_embeddings(position_ids)
         embeddings += position_embeddings
 
+        # custom new spatial embeddings
         spatial_position_embeddings = self.calculate_spatial_position_embeddings(bbox)
-
-        # custom
         spatial_position_embeddings = self.spatial_proj(spatial_position_embeddings)
-
         embeddings += spatial_position_embeddings
         return embeddings
 
@@ -820,17 +848,23 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 init.zeros_(module.weight.data[module.padding_idx])
+        if isinstance(module, PPDocLayoutV2PositionRelationEmbedding):
+            inv_freq, _ = module.compute_default_rope_parameters(module.config)
+            inv_freq = inv_freq.to(module.inv_freq.device)
+            module.register_buffer("inv_freq", inv_freq, persistent=False)
 
 
-class PPDocLayoutV2ReadingOrder(nn.Module, ModuleUtilsMixin):
+class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.embeddings = PPDocLayoutV2TextEmbeddings(config)
         self.label_embeddings = nn.Embedding(config.num_classes, config.hidden_size)
         self.label_features_projection = nn.Linear(config.hidden_size, config.hidden_size)
         self.encoder = PPDocLayoutV2ReadingOrderEncoder(config)
         self.relative_head = PPDocLayoutV2GlobalPointer(config)
         self.config = config
+
+        self.post_init()
 
     def forward(self, boxes, labels=None, mask=None):
         device = mask.device
@@ -867,8 +901,15 @@ class PPDocLayoutV2ReadingOrder(nn.Module, ModuleUtilsMixin):
         final_embeddings = self.embeddings.dropout(final_embeddings)
 
         input_embeddings = pred_col_idx < (num_pred + 2).unsqueeze(1)
-        input_shape = input_embeddings.size()
-        attention_mask = self.get_extended_attention_mask(input_embeddings, input_shape)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=final_embeddings,
+            attention_mask=input_embeddings,
+        )
+        if attention_mask.dtype == torch.bool:
+            attention_mask = torch.zeros_like(attention_mask, dtype=final_embeddings.dtype).masked_fill(
+                ~attention_mask, torch.finfo(final_embeddings.dtype).min
+            )
         encoder_output = self.encoder(hidden_states=final_embeddings, bbox=pad_boxes, attention_mask=attention_mask)
         encoder_output = encoder_output.last_hidden_state
         token = encoder_output[:, 1 : 1 + seq_len, :]
@@ -2291,8 +2332,6 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         )
 
         self.model.denoising_class_embed = nn.Embedding(config.num_labels, config.d_model)
-        # self.class_thresholds = [config.threshold_mapping[v] for v in config.id2label.values()]
-        # self.class_map = [config.order_map[category] for category in config.order_map]
         self.reading_order = PPDocLayoutV2ReadingOrder(config.reading_order_config)
         self.num_queries = config.num_queries
         self.config = config
@@ -2448,4 +2487,9 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         )
 
 
-__all__ = ["PPDocLayoutV2ForObjectDetection", "PPDocLayoutV2Model", "PPDocLayoutV2PreTrainedModel"]
+__all__ = [
+    "PPDocLayoutV2ForObjectDetection",
+    "PPDocLayoutV2Model",
+    "PPDocLayoutV2PreTrainedModel",
+    "PPDocLayoutV2ReadingOrder",
+]

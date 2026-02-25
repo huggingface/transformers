@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-10-16 and added to Hugging Face Transformers on 2026-02-24.*
+*This model was released on 2025-10-16 and added to Hugging Face Transformers on 2026-02-25.*
 
 # PP-DocLayoutV2
 
@@ -152,3 +152,7 @@ for result in results:
 ## PPDocLayoutV2ImageProcessor
 
 [[autodoc]] PPDocLayoutV2ImageProcessor
+
+## PPDocLayoutV2ReadingOrder
+
+[[autodoc]] PPDocLayoutV2ReadingOrder
