@@ -517,13 +517,13 @@ Parameters:
             text (`Union[str, list[str], list[list[str]]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If you pass a pretokenized input, set `is_split_into_words=True` to avoid ambiguity with batched inputs.
-            custom_processing_mode (`str`, *optional*, defaults to `"standard"`):
+            custom_processing_mode (`str`, *kwargs*, *optional*, defaults to `"standard"`):
                 Custom processing mode for advanced text/image processing. Can be 'standard', 'enhanced', or 'experimental'.
-            enable_advanced_features (`bool`, *optional*, defaults to `False`):
+            enable_advanced_features (`bool`, *kwargs*, *optional*, defaults to `False`):
                 Whether to enable advanced processing features like custom tokenization strategies.
-            custom_threshold (`float`, *optional*, defaults to 0.5):
+            custom_threshold (`float`, *kwargs*, *optional*, defaults to 0.5):
                 Custom threshold value for filtering or processing decisions.
-            output_format (`str`, *optional*, defaults to `"default"`):
+            output_format (`str`, *kwargs*, *optional*, defaults to `"default"`):
                 Output format specification. Can be 'default', 'extended', or 'minimal'.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
@@ -584,16 +584,16 @@ Parameters:
             images (`Union[PIL.Image.Image, numpy.ndarray, torch.Tensor, list[PIL.Image.Image], list[numpy.ndarray], list[torch.Tensor]]`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            image_grid_pinpoints (`list[list[int]]`, *optional*):
+            image_grid_pinpoints (`list[list[int]]`, *kwargs*, *optional*):
                 A list of possible resolutions to use for processing high resolution images. The best resolution is selected
                 based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
                 method.
-            custom_scale (`float`, *optional*, defaults to 255.0):
+            custom_scale (`float`, *kwargs*, *optional*, defaults to 255.0):
                 Custom scale factor for preprocessing pipelines.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 Returns stacked tensors if set to `'pt'`, otherwise returns a list of tensors.
             **kwargs ([`ImagesKwargs`], *optional*):
-                Additional image preprocessing options. Model-specific parameters are listed above; see the TypedDict class
+                Additional image preprocessing options. Model-specific kwargs are listed above; see the TypedDict class
                 for the complete list of supported arguments.
 
         Returns:
@@ -624,14 +624,14 @@ Parameters:
 Constructs a fast DummyForTest image processor.
 
 Args:
-    image_grid_pinpoints (`list[list[int]]`, *optional*):
+    image_grid_pinpoints (`list[list[int]]`, *kwargs*, *optional*):
         A list of possible resolutions to use for processing high resolution images. The best resolution is selected
         based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
         method.
-    custom_scale (`float`, *optional*, defaults to 255.0):
+    custom_scale (`float`, *kwargs*, *optional*, defaults to 255.0):
         Custom scale factor for preprocessing pipelines.
     **kwargs ([`ImagesKwargs`], *optional*):
-        Additional image preprocessing options. Model-specific parameters are listed above; see the TypedDict class
+        Additional image preprocessing options. Model-specific kwargs are listed above; see the TypedDict class
         for the complete list of supported arguments.
 """
 

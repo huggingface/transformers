@@ -65,6 +65,9 @@ UNROLL_KWARGS_CLASSES = {
 }
 BASIC_KWARGS_TYPES = ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs"]
 
+# Short indicator added to unrolled kwargs to distinguish them from regular args
+KWARGS_INDICATOR = ", *kwargs*"
+
 HARDCODED_CONFIG_FOR_MODELS = {
     "openai": "OpenAIGPTConfig",
     "x-clip": "XCLIPConfig",
@@ -276,7 +279,7 @@ class ImageProcessorArgs:
     # Used for the **kwargs summary line when unrolling typed kwargs (key: "__kwargs__")
     __kwargs__ = {
         "description": """
-    Additional image preprocessing options. Model-specific parameters are listed above; see the TypedDict class
+    Additional image preprocessing options. Model-specific kwargs are listed above; see the TypedDict class
     for the complete list of supported arguments.
     """,
         "shape": None,
@@ -2359,15 +2362,15 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                             nested_param_type_str = (
                                 nested_param_type_str if "`" in nested_param_type_str else f"`{nested_param_type_str}`"
                             )
-                            # Format the parameter docstring
+                            # Format the parameter docstring (KWARGS_INDICATOR distinguishes from regular args)
                             if nested_additional_info:
                                 docstring += set_min_indent(
-                                    f"{nested_param_name} ({nested_param_type_str}{nested_additional_info}):{nested_description}",
+                                    f"{nested_param_name} ({nested_param_type_str}{KWARGS_INDICATOR}{nested_additional_info}):{nested_description}",
                                     indent_level + 8,
                                 )
                             else:
                                 docstring += set_min_indent(
-                                    f"{nested_param_name} ({nested_param_type_str}{nested_shape_string}{nested_optional_string}{nested_param_default}):{nested_description}",
+                                    f"{nested_param_name} ({nested_param_type_str}{KWARGS_INDICATOR}{nested_shape_string}{nested_optional_string}{nested_param_default}):{nested_description}",
                                     indent_level + 8,
                                 )
 
@@ -2398,15 +2401,15 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                             f"[ERROR] {param_name} for {kwarg_param.annotation.__args__[0].__qualname__} in file {func.__code__.co_filename} has no type"
                         )
                     param_type = param_type if "`" in param_type else f"`{param_type}`"
-                    # Format the parameter docstring
+                    # Format the parameter docstring (KWARGS_INDICATOR distinguishes from regular args)
                     if additional_info:
                         docstring += set_min_indent(
-                            f"{param_name} ({param_type}{additional_info}):{description}",
+                            f"{param_name} ({param_type}{KWARGS_INDICATOR}{additional_info}):{description}",
                             indent_level + 8,
                         )
                     else:
                         docstring += set_min_indent(
-                            f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
+                            f"{param_name} ({param_type}{KWARGS_INDICATOR}{shape_string}{optional_string}{param_default}):{description}",
                             indent_level + 8,
                         )
                 else:
