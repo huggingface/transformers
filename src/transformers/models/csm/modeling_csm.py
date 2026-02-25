@@ -643,6 +643,7 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
+        next_sequence_length: int | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
@@ -650,7 +651,7 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
-            input_ids, past_key_values, attention_mask, inputs_embeds, cache_position, **kwargs
+            input_ids, next_sequence_length, past_key_values, attention_mask, inputs_embeds, cache_position, **kwargs
         )
 
         is_first_generation_step = model_inputs["cache_position"][0] == 0
@@ -917,6 +918,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
+        next_sequence_length: int | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
@@ -925,6 +927,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
     ):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids=input_ids,
+            next_sequence_length=next_sequence_length,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,

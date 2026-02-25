@@ -325,12 +325,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-### ImageToImagePipeline [[transformers.ImageToImagePipeline]]
-
-[[autodoc]] ImageToImagePipeline
-    - __call__
-    - all
-
 ### ObjectDetectionPipeline [[transformers.ObjectDetectionPipeline]]
 
 [[autodoc]] ObjectDetectionPipeline
@@ -362,12 +356,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 ### FillMaskPipeline [[transformers.FillMaskPipeline]]
 
 [[autodoc]] FillMaskPipeline
-    - __call__
-    - all
-
-### QuestionAnsweringPipeline [[transformers.QuestionAnsweringPipeline]]
-
-[[autodoc]] QuestionAnsweringPipeline
     - __call__
     - all
 
@@ -431,12 +419,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 ### MaskGenerationPipeline [[transformers.MaskGenerationPipeline]]
 
 [[autodoc]] MaskGenerationPipeline
-    - __call__
-    - all
-
-### VisualQuestionAnsweringPipeline [[transformers.VisualQuestionAnsweringPipeline]]
-
-[[autodoc]] VisualQuestionAnsweringPipeline
     - __call__
     - all
 

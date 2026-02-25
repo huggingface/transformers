@@ -633,13 +633,12 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
         audio_input_ids_mask: torch.LongTensor | None = None,
         **kwargs,
     ):
-        full_input_ids = kwargs.pop("full_input_ids", input_ids)
         model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
 
         if audio_input_ids is not None and model_inputs.get("past_key_values") is not None:
             current_cache_length = model_inputs["cache_position"][0]
-            audio_token_mask = (full_input_ids == self.config.audio_token_id) | (
-                full_input_ids == self.config.audio_delay_token_id
+            audio_token_mask = (input_ids == self.config.audio_token_id) | (
+                input_ids == self.config.audio_delay_token_id
             )
             in_cache_num_audio_input_ids = audio_token_mask[:, :current_cache_length].sum(dim=-1)
 
