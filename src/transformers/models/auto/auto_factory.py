@@ -568,8 +568,6 @@ class _LazyAutoMapping(OrderedDict[type[PreTrainedConfig], _LazyAutoMappingValue
     def __getitem__(self, key: type[PreTrainedConfig]) -> _LazyAutoMappingValue:
         if key in self._extra_content:
             return self._extra_content[key]
-        print("self._reverse_config_mapping: ", self._reverse_config_mapping)
-        print("key: ", key)
         model_type = self._reverse_config_mapping[key.__name__]
         if model_type in self._model_mapping:
             model_name = self._model_mapping[model_type]

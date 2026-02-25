@@ -211,9 +211,9 @@ for i, image in enumerate(images['pixel_values']):
 
 [[autodoc]] JanusImageProcessor
 
-## JanusImageProcessorFast
+## JanusImageProcessorPil
 
-[[autodoc]] JanusImageProcessorFast
+[[autodoc]] JanusImageProcessorPil
 
 ## JanusVisionModel
 

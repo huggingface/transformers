@@ -22,8 +22,13 @@ from torch import nn
 from torchvision.io import read_image
 
 from ...image_processing_backends import TorchvisionBackend
-from ...image_processing_utils import BatchFeature
-from ...image_transforms import center_to_corners_format, corners_to_center_format, safe_squeeze
+from ...image_processing_utils import BatchFeature, get_size_dict
+from ...image_transforms import (
+    center_to_corners_format,
+    corners_to_center_format,
+    get_size_with_aspect_ratio,
+    safe_squeeze,
+)
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -68,24 +73,6 @@ class DetrImageProcessorKwargs(ImagesKwargs, total=False):
 
     format: str | AnnotationFormat
     do_convert_annotations: bool
-
-
-def get_size_with_aspect_ratio(image_size: tuple[int, int], shortest_edge: int, longest_edge: int) -> tuple[int, int]:
-    """
-    Computes the output image size given the input image size, shortest edge, and longest edge.
-    Maintains aspect ratio while respecting both constraints.
-    """
-    height, width = image_size
-    min_size = min(height, width)
-    max_size = max(height, width)
-
-    scale = shortest_edge / min_size
-    if max_size * scale > longest_edge:
-        scale = longest_edge / max_size
-
-    new_height = int(height * scale)
-    new_width = int(width * scale)
-    return (new_height, new_width)
 
 
 def binary_mask_to_rle(mask):
@@ -458,10 +445,7 @@ class DetrImageProcessor(TorchvisionBackend):
         max_size = None if size is None else kwargs.pop("max_size", 1333)
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         # Convert size dict for backwards compat with max_size parameter
-        if size is not None:
-            from ...image_processing_utils import get_size_dict
-
-            kwargs["size"] = get_size_dict(size, max_size=max_size, default_to_square=False)
+        kwargs["size"] = get_size_dict(size, max_size=max_size, default_to_square=False)
 
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations")
@@ -533,11 +517,7 @@ class DetrImageProcessor(TorchvisionBackend):
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
-            new_size = get_size_with_aspect_ratio(
-                image.shape[-2:],
-                size.shortest_edge,
-                size.longest_edge or size.shortest_edge,
-            )
+            new_size = get_size_with_aspect_ratio(image.shape[-2:], size.shortest_edge, size.longest_edge)
         elif size.max_height and size.max_width:
             new_size = get_image_size_for_max_height_width(image.shape[-2:], size.max_height, size.max_width)
         elif size.height and size.width:
