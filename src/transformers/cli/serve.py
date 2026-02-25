@@ -758,7 +758,8 @@ class Serve:
                 if not config_path:
                     continue
 
-                config = json.loads(config_path.open().read())
+                with config_path.open() as f:
+                    config = json.loads(f.read())
 
                 if not (isinstance(config, dict) and "architectures" in config):
                     continue

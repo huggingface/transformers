@@ -192,7 +192,8 @@ class MyT5Tokenizer(PreTrainedTokenizer):
         self._utf_vocab_size = 2**8  # utf is 8 bits
 
         # Load byte maps
-        self.byte_maps = json.load(open(vocab_file, "r"))
+        with open(vocab_file, "r") as f:
+            self.byte_maps = json.load(f)
 
         self.decompose_rewriter = ByteRewriter(self.byte_maps["decompose_map"])
         self.merge_rewriter = ByteRewriter(self.byte_maps["merge_map"])
