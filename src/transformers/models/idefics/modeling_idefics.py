@@ -156,7 +156,9 @@ def expand_inputs_for_generation(
     return input_ids, model_kwargs
 
 
-def freeze_model(model, module_exceptions=[]):
+def freeze_model(model, module_exceptions=None):
+    if module_exceptions is None:
+        module_exceptions = []
     mapping = {
         "LayerNorm": nn.LayerNorm,
         "Linear": nn.Linear,
@@ -932,11 +934,15 @@ class IdeficsModel(IdeficsPreTrainedModel):
         if config.freeze_vision_layers:
             freeze_model(self.vision_model, module_exceptions=config.freeze_vision_module_exceptions)
 
-    def freeze_text_layers(self, module_exceptions=[]):
+    def freeze_text_layers(self, module_exceptions=None):
+        if module_exceptions is None:
+            module_exceptions = []
         for module in [self.layers, self.norm]:
             freeze_model(module, module_exceptions=module_exceptions)
 
-    def freeze_vision_layers(self, module_exceptions=[]):
+    def freeze_vision_layers(self, module_exceptions=None):
+        if module_exceptions is None:
+            module_exceptions = []
         freeze_model(self.vision_model, module_exceptions=module_exceptions)
 
     @merge_with_config_defaults
