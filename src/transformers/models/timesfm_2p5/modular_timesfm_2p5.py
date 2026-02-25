@@ -317,6 +317,7 @@ class Timesfm2P5Attention(LlamaAttention):
             value_states,
             attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
+            # scaling=1.0 because per-dimension learnable scaling is already applied to query_states above
             scaling=1.0,
             **kwargs,
         )
@@ -327,10 +328,7 @@ class Timesfm2P5Attention(LlamaAttention):
 
 
 class Timesfm2P5DecoderLayer(LlamaDecoderLayer):
-    """TimesFM 2.5 Transformer decoder layer with pre/post RMS normalization.
-
-    Inherits from LlamaDecoderLayer and adds pre/post feedforward layernorms.
-    """
+    """TimesFM 2.5 Transformer decoder layer with pre/post RMS normalization and no KV cache."""
 
     def __init__(self, config: Timesfm2P5Config, layer_idx: int):
         super().__init__(config, layer_idx)
