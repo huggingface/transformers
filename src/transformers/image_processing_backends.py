@@ -208,6 +208,14 @@ class TorchvisionBackend(BaseImageProcessor):
                 interpolation = resample
         else:
             interpolation = tvF.InterpolationMode.BILINEAR
+        if interpolation == tvF.InterpolationMode.LANCZOS:
+            logger.warning_once(
+                "You have used a torchvision backend image processor with LANCZOS resample which not yet supported for torch.Tensor. "
+                "BICUBIC resample will be used as an alternative. Please fall back to a pil backend image processor if you "
+                "want full consistency with the original model."
+            )
+            interpolation = tvF.InterpolationMode.BICUBIC
+
         if size.shortest_edge and size.longest_edge:
             new_size = get_size_with_aspect_ratio(
                 image.size()[-2:],

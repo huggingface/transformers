@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_pixtral import *
     from .image_processing_pixtral import *
-    from .image_processing_pixtral_fast import *
+    from .image_processing_pil_pixtral import *
     from .modeling_pixtral import *
     from .processing_pixtral import *
 else:

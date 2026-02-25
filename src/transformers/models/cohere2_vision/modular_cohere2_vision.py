@@ -26,7 +26,7 @@ from transformers.models.aya_vision.modeling_aya_vision import (
     AyaVisionModelOutputWithPast,
     AyaVisionPreTrainedModel,
 )
-from transformers.models.got_ocr2.image_processing_got_ocr2_fast import GotOcr2ImageProcessorFast
+from transformers.models.got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessor
 
 from ...cache_utils import Cache
 from ...image_processing_utils import BatchFeature
@@ -321,7 +321,7 @@ class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class Cohere2VisionImageProcessorFast(GotOcr2ImageProcessorFast):
+class Cohere2VisionImageProcessorFast(GotOcr2ImageProcessor):
     size = {"height": 512, "width": 512}
     min_patches = 1
     max_patches = 12
