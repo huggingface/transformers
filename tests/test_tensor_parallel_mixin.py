@@ -271,6 +271,12 @@ def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new
         f"Max diff: {diff.max().item()} | Mean diff: {diff.mean().item()}"
     )
 
+    # Compare generated token sequences
+    assert torch.equal(output.sequences, output_tp.sequences), (
+        f"TP and non-TP model generated different token sequences (direct load path). "
+        f"Non-TP: {output.sequences.tolist()} | TP: {output_tp.sequences.tolist()}"
+    )
+
     dist.barrier()
 
 
