@@ -42,21 +42,16 @@ class FourOverSixQuantize(ConversionOps):
         parameter = input_dict[full_parameter_name][0]
         quantized_parameters = module.get_quantized_parameters(parameter_name, parameter)
 
-        # Delete the high-precision parameters from the module after we used them to create
-        # the quantized parameters
-        # Cache parameters_to_quantize to avoid potential race conditions with lazy properties
-        if hasattr(module, "parameters_to_quantize"):
-            parameters_to_quantize = list(module.parameters_to_quantize)
-            for param_name in parameters_to_quantize:
-                if hasattr(module, param_name):
-                    delattr(module, param_name)
+        for parameter_name in module.parameters_to_quantize:
+            delattr(module, parameter_name)
 
         # Remove these keys from the missing_keys list since we've deleted them from the model
         for key in input_dict:
             missing_keys.discard(key)
 
         return {
-            f"{module_name}.{quantized_key}": quantized_parameters[quantized_key] for quantized_key in quantized_parameters
+            f"{module_name}.{quantized_key}": quantized_parameters[quantized_key]
+            for quantized_key in quantized_parameters
         }
 
 
