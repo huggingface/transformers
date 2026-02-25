@@ -303,6 +303,9 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
     def _freeze_parameters(self):
         for param in self.parameters():
             param.requires_grad = False

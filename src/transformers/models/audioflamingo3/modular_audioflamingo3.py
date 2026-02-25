@@ -53,6 +53,9 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
     AudioFlamingo3 encoder: Whisper encoder, average pool (time/2), then LayerNorm.
     """
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
     @can_return_tuple
     def forward(
         self,
