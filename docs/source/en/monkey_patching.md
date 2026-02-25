@@ -27,12 +27,12 @@ Here's a simple example showing how to replace a model component:
 
 ```python
 from transformers import AutoModelForCausalLM
-from transformers.models.gpt2.modeling_gpt2 import GPT2Attention
+from transformers.models.llama.modeling_llama import LlamaAttention
 from transformers.monkey_patch import register_monkey_patch_mapping
 
 
 # Define your replacement class (must inherit from nn.Module)
-class CustomGPT2Attention(GPT2Attention):
+class CustomLlamaAttention(LlamaAttention):
     def forward(self, *args, **kwargs):
         # Your custom implementation
         print("Using custom attention!")
@@ -40,13 +40,13 @@ class CustomGPT2Attention(GPT2Attention):
 
 
 # Register the patch globally (only applies to transformers modeling modules)
-register_monkey_patch_mapping(mapping={"GPT2Attention": CustomGPT2Attention})
+register_monkey_patch_mapping(mapping={"LlamaAttention": CustomLlamaAttention})
 
 # Load a model - the patch is automatically applied during initialization
-model = AutoModelForCausalLM.from_pretrained("gpt2")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-1B")
 
-# All GPT2Attention layers in the model are now CustomGPT2Attention instances
-print(type(model.transformer.h[0].attn))  # <class '__main__.CustomGPT2Attention'>
+# All LlamaAttention layers in the model are now CustomLlamaAttention instances
+print(type(model.model.layers[0].self_attn))  # <class '__main__.CustomLlamaAttention'>
 ```
 
 ## How it works
@@ -63,7 +63,7 @@ Once patches are registered, they persist and affect all subsequent model loads 
 
 **Important limitations**:
 
-- Only classes in `transformers` modeling modules are allowed to be patched (e.g., `GPT2Attention`, `BertEncoder`).
+- Only classes in `transformers` modeling modules are allowed to be patched (e.g., `LlamaAttention`, `LlamaMLP`).
 - The mapping keys can be either exact class names or regular expression patterns (see [Pattern matching](#pattern-matching) below).
 
 ## Global registration
@@ -110,7 +110,7 @@ register_monkey_patch_mapping(
 )
 ```
 
-**Important**: Exact matches take precedence over patterns. If you register both `"BertAttention"` and `".*Attention"`, classes named `BertAttention` will use the exact-match replacement, while other matching classes will use the pattern-match replacement.
+**Important**: Exact matches take precedence over patterns. If you register both `"LlamaAttention"` and `".*Attention"`, classes named `LlamaAttention` will use the exact-match replacement, while other matching classes will use the pattern-match replacement.
 
 > [!WARNING]
 > **Regex patterns can silently break models.** A broad pattern like `".*Attention"` will match *every* class whose name contains "Attention" — including container classes that wrap the attention you actually want to replace. For example, BERT has three attention-related classes: `BertSelfAttention` and `BertCrossAttention` (the inner attention implementations) and `BertAttention` (an outer module that *contains* one of those inner classes). Patching all three with the same custom attention layer produces a broken model because the outer `BertAttention` no longer wraps the inner one — it *is* one, eliminating expected sub-modules like `self` and `output`. Prefer narrow patterns (e.g., `".*SelfAttention$"`) or exact class names to avoid unintended matches.
@@ -152,21 +152,21 @@ print(current_patches)
 The [`apply_monkey_patches`] context manager is only needed when you're constructing models **manually** (e.g., `Model(config)`) without using `from_pretrained` or `from_config`:
 
 ```python
-from transformers import BertModel, BertConfig
+from transformers import LlamaModel, LlamaConfig
 from transformers.monkey_patch import register_monkey_patch_mapping, apply_monkey_patches
 
 # Register patch globally
-register_monkey_patch_mapping(mapping={"BertAttention": CustomAttention})
+register_monkey_patch_mapping(mapping={"LlamaAttention": CustomAttention})
 
 # For manual construction, you need the context manager
 with apply_monkey_patches():
-    model = BertModel(BertConfig())  # Uses CustomAttention
+    model = LlamaModel(LlamaConfig())  # Uses CustomAttention
 
 # Without the context manager, manual construction uses original classes
-model = BertModel(BertConfig())  # Uses BertAttention
+model = LlamaModel(LlamaConfig())  # Uses LlamaAttention
 
 # But from_pretrained and from_config will always apply registered patches
-model = BertModel.from_pretrained("bert-base-uncased")  # Uses CustomAttention 
+model = LlamaModel.from_pretrained("meta-llama/Llama-3.2-1B")  # Uses CustomAttention
 ```
 
 ## Important notes
@@ -189,7 +189,7 @@ model = BertModel.from_pretrained("bert-base-uncased")  # Uses CustomAttention
 
 ```python
 # For exact names - must match exactly (case-sensitive)
-register_monkey_patch_mapping(mapping={"BertAttention": CustomAttention})
+register_monkey_patch_mapping(mapping={"LlamaAttention": CustomAttention})
 
 # For patterns - use valid regex
 register_monkey_patch_mapping(mapping={".*Attention": CustomAttention})
@@ -199,14 +199,14 @@ register_monkey_patch_mapping(mapping={".*Attention": CustomAttention})
 
 ```python
 print(get_monkey_patch_mapping())
-# Shows all registered mappings: {'BertAttention': <class 'CustomAttention'>, '.*MLP': <class 'CustomMLP'>}
+# Shows all registered mappings: {'LlamaAttention': <class 'CustomAttention'>, '.*MLP': <class 'CustomMLP'>}
 ```
 
 **Check model source**: Find the exact class name in the model's source:
 
 ```python
-from transformers.models.bert import modeling_bert
-print(dir(modeling_bert))  # Look for the class name
+from transformers.models.llama import modeling_llama
+print(dir(modeling_llama))  # Look for the class name
 ```
 
 ### How do I know if my patch is working?
@@ -214,10 +214,10 @@ print(dir(modeling_bert))  # Look for the class name
 Inspect the loaded model to verify the patch:
 
 ```python
-model = AutoModelForCausalLM.from_pretrained("gpt2")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-1B")
 
 # Check the type of a specific module
-print(type(model.transformer.h[0].attn))  # Should show your custom class
+print(type(model.model.layers[0].self_attn))  # Should show your custom class
 
 # Or iterate through all modules
 for name, module in model.named_modules():
@@ -235,17 +235,16 @@ from transformers.monkey_patch import register_monkey_patch_mapping
 
 register_monkey_patch_mapping(
     mapping={
-        "BertSelfAttention": BertFusedSelfAttention,
-        "BertCrossAttention": BertFusedCrossAttention,
+        "LlamaAttention": LlamaFusedAttention,
     }
 )
 
 register_checkpoint_conversion_mapping(
-    model_type="bert",
+    model_type="llama",
     mapping=[
         WeightConverter(
-            source_patterns=["query", "key", "value"],
-            target_patterns=["qkv"],
+            source_patterns=["q_proj", "k_proj", "v_proj"],
+            target_patterns=["qkv_proj"],
             operations=[
                 Concatenate(dim=0),
             ],
