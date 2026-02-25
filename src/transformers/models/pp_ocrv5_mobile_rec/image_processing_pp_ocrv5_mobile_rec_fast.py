@@ -21,9 +21,9 @@
 
 import math
 
-import cv2
 import numpy as np
 import torch
+from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -135,6 +135,109 @@ class PPOCRV5MobileRecImageProcessorFast(BaseImageProcessorFast):
         self.character = characters
         self.char_to_idx = {char: idx for idx, char in enumerate(characters)}
 
+    def _pil_resize(self, img: np.ndarray, target_size: tuple[int, int]) -> np.ndarray:
+        """
+        Resize image to exactly match cv2.resize behavior using fixed-point arithmetic.
+
+        This implementation uses fixed-point arithmetic (matching OpenCV's internal approach)
+        with float32 precision for coordinate calculations to achieve maximum compatibility.
+
+        Args:
+            img (`np.ndarray`):
+                Input image in HWC format (height, width, channels).
+            target_size (`tuple[int, int]`):
+                Target size as (width, height) to match cv2.resize convention.
+
+        Returns:
+            `np.ndarray`: Resized image in HWC format.
+        """
+        h, w = img.shape[:2]
+        target_w, target_h = target_size
+
+        # Ensure uint8 format
+        if img.dtype != np.uint8:
+            img = np.clip(img, 0, 255).astype(np.uint8)
+
+        # Handle grayscale images
+        if len(img.shape) == 2:
+            img = img[:, :, np.newaxis]
+            squeeze_output = True
+        else:
+            squeeze_output = False
+
+        # OpenCV uses fixed-point arithmetic with these constants
+        INTER_RESIZE_COEF_BITS = 11
+        INTER_RESIZE_COEF_SCALE = 1 << INTER_RESIZE_COEF_BITS  # 2048
+
+        # Calculate scaling factors using float32 (like cv2)
+        scale_x = np.float32(w) / np.float32(target_w)
+        scale_y = np.float32(h) / np.float32(target_h)
+
+        # Create coordinate grids for output image using float32
+        out_y, out_x = np.meshgrid(
+            np.arange(target_h, dtype=np.float32),
+            np.arange(target_w, dtype=np.float32),
+            indexing="ij"
+        )
+
+        # Map output coordinates to input coordinates (pixel-center alignment) using float32
+        src_x = (out_x + np.float32(0.5)) * scale_x - np.float32(0.5)
+        src_y = (out_y + np.float32(0.5)) * scale_y - np.float32(0.5)
+
+        # Clip to valid range
+        src_x = np.clip(src_x, np.float32(0), np.float32(w - 1))
+        src_y = np.clip(src_y, np.float32(0), np.float32(h - 1))
+
+        # Get integer parts
+        x0 = np.floor(src_x).astype(np.int32)
+        y0 = np.floor(src_y).astype(np.int32)
+        x1 = np.minimum(x0 + 1, w - 1)
+        y1 = np.minimum(y0 + 1, h - 1)
+
+        # Calculate fractional parts (keep in float32)
+        fx = src_x - x0.astype(np.float32)
+        fy = src_y - y0.astype(np.float32)
+
+        # Convert to fixed-point (with rounding, matching cv2's behavior)
+        wx = np.round(fx * np.float32(INTER_RESIZE_COEF_SCALE)).astype(np.int32)
+        wy = np.round(fy * np.float32(INTER_RESIZE_COEF_SCALE)).astype(np.int32)
+
+        # Clamp to valid range
+        wx = np.minimum(wx, INTER_RESIZE_COEF_SCALE)
+        wy = np.minimum(wy, INTER_RESIZE_COEF_SCALE)
+
+        # Calculate the four interpolation weights in fixed-point
+        w0 = (INTER_RESIZE_COEF_SCALE - wx) * (INTER_RESIZE_COEF_SCALE - wy)
+        w1 = wx * (INTER_RESIZE_COEF_SCALE - wy)
+        w2 = (INTER_RESIZE_COEF_SCALE - wx) * wy
+        w3 = wx * wy
+
+        # Perform bilinear interpolation for each channel using fixed-point arithmetic
+        output = np.zeros((target_h, target_w, img.shape[2]), dtype=np.uint8)
+
+        for c in range(img.shape[2]):
+            # Get the four corner pixel values (as int32 for fixed-point math)
+            Ia = img[y0, x0, c].astype(np.int32)
+            Ib = img[y0, x1, c].astype(np.int32)
+            Ic = img[y1, x0, c].astype(np.int32)
+            Id = img[y1, x1, c].astype(np.int32)
+
+            # Fixed-point interpolation
+            val = w0 * Ia + w1 * Ib + w2 * Ic + w3 * Id
+
+            # Divide by INTER_RESIZE_COEF_SCALE^2 with rounding
+            # This is equivalent to: (val + (1 << 21)) >> 22
+            shift_bits = INTER_RESIZE_COEF_BITS * 2
+            val = (val + (1 << (shift_bits - 1))) >> shift_bits
+
+            # Clamp to [0, 255]
+            output[:, :, c] = np.clip(val, 0, 255).astype(np.uint8)
+
+        if squeeze_output:
+            output = output[:, :, 0]
+
+        return output
+
     def _resize_norm_img(
         self,
         img: np.ndarray,
@@ -144,8 +247,8 @@ class PPOCRV5MobileRecImageProcessorFast(BaseImageProcessorFast):
         """
         Resize and normalize a single image while maintaining aspect ratio.
 
-        This method is identical to the one in [`PPOCRV5MobileRecImageProcessor`] to ensure
-        consistent preprocessing results.
+        This method uses PIL-based resizing instead of cv2 while maintaining
+        consistent preprocessing results with [`PPOCRV5MobileRecImageProcessor`].
 
         Args:
             img (`np.ndarray`):
@@ -165,7 +268,7 @@ class PPOCRV5MobileRecImageProcessorFast(BaseImageProcessorFast):
 
         if target_w > self.max_img_width:
             # If target width exceeds max, resize to max width
-            resized_image = cv2.resize(img, (self.max_img_width, img_h))
+            resized_image = self._pil_resize(img, (self.max_img_width, img_h))
             resized_w = self.max_img_width
             target_w = self.max_img_width
         else:
@@ -175,7 +278,7 @@ class PPOCRV5MobileRecImageProcessorFast(BaseImageProcessorFast):
                 resized_w = target_w
             else:
                 resized_w = int(math.ceil(img_h * ratio))
-            resized_image = cv2.resize(img, (resized_w, img_h))
+            resized_image = self._pil_resize(img, (resized_w, img_h))
 
         # Convert to float32
         resized_image = resized_image.astype(np.float32)
