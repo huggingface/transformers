@@ -266,10 +266,10 @@ class ConditionalDetrConvEncoder(nn.Module):
             replace_batch_norm(backbone)
 
         # We used to load with timm library directly instead of the AutoBackbone API
-        # so we need to unwrap the `backbone._backbone` module to load weights without mismatch
+        # so we need to unwrap the `backbone.timm_model` module to load weights without mismatch
         is_timm_model = False
-        if hasattr(backbone, "_backbone"):
-            backbone = backbone._backbone
+        if hasattr(backbone, "timm_model"):
+            backbone = backbone.timm_model
             is_timm_model = True
         self.model = backbone
 

@@ -85,7 +85,10 @@ class TimmBackboneConfig(TimmWrapperConfig):
                 "in_chans": num_channels,
                 "output_stride": output_stride,
             }
-        logger.warning("Deprecation message!")
+        logger.warning(
+            "TimmBackboneConfig is deprecate and will be removed in future versions. "
+            "Use a TimmWrapperConfig instead with TimmWrapperBackboneModel to extract features."
+        )
         super().__init__(freeze_batch_norm_2d=freeze_batch_norm_2d, **kwargs)
 
     def __setattr__(self, key, value):

@@ -197,7 +197,9 @@ class TimmWrapperBackboneModel(BackboneMixin, TimmWrapperPreTrainedModel):
 
     @property
     def _backbone(self):
-        logger.warning("Deprecation msg")
+        logger.warning(
+            f"The `self._backbone` attribute is deprecated for {self.__class__.__name__}. Please use `self.timm_model` instead."
+        )
         return self.timm_model
 
     @can_return_tuple

@@ -22,7 +22,10 @@ logger = logging.get_logger(__name__)
 
 class TimmBackbone(TimmWrapperBackboneModel):
     def __init__(self, *args, **kwargs):
-        logger.warning("Deprecation message")
+        logger.warning(
+            "`TimmBackbone` is deprecate and will be removed in future versions. Use a "
+            "`TimmWrapperBackboneModel` init from `TimmWrapperConfig` instead to extract features."
+        )
         super().__init__(*args, **kwargs)
 
 
