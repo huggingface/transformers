@@ -548,7 +548,6 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         {
             "feature-extraction": RoCBertModel,
             "fill-mask": RoCBertForMaskedLM,
-            "question-answering": RoCBertForQuestionAnswering,
             "text-classification": RoCBertForSequenceClassification,
             "text-generation": RoCBertForCausalLM,
             "token-classification": RoCBertForTokenClassification,

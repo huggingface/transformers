@@ -377,7 +377,6 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         {
             "feature-extraction": XLMModel,
             "fill-mask": XLMWithLMHeadModel,
-            "question-answering": XLMForQuestionAnsweringSimple,
             "text-classification": XLMForSequenceClassification,
             "text-generation": XLMWithLMHeadModel,
             "token-classification": XLMForTokenClassification,

@@ -60,7 +60,7 @@ if is_mlx_available():
 
 
 # vendored from distutils.util
-def strtobool(val):
+def strtobool(val) -> int:
     """Convert a string representation of truth to true (1) or false (0).
 
     True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values are 'n', 'no', 'f', 'false', 'off', and '0'.
@@ -74,7 +74,7 @@ def strtobool(val):
     raise ValueError(f"invalid truth value {val!r}")
 
 
-def infer_framework_from_repr(x):
+def infer_framework_from_repr(x) -> str | None:
     """
     Tries to guess the framework of an object `x` from its repr (brittle but will help in `is_tensor` to try the
     frameworks in a smart order, without the need to import the frameworks).
@@ -107,7 +107,7 @@ def _get_frameworks_and_test_func(x):
     return {f: framework_to_test[f] for f in frameworks}
 
 
-def is_tensor(x):
+def is_tensor(x) -> bool:
     """
     Tests if `x` is a `torch.Tensor`, `np.ndarray` or `mlx.array` in the order defined by `infer_framework_from_repr`
     """
@@ -124,28 +124,28 @@ def is_tensor(x):
     return False
 
 
-def is_numpy_array(x):
+def is_numpy_array(x) -> bool:
     """
     Tests if `x` is a numpy array or not.
     """
     return isinstance(x, np.ndarray)
 
 
-def is_torch_tensor(x):
+def is_torch_tensor(x) -> bool:
     """
     Tests if `x` is a torch tensor or not. Safe to call even if torch is not installed.
     """
     return _is_torch_available and isinstance(x, torch.Tensor)
 
 
-def is_torch_device(x):
+def is_torch_device(x) -> bool:
     """
     Tests if `x` is a torch device or not. Safe to call even if torch is not installed.
     """
     return _is_torch_available and isinstance(x, torch.device)
 
 
-def is_torch_dtype(x):
+def is_torch_dtype(x) -> bool:
     """
     Tests if `x` is a torch dtype or not. Safe to call even if torch is not installed.
     """
@@ -207,14 +207,14 @@ def _is_mlx(x):
     return isinstance(x, mx.array)
 
 
-def is_mlx_array(x):
+def is_mlx_array(x) -> bool:
     """
     Tests if `x` is a mlx array or not. Safe to call even when mlx is not installed.
     """
     return False if not _is_mlx_available else _is_mlx(x)
 
 
-def is_flash_attention_requested(config=None, requested_attention_implementation: str | None = None):
+def is_flash_attention_requested(config=None, requested_attention_implementation: str | None = None) -> bool:
     """
     Checks whether some flavor of flash attention is requested or not.
 

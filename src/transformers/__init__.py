@@ -146,7 +146,6 @@ _import_structure = {
         "ImageFeatureExtractionPipeline",
         "ImageSegmentationPipeline",
         "ImageTextToTextPipeline",
-        "ImageToImagePipeline",
         "JsonPipelineDataFormat",
         "KeypointMatchingPipeline",
         "MaskGenerationPipeline",
@@ -155,14 +154,12 @@ _import_structure = {
         "PipedPipelineDataFormat",
         "Pipeline",
         "PipelineDataFormat",
-        "QuestionAnsweringPipeline",
         "TableQuestionAnsweringPipeline",
         "TextClassificationPipeline",
         "TextGenerationPipeline",
         "TextToAudioPipeline",
         "TokenClassificationPipeline",
         "VideoClassificationPipeline",
-        "VisualQuestionAnsweringPipeline",
         "ZeroShotAudioClassificationPipeline",
         "ZeroShotClassificationPipeline",
         "ZeroShotImageClassificationPipeline",
@@ -251,6 +248,7 @@ _import_structure = {
         "EetqConfig",
         "FbgemmFp8Config",
         "FineGrainedFP8Config",
+        "FourOverSixConfig",
         "FPQuantConfig",
         "GPTQConfig",
         "HiggsConfig",
@@ -656,7 +654,6 @@ if TYPE_CHECKING:
     from .pipelines import ImageFeatureExtractionPipeline as ImageFeatureExtractionPipeline
     from .pipelines import ImageSegmentationPipeline as ImageSegmentationPipeline
     from .pipelines import ImageTextToTextPipeline as ImageTextToTextPipeline
-    from .pipelines import ImageToImagePipeline as ImageToImagePipeline
     from .pipelines import JsonPipelineDataFormat as JsonPipelineDataFormat
     from .pipelines import KeypointMatchingPipeline as KeypointMatchingPipeline
     from .pipelines import MaskGenerationPipeline as MaskGenerationPipeline
@@ -665,14 +662,12 @@ if TYPE_CHECKING:
     from .pipelines import PipedPipelineDataFormat as PipedPipelineDataFormat
     from .pipelines import Pipeline as Pipeline
     from .pipelines import PipelineDataFormat as PipelineDataFormat
-    from .pipelines import QuestionAnsweringPipeline as QuestionAnsweringPipeline
     from .pipelines import TableQuestionAnsweringPipeline as TableQuestionAnsweringPipeline
     from .pipelines import TextClassificationPipeline as TextClassificationPipeline
     from .pipelines import TextGenerationPipeline as TextGenerationPipeline
     from .pipelines import TextToAudioPipeline as TextToAudioPipeline
     from .pipelines import TokenClassificationPipeline as TokenClassificationPipeline
     from .pipelines import VideoClassificationPipeline as VideoClassificationPipeline
-    from .pipelines import VisualQuestionAnsweringPipeline as VisualQuestionAnsweringPipeline
     from .pipelines import ZeroShotAudioClassificationPipeline as ZeroShotAudioClassificationPipeline
     from .pipelines import ZeroShotClassificationPipeline as ZeroShotClassificationPipeline
     from .pipelines import ZeroShotImageClassificationPipeline as ZeroShotImageClassificationPipeline
@@ -756,6 +751,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import EetqConfig as EetqConfig
     from .utils.quantization_config import FbgemmFp8Config as FbgemmFp8Config
     from .utils.quantization_config import FineGrainedFP8Config as FineGrainedFP8Config
+    from .utils.quantization_config import FourOverSixConfig as FourOverSixConfig
     from .utils.quantization_config import FPQuantConfig as FPQuantConfig
     from .utils.quantization_config import GPTQConfig as GPTQConfig
     from .utils.quantization_config import HiggsConfig as HiggsConfig
