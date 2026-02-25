@@ -968,19 +968,6 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         return outputs
 
 
-def bidirectional_mask_function(attention_mask: torch.Tensor | None) -> Callable:
-    """
-    This creates bidirectional attention mask.
-    """
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        if attention_mask is None:
-            return torch.ones((), dtype=torch.bool)
-        return attention_mask[batch_idx, kv_idx].to(torch.bool)
-
-    return inner_mask
-
-
 class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
     config: T5Gemma2DecoderConfig
     _can_record_outputs = {
