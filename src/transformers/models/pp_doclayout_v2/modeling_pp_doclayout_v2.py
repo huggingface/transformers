@@ -866,7 +866,7 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
 
         self.post_init()
 
-    def forward(self, boxes, labels=None, mask=None):
+    def forward(self, boxes, labels=None, mask=None, **kwargs):
         device = mask.device
         batch_size, seq_len = mask.shape
         num_pred = mask.sum(dim=1)
