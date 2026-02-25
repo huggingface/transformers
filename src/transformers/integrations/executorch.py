@@ -21,6 +21,7 @@ from ..cache_utils import (
     EncoderDecoderCache,
     StaticCache,
     StaticLayer,
+    StaticSlidingWindowLayer,
 )
 from ..generation.configuration_utils import GenerationConfig
 from ..modeling_utils import PreTrainedModel
@@ -522,6 +523,11 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         # Initialize the static cache
         self.model = model
         self.static_cache = StaticCache(max_cache_len=max_cache_len, config=config)
+        # Since StaticSlidingWindow have dynamic control flow that cannot be avoided, we have to replace them here by
+        # simple StaticLayer... It means that any generation beyond the window is unfortunately unsupported
+        for i, layer in enumerate(self.static_cache.layers):
+            if isinstance(layer, StaticSlidingWindowLayer):
+                self.static_cache.layers[i] = StaticLayer(layer.max_cache_len)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         dtype = self.model.dtype
@@ -532,8 +538,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         for i, layer in enumerate(self.static_cache.layers):
             self.register_buffer(f"key_cache_{i}", layer.keys, persistent=False)
             self.register_buffer(f"value_cache_{i}", layer.values, persistent=False)
-            if isinstance(layer, StaticLayer):
-                self.register_buffer(f"cumulative_length_{i}", layer.cumulative_length, persistent=False)
+            self.register_buffer(f"cumulative_length_{i}", layer.cumulative_length, persistent=False)
 
     def forward(
         self,
@@ -563,11 +568,10 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             ensuring that the exported model can be executed in `ExecuTorch` out-of-the-box.
         """
         # Start by resetting static cache (it's needed to be able to run several generations with the same exported program,
-        # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was 
+        # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
         # already exported)
         for layer in self.static_cache.layers:
-            if isinstance(layer, StaticLayer):
-                layer.cumulative_length.copy_(cache_position[0:1])
+            layer.cumulative_length.copy_(cache_position[0:1])
 
         past_key_values = self.static_cache
 
@@ -699,6 +703,11 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
 
         # Initialize the cache
         self.cache = StaticCache(config=config, max_cache_len=max_cache_len)
+        # Since StaticSlidingWindow have dynamic control flow that cannot be avoided, we have to replace them here by
+        # simple StaticLayer... It means that any generation beyond the window is unfortunately unsupported
+        for i, layer in enumerate(self.cache.layers):
+            if isinstance(layer, StaticSlidingWindowLayer):
+                self.cache.layers[i] = StaticLayer(layer.max_cache_len)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         dtype = self.model.dtype
@@ -709,8 +718,7 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         for i, layer in enumerate(self.cache.layers):
             self.register_buffer(f"key_cache_{i}", layer.keys, persistent=False)
             self.register_buffer(f"value_cache_{i}", layer.values, persistent=False)
-            if isinstance(layer, StaticLayer):
-                self.register_buffer(f"cumulative_length_{i}", layer.cumulative_length, persistent=False)
+            self.register_buffer(f"cumulative_length_{i}", layer.cumulative_length, persistent=False)
 
     def forward(
         self,
@@ -730,11 +738,10 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
             torch.Tensor: Logits output from the model.
         """
         # Start by resetting static cache (it's needed to be able to run several generations with the same exported program,
-        # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was 
+        # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
         # already exported)
         for layer in self.cache.layers:
-            if isinstance(layer, StaticLayer):
-                layer.cumulative_length.copy_(cache_position[0:1])
+            layer.cumulative_length.copy_(cache_position[0:1])
 
         # Forward pass with the model
         outputs = self.model(
@@ -851,6 +858,11 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
 
         # Initialize static cache for decoder and DynamicCache for encoder
         self.static_cache = StaticCache(config=self.config, max_cache_len=max_static_cache_length)
+        # Since StaticSlidingWindow have dynamic control flow that cannot be avoided, we have to replace them here by
+        # simple StaticLayer... It means that any generation beyond the window is unfortunately unsupported
+        for i, layer in enumerate(self.static_cache.layers):
+            if isinstance(layer, StaticSlidingWindowLayer):
+                self.static_cache.layers[i] = StaticLayer(layer.max_cache_len)
         head_dim = getattr(self.config, "head_dim", self.config.hidden_size // self.config.num_attention_heads)
         num_heads = getattr(self.config, "num_key_value_heads", self.config.num_attention_heads)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, torch.float32, model_device)
@@ -862,16 +874,14 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         for i, layer in enumerate(self.static_cache.layers):
             self.register_buffer(f"key_cache_{i}", layer.keys, persistent=False)
             self.register_buffer(f"value_cache_{i}", layer.values, persistent=False)
-            if isinstance(layer, StaticLayer):
-                self.register_buffer(f"cumulative_length_{i}", layer.cumulative_length, persistent=False)
+            self.register_buffer(f"cumulative_length_{i}", layer.cumulative_length, persistent=False)
 
     def forward(self, decoder_input_ids, encoder_hidden_states, cache_position):
         # Start by resetting static cache (it's needed to be able to run several generations with the same exported program,
-        # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was 
+        # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
         # already exported)
         for layer in self.static_cache.layers:
-            if isinstance(layer, StaticLayer):
-                layer.cumulative_length.copy_(cache_position[0:1])
+            layer.cumulative_length.copy_(cache_position[0:1])
 
         # Get outputs from decoder
         outputs = self.decoder(
