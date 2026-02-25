@@ -158,7 +158,9 @@ class OlmoHybridIntegrationTest(unittest.TestCase):
     @slow
     def test_model_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = OlmoHybridForCausalLM.from_pretrained("hf-internal-testing/olmo-hybrid").to(torch_device, dtype=torch.bfloat16)
+        model = OlmoHybridForCausalLM.from_pretrained("hf-internal-testing/olmo-hybrid").to(
+            torch_device, dtype=torch.bfloat16
+        )
         out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
 
         rtol = 3e-2
