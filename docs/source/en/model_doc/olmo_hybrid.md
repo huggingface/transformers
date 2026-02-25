@@ -10,7 +10,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-02-23.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2026-02-25.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
