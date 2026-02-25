@@ -94,20 +94,23 @@ class Timesfm2P5MLP(nn.Module):
 class Timesfm2P5ResidualBlock(nn.Module):
     """[`TimesFmResidualBlock`] variant with configurable `use_bias` and `activation`."""
 
-    def __init__(
-        self, input_dims: int, hidden_dims: int, output_dims: int, use_bias: bool = True, activation: str = "swish"
-    ):
+    def __init__(self, config, input_dims: int, hidden_dims: int, output_dims: int, use_bias: bool | None = None):
         super().__init__()
+        self.input_dims = input_dims
+        self.hidden_dims = hidden_dims
+        self.output_dims = output_dims
         self.input_layer = nn.Linear(input_dims, hidden_dims, bias=use_bias)
+        self.activation = ACT2FN[config.activation]
         self.output_layer = nn.Linear(hidden_dims, output_dims, bias=use_bias)
         self.residual_layer = nn.Linear(input_dims, output_dims, bias=use_bias)
-        self.activation = ACT2FN[activation]
+        use_bias = use_bias if use_bias is not None else config.use_bias
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residual = self.residual_layer(hidden_states)
-        hidden_states = self.input_layer(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        return self.output_layer(hidden_states) + residual
+    def forward(self, x):
+        hidden = self.input_layer(x)
+        hidden = self.activation(hidden)
+        output = self.output_layer(hidden)
+        residual = self.residual_layer(x)
+        return output + residual
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -485,11 +488,11 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         self.tolerance = 1e-6
 
         self.input_ff_layer = Timesfm2P5ResidualBlock(
+            config,
             input_dims=2 * config.patch_length,
             hidden_dims=config.hidden_size,
             output_dims=config.hidden_size,
             use_bias=True,
-            activation=config.activation,
         )
 
         self.layers = nn.ModuleList(
@@ -676,18 +679,16 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
 
         num_quantiles = len(config.quantiles) + 1
         self.output_projection_point = Timesfm2P5ResidualBlock(
+            config,
             input_dims=config.hidden_size,
             hidden_dims=config.hidden_size,
             output_dims=config.horizon_length * num_quantiles,
-            use_bias=config.use_bias,
-            activation=config.activation,
         )
         self.output_projection_quantiles = Timesfm2P5ResidualBlock(
+            config,
             input_dims=config.hidden_size,
             hidden_dims=config.hidden_size,
             output_dims=config.output_quantile_len * num_quantiles,
-            use_bias=config.use_bias,
-            activation=config.activation,
         )
 
         # Initialize weights and apply final processing
