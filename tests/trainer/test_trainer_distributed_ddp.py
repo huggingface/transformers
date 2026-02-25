@@ -83,32 +83,13 @@ class DDPCommandsMixin:
 
 class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
     # -----------------------------------------------------------------------
-    # torchrun tests
-    # -----------------------------------------------------------------------
-    @run_first
-    @require_torch_multi_accelerator
-    def test_eval_predict_torchrun(self):
-        output_dir = self.get_auto_remove_tmp_dir()
-        script = os.path.join(SCRIPTS_DIR, "eval_predict.py")
-        cmd = self.get_torchrun_cmd(script, extra_args=["--output_dir", output_dir])
-        execute_subprocess_async(cmd, env=self.get_env())
-
-    @run_first
-    @require_torch_multi_accelerator
-    def test_worker_seed_torchrun(self):
-        output_dir = self.get_auto_remove_tmp_dir()
-        script = os.path.join(SCRIPTS_DIR, "worker_seed.py")
-        cmd = self.get_torchrun_cmd(script, extra_args=["--output_dir", output_dir])
-        execute_subprocess_async(cmd, env=self.get_env())
-
-    # -----------------------------------------------------------------------
     # accelerate launch tests
     # -----------------------------------------------------------------------
     @run_first
     @require_torch_multi_accelerator
-    def test_eval_predict(self):
+    def test_eval_order(self):
         output_dir = self.get_auto_remove_tmp_dir()
-        script = os.path.join(SCRIPTS_DIR, "eval_predict.py")
+        script = os.path.join(SCRIPTS_DIR, "eval_ddp.py")
         cmd = self.get_accelerate_cmd(
             script,
             extra_args=["--output_dir", output_dir],
