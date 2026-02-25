@@ -530,7 +530,7 @@ Parameters:
 
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-            **kwargs ([`~ProcessingKwargs`], *optional*):
+            **kwargs ([`ProcessingKwargs`], *optional*):
                 Additional processing options for each modality (text, images, videos, audio). Model-specific parameters
                 are listed above; see the TypedDict class for the complete list of supported arguments.
 
@@ -592,7 +592,7 @@ Parameters:
                 Custom scale factor for preprocessing pipelines.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 Returns stacked tensors if set to `'pt'`, otherwise returns a list of tensors.
-            **kwargs ([`~ImagesKwargs`], *optional*):
+            **kwargs ([`ImagesKwargs`], *optional*):
                 Additional image preprocessing options. Model-specific parameters are listed above; see the TypedDict class
                 for the complete list of supported arguments.
 
@@ -630,7 +630,7 @@ Args:
         method.
     custom_scale (`float`, *optional*, defaults to 255.0):
         Custom scale factor for preprocessing pipelines.
-    **kwargs ([`~ImagesKwargs`], *optional*):
+    **kwargs ([`ImagesKwargs`], *optional*):
         Additional image preprocessing options. Model-specific parameters are listed above; see the TypedDict class
         for the complete list of supported arguments.
 """

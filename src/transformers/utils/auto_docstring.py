@@ -2414,7 +2414,7 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
             "Additional keyword arguments. Model-specific parameters are listed above.",
         )
         kwargs_summary = set_min_indent(
-            f"**kwargs ([`~{kwargs_type_name}`], *optional*):{kwargs_description}",
+            f"**kwargs ([`{kwargs_type_name}`], *optional*):{kwargs_description}",
             indent_level + 8,
         )
 
