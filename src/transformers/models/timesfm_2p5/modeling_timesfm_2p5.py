@@ -478,7 +478,6 @@ class Timesfm2P5PreTrainedModel(PreTrainedModel):
             )
 
 
-@auto_docstring
 class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
     def __init__(self, config: Timesfm2P5Config):
         super().__init__(config)
@@ -663,7 +662,6 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         )
 
 
-@auto_docstring
 class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
     """Timesfm2P5 model for quantile and mean prediction."""
 
