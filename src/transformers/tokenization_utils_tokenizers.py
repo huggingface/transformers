@@ -116,7 +116,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # we extract vocab / merges from the tokenizer file to pass them to __init__
-            processor = TokenizerFast.from_file(fast_tokenizer_file).post_processor
+            _tmp_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
+            processor = _tmp_tokenizer.post_processor
+            # Preserve truncation and padding baked into tokenizer.json so that AutoTokenizer
+            # behaves identically to TokenizersBackend.from_pretrained for models that store
+            # these settings in their tokenizer.json file.
+            if _tmp_tokenizer.truncation is not None:
+                local_kwargs["_json_truncation"] = _tmp_tokenizer.truncation
+            if _tmp_tokenizer.padding is not None:
+                local_kwargs["_json_padding"] = _tmp_tokenizer.padding
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
             vocab = tokenizer_json.get("model", {}).get("vocab", None)
@@ -232,6 +240,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return local_kwargs
 
     def __init__(self, *args, **kwargs):
+        # Truncation/padding dicts extracted from tokenizer.json by convert_to_native_format
+        # when a class with a custom __init__ rebuilds the backend tokenizer from scratch.
+        _json_truncation = kwargs.pop("_json_truncation", None)
+        _json_padding = kwargs.pop("_json_padding", None)
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         gguf_file = kwargs.pop("gguf_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
@@ -289,7 +301,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._tokenizer is None:
             raise ValueError("The backend tokenizer is not correctly initialized.")
 
-        _truncation = self._tokenizer.truncation
+        _truncation = self._tokenizer.truncation or _json_truncation
 
         if _truncation is not None:
             self._tokenizer.enable_truncation(**_truncation)
@@ -300,7 +312,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         else:
             self._tokenizer.no_truncation()
 
-        _padding = self._tokenizer.padding
+        _padding = self._tokenizer.padding or _json_padding
         if _padding is not None:
             self._tokenizer.enable_padding(**_padding)
             kwargs.setdefault("pad_token", _padding["pad_token"])
