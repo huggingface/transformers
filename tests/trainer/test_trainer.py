@@ -227,7 +227,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # train with gradient accumulation
             set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name)
+            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
             grad_accum_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
@@ -241,7 +241,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # train with broken loss
             set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name)
+            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
             broken_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
