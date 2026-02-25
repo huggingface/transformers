@@ -166,7 +166,7 @@ class TableTransformerConfig(PreTrainedConfig):
             "out_indices": backbone_kwargs.get("out_indices", [1, 2, 3, 4]),
         }
         if dilation:
-            timm_default_kwargs["output_stride"] = backbone_kwargs.get("output_stride", 16)
+            timm_default_kwargs["model_args"]["output_stride"] = backbone_kwargs.get("output_stride", 16)
 
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
