@@ -147,7 +147,7 @@ class Timesfm2P5Config(TimesFmConfig):
         force_flip_invariance: bool = True,
         infer_is_positive: bool = True,
         max_position_embeddings: int = 16384,
-        rope_theta: float = 10000.0,
+    rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
         # Set before super().__init__() so PreTrainedConfig detects it and populates rope_parameters
