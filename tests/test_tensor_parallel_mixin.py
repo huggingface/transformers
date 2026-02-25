@@ -206,6 +206,7 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
 
     # Compare gradients for matching parameters
     world_size = dist.get_world_size()
+    failed_grads = {}
     for (name, param), (_, param_tp) in zip(model.named_parameters(), model_tp.named_parameters()):
         if param.grad is not None and param_tp.grad is not None:
             grad = param.grad
@@ -226,9 +227,12 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
                             grad = grad.narrow(dim, start, shard_size)
                         break
 
-            assert torch.allclose(grad.cpu(), grad_tp.cpu(), atol=atol, rtol=rtol), (
-                f"Gradients differ for parameter {name}. Max diff: {(grad.cpu() - grad_tp.cpu()).abs().max().item()}"
-            )
+            if not torch.allclose(grad.cpu(), grad_tp.cpu(), atol=atol, rtol=rtol):
+                failed_grads[name] = (grad.cpu() - grad_tp.cpu()).abs().max().item()
+
+    assert not failed_grads, f"Gradients differ for {len(failed_grads)} parameter(s):\n" + "\n".join(
+        f"  {name}: max diff = {diff}" for name, diff in failed_grads.items()
+    )
 
     dist.barrier()
 
