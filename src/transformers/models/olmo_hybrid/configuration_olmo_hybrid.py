@@ -97,7 +97,7 @@ class OlmoHybridConfig(PreTrainedConfig):
             Minimum value for dt initialization in GatedDeltaNet layers.
         linear_dt_max (`float`, *optional*, defaults to 0.1):
             Maximum value for dt initialization in GatedDeltaNet layers.
-        linear_dt_init_floor (`float`, *optional*, defaults to 1e-4):
+        linear_dt_init_floor (`float`, *optional*, defaults to 0.0001):
             Floor value for clamping dt during initialization in GatedDeltaNet layers.
         linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
             Kernel size for the short convolution applied to queries, keys, and values in linear attention layers.
