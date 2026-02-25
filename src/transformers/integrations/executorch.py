@@ -20,6 +20,7 @@ from ..cache_utils import (
     DynamicSlidingWindowLayer,
     EncoderDecoderCache,
     StaticCache,
+    StaticLayer,
 )
 from ..generation.configuration_utils import GenerationConfig
 from ..modeling_utils import PreTrainedModel
@@ -526,9 +527,13 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, dtype, device)
-        for i in range(len(self.static_cache)):
-            self.register_buffer(f"key_cache_{i}", self.static_cache.layers[i].keys, persistent=False)
-            self.register_buffer(f"value_cache_{i}", self.static_cache.layers[i].values, persistent=False)
+
+        # Register cache buffers to make them exportable
+        for i, layer in enumerate(self.static_cache.layers):
+            self.register_buffer(f"key_cache_{i}", layer.keys, persistent=False)
+            self.register_buffer(f"value_cache_{i}", layer.values, persistent=False)
+            if isinstance(layer, StaticLayer):
+                self.register_buffer(f"cumulative_length_{i}", layer.cumulative_length, persistent=False)
 
     def forward(
         self,
@@ -557,8 +562,12 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             The adapter matches the model's forward signature with that in `executorch/extension/llm/runner`,
             ensuring that the exported model can be executed in `ExecuTorch` out-of-the-box.
         """
-        # Start by resetting static cache
-        self.static_cache.reset()
+        # Start by resetting static cache (it's needed to be able to run several generations with the same exported program,
+        # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was 
+        # already exported)
+        for layer in self.static_cache.layers:
+            if isinstance(layer, StaticLayer):
+                layer.cumulative_length.copy_(cache_position[0:1])
 
         past_key_values = self.static_cache
 
@@ -696,10 +705,12 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
         self.cache.early_initialization(batch_size, num_heads, head_dim, dtype, device)
 
-        # Register all key and value cache tensors as buffers
-        for i in range(len(self.cache)):
-            self.register_buffer(f"key_cache_{i}", self.cache.layers[i].keys, persistent=False)
-            self.register_buffer(f"value_cache_{i}", self.cache.layers[i].values, persistent=False)
+        # Register cache buffers to make them exportable
+        for i, layer in enumerate(self.cache.layers):
+            self.register_buffer(f"key_cache_{i}", layer.keys, persistent=False)
+            self.register_buffer(f"value_cache_{i}", layer.values, persistent=False)
+            if isinstance(layer, StaticLayer):
+                self.register_buffer(f"cumulative_length_{i}", layer.cumulative_length, persistent=False)
 
     def forward(
         self,
@@ -718,8 +729,12 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         Returns:
             torch.Tensor: Logits output from the model.
         """
-        # Start by resetting static cache
-        self.cache.reset()
+        # Start by resetting static cache (it's needed to be able to run several generations with the same exported program,
+        # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was 
+        # already exported)
+        for layer in self.cache.layers:
+            if isinstance(layer, StaticLayer):
+                layer.cumulative_length.copy_(cache_position[0:1])
 
         # Forward pass with the model
         outputs = self.model(
@@ -844,13 +859,19 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         register_dynamic_cache_export_support()
 
         # Register cache buffers to make them exportable
-        for i in range(len(self.static_cache)):
-            self.register_buffer(f"key_cache_{i}", self.static_cache.layers[i].keys, persistent=False)
-            self.register_buffer(f"value_cache_{i}", self.static_cache.layers[i].values, persistent=False)
+        for i, layer in enumerate(self.static_cache.layers):
+            self.register_buffer(f"key_cache_{i}", layer.keys, persistent=False)
+            self.register_buffer(f"value_cache_{i}", layer.values, persistent=False)
+            if isinstance(layer, StaticLayer):
+                self.register_buffer(f"cumulative_length_{i}", layer.cumulative_length, persistent=False)
 
     def forward(self, decoder_input_ids, encoder_hidden_states, cache_position):
-        # Start by resetting static cache
-        self.cache.reset()
+        # Start by resetting static cache (it's needed to be able to run several generations with the same exported program,
+        # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was 
+        # already exported)
+        for layer in self.static_cache.layers:
+            if isinstance(layer, StaticLayer):
+                layer.cumulative_length.copy_(cache_position[0:1])
 
         # Get outputs from decoder
         outputs = self.decoder(
