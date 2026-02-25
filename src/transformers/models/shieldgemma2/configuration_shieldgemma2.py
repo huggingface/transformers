@@ -27,7 +27,7 @@ class ShieldGemma2Config(PreTrainedConfig):
     ShieldGemma2ForImageClassification according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the shieldgemma-2-4b-it.
 
-    e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
+    e.g. [google/shieldgemma-2-4b-it](https://huggingface.co/google/shieldgemma-2-4b-it)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
