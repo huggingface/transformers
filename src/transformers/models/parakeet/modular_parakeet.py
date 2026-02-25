@@ -29,6 +29,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_torchaudio_available
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoModel
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig, ParakeetTDTConfig
@@ -45,8 +46,6 @@ class ParakeetEncoderModelOutput(BaseModelOutput):
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
-    """Relative positional encoding for Parakeet."""
-
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: ParakeetEncoderConfig, device=None):
@@ -334,30 +333,17 @@ class ParakeetPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-
-        if hasattr(self.config, "initializer_range"):
-            std = self.config.initializer_range
-        else:
-            # 0.02 is the standard default value across the library
-            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+        std = getattr(self.config, "initializer_range", 0.02)
 
         if isinstance(module, ParakeetEncoderAttention):
-            # Initialize positional bias parameters
             init.normal_(module.bias_u, mean=0.0, std=std)
             init.normal_(module.bias_v, mean=0.0, std=std)
         elif isinstance(module, ParakeetEncoderRelPositionalEncoding):
             encoder_config = getattr(self.config, "encoder_config", self.config)
             inv_freq = 1.0 / (
-                10000.0
-                ** (torch.arange(0, encoder_config.hidden_size, 2, dtype=torch.int64) / encoder_config.hidden_size)
+                10000.0 ** (torch.arange(0, encoder_config.hidden_size, 2, dtype=torch.int64) / encoder_config.hidden_size)
             )
             init.copy_(module.inv_freq, inv_freq)
-        elif isinstance(module, nn.LSTM):
-            for name, param in module.named_parameters():
-                if "weight" in name:
-                    init.normal_(param, mean=0.0, std=std)
-                elif "bias" in name:
-                    init.zeros_(param)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = getattr(self.config, "encoder_config", self.config)
@@ -552,7 +538,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
 
     def __init__(self, config: ParakeetCTCConfig):
         super().__init__(config)
-        self.encoder = ParakeetEncoder(config.encoder_config)
+        self.encoder = AutoModel.from_config(config.encoder_config)
         # Conv rather than linear to be consistent with NeMO decoding layer
         self.ctc_head = nn.Conv1d(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
 
@@ -737,7 +723,7 @@ class ParakeetTDTJointNetwork(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    Parakeet model with TDT (Token Duration Transducer) head for speech recognition.
+    Parakeet Encoder with a TDT (Token Duration Transducer) head.
     """
 )
 class ParakeetForTDT(ParakeetPreTrainedModel):
@@ -745,7 +731,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
     def __init__(self, config: ParakeetTDTConfig):
         super().__init__(config)
-        self.encoder = ParakeetEncoder(config.encoder_config)
+        self.encoder = AutoModel.from_config(config.encoder_config)
         self.decoder = ParakeetTDTDecoder(config)
         self.joint = ParakeetTDTJointNetwork(config)
 
@@ -878,22 +864,19 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         >>> print(output.token_timestamps)
         ```
         """
+        kwargs["return_dict"] = True
         if return_timestamps:
             return_dict_in_generate = True
 
-        blank_id = self.config.pad_token_id
-        max_symbols_per_step = self.config.max_symbols_per_step
-        device = input_features.device
         batch_size = input_features.shape[0]
-
-        kwargs["return_dict"] = True
-        outputs: CausalLMOutput = self(
+        outputs: CausalLMOutput = self.forward(
             input_features=input_features,
             attention_mask=attention_mask,
             **kwargs,
         )
         encoder_hidden_states = outputs.logits
 
+        device = encoder_hidden_states.device
         sequence_length = encoder_hidden_states.shape[1]
         if attention_mask is not None:
             encoder_attention_mask = self._get_output_attention_mask(attention_mask, target_length=sequence_length)
@@ -906,14 +889,16 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             self.config.num_decoder_layers,
             batch_size,
             self.config.decoder_hidden_size,
-            device=device,
             dtype=encoder_hidden_states.dtype,
         )
         cell_state = torch.zeros_like(hidden_state)
 
         # Initialize with blank token
-        prev_tokens = torch.full((batch_size, 1), blank_id, dtype=torch.long, device=device)
+        prev_tokens = torch.full((batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=device)
         decoder_output, hidden_state, cell_state = self.decoder(prev_tokens, hidden_state, cell_state)
+        decoder_output = decoder_output.to(device)
+        hidden_state = hidden_state.to(device)
+        cell_state = cell_state.to(device)
 
         all_tokens = [[] for _ in range(batch_size)]
         token_frame_indices = [[] for _ in range(batch_size)] if return_timestamps else None
@@ -927,16 +912,14 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             ].unsqueeze(1)
 
             symbols_added = 0
-            while symbols_added < max_symbols_per_step:
+            while symbols_added < self.config.max_symbols_per_step:
                 token_logits, duration_logits = self.joint(encoder_frames, decoder_output)
-                token_logits = token_logits.squeeze(1)
-                duration_logits = duration_logits.squeeze(1)
+                token_logits = token_logits.squeeze(1).to(device)
+                duration_logits = duration_logits.squeeze(1).to(device)
 
                 tokens = token_logits.argmax(dim=-1)
                 durations = duration_logits.argmax(dim=-1)
-
-                is_blank = tokens == blank_id
-                emit_mask = active_mask & ~is_blank
+                emit_mask = active_mask & ~(tokens == self.config.pad_token_id)
 
                 for i in range(batch_size):
                     if emit_mask[i]:
@@ -949,6 +932,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                     new_decoder_output, new_hidden_state, new_cell_state = self.decoder(
                         new_prev_tokens, hidden_state, cell_state
                     )
+                    new_decoder_output = new_decoder_output.to(device)
+                    new_hidden_state = new_hidden_state.to(device)
+                    new_cell_state = new_cell_state.to(device)
 
                     emit_mask_expanded = emit_mask.view(batch_size, 1, 1)
                     decoder_output = torch.where(emit_mask_expanded, new_decoder_output, decoder_output)
@@ -961,7 +947,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 stay_mask = active_mask & (durations == 0)
                 if stay_mask.any():
                     symbols_added += 1
-                    if symbols_added >= max_symbols_per_step:
+                    if symbols_added >= self.config.max_symbols_per_step:
                         time_indices = time_indices + 1
                         break
                     continue
