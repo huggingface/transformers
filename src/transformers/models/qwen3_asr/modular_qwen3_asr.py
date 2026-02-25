@@ -48,7 +48,7 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerTextDecoderLayer, _get_feat_extract_output_lengths, 
     Qwen3OmniMoePreTrainedModelForConditionalGeneration, Qwen3OmniMoeAudioAttention,
     SinusoidsPositionEmbedding, Qwen3OmniMoeAudioEncoderLayer, Qwen3OmniMoeAudioEncoder,
-    Qwen3OmniMoeThinkerTextRotaryEmbedding
+    Qwen3OmniMoeThinkerTextRotaryEmbedding, Qwen3OmniMoeThinkerTextMLP
 )
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
@@ -737,20 +737,8 @@ class Qwen3ASRThinkerTextRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding)
         self.rope_type = config.rope_scaling.get("rope_type", "linear")
         self.mrope_section = config.rope_scaling.get("mrope_section", [24, 20, 20])
 
-class Qwen3ASRThinkerTextMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+class Qwen3ASRThinkerTextMLP(Qwen3OmniMoeThinkerTextMLP):
+    pass
 
 
 @use_kernel_forward_from_hub("RMSNorm")
