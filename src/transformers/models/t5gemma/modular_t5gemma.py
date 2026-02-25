@@ -22,6 +22,12 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...masking_utils import (
+    create_bidirectional_mask,
+    create_bidirectional_sliding_window_mask,
+    create_causal_mask,
+    create_sliding_window_causal_mask,
+)
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -50,10 +56,6 @@ from ..gemma2.modeling_gemma2 import (
     Gemma2PreTrainedModel,
     Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
-    create_bidirectional_mask,
-    create_bidirectional_sliding_window_mask,
-    create_causal_mask,
-    create_sliding_window_causal_mask,
     eager_attention_forward,
 )
 

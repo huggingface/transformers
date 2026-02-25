@@ -66,7 +66,6 @@ from ..t5gemma.modeling_t5gemma import (
     T5GemmaClassificationHead,
     T5GemmaEncoderLayer,
     T5GemmaLMHead,
-    bidirectional_mask_function,
 )
 
 
@@ -1083,19 +1082,13 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
             }
 
         if not isinstance(cross_attn_mask_mapping := encoder_attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": encoder_hidden_states,
-                "attention_mask": encoder_attention_mask,
-                "cache_position": cache_position,
-                "past_key_values": None,
-                "position_ids": None,
-            }
             cross_attn_mask_mapping = {
-                "full_attention": create_causal_mask(
-                    **mask_kwargs,
-                    or_mask_function=bidirectional_mask_function(encoder_attention_mask),
-                ),
+                "full_attention": create_bidirectional_mask(
+                    config=self.config,
+                    inputs_embeds=inputs_embeds,
+                    attention_mask=encoder_attention_mask,
+                    encoder_hidden_states=encoder_hidden_states,
+                )
             }
 
         merged_attn_mask_mapping = {
