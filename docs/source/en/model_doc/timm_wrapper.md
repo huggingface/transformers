@@ -71,6 +71,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] TimmWrapperImageProcessor
     - preprocess
 
+## TimmWrapperBackboneModel
+
+[[autodoc]] TimmWrapperBackboneModel
+    - forward
+
 ## TimmWrapperModel
 
 [[autodoc]] TimmWrapperModel

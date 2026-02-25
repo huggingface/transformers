@@ -28,6 +28,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils.import_utils import is_timm_available, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -36,7 +37,12 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import TimmWrapperConfig, TimmWrapperForImageClassification, TimmWrapperModel
+    from transformers import (
+        TimmWrapperBackboneModel,
+        TimmWrapperConfig,
+        TimmWrapperForImageClassification,
+        TimmWrapperModel,
+    )
 
 
 if is_timm_available():
@@ -251,6 +257,32 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             model.save_pretrained(tmpdirname)
             restored_model = TimmWrapperModel.from_pretrained(tmpdirname)
             self.assertEqual(len(restored_model.timm_model.blocks), 3)
+
+
+class TimmWrapperBackboneModelTester(TimmWrapperModelTester):
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
+        # Add `features_only` for the backbone model
+        self.model_args = {"channels": (16, 16, 16, 16), "features_only": True}
+
+
+@require_torch
+class TimmWrapperBackboneTest(BackboneTesterMixin, unittest.TestCase):
+    all_model_classes = (TimmWrapperBackboneModel,) if is_torch_available() else ()
+    has_attentions = False
+    config_class = TimmWrapperConfig
+
+    def setUp(self):
+        self.model_tester = TimmWrapperBackboneModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=self.config_class,
+            has_text_modality=False,
+            common_properties=["architecture"],
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
 
 # We will verify our results on an image of cute cats
