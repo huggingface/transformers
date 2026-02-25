@@ -11,11 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Olmo3_2Hybrid model."""
+"""Testing suite for the PyTorch OlmoHybrid model."""
 
 import unittest
 
-from transformers import Olmo3_2HybridConfig, is_torch_available
+from transformers import OlmoHybridConfig, is_torch_available
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     Expectations,
@@ -33,20 +33,20 @@ if is_torch_available():
 
     from transformers import (
         Cache,
-        Olmo3_2HybridForCausalLM,
-        Olmo3_2HybridModel,
+        OlmoHybridForCausalLM,
+        OlmoHybridModel,
     )
-    from transformers.models.olmo3_2_hybrid.modeling_olmo3_2_hybrid import (
-        Olmo3_2HybridDynamicCache,
-        Olmo3_2HybridRotaryEmbedding,
+    from transformers.models.olmo_hybrid.modeling_olmo_hybrid import (
+        OlmoHybridDynamicCache,
+        OlmoHybridRotaryEmbedding,
     )
 
 
-class Olmo3_2HybridModelTester(CausalLMModelTester):
+class OlmoHybridModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = Olmo3_2HybridConfig
-        base_model_class = Olmo3_2HybridModel
-        causal_lm_class = Olmo3_2HybridForCausalLM
+        config_class = OlmoHybridConfig
+        base_model_class = OlmoHybridModel
+        causal_lm_class = OlmoHybridForCausalLM
 
     def __init__(self, parent):
         super().__init__(parent=parent)
@@ -60,14 +60,14 @@ class Olmo3_2HybridModelTester(CausalLMModelTester):
 
 
 @require_torch
-class Olmo3_2HybridModelTest(CausalLMModelTest, unittest.TestCase):
-    model_tester_class = Olmo3_2HybridModelTester
-    rotary_embedding_layer = Olmo3_2HybridRotaryEmbedding if is_torch_available() else None
+class OlmoHybridModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = OlmoHybridModelTester
+    rotary_embedding_layer = OlmoHybridRotaryEmbedding if is_torch_available() else None
 
     # === Cache helper methods (same pattern as Qwen3Next) ===
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Olmo3_2Hybrid has a special Cache as it alternates with gated deltanet layers"""
-        self.assertIsInstance(past_key_values, Olmo3_2HybridDynamicCache)
+        """OlmoHybrid has a special Cache as it alternates with gated deltanet layers"""
+        self.assertIsInstance(past_key_values, OlmoHybridDynamicCache)
 
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -84,7 +84,7 @@ class Olmo3_2HybridModelTest(CausalLMModelTest, unittest.TestCase):
         )
 
     def _check_caches_are_equal(self, cache1: Cache, cache2: Cache):
-        """Olmo3_2Hybrid has a special Cache as it alternates with gated deltanet layers"""
+        """OlmoHybrid has a special Cache as it alternates with gated deltanet layers"""
         if not len(cache1) == len(cache2):
             raise ValueError("Both caches do not have the same number of layers.")
 
@@ -96,7 +96,7 @@ class Olmo3_2HybridModelTest(CausalLMModelTest, unittest.TestCase):
 
     # === Override test_attention_outputs (same pattern as Qwen3Next) ===
     def test_attention_outputs(self):
-        """Needs to be overwritten as Olmo3_2Hybrid alternates between attention layers and gated deltanet layers."""
+        """Needs to be overwritten as OlmoHybrid alternates between attention layers and gated deltanet layers."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
         config._attn_implementation = "eager"
@@ -148,7 +148,7 @@ class Olmo3_2HybridModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch
-class Olmo3_2HybridIntegrationTest(unittest.TestCase):
+class OlmoHybridIntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
@@ -158,9 +158,7 @@ class Olmo3_2HybridIntegrationTest(unittest.TestCase):
     @slow
     def test_model_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = Olmo3_2HybridForCausalLM.from_pretrained("yanhong-l/olmo-3.5-test").to(
-            torch_device, dtype=torch.bfloat16
-        )
+        model = OlmoHybridForCausalLM.from_pretrained("yanhong-l/olmo-3.5-test").to(torch_device, dtype=torch.bfloat16)
         out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
 
         rtol = 3e-2
@@ -237,7 +235,7 @@ class Olmo3_2HybridIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = expectations.get_expectation()
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("yanhong-l/olmo-3.5-test")
-        model = Olmo3_2HybridForCausalLM.from_pretrained(
+        model = OlmoHybridForCausalLM.from_pretrained(
             "yanhong-l/olmo-3.5-test", device_map="auto", torch_dtype=torch.bfloat16
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
