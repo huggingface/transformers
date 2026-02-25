@@ -303,6 +303,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Ignore copy
     def _init_weights(self, module):
         super()._init_weights(module)
 
