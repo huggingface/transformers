@@ -391,6 +391,13 @@ class MixtralForCausalLM(MistralForCausalLM):
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
         )
+        
+        # Determine if we need router logits for auxiliary loss computation
+        need_router_logits_for_aux_loss = self.router_aux_loss_coef > 0 and labels is not None
+        # We need to collect router logits if either:
+        # 1. User explicitly wants them in output (output_router_logits=True), or
+        # 2. We need them for auxiliary loss computation (router_aux_loss_coef > 0 and training)
+        collect_router_logits = output_router_logits or need_router_logits_for_aux_loss
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: MoeModelOutputWithPast = self.model(
@@ -400,7 +407,7 @@ class MixtralForCausalLM(MistralForCausalLM):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_router_logits=output_router_logits,
+            output_router_logits=collect_router_logits,
             cache_position=cache_position,
             **kwargs,
         )
@@ -415,7 +422,8 @@ class MixtralForCausalLM(MistralForCausalLM):
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         aux_loss = None
-        if output_router_logits:
+        # Compute auxiliary loss if we have router_aux_loss_coef > 0 and collected router logits
+        if need_router_logits_for_aux_loss and outputs.router_logits is not None:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,
@@ -432,7 +440,7 @@ class MixtralForCausalLM(MistralForCausalLM):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
+            router_logits=outputs.router_logits if output_router_logits else None,
         )
 
 
