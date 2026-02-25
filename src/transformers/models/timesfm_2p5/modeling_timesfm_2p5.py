@@ -377,10 +377,10 @@ class Timesfm2P5DecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
@@ -394,7 +394,7 @@ class Timesfm2P5DecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.post_feedforward_layernorm(hidden_states) + residual
 
-        return hidden_states, attn_weights
+        return hidden_states
 
 
 class Timesfm2P5PositionalEmbedding(nn.Module):
@@ -641,7 +641,7 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         hidden_states = input_embeddings
 
         for layer in self.layers:
-            hidden_states, _ = layer(
+            hidden_states = layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
