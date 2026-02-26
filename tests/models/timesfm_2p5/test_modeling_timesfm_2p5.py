@@ -121,7 +121,7 @@ class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
         results = model(**inputs_dict)
         assert results.mean_predictions is not None
 
-    @unittest.skip(reason="Compile not yet supported because of masks")
+    @unittest.skip(reason="FA backend not yet supported because of forced masks")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
