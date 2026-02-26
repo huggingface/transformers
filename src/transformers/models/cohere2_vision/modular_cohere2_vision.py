@@ -93,8 +93,6 @@ class Cohere2VisionPreTrainedModel(AyaVisionPreTrainedModel):
 
 
 class Cohere2VisionModel(AyaVisionModel):
-    _checkpoint_conversion_mapping = {}
-
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
@@ -154,8 +152,6 @@ class Cohere2VisionModel(AyaVisionModel):
 
 
 class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
     @auto_docstring
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]

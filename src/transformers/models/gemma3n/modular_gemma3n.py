@@ -2151,7 +2151,7 @@ class Gemma3nTextModel(Gemma3TextModel):
 
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
 class Gemma3nForCausalLM(Gemma3ForCausalLM):
-    _checkpoint_conversion_mapping = {"model.language_model": "model"}
+    pass
 
 
 class Gemma3nMultimodalEmbedder(nn.Module):
@@ -2211,8 +2211,6 @@ class Gemma3nMultimodalEmbedder(nn.Module):
     """
 )
 class Gemma3nModel(PaliGemmaModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Gemma3nConfig):
         super().__init__(config)
         del self.multi_modal_projector  # Replaced by Gemma3nVisionEmbedder
@@ -2464,8 +2462,6 @@ class Gemma3nModel(PaliGemmaModel):
     """
 )
 class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
     @can_return_tuple
     @auto_docstring
     def forward(

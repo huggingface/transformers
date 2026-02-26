@@ -997,7 +997,6 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
 @auto_docstring
 class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {"^model": "language_model"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Qwen2_5_VLConfig
@@ -1439,10 +1438,6 @@ class Qwen2_5_VLCausalLMOutputWithPast(ModelOutput):
 
 
 class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^visual": "model.visual",
-        r"^model(?!\.(language_model|visual))": "model.language_model",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

@@ -1101,7 +1101,6 @@ class Glm4vMoeModelOutputWithPast(ModelOutput):
 @auto_docstring
 class Glm4vMoeModel(Glm4vMoePreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
@@ -1586,7 +1585,6 @@ def load_balancing_loss_func(
 
 
 class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

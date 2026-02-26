@@ -1038,7 +1038,6 @@ class Ernie4_5_VL_MoeVariableResolutionResamplerModel(nn.Module):
 
 
 class Ernie4_5_VL_MoeModel(Qwen2VLModel):
-    _checkpoint_conversion_mapping = {"^norm": "language_model.norm"}
     config: Ernie4_5_VL_MoeConfig
     _no_split_modules = ["Ernie4_5_VL_MoeDecoderLayer", "Ernie4_5_VL_MoeVisionBlock"]
 
@@ -1274,8 +1273,6 @@ class Ernie4_5_VL_MoeModel(Qwen2VLModel):
 
 
 class Ernie4_5_VL_MoeForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
-    _checkpoint_conversion_mapping = {"^model.norm": "model.language_model.norm"}
-
     def __init__(self, config):
         super().__init__(config)
 

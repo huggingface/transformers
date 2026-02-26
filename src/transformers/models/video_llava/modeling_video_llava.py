@@ -152,8 +152,6 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     """,
 )
 class VideoLlavaModel(VideoLlavaPreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
-
     def __init__(self, config: VideoLlavaConfig):
         super().__init__(config)
         self.video_tower = AutoModel.from_config(config.vision_config)
@@ -393,13 +391,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     """
 )
 class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^image_tower": "model.image_tower",
-        "^video_tower": "model.video_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^language_model.lm_head": "lm_head",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: VideoLlavaConfig):

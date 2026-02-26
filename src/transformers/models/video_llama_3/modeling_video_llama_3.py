@@ -528,7 +528,6 @@ class VideoLlama3ModelOutputWithPast(ModelOutput):
 @auto_docstring
 class VideoLlama3Model(VideoLlama3PreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     _can_compile_fullgraph = False
@@ -761,7 +760,6 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
 
 
 class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _can_compile_fullgraph = False
 

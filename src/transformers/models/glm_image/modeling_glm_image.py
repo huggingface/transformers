@@ -948,7 +948,6 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
 @auto_docstring
 class GlmImageModel(GlmImagePreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     _no_split_modules = ["GlmImageTextDecoderLayer", "GlmImageVisionBlock"]
@@ -1453,7 +1452,6 @@ class GlmImageCausalLMOutputWithPast(ModelOutput):
 
 
 class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

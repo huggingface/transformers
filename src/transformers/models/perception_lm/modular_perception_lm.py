@@ -139,8 +139,6 @@ class PerceptionLMCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 
 @auto_docstring
 class PerceptionLMModel(LlavaModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: PerceptionLMConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -281,8 +279,6 @@ class PerceptionLMModel(LlavaModel):
 
 @auto_docstring
 class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
     def prepare_inputs_for_generation(
         self,
         input_ids,

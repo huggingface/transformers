@@ -240,11 +240,7 @@ class Sam3TrackerMaskDecoder(Sam2MaskDecoder):
 
 
 class Sam3TrackerModel(Sam2Model):
-    _checkpoint_conversion_mapping = {
-        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
-        "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
-        "tracker_neck.": "vision_encoder.neck.",
-    }
+    _base_model_prefix = "tracker_model"
     _keys_to_ignore_on_load_unexpected = [
         r"^detector_model.",
         r"^memory_.*",

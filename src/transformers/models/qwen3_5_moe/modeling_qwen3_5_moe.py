@@ -1528,7 +1528,6 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
 @auto_docstring
 class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Qwen3_5MoeConfig
@@ -2103,7 +2102,6 @@ class Qwen3_5MoeForCausalLM(Qwen3_5MoePreTrainedModel, GenerationMixin):
 
 
 class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

@@ -145,8 +145,6 @@ class Lfm2VlModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class Lfm2VlModel(Lfm2VlPreTrainedModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Lfm2VlConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -304,7 +302,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
     """
 )
 class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Lfm2VlConfig):

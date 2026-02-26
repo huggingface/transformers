@@ -154,7 +154,6 @@ class LightOnOcrPreTrainedModel(PreTrainedModel):
     """
 )
 class LightOnOcrModel(LightOnOcrPreTrainedModel):
-    _checkpoint_conversion_mapping = {}
     base_model_prefix = ""
 
     def __init__(self, config: LightOnOcrConfig):
@@ -309,7 +308,6 @@ class LightOnOcrCausalLMOutputWithPast(ModelOutput):
     """
 )
 class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: LightOnOcrConfig):

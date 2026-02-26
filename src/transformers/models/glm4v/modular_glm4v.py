@@ -949,7 +949,6 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
 
 
 class Glm4vModel(Qwen2VLModel):
-    _checkpoint_conversion_mapping = {}
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
 
     def __init__(self, config):
@@ -1222,8 +1221,6 @@ class Glm4vCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
 
 
 class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
