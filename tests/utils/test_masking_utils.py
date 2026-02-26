@@ -86,7 +86,7 @@ class MaskTest(unittest.TestCase):
         causal_mask = create_causal_mask(
             config=config,
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
-            input_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
+            inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
             cache_position=cache_position,
             past_key_values=None,
@@ -109,7 +109,7 @@ class MaskTest(unittest.TestCase):
         causal_mask = create_causal_mask(
             config=config,
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
-            input_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
+            inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
             cache_position=cache_position,
             past_key_values=None,
@@ -133,7 +133,7 @@ class MaskTest(unittest.TestCase):
         causal_mask = create_causal_mask(
             config=config,
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
-            input_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
+            inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
             cache_position=cache_position,
             past_key_values=None,
@@ -167,7 +167,7 @@ class MaskTest(unittest.TestCase):
         causal_mask = create_causal_mask(
             config=config,
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
-            input_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
+            inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
             cache_position=cache_position,
             past_key_values=None,
@@ -180,7 +180,7 @@ class MaskTest(unittest.TestCase):
         causal_mask = create_causal_mask_compiled(
             config=config,
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
-            input_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
+            inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
             cache_position=cache_position,
             past_key_values=None,
@@ -210,7 +210,7 @@ class MaskTest(unittest.TestCase):
 
         chunked_attention_mask = create_chunked_causal_mask(
             config=config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=None,
@@ -271,7 +271,7 @@ class MaskTest(unittest.TestCase):
 
         chunked_attention_mask = create_chunked_causal_mask(
             config=config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=cache,
@@ -299,15 +299,15 @@ class MaskTest(unittest.TestCase):
 
     @staticmethod
     def _run_bidirectional_mask(mask_fn, attn_implementation):
-        def run_mask_creation(mask_fn, config, input_embeds, encoder_mask, cross_mask, encoder_hidden_states):
+        def run_mask_creation(mask_fn, config, inputs_embeds, encoder_mask, cross_mask, encoder_hidden_states):
             encoder_attn_mask = mask_fn(
                 config=config,
-                input_embeds=input_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=encoder_mask,
             )
             cross_attn_mask = mask_fn(
                 config=config,
-                input_embeds=input_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=cross_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )
@@ -322,17 +322,17 @@ class MaskTest(unittest.TestCase):
         q_length = 10
         kv_length = 5
 
-        input_embeds = torch.ones((batch_size, q_length, 1), device=torch_device, dtype=torch.float16)
+        inputs_embeds = torch.ones((batch_size, q_length, 1), device=torch_device, dtype=torch.float16)
         encoder_hidden_states = torch.ones((batch_size, kv_length, 1), device=torch_device, dtype=torch.float16)
 
-        encoder_mask = torch.ones_like(input_embeds)[..., 0]
+        encoder_mask = torch.ones_like(inputs_embeds)[..., 0]
         cross_mask = torch.ones_like(encoder_hidden_states)[..., 0]
 
         # Case 1: Full mask
         full_mask_encoder_1, full_mask_cross_1 = run_mask_creation(
             mask_fn=mask_fn,
             config=config,
-            input_embeds=input_embeds,
+            inputs_embeds=inputs_embeds,
             encoder_mask=encoder_mask,
             cross_mask=cross_mask,
             encoder_hidden_states=encoder_hidden_states,
@@ -340,7 +340,7 @@ class MaskTest(unittest.TestCase):
         full_mask_encoder_2, full_mask_cross_2 = run_mask_creation(
             mask_fn=mask_fn,
             config=config,
-            input_embeds=input_embeds,
+            inputs_embeds=inputs_embeds,
             encoder_mask=None,
             cross_mask=None,
             encoder_hidden_states=encoder_hidden_states,
@@ -353,7 +353,7 @@ class MaskTest(unittest.TestCase):
         padded_mask_encoder, padded_mask_cross = run_mask_creation(
             mask_fn=mask_fn,
             config=config,
-            input_embeds=input_embeds,
+            inputs_embeds=inputs_embeds,
             encoder_mask=encoder_mask,
             cross_mask=cross_mask,
             encoder_hidden_states=encoder_hidden_states,

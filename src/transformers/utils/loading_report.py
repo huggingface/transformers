@@ -50,7 +50,7 @@ def update_key_name(mapping: dict[str, Any]) -> dict[str, Any]:
         mapping = {k: k for k in mapping}
         not_mapping = True
 
-    bucket: dict[tuple[str, Any], list[set[int]]] = defaultdict(list)
+    bucket: dict[str, list[set[int] | Any]] = defaultdict(list)
     for key, val in mapping.items():
         digs = _DIGIT_RX.findall(key)
         patt = _pattern_of(key)
@@ -214,7 +214,7 @@ class LoadStateDictInfo:
             tips += f"\n- {_color('CONVERSION', 'purple') + PALETTE['italic']}\t:originate from the conversion scheme"
             for k, v in update_key_name(self.conversion_errors).items():
                 status = _color("CONVERSION", "purple")
-                _details = v[:term_w]
+                _details = f"\n\n{v}\n\n"
                 rows.append([k, status, _details])
 
         # If nothing is wrong, return None

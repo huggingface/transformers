@@ -38,7 +38,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..align.modeling_align import eager_attention_forward
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, rotate_half
 
@@ -172,7 +173,7 @@ class ModernBertConfig(PreTrainedConfig):
         max_position_embeddings: int | None = 8192,
         initializer_range: float | None = 0.02,
         initializer_cutoff_factor: float | None = 2.0,
-        norm_eps: int | None = 1e-5,
+        norm_eps: float | None = 1e-5,
         norm_bias: bool | None = False,
         pad_token_id: int | None = 50283,
         eos_token_id: int | None = 50282,
@@ -573,24 +574,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
-    def _check_and_adjust_attn_implementation(
-        self, attn_implementation: str | None, is_init_check: bool = False
-    ) -> str:
-        """
-        Checks and dispatches to hhe requested attention implementation.
-        """
-        # If the user didn't specify anything, try to use flash_attention_2.
-        # Otherwise we fall back to the default SDPA -> Eager from the super() method.
-        try:
-            requested_attn_implementation = "flash_attention_2" if attn_implementation is None else attn_implementation
-            return super()._check_and_adjust_attn_implementation(
-                attn_implementation=requested_attn_implementation, is_init_check=is_init_check
-            )
-        except (ValueError, ImportError):
-            return super()._check_and_adjust_attn_implementation(
-                attn_implementation=attn_implementation, is_init_check=is_init_check
-            )
-
 
 @auto_docstring
 class ModernBertModel(ModernBertPreTrainedModel):
@@ -612,7 +595,8 @@ class ModernBertModel(ModernBertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.tok_embeddings = value
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -636,7 +620,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         if not isinstance(attention_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": hidden_states,
+                "inputs_embeds": hidden_states,
                 "attention_mask": attention_mask,
             }
             attention_mask_mapping = {

@@ -22,6 +22,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
@@ -30,7 +31,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_bit import BitConfig
 
 
@@ -759,12 +759,11 @@ class BitForImageClassification(BitPreTrainedModel):
     BiT backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class BitBackbone(BitPreTrainedModel, BackboneMixin):
+class BitBackbone(BackboneMixin, BitPreTrainedModel):
     has_attentions = False
 
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.bit = BitModel(config)
         self.num_features = [config.embedding_size] + config.hidden_sizes

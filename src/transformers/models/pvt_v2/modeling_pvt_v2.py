@@ -22,11 +22,11 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_pvt_v2 import PvtV2Config
 
 
@@ -510,10 +510,9 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
     PVTv2 backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class PvtV2Backbone(PvtV2Model, BackboneMixin):
+class PvtV2Backbone(BackboneMixin, PvtV2Model):
     def __init__(self, config: PvtV2Config):
         super().__init__(config)
-        super()._init_backbone(config)
         self.num_features = config.hidden_sizes
 
     @auto_docstring

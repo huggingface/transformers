@@ -78,7 +78,6 @@ _deps = [
     "codecarbon>=2.8.1",
     "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
-    "diffusers",
     "dill<0.3.5",
     "evaluate>=0.4.6",
     "faiss-cpu",
@@ -88,7 +87,6 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "huggingface-hub>=1.3.0,<2.0",
-    "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "jmespath>=1.0.1",
@@ -126,6 +124,7 @@ _deps = [
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff==0.14.10",
+    "ty==0.0.12",
     # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
     # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
     # `Trainer` tests (see references to `run_translation.py`).
@@ -145,12 +144,12 @@ _deps = [
     "tiktoken",
     "timm>=1.0.23",
     "tokenizers>=0.22.0,<=0.23.0",
-    "torch>=2.2",
+    "torch>=2.4",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.27",
-    "typer-slim",
+    "typer",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "urllib3<2.0.0",
@@ -182,7 +181,7 @@ if PYTHON_MINOR_VERSION < 13:
     extras["audio"] += deps_list("kenlm")
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
-extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich")
+extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty")
 extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
@@ -268,7 +267,7 @@ install_requires = [
     deps["pyyaml"],  # used for the model cards metadata
     deps["regex"],  # for OpenAI GPT
     deps["tokenizers"],
-    deps["typer-slim"],  # CLI utilities. In practice, already a dependency of huggingface_hub but we use it as well
+    deps["typer"],  # CLI utilities. In practice, already a dependency of huggingface_hub but we use it as well
     deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
@@ -324,7 +323,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.0.1.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.3.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",

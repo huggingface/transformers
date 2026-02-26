@@ -325,11 +325,6 @@ class Phi3IntegrationTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
-        from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
-
-        if not is_torch_greater_or_equal_than_2_4:
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,

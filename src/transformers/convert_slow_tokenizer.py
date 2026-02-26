@@ -169,7 +169,7 @@ class SentencePieceExtractor:
         if model_type is None:
             from tokenizers.models import BPE, Unigram
 
-            model_type = Unigram if self.proto.trainer_spec.model_type == 2 else BPE
+            model_type = Unigram if self.proto.trainer_spec.model_type == 1 else BPE
         vocab = [(piece.piece, piece.score) for piece in self.proto.pieces]
 
         if model_type.__name__ != "BPE":

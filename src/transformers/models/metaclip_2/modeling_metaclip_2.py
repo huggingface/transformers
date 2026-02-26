@@ -19,7 +19,8 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Ima
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_int
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_metaclip_2 import MetaClip2Config, MetaClip2TextConfig, MetaClip2VisionConfig
 
 
@@ -400,9 +401,14 @@ class MetaClip2Encoder(nn.Module):
         )
 
 
-class MetaClip2TextTransformer(nn.Module):
+class MetaClip2TextTransformer(MetaClip2PreTrainedModel):
+    config: MetaClip2TextConfig
+    input_modalities = ("text",)
+
+    _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
+
     def __init__(self, config: MetaClip2TextConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
         self.embeddings = MetaClip2TextEmbeddings(config)
@@ -411,7 +417,10 @@ class MetaClip2TextTransformer(nn.Module):
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
+        self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -427,7 +436,7 @@ class MetaClip2TextTransformer(nn.Module):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             cache_position=torch.arange(hidden_states.shape[1], device=hidden_states.device),
             past_key_values=None,
@@ -511,7 +520,6 @@ class MetaClip2TextModel(MetaClip2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -616,7 +624,7 @@ class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -652,6 +660,8 @@ class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
         return MetaClip2TextModelOutput(
             text_embeds=text_embeds,
             last_hidden_state=text_outputs.last_hidden_state,
+            hidden_states=text_outputs.hidden_states,
+            attentions=text_outputs.attentions,
         )
 
 
@@ -948,9 +958,14 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         )
 
 
-class MetaClip2VisionTransformer(nn.Module):
+class MetaClip2VisionTransformer(MetaClip2PreTrainedModel):
+    config: MetaClip2VisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    _no_split_modules = ["MetaClip2EncoderLayer"]
+
     def __init__(self, config: MetaClip2VisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
 
@@ -958,7 +973,10 @@ class MetaClip2VisionTransformer(nn.Module):
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = MetaClip2Encoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -1045,7 +1063,6 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -1158,7 +1175,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1199,6 +1216,8 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
         return MetaClip2VisionModelOutput(
             image_embeds=image_embeds,
             last_hidden_state=vision_outputs.last_hidden_state,
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
         )
 
 
@@ -1227,7 +1246,7 @@ class MetaClip2ForImageClassification(MetaClip2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1258,6 +1277,8 @@ class MetaClip2ForImageClassification(MetaClip2PreTrainedModel):
         return ImageClassifierOutput(
             loss=loss,
             logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

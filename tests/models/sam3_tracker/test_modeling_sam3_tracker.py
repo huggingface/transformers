@@ -302,6 +302,7 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             del inputs_dict["output_attentions"]
             config.mask_decoder_config.output_attentions = True
             config.vision_config.output_attentions = True
+            config.vision_config.backbone_config.output_attentions = True
             config.output_attentions = True
             model = model_class(config)
             model.to(torch_device)

@@ -37,6 +37,7 @@ from .configuration_auto import (
 from .feature_extraction_auto import AutoFeatureExtractor
 from .image_processing_auto import AutoImageProcessor
 from .tokenization_auto import AutoTokenizer
+from .video_processing_auto import AutoVideoProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -60,6 +61,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clipseg", "CLIPSegProcessor"),
         ("clvp", "ClvpProcessor"),
         ("cohere2_vision", "Cohere2VisionProcessor"),
+        ("colmodernvbert", "ColModernVBertProcessor"),
         ("colpali", "ColPaliProcessor"),
         ("colqwen2", "ColQwen2Processor"),
         ("deepseek_vl", "DeepseekVLProcessor"),
@@ -84,6 +86,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("granite_speech", "GraniteSpeechProcessor"),
         ("grounding-dino", "GroundingDinoProcessor"),
         ("groupvit", "CLIPProcessor"),
+        ("higgs_audio_v2", "HiggsAudioV2Processor"),
         ("hubert", "Wav2Vec2Processor"),
         ("idefics", "IdeficsProcessor"),
         ("idefics2", "Idefics2Processor"),
@@ -113,7 +116,9 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mistral3", "PixtralProcessor"),
         ("mllama", "MllamaProcessor"),
         ("mm-grounding-dino", "GroundingDinoProcessor"),
+        ("modernvbert", "Idefics3Processor"),
         ("moonshine", "Wav2Vec2Processor"),
+        ("moonshine_streaming", "MoonshineStreamingProcessor"),
         ("omdet-turbo", "OmDetTurboProcessor"),
         ("oneformer", "OneFormerProcessor"),
         ("ovis2", "Ovis2Processor"),
@@ -130,6 +135,8 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("qwen2_5_vl", "Qwen2_5_VLProcessor"),
         ("qwen2_audio", "Qwen2AudioProcessor"),
         ("qwen2_vl", "Qwen2VLProcessor"),
+        ("qwen3_5", "Qwen3VLProcessor"),
+        ("qwen3_5_moe", "Qwen3VLProcessor"),
         ("qwen3_omni_moe", "Qwen3OmniMoeProcessor"),
         ("qwen3_vl", "Qwen3VLProcessor"),
         ("qwen3_vl_moe", "Qwen3VLProcessor"),
@@ -147,6 +154,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("speech_to_text", "Speech2TextProcessor"),
         ("speecht5", "SpeechT5Processor"),
         ("t5gemma2", "Gemma3Processor"),
+        ("t5gemma2_encoder", "Gemma3Processor"),
         ("trocr", "TrOCRProcessor"),
         ("tvp", "TvpProcessor"),
         ("udop", "UdopProcessor"),
@@ -157,6 +165,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("vipllava", "LlavaProcessor"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
         ("voxtral", "VoxtralProcessor"),
+        ("voxtral_realtime", "VoxtralRealtimeProcessor"),
         ("wav2vec2", "Wav2Vec2Processor"),
         ("wav2vec2-bert", "Wav2Vec2Processor"),
         ("wav2vec2-conformer", "Wav2Vec2Processor"),
@@ -400,31 +409,20 @@ class AutoProcessor:
         elif type(config) in PROCESSOR_MAPPING:
             return PROCESSOR_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        # At this stage, there doesn't seem to be a `Processor` class available for this model, so let's try a
-        # tokenizer.
-        try:
-            return AutoTokenizer.from_pretrained(
-                pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-            )
-        except Exception:
+        # At this stage, there doesn't seem to be a `Processor` class available for this model.
+        # Let's try the commonly available classes
+        for klass in (AutoTokenizer, AutoImageProcessor, AutoVideoProcessor, AutoFeatureExtractor):
             try:
-                return AutoImageProcessor.from_pretrained(
+                return klass.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
             except Exception:
-                pass
-
-            try:
-                return AutoFeatureExtractor.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                )
-            except Exception:
-                pass
+                continue
 
         raise ValueError(
             f"Unrecognized processing class in {pretrained_model_name_or_path}. Can't instantiate a processor, a "
-            "tokenizer, an image processor or a feature extractor for this model. Make sure the repository contains "
-            "the files of at least one of those processing classes."
+            "tokenizer, an image processor, a video processor or a feature extractor for this model. "
+            "Make sure the repository contains the files of at least one of those processing classes."
         )
 
     @staticmethod

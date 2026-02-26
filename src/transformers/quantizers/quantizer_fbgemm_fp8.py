@@ -108,6 +108,13 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 return True
         return False
 
+    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
+        "Return the element size (in bytes) for `param_name`."
+        if self.param_needs_quantization(model, param_name):
+            # 8 bit, this is neeed as when `pre_quantized`` is False, we don't set the dtype of the FP8Linear in order to correctly load the weights
+            return 1
+        return super().param_element_size(model, param_name, param)
+
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
@@ -127,6 +134,20 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             tp_plan=model._tp_plan,
         )
 
+    def _process_model_after_weight_loading(self, model, **kwargs):
+        """
+        Force update the input scale upper bound after weight loading and device dispatch are complete.
+        This resolves issues where persistent buffers are zeroed out or overwritten during the loading process.
+        """
+        from ..integrations.fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
+
+        for m in model.modules():
+            if isinstance(m, (FbgemmFp8Linear, FbgemmFp8Llama4TextExperts)):
+                if hasattr(m, "input_scale_ub"):
+                    # The model is now on the target device, so we can use fill_ directly.
+                    m.input_scale_ub.fill_(self.quantization_config.activation_scale_ub)
+        return model
+
     def update_tp_plan(self, config):
         if "Llama4" in config.__class__.__name__:
             text_plan = {
@@ -140,7 +161,6 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 "layers.*.self_attn.v_proj.weight": "colwise",
                 "layers.*.self_attn.v_proj.weight_scale": "colwise",
                 "layers.*.self_attn.o_proj.weight": "rowwise",
-                "layers.*.self_attn": "gather",
                 # We keep the same sequence_parallel plan for layernorms
                 "layers.*.input_layernorm.weight": "sequence_parallel",
                 "layers.*.post_attention_layernorm.weight": "sequence_parallel",

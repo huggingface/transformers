@@ -21,11 +21,11 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_vitdet import VitDetConfig
 
 
@@ -683,10 +683,9 @@ class VitDetModel(VitDetPreTrainedModel):
     ViTDet backbone, to be used with frameworks like Mask R-CNN.
     """
 )
-class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
+class VitDetBackbone(BackboneMixin, VitDetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.embeddings = VitDetEmbeddings(config)
         self.encoder = VitDetEncoder(config)

@@ -1075,6 +1075,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # we reconstruct that into a single dict while loading them.
             self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
+        self.response_schema = kwargs.pop("response_schema", None)
+
         model_specific_tokens = {**auto_model_specific_tokens, **explicit_model_specific_tokens}
         if model_specific_tokens:
             self._set_model_specific_special_tokens(special_tokens=model_specific_tokens)
@@ -1404,12 +1406,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     def __repr__(self) -> str:
         added_tokens_decoder_rep = "\n\t".join([f"{k}: {v.__repr__()}," for k, v in self.added_tokens_decoder.items()])
+        if added_tokens_decoder_rep:
+            added_tokens_decoder_rep = f"\n\t{added_tokens_decoder_rep}\n"
         return (
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
             f" special_tokens={self.special_tokens_map},"
-            " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}\n)"
+            f" added_tokens_decoder={{{added_tokens_decoder_rep}}})"
         )
 
     def __len__(self) -> int:
@@ -1836,6 +1840,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     if key in kwargs and kwargs[key]:
                         continue  # User-provided kwargs take precedence
                     if isinstance(value, dict) and key != "extra_special_tokens":
+                        value.pop("special", None)
                         value = AddedToken(**value, special=True)
                     elif key == "extra_special_tokens" and isinstance(value, list):
                         # Merge list tokens, converting dicts to AddedToken
@@ -2027,6 +2032,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             save_directory, tokenizer_config, filename_prefix, save_jinja_files
         )
 
+        if getattr(self, "response_schema", None) is not None:
+            tokenizer_config["response_schema"] = self.response_schema
+
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
         for file_id in self.vocab_files_names:
@@ -2133,6 +2141,27 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
 
         return file_names + vocab_files + (added_tokens_file,)
+
+    def clean_up_tokenization(self, text: str) -> str:
+        """
+        Clean up tokenization spaces in a given text.
+        This method is mostly for remote code support.
+
+        """
+
+        text = (
+            text.replace(" .", ".")
+            .replace(" ?", "?")
+            .replace(" !", "!")
+            .replace(" ,", ",")
+            .replace(" ' ", "'")
+            .replace(" n't", "n't")
+            .replace(" 'm", "'m")
+            .replace(" 's", "'s")
+            .replace(" 've", "'ve")
+            .replace(" 're", "'re")
+        )
+        return text
 
     def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str, ...]:
         """
@@ -3348,7 +3377,8 @@ def find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
             ):
                 return candidate
         except Exception:
-            pass
+            # TODO: tighten to OSError / ProxyError
+            continue
 
     subfolder = kwargs.get("subfolder", "")
     local_files_only = kwargs.get("local_files_only", False)
@@ -3378,8 +3408,9 @@ def find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
             for entry in entries:
                 if entry.path.endswith(".model"):
                     return entry.path if not subfolder else entry.path.removeprefix(f"{subfolder}/")
-        except Exception:
-            pass
+        except Exception as e:
+            # TODO: tighten exception class
+            logger.debug(f"Could not list Hub repository files: {e}")
 
     return None
 

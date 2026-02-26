@@ -73,8 +73,8 @@ class TestHubKernels(TestCasePlus):
             if hasattr(cls, attr):
                 try:
                     delattr(cls, attr)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Could not delete attribute {attr}: {e}")
 
         # Clear any temporary kernel module cache entries populated by tests
         try:
@@ -83,8 +83,8 @@ class TestHubKernels(TestCasePlus):
             ]
             for k in keys_to_remove:
                 _KERNEL_MODULE_MAPPING.pop(k, None)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Could not clear kernel module cache: {e}")
 
     def tearDown(self):
         # Free accelerator memory/cache and trigger GC
@@ -356,12 +356,12 @@ class TestAttentionKernelRegistration(TestCasePlus):
             # Cleanup registration to avoid leaking functions across tests
             try:
                 ALL_ATTENTION_FUNCTIONS.pop(attn_impl, None)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Could not clean up `ALL_ATTENTION_FUNCTIONS`: {e}")
             try:
                 ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
 
     def test_load_and_register_named_function_kernel(self):
         def my_attention(*args, **kwargs):
@@ -375,12 +375,12 @@ class TestAttentionKernelRegistration(TestCasePlus):
             # Cleanup registration to avoid leaking functions across tests
             try:
                 ALL_ATTENTION_FUNCTIONS.pop(attn_impl, None)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Could not clean up `ALL_ATTENTION_FUNCTIONS`: {e}")
             try:
                 ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
 
 
 @require_kernels
@@ -396,8 +396,8 @@ class TestUseKernelsLifecycle(TestCasePlus):
         if hasattr(cls, "model"):
             try:
                 del cls.model
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Could not delete model: {e}")
 
     def tearDown(self):
         # Free accelerator memory/cache and trigger GC

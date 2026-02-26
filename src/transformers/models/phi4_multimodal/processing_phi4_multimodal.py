@@ -58,7 +58,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         text: TextInput | list[TextInput],
         images: ImageInput | None = None,
         audio: AudioInput | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[Phi4MultimodalProcessorKwargs],
     ) -> BatchFeature:
         r"""
         Returns:

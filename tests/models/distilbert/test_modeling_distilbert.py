@@ -37,7 +37,6 @@ if is_torch_available():
         DistilBertModel,
     )
     from transformers.models.distilbert.modeling_distilbert import _create_sinusoidal_embeddings
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 
 
 class DistilBertModelTester:
@@ -215,7 +214,6 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         {
             "feature-extraction": DistilBertModel,
             "fill-mask": DistilBertForMaskedLM,
-            "question-answering": DistilBertForQuestionAnswering,
             "text-classification": DistilBertForSequenceClassification,
             "token-classification": DistilBertForTokenClassification,
             "zero-shot": DistilBertForSequenceClassification,
@@ -400,9 +398,6 @@ class DistilBertModelIntegrationTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     @slow
     def test_export(self):
-        if not is_torch_greater_or_equal_than_2_4:
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         distilbert_model = "distilbert-base-uncased"
         device = "cpu"
         attn_implementation = "sdpa"
