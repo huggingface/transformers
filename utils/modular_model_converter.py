@@ -522,7 +522,7 @@ ALL_FILE_TYPES = (
     "image_processing.*_fast",
     "image_processing",
     "video_processing",
-    "feature-extraction",
+    "feature_extraction",
 )
 
 

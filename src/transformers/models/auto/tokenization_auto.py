@@ -233,7 +233,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("nystromformer", "AlbertTokenizer" if is_tokenizers_available() else None),
         ("olmo", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("olmo2", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
-        ("olmo3", "GPT2Tokenizer" if is_tokenizers_available() else None),
+        ("olmo3", "TokenizersBackend" if is_tokenizers_available() else None),
         ("olmoe", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("omdet-turbo", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("oneformer", "CLIPTokenizer" if is_tokenizers_available() else None),
