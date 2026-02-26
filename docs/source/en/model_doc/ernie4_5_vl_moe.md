@@ -171,63 +171,63 @@ output_text = processor.batch_decode(
 print(output_text)
 ```
 
-## Ernie4_5_VL_MoeConfig
+## Ernie4_5_VLMoeConfig
 
-[[autodoc]] Ernie4_5_VL_MoeConfig
+[[autodoc]] Ernie4_5_VLMoeConfig
 
-## Ernie4_5_VL_MoeTextConfig
+## Ernie4_5_VLMoeTextConfig
 
-[[autodoc]] Ernie4_5_VL_MoeTextConfig
+[[autodoc]] Ernie4_5_VLMoeTextConfig
 
-## Ernie4_5_VL_MoeVisionConfig
+## Ernie4_5_VLMoeVisionConfig
 
-[[autodoc]] Ernie4_5_VL_MoeVisionConfig
+[[autodoc]] Ernie4_5_VLMoeVisionConfig
 
-## Ernie4_5_VL_MoeImageProcessor
+## Ernie4_5_VLMoeImageProcessor
 
-[[autodoc]] Ernie4_5_VL_MoeImageProcessor
+[[autodoc]] Ernie4_5_VLMoeImageProcessor
     - preprocess
 
-## Ernie4_5_VL_MoeImageProcessorFast
+## Ernie4_5_VLMoeImageProcessorFast
 
-[[autodoc]] Ernie4_5_VL_MoeImageProcessorFast
+[[autodoc]] Ernie4_5_VLMoeImageProcessorFast
     - preprocess
 
-## Ernie4_5_VL_MoeVideoProcessor
+## Ernie4_5_VLMoeVideoProcessor
 
-[[autodoc]] Ernie4_5_VL_MoeVideoProcessor
+[[autodoc]] Ernie4_5_VLMoeVideoProcessor
     - preprocess
 
-## Ernie4_5_VL_MoeProcessor
+## Ernie4_5_VLMoeProcessor
 
-[[autodoc]] Ernie4_5_VL_MoeProcessor
+[[autodoc]] Ernie4_5_VLMoeProcessor
     - __call__
 
-## Ernie4_5_VL_MoeTextModel
+## Ernie4_5_VLMoeTextModel
 
-[[autodoc]] Ernie4_5_VL_MoeTextModel
+[[autodoc]] Ernie4_5_VLMoeTextModel
     - forward
 
-## Ernie4_5_VL_MoeVisionTransformerPretrainedModel
+## Ernie4_5_VLMoeVisionTransformerPretrainedModel
 
-[[autodoc]] Ernie4_5_VL_MoeVisionTransformerPretrainedModel
+[[autodoc]] Ernie4_5_VLMoeVisionTransformerPretrainedModel
     - forward
 
-## Ernie4_5_VL_MoeVariableResolutionResamplerModel
+## Ernie4_5_VLMoeVariableResolutionResamplerModel
 
-[[autodoc]] Ernie4_5_VL_MoeVariableResolutionResamplerModel
+[[autodoc]] Ernie4_5_VLMoeVariableResolutionResamplerModel
     - forward
 
-## Ernie4_5_VL_MoeModel
+## Ernie4_5_VLMoeModel
 
-[[autodoc]] Ernie4_5_VL_MoeModel
+[[autodoc]] Ernie4_5_VLMoeModel
     - forward
     - get_video_features
     - get_image_features
 
-## Ernie4_5_VL_MoeForConditionalGeneration
+## Ernie4_5_VLMoeForConditionalGeneration
 
-[[autodoc]] Ernie4_5_VL_MoeForConditionalGeneration
+[[autodoc]] Ernie4_5_VLMoeForConditionalGeneration
     - forward
     - get_video_features
     - get_image_features
