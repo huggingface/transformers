@@ -11,9 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from ..utils import is_accelerate_available, is_kernels_available, is_torch_available, logging
+from ..utils import is_kernels_available, is_torch_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -42,9 +42,6 @@ class MetalHfQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, *args, **kwargs):
-        if not is_torch_available():
-            raise ImportError("Metal quantization requires PyTorch. Please install torch.")
-
         if self.quantization_config.dequantize:
             return
 
@@ -62,9 +59,6 @@ class MetalHfQuantizer(HfQuantizer):
         if not is_kernels_available():
             raise ImportError("Metal quantization requires kernels: `pip install kernels`")
 
-        if not is_accelerate_available():
-            raise ImportError("Metal quantization requires accelerate: `pip install accelerate`")
-
         device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
@@ -77,6 +71,11 @@ class MetalHfQuantizer(HfQuantizer):
                     "Metal quantization on the fly does not support CPU or disk in the device_map. "
                     "Please use a pre-quantized checkpoint or remove CPU/disk from device_map."
                 )
+
+    def update_device_map(self, device_map: dict[str, Any] | None) -> dict[str, Any] | None:
+        if device_map is None:
+            device_map = {"": "mps"}
+        return device_map
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         from ..integrations.metal_quantization import MetalLinear
@@ -101,9 +100,6 @@ class MetalHfQuantizer(HfQuantizer):
             quantization_config=self.quantization_config,
             pre_quantized=self.pre_quantized,
         )
-
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        pass
 
     def is_serializable(self):
         return True

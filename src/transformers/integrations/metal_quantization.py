@@ -108,12 +108,7 @@ class MetalLinear(nn.Linear):
         else:
             self.weight = nn.Parameter(torch.zeros(out_features, in_features, dtype=dtype), requires_grad=False)
 
-        # For pre-quantized (dtype==uint32): scales/qbiases will be loaded
-        # from the checkpoint in whatever dtype they were saved as.
-        # For quantize-on-the-fly (dtype==None/float): MetalQuantize will set
-        # them in the original weight's dtype (e.g. bfloat16).
-        # We use float16 as the placeholder -- it gets overwritten either way.
-        scales_dtype = torch.float16 if dtype == torch.uint32 else (dtype or torch.float16)
+        scales_dtype = torch.float32 if dtype == torch.uint32 else None
         self.scales = nn.Parameter(torch.zeros(out_features, n_groups, dtype=scales_dtype), requires_grad=False)
         self.qbiases = nn.Parameter(torch.zeros(out_features, n_groups, dtype=scales_dtype), requires_grad=False)
 
@@ -123,7 +118,7 @@ class MetalLinear(nn.Linear):
             self.register_parameter("bias", None)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        if self.weight.dtype not in (torch.uint32, torch.int32):
+        if self.weight.dtype != torch.uint32:
             return nn.functional.linear(input, self.weight, self.bias)
 
         kernel = _get_metal_kernel()
@@ -175,16 +170,14 @@ def replace_with_metal_linear(
 
         if isinstance(module, nn.Linear):
             module_kwargs = {} if pre_quantized else {"dtype": None}
-
-            with torch.device("meta"):
-                new_module = MetalLinear(
-                    in_features=module.in_features,
-                    out_features=module.out_features,
-                    bias=module.bias is not None,
-                    bits=bits,
-                    group_size=group_size,
-                    **module_kwargs,
-                )
+            new_module = MetalLinear(
+                in_features=module.in_features,
+                out_features=module.out_features,
+                bias=module.bias is not None,
+                bits=bits,
+                group_size=group_size,
+                **module_kwargs,
+            )
 
             model.set_submodule(module_name, new_module)
             has_been_replaced = True
@@ -204,8 +197,8 @@ def _affine_quantize_tensor(weight: torch.Tensor, group_size: int, bits: int):
 
     Returns ``(w_packed, scales, biases)`` with:
       - ``w_packed``: ``[N, K // (32 // bits)]`` uint32
-      - ``scales``:   ``[N, K // group_size]`` float32
-      - ``biases``:   ``[N, K // group_size]`` float32
+      - ``scales``:   ``[N, K // group_size]`` float32/float16/bfloat16
+      - ``biases``:   ``[N, K // group_size]`` float32/float16/bfloat16
     """
     N, K = weight.shape
     elems_per_int = 32 // bits
@@ -300,19 +293,13 @@ class MetalDequantize(ConversionOps):
         bits = self.hf_quantizer.quantization_config.bits
         group_size = self.hf_quantizer.quantization_config.group_size
 
-        quantized = input_dict.get("weight$")
-        if quantized is None:
-            quantized = next(iter(input_dict.values()))
-        quantized = quantized[0] if isinstance(quantized, list) else quantized
+        quantized = input_dict["weight$"][0]
+        scales = input_dict["scales"][0]
+        qbiases = input_dict["qbiases"][0]
 
-        scales = input_dict.get("scales")
-        scales = scales[0] if isinstance(scales, list) else scales
-
-        qbiases = input_dict.get("qbiases")
-        qbiases = qbiases[0] if isinstance(qbiases, list) else qbiases
-
-        if scales is None or qbiases is None:
-            return {full_layer_name: quantized}
+        if len(input_dict) < 2:
+            # case where we only got weights, need to check for "weight$"
+            return {full_layer_name: input_dict["weight$"]}
 
         w_deq = _affine_dequantize_tensor(quantized, scales, qbiases, group_size, bits)
-        return {full_layer_name: w_deq}
+        return {full_layer_name: w_deq.to(scales.dtype)}

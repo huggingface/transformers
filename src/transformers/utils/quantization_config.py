@@ -1923,7 +1923,7 @@ class MetalConfig(QuantizationConfigMixin):
     Args:
         bits (`int`, *optional*, defaults to `4`):
             Number of bits per weight element. Supported values are 2, 4, and 8.
-        group_size (`int`, *optional*, defaults to `128`):
+        group_size (`int`, *optional*, defaults to `64`):
             Number of elements sharing the same scale/bias pair.
         modules_to_not_convert (`list[str]`, *optional*, defaults to `None`):
             A list of module names that should not be quantized (e.g. ``["lm_head"]``).
@@ -1935,7 +1935,7 @@ class MetalConfig(QuantizationConfigMixin):
     def __init__(
         self,
         bits: int = 4,
-        group_size: int = 128,
+        group_size: int = 64,
         modules_to_not_convert: list | None = None,
         dequantize: bool = False,
         **kwargs,
