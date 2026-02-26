@@ -828,7 +828,9 @@ class HmllLoadSpec(DeferredLoadSpec):
     dst: torch.Tensor
 
     def execute(self) -> torch.Tensor:
-        self.registry.fetchv(self.name, self.ranges, self.dst.data_ptr())
+        nread = self.registry.fetchv(self.name, self.ranges, self.dst.data_ptr())
+        if nread <= 0:
+            raise RuntimeError("Failed to fetch tensor")
         return self.dst
 
 
