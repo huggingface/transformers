@@ -13,6 +13,8 @@
 # limitations under the License.
 """Tokenization classes for Qwen2."""
 
+from functools import wraps
+
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
@@ -96,6 +98,34 @@ class Qwen2Tokenizer(TokenizersBackend):
         )
 
         self.add_tokens([AddedToken(token, special=True) for token in self.all_special_tokens])
+
+    @staticmethod
+    def _normalize_message(msg: dict) -> dict:
+        """
+        Remap the `thinking` key to `reasoning_content`.
+
+        Qwen3 uses `Qwen2Tokenizer`, so this method applies to both Qwen2 & Qwen3
+        models. Most training datasets store chain-of-thought output under `thinking`
+        rather than `reasoning_content`. The Qwen3 chat template only recognises
+        `reasoning_content`, so we normalise on the way in rather than requiring
+        callers to preprocess their data.
+        """
+        if "thinking" in msg and "reasoning_content" not in msg:
+            msg = {**msg, "reasoning_content": msg.pop("thinking")}
+        return msg
+
+    @wraps(TokenizersBackend.apply_chat_template)
+    def apply_chat_template(self, conversation, chat_template=None, **kwargs):
+        if isinstance(conversation, list):
+            is_batch = conversation and not isinstance(conversation[0], dict)
+            if is_batch:
+                conversation = [
+                    [self._normalize_message(m) for m in conv] for conv in conversation
+                ]
+            else:
+                conversation = [self._normalize_message(m) for m in conversation]
+
+        return super().apply_chat_template(conversation, chat_template=chat_template, **kwargs)
 
 
 __all__ = ["Qwen2Tokenizer"]
