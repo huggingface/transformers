@@ -635,6 +635,55 @@ class SpmConverter(Converter):
     SpmExtractor = SentencePieceExtractor
     special_tokens = {}
 
+    @staticmethod
+    def converted_from_proto(proto, vocab, merges=None):
+        """
+        Similar to convert_from_spm method, but used when converting directly from proto and vocab/merges.
+        (convert_from_spm requires some class attrs like byte_fallback, unk_piece, precompiled_charsmap, etc.)
+        """
+        byte_fallback = proto.trainer_spec.byte_fallback
+        unk_piece = proto.trainer_spec.unk_piece
+        precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
+
+        # model
+        if isinstance(vocab, dict):
+            tokenizer = Tokenizer(
+                BPE(
+                    vocab=vocab,
+                    merges=merges or [],
+                    unk_token=unk_piece,
+                    fuse_unk=True,
+                    byte_fallback=byte_fallback,
+                    dropout=None,
+                )
+            )
+        elif isinstance(vocab, list) and vocab and isinstance(vocab[0], (tuple, list)):
+            tokenizer = Tokenizer(
+                Unigram(
+                    vocab=vocab,
+                    unk_id=proto.trainer_spec.unk_id,
+                    byte_fallback=byte_fallback,
+                )
+            )
+        else:
+            return None
+
+        # normalizer
+        _normalizers = [normalizers.Replace(" ", "▁")]
+        if precompiled_charsmap:
+            _normalizers.insert(0, normalizers.Precompiled(precompiled_charsmap))
+        tokenizer.normalizer = normalizers.Sequence(_normalizers)
+
+        # decoder
+        if byte_fallback:
+            tokenizer.decoder = decoders.Sequence(
+                [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
+            )
+        else:
+            tokenizer.decoder = decoders.Sequence([decoders.Replace("▁", " ")])
+
+        return tokenizer
+
     @classmethod
     def convert_from_spm(cls, vocab=None, **kwargs):
         """

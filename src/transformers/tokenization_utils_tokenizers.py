@@ -37,6 +37,7 @@ from transformers.utils.hub import cached_file
 
 from .integrations.ggml import convert_gguf_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+from .convert_slow_tokenizer import SpmConverter
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
     BatchEncoding,
@@ -162,7 +163,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             try:
                 from .convert_slow_tokenizer import SentencePieceExtractor
 
-                local_kwargs = SentencePieceExtractor(vocab_file).extract(cls.model, **local_kwargs)
+                extractor = SentencePieceExtractor(vocab_file)
+                local_kwargs = extractor.extract(cls.model, **local_kwargs)
                 try:
                     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
 
@@ -176,6 +178,19 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 # what used to be in `convert_slow`
                 if hasattr(cls, "convert_from_spm_model"):
                     local_kwargs = cls.convert_from_spm_model(**local_kwargs)
+
+                # Generic spm fallback to build tokenizer_object from spm proto
+                if "tokenizer_object" not in local_kwargs:
+                    tokenizer_object = SpmConverter.converted_from_proto(
+                        proto=extractor.proto,
+                        vocab=local_kwargs.get("vocab"),
+                        merges=local_kwargs.get("merges"),
+                    )
+                    if tokenizer_object is not None:
+                        local_kwargs["tokenizer_object"] = tokenizer_object
+                        local_kwargs.pop("vocab", None)
+                        local_kwargs.pop("merges", None)
+
             except Exception as e:  # TODO only catch deserialization error here!
                 logger.warning(
                     f"Could not extract SentencePiece model from {vocab_file} using sentencepiece library due to {e}. "
