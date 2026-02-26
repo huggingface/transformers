@@ -85,6 +85,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("cohere", "CohereConfig"),
         ("cohere2", "Cohere2Config"),
         ("cohere2_vision", "Cohere2VisionConfig"),
+        ("colmodernvbert", "ColModernVBertConfig"),
         ("colpali", "ColPaliConfig"),
         ("colqwen2", "ColQwen2Config"),
         ("conditional_detr", "ConditionalDetrConfig"),
@@ -186,6 +187,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("glm_image_text", "GlmImageTextConfig"),
         ("glm_image_vision", "GlmImageVisionConfig"),
         ("glm_image_vqmodel", "GlmImageVQVAEConfig"),
+        ("glm_moe_dsa", "GlmMoeDsaConfig"),
         ("glm_ocr", "GlmOcrConfig"),
         ("glm_ocr_text", "GlmOcrTextConfig"),
         ("glm_ocr_vision", "GlmOcrVisionConfig"),
@@ -212,6 +214,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("helium", "HeliumConfig"),
         ("hgnet_v2", "HGNetV2Config"),
         ("hiera", "HieraConfig"),
+        ("higgs_audio_v2", "HiggsAudioV2Config"),
+        ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerConfig"),
         ("hubert", "HubertConfig"),
         ("hunyuan_v1_dense", "HunYuanDenseV1Config"),
         ("hunyuan_v1_moe", "HunYuanMoEV1Config"),
@@ -292,6 +296,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mobilevitv2", "MobileViTV2Config"),
         ("modernbert", "ModernBertConfig"),
         ("modernbert-decoder", "ModernBertDecoderConfig"),
+        ("modernvbert", "ModernVBertConfig"),
         ("moonshine", "MoonshineConfig"),
         ("moonshine_streaming", "MoonshineStreamingConfig"),
         ("moonshine_streaming_encoder", "MoonshineStreamingEncoderConfig"),
@@ -362,6 +367,10 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("qwen2_vl", "Qwen2VLConfig"),
         ("qwen2_vl_text", "Qwen2VLTextConfig"),
         ("qwen3", "Qwen3Config"),
+        ("qwen3_5", "Qwen3_5Config"),
+        ("qwen3_5_moe", "Qwen3_5MoeConfig"),
+        ("qwen3_5_moe_text", "Qwen3_5MoeTextConfig"),
+        ("qwen3_5_text", "Qwen3_5TextConfig"),
         ("qwen3_moe", "Qwen3MoeConfig"),
         ("qwen3_next", "Qwen3NextConfig"),
         ("qwen3_omni_moe", "Qwen3OmniMoeConfig"),
@@ -470,6 +479,9 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("vjepa2", "VJEPA2Config"),
         ("voxtral", "VoxtralConfig"),
         ("voxtral_encoder", "VoxtralEncoderConfig"),
+        ("voxtral_realtime", "VoxtralRealtimeConfig"),
+        ("voxtral_realtime_encoder", "VoxtralRealtimeEncoderConfig"),
+        ("voxtral_realtime_text", "VoxtralRealtimeTextConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
         ("wav2vec2-bert", "Wav2Vec2BertConfig"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
@@ -553,6 +565,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("cohere", "Cohere"),
         ("cohere2", "Cohere2"),
         ("cohere2_vision", "Cohere2Vision"),
+        ("colmodernvbert", "ColModernVBert"),
         ("colpali", "ColPali"),
         ("colqwen2", "ColQwen2"),
         ("conditional_detr", "Conditional DETR"),
@@ -662,6 +675,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("glm_image_text", "GlmImageText"),
         ("glm_image_vision", "GlmImageVisionModel"),
         ("glm_image_vqmodel", "GlmImageVQVAE"),
+        ("glm_moe_dsa", "GlmMoeDsa"),
         ("glm_ocr", "Glmocr"),
         ("glm_ocr_text", "GlmOcrText"),
         ("glm_ocr_vision", "GlmOcrVisionModel"),
@@ -689,6 +703,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("herbert", "HerBERT"),
         ("hgnet_v2", "HGNet-V2"),
         ("hiera", "Hiera"),
+        ("higgs_audio_v2", "HiggsAudioV2"),
+        ("higgs_audio_v2_tokenizer", "HiggsAudioV2Tokenizer"),
         ("hubert", "Hubert"),
         ("hunyuan_v1_dense", "HunYuanDenseV1"),
         ("hunyuan_v1_moe", "HunYuanMoeV1"),
@@ -778,6 +794,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("mobilevitv2", "MobileViTV2"),
         ("modernbert", "ModernBERT"),
         ("modernbert-decoder", "ModernBertDecoder"),
+        ("modernvbert", "ModernVBert"),
         ("moonshine", "Moonshine"),
         ("moonshine_streaming", "MoonshineStreaming"),
         ("moonshine_streaming_encoder", "MoonshineStreamingEncoder"),
@@ -852,6 +869,10 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("qwen2_vl", "Qwen2VL"),
         ("qwen2_vl_text", "Qwen2VL"),
         ("qwen3", "Qwen3"),
+        ("qwen3_5", "Qwen3_5"),
+        ("qwen3_5_moe", "Qwen3_5Moe"),
+        ("qwen3_5_moe_text", "Qwen3_5MoeText"),
+        ("qwen3_5_text", "Qwen3_5Text"),
         ("qwen3_moe", "Qwen3MoE"),
         ("qwen3_next", "Qwen3Next"),
         ("qwen3_omni_moe", "Qwen3OmniMoE"),
@@ -962,6 +983,9 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("vjepa2", "VJEPA2Model"),
         ("voxtral", "Voxtral"),
         ("voxtral_encoder", "Voxtral Encoder"),
+        ("voxtral_realtime", "VoxtralRealtime"),
+        ("voxtral_realtime_encoder", "VoxtralRealtime Encoder"),
+        ("voxtral_realtime_text", "VoxtralRealtime Text Model"),
         ("wav2vec2", "Wav2Vec2"),
         ("wav2vec2-bert", "Wav2Vec2-BERT"),
         ("wav2vec2-conformer", "Wav2Vec2-Conformer"),
@@ -1010,6 +1034,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("clip_vision_model", "clip"),
         ("qwen2_audio_encoder", "qwen2_audio"),
         ("voxtral_encoder", "voxtral"),
+        ("voxtral_realtime_encoder", "voxtral_realtime"),
+        ("voxtral_realtime_text", "voxtral_realtime"),
         ("clip_text_model", "clip"),
         ("aria_text", "aria"),
         ("gemma3_text", "gemma3"),
@@ -1044,6 +1070,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("qwen2_vl_text", "qwen2_vl"),
         ("qwen3_vl_text", "qwen3_vl"),
         ("qwen3_vl_moe_text", "qwen3_vl_moe"),
+        ("qwen3_5_text", "qwen3_5"),
+        ("qwen3_5_moe_text", "qwen3_5_moe"),
         ("sam_vision_model", "sam"),
         ("sam2_vision_model", "sam2"),
         ("sam2_hiera_det_model", "sam2"),
@@ -1423,17 +1451,10 @@ class AutoConfig:
                     "`pip install git+https://github.com/huggingface/transformers.git`"
                 )
             return config_class.from_dict(config_dict, **unused_kwargs)
-        else:
-            # Fallback: use pattern matching on the string.
-            # We go from longer names to shorter names to catch roberta before bert (for instance)
-            for pattern in sorted(CONFIG_MAPPING.keys(), key=len, reverse=True):
-                if pattern in str(pretrained_model_name_or_path):
-                    return CONFIG_MAPPING[pattern].from_dict(config_dict, **unused_kwargs)
 
         raise ValueError(
             f"Unrecognized model in {pretrained_model_name_or_path}. "
-            f"Should have a `model_type` key in its {CONFIG_NAME}, or contain one of the following strings "
-            f"in its name: {', '.join(CONFIG_MAPPING.keys())}"
+            f"Should have a `model_type` key in its {CONFIG_NAME}."
         )
 
     @staticmethod

@@ -38,7 +38,8 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import OutputRecorder, TransformersKwargs
+from ...utils.generic import TransformersKwargs
+from ...utils.output_capturing import OutputRecorder
 from ...video_utils import VideoInput
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..sam2.configuration_sam2 import (

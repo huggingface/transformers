@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import BitsAndBytesConfig, EsmConfig, is_torch_available
+from transformers import BitsAndBytesConfig, EsmConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     TestCasePlus,
     is_flaky,
@@ -315,6 +315,8 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             if not model_class._supports_flash_attn:
                 self.skipTest(reason="Model does not support Flash Attention 2")
 
+            # Set seed for deterministic test - ensures reproducible model initialization and inputs
+            set_seed(42)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
@@ -337,6 +339,10 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 logits_fa = outputs_fa.hidden_states[-1]
 
                 torch.testing.assert_close(logits_fa, logits, atol=1e-2, rtol=1e-3)
+
+    @unittest.skip("ESM embeddings are scaled due to token dropout so the test does not apply")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
 
 
 @slow

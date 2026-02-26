@@ -21,12 +21,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from transformers.models.sam2.modeling_sam2 import (
-    eager_attention_forward,
-    window_partition,
-)
-from transformers.utils.generic import OutputRecorder
-
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
@@ -37,7 +31,9 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     auto_docstring,
 )
+from ...utils.output_capturing import OutputRecorder
 from ..auto import CONFIG_MAPPING, AutoConfig
+from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
     Sam2VideoConfig,
     Sam2VideoMaskDecoderConfig,

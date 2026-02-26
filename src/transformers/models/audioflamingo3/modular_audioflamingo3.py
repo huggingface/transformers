@@ -22,7 +22,8 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..qwen2_audio.modeling_qwen2_audio import (
     Qwen2AudioEncoder,
     Qwen2AudioPreTrainedModel,
@@ -62,7 +63,8 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         "attentions": AudioFlamingo3Attention,
     }
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_features: torch.Tensor,
@@ -97,7 +99,7 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=input_features_mask,
         )
 
@@ -296,7 +298,7 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if cache_position is not None and cache_position[0] == 0:
+        if cache_position is not None and model_inputs["cache_position"][0] == 0:
             # input_features should only be passed when we are not in cached decoding stage
             if input_features is not None:
                 model_inputs["input_features"] = input_features
