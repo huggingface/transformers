@@ -12,41 +12,64 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
+import torch.nn as nn
+import triton
+from torch.library import custom_op
+from torch.nn import functional as F
+
+from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_kernels_available, is_torch_available, logging
-
-
-if is_torch_available():
-    import torch
-    import torch.nn as nn
-    import triton
-    import triton.language as tl
-    from torch.library import custom_op, triton_op, wrap_triton
-    from torch.nn import functional as F
-
-    from ..activations import ACT2FN
+from .hub_kernels import get_kernel
 
 
 logger = logging.get_logger(__name__)
 
+
+_FP8_DTYPE = torch.float8_e4m3fn
+_FP8_MIN = torch.finfo(_FP8_DTYPE).min
+_FP8_MAX = torch.finfo(_FP8_DTYPE).max
+
+# Global for the Triton quantization kernel (lazily compiled)
+_triton_kernel = None
+_triton_kernel_available = None
+
+
 # Global for the CUTLASS quantization kernel (lazily loaded)
 _cutlass_kernel = None
+_cutlass_kernel_available = None
+
+
+def _get_triton_kernel():
+    """Lazily compile the Triton quantization kernel."""
+    global _triton_kernel, _triton_kernel_available
+
+    if _triton_kernel_available is None:
+        # this kernel is universal so should be usable independently of torch version
+        _triton_kernel = get_kernel("kernels-community/finegrained-fp8")
+        _triton_kernel_available = True
+
+    return _triton_kernel
 
 
 def _get_cutlass_kernel():
     """Lazily load the CUTLASS quantization kernel from HuggingFace Hub."""
-    global _cutlass_kernel
-    if _cutlass_kernel is None:
+    global _cutlass_kernel, _cutlass_kernel_available
+
+    if _cutlass_kernel_available is None:
         try:
             from .hub_kernels import get_kernel
 
             # this kernel's build was not updated since torch 2.8
             _cutlass_kernel = get_kernel("RedHatAI/quantization")
+            _cutlass_kernel_available = True
         except Exception as e:
             logger.warning_once(f"Failed to load CUTLASS quantization kernel: {e}. Falling back to Triton.")
-            _cutlass_kernel = False  # Mark as unavailable to avoid future attempts
-    return _cutlass_kernel if _cutlass_kernel else None
+            _cutlass_kernel_available = False
+
+    return _cutlass_kernel
 
 
 def _supports_cutlass(
@@ -143,222 +166,6 @@ def w8a8_block_fp8_matmul_cutlass(
     return C.view(original_shape[:-1] + (N,))
 
 
-_FP8_DTYPE = torch.float8_e4m3fn
-_FP8_MIN = torch.finfo(_FP8_DTYPE).min
-_FP8_MAX = torch.finfo(_FP8_DTYPE).max
-
-
-# Copied from https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/main/inference/kernel.py
-@triton.jit
-def fp8_act_quant_kernel(x_ptr, y_ptr, s_ptr, BLOCK_SIZE: tl.constexpr):
-    pid = tl.program_id(axis=0)
-    offs = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    x = tl.load(x_ptr + offs).to(tl.float32)
-    s = tl.max(tl.abs(x)) / 448.0  # _FP8_MAX
-    y = x / s
-    y = y.to(y_ptr.dtype.element_ty)
-    tl.store(y_ptr + offs, y)
-    tl.store(s_ptr + pid, s)
-
-
-@triton_op("transformers::fp8_act_quant", mutates_args=())
-def fp8_act_quant(x: torch.Tensor, block_size: int = 128) -> tuple[torch.Tensor, torch.Tensor]:
-    assert x.is_contiguous()
-    assert x.shape[-1] % block_size == 0
-    y = torch.empty_like(x, dtype=_FP8_DTYPE)
-    s = x.new_empty(*x.size()[:-1], x.size(-1) // block_size, dtype=torch.float32)
-
-    grid = (triton.cdiv(x.numel(), block_size),)
-    wrap_triton(fp8_act_quant_kernel)[grid](x, y, s, BLOCK_SIZE=block_size)
-    return y, s
-
-
-# Adapted from https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/layers/quantization/fp8_kernel.py
-@triton.jit
-def w8a8_block_fp8_matmul_kernel(
-    # Pointers to inputs and output
-    A,
-    B,
-    C,
-    As,
-    Bs,
-    # Shape for matmul
-    M,
-    N,
-    K,
-    # Block size for block-wise quantization
-    group_n,
-    group_k,
-    # Stride for inputs and output
-    stride_am,
-    stride_ak,
-    stride_bk,
-    stride_bn,
-    stride_cm,
-    stride_cn,
-    stride_As_m,
-    stride_As_k,
-    stride_Bs_k,
-    stride_Bs_n,
-    # Meta-parameters
-    BLOCK_SIZE_M: tl.constexpr,
-    BLOCK_SIZE_N: tl.constexpr,
-    BLOCK_SIZE_K: tl.constexpr,
-    GROUP_SIZE_M: tl.constexpr,
-):
-    """Triton-accelerated function used to perform linear operations (dot
-    product) on input tensors `A` and `B` with block-wise quantization, and
-    store the result in output tensor `C`.
-    """
-
-    pid = tl.program_id(axis=0)
-    num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
-    num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
-    num_pid_in_group = GROUP_SIZE_M * num_pid_n
-    group_id = pid // num_pid_in_group
-    first_pid_m = group_id * GROUP_SIZE_M
-    group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M)
-    pid_m = first_pid_m + (pid % group_size_m)
-    pid_n = (pid % num_pid_in_group) // group_size_m
-
-    offs_am = (pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)) % M
-    offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
-    offs_k = tl.arange(0, BLOCK_SIZE_K)
-    a_ptrs = A + (offs_am[:, None] * stride_am + offs_k[None, :] * stride_ak)
-    b_ptrs = B + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
-
-    As_ptrs = As + offs_am * stride_As_m
-    offs_bsn = offs_bn // group_n
-    Bs_ptrs = Bs + offs_bsn * stride_Bs_n
-
-    accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
-        a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0)
-        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
-
-        k_start = k * BLOCK_SIZE_K
-        offs_ks = k_start // group_k
-        a_s = tl.load(As_ptrs + offs_ks * stride_As_k)
-        b_s = tl.load(Bs_ptrs + offs_ks * stride_Bs_k)
-
-        accumulator += tl.dot(a, b) * a_s[:, None] * b_s[None, :]
-        a_ptrs += BLOCK_SIZE_K * stride_ak
-        b_ptrs += BLOCK_SIZE_K * stride_bk
-
-    if C.dtype.element_ty == tl.bfloat16:
-        c = accumulator.to(tl.bfloat16)
-    elif C.dtype.element_ty == tl.float16:
-        c = accumulator.to(tl.float16)
-    else:
-        c = accumulator.to(tl.float32)
-
-    offs_cm = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
-    offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-    c_ptrs = C + stride_cm * offs_cm[:, None] + stride_cn * offs_cn[None, :]
-    c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
-    tl.store(c_ptrs, c, mask=c_mask)
-
-
-@triton_op("transformers::w8a8_block_fp8_matmul_triton", mutates_args=())
-def w8a8_block_fp8_matmul_triton(
-    A: torch.Tensor,
-    B: torch.Tensor,
-    As: torch.Tensor,
-    Bs: torch.Tensor,
-    block_size: list[int] | None,
-    output_dtype: torch.dtype = torch.float32,
-) -> torch.Tensor:
-    """This function performs matrix multiplication with block-wise
-    quantization.
-    It takes two input tensors `A` and `B` with scales `As` and `Bs`.
-    The output is returned in the specified `output_dtype`.
-    Args:
-        A: The input tensor, e.g., activation.
-        B: The input tensor, e.g., weight.
-        As: The per-token-group quantization scale for `A`.
-        Bs: The per-block quantization scale for `B`.
-        block_size: The block size for per-block quantization. It should
-        be 2-dim, e.g., [128, 128].
-        output_dytpe: The dtype of the returned tensor.
-    Returns:
-        torch.Tensor: The result of matmul.
-    """
-    if block_size is None:
-        block_n, block_k = 128, 128
-    else:
-        assert len(block_size) == 2
-        block_n, block_k = block_size[0], block_size[1]
-
-    # if we have per-tensor quantization, we use 128x128 block size for tiled matmul multiplication
-    if block_n == B.shape[-2] and block_k == B.shape[-1]:
-        block_n = 128
-        block_k = 128
-
-    assert A.shape[-1] == B.shape[-1]
-    assert A.is_contiguous()
-
-    assert B.ndim == 2
-    assert B.is_contiguous()
-
-    N, K = B.shape
-    M = A.numel() // A.shape[-1]
-
-    # For per-tensor scales (scalar), expand to block-scale shape with strides (0, 0).
-    # This is a zero-copy view; all loads inside the kernel hit the same cached value.
-    if As.numel() == 1:
-        As = As.reshape(1, 1).expand(M, triton.cdiv(K, block_k))
-    else:
-        assert A.shape[:-1] == As.shape[:-1]
-        assert triton.cdiv(K, block_k) == As.shape[-1]
-    if Bs.numel() == 1:
-        Bs = Bs.reshape(1, 1).expand(triton.cdiv(N, block_n), triton.cdiv(K, block_k))
-    else:
-        assert Bs.ndim == 2
-        assert triton.cdiv(N, block_n) == Bs.shape[0], f"{N}, {block_n}, {Bs.shape}"
-        assert triton.cdiv(K, block_k) == Bs.shape[1], f"{K}, {block_k}, {Bs.shape}"
-
-    C_shape = A.shape[:-1] + (N,)
-    C = A.new_empty(C_shape, dtype=output_dtype)
-
-    # Adaptive BLOCK_SIZE_M: smallest power-of-2 >= M, floored at 16, capped at 128.
-    # Matches the WGMMA tile to the actual row count — smaller tiles use less
-    # register pressure and a better-matched FP8 WGMMA instruction, improving
-    # both accuracy and performance for small M (decode).
-    BLOCK_SIZE_M = min(max(triton.next_power_of_2(M), 16), 128)
-    BLOCK_SIZE_K = block_k
-    BLOCK_SIZE_N = block_n
-
-    grid = (triton.cdiv(M, BLOCK_SIZE_M) * triton.cdiv(N, BLOCK_SIZE_N),)
-    wrap_triton(w8a8_block_fp8_matmul_kernel)[grid](
-        A,
-        B,
-        C,
-        As,
-        Bs,
-        M,
-        N,
-        K,
-        block_n,
-        block_k,
-        A.stride(-2),
-        A.stride(-1),
-        B.stride(1),
-        B.stride(0),
-        C.stride(-2),
-        C.stride(-1),
-        As.stride(-2),
-        As.stride(-1),
-        Bs.stride(1),
-        Bs.stride(0),
-        BLOCK_SIZE_M=BLOCK_SIZE_M,
-        BLOCK_SIZE_N=BLOCK_SIZE_N,
-        BLOCK_SIZE_K=BLOCK_SIZE_K,
-        GROUP_SIZE_M=8,
-    )
-
-    return C
-
-
 def w8a8_block_fp8_matmul(
     A: torch.Tensor,
     B: torch.Tensor,
@@ -389,7 +196,8 @@ def w8a8_block_fp8_matmul(
             _cutlass_kernel = False  # mark unavailable to avoid future attempts
 
     # Fall back to Triton
-    return w8a8_block_fp8_matmul_triton(A, B, As, Bs, block_size, output_dtype)
+    kernel = _get_triton_kernel()
+    return kernel.w8a8_block_fp8_matmul(A, B, As, Bs, block_size, output_dtype)
 
 
 class FP8Linear(nn.Linear):
@@ -462,360 +270,13 @@ class FP8Linear(nn.Linear):
         return output.to(dtype=input.dtype)
 
 
-@triton.jit
-def w8a8_block_fp8_matmul_batched_kernel(
-    A,  # (S, K)  raw BF16/FP16 activations
-    B,  # (E, N, K) FP8 weight matrices
-    C,  # (S, N)  output
-    Bs,  # (E, N // group_n, K // group_k) weight scales
-    ExpertIds,  # (S,) — which expert each batch element routes to
-    # Shape
-    N,
-    K,
-    # Block size for block-wise quantization
-    group_n,
-    group_k,
-    # Per-row strides
-    stride_ak,
-    stride_bk,
-    stride_bn,
-    stride_cn,
-    stride_Bs_k,
-    stride_Bs_n,
-    # Batch / expert strides
-    stride_Ab,  # stride between rows in A (one token per program)
-    stride_Eb,  # stride between experts in B
-    stride_Cb,
-    stride_Esb,  # stride between experts in Bs
-    # Meta-parameters
-    BLOCK_SIZE_M: tl.constexpr,
-    BLOCK_SIZE_N: tl.constexpr,
-    BLOCK_SIZE_K: tl.constexpr,
-):
-    pid_n = tl.program_id(axis=0)
-    batch_id = tl.program_id(axis=1)
-
-    # Advance base pointers to this token's activation row and its expert's
-    # weight / scale slice. No pre-gather of weights needed (like in non-fp8 impls)
-    expert_id = tl.load(ExpertIds + batch_id)
-    A = A + batch_id * stride_Ab
-    B = B + expert_id * stride_Eb
-    C = C + batch_id * stride_Cb
-    Bs = Bs + expert_id * stride_Esb
-
-    offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
-    offs_k = tl.arange(0, BLOCK_SIZE_K)
-    # M=1: broadcast the single activation row to BLOCK_SIZE_M identical rows
-    # so tl.dot gets the required (BLOCK_SIZE_M, BLOCK_SIZE_K) shape.
-    a_ptrs = A + tl.arange(0, BLOCK_SIZE_M)[:, None] * 0 + offs_k[None, :] * stride_ak
-    b_ptrs = B + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
-
-    offs_bsn = offs_bn // group_n
-    Bs_ptrs = Bs + offs_bsn * stride_Bs_n
-
-    accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
-        # ---- fused act_quant (replaces: a = tl.load(a_ptrs); a_s = tl.load(As_ptrs)) ----
-        a_raw = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0).to(tl.float32)
-        a_s = tl.max(tl.abs(a_raw)) / 448.0  # per-block scale (scalar for M=1)
-        a = (a_raw / tl.maximum(a_s, 1e-12)).to(tl.float8e4nv)
-        # ---- same as baseline from here ----
-        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
-
-        k_start = k * BLOCK_SIZE_K
-        offs_ks = k_start // group_k
-        b_s = tl.load(Bs_ptrs + offs_ks * stride_Bs_k)
-
-        accumulator += tl.dot(a, b) * a_s * b_s[None, :]
-        a_ptrs += BLOCK_SIZE_K * stride_ak
-        b_ptrs += BLOCK_SIZE_K * stride_bk
-
-    if C.dtype.element_ty == tl.bfloat16:
-        c = accumulator.to(tl.bfloat16)
-    elif C.dtype.element_ty == tl.float16:
-        c = accumulator.to(tl.float16)
-    else:
-        c = accumulator.to(tl.float32)
-
-    # Only write row 0 (M=1); the broadcast rows are discarded.
-    offs_cm = tl.arange(0, BLOCK_SIZE_M)
-    offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-    c_ptrs = C + offs_cm[:, None] * 0 + stride_cn * offs_cn[None, :]
-    c_mask = (offs_cm[:, None] < 1) & (offs_cn[None, :] < N)
-    tl.store(c_ptrs, c, mask=c_mask)
-
-
-@triton.jit
-def w8a8_block_fp8_grouped_mm_kernel(
-    A,  # (S, K)  raw BF16/FP16 activations, sorted/grouped by expert id
-    B,  # (E, N, K) FP8 weight matrices
-    C,  # (S, N)  output
-    Bs,  # (E, N // group_n, K // group_k) weight scales
-    Offsets,  # (E,) int32 — cumulative row-end per expert
-    TileOffsets,  # (E,) int32 — cumulative tile-end per expert
-    # Shape
-    S,
-    N,
-    K,
-    # Block size for block-wise quantization
-    group_n,
-    group_k,
-    # Strides
-    stride_am,
-    stride_ak,
-    stride_Eb,
-    stride_bk,
-    stride_bn,
-    stride_cm,
-    stride_cn,
-    stride_Esb,
-    stride_Bsk,
-    stride_Bsn,
-    # Meta-parameters
-    NUM_EXPERTS: tl.constexpr,
-    BLOCK_SIZE_M: tl.constexpr,
-    BLOCK_SIZE_N: tl.constexpr,
-    BLOCK_SIZE_K: tl.constexpr,
-):
-    pid = tl.program_id(axis=0)
-    num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
-    pid_m = pid // num_pid_n
-    pid_n = pid % num_pid_n
-
-    # Exit early for programs beyond the actual tile count.
-    total_tiles = tl.load(TileOffsets + NUM_EXPERTS - 1)
-    if pid_m >= total_tiles:
-        return
-
-    # Binary search in TileOffsets to find the owning expert.
-    # Finds the smallest e such that TileOffsets[e] > pid_m (upper_bound semantics),
-    # which is the expert whose tile range contains pid_m.
-    # O(log2(NUM_EXPERTS)) loads instead of the O(NUM_EXPERTS) linear scan.
-    # NUM_EXPERTS.bit_length() is ceil(log2(E))+1 for powers-of-two, giving one
-    # harmless extra iteration when lo==hi; it's a compile-time constant so the
-    # loop is fully unrolled by the compiler.
-    lo = 0
-    hi = NUM_EXPERTS
-    for _ in tl.static_range(NUM_EXPERTS.bit_length()):
-        mid = (lo + hi) >> 1
-        mid_val = tl.load(TileOffsets + mid)
-        is_left = mid_val <= pid_m
-        lo = tl.where(is_left, mid + 1, lo)
-        hi = tl.where(is_left, hi, mid)
-    expert_id = lo
-
-    prev_eid = tl.maximum(expert_id - 1, 0)
-
-    expert_start = tl.where(expert_id == 0, 0, tl.load(Offsets + prev_eid))
-    expert_end = tl.load(Offsets + expert_id)
-    M_expert = expert_end - expert_start
-
-    expert_tile_start = tl.where(expert_id == 0, 0, tl.load(TileOffsets + prev_eid))
-    local_tile = pid_m - expert_tile_start
-    m_off = local_tile * BLOCK_SIZE_M
-
-    offs_am = m_off + tl.arange(0, BLOCK_SIZE_M)
-    row_mask = offs_am < M_expert
-    offs_global_m = expert_start + offs_am
-
-    offs_bn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-    offs_bn_safe = offs_bn % N
-    offs_k = tl.arange(0, BLOCK_SIZE_K)
-
-    offs_am_safe = offs_global_m % S
-
-    a_ptrs = A + offs_am_safe[:, None] * stride_am + offs_k[None, :] * stride_ak
-    b_ptrs = B + expert_id * stride_Eb + offs_k[:, None] * stride_bk + offs_bn_safe[None, :] * stride_bn
-    offs_bsn_safe = offs_bn_safe // group_n
-    Bs_ptrs = Bs + expert_id * stride_Esb + offs_bsn_safe * stride_Bsn
-
-    accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
-        # ---- fused act_quant (replaces: a = tl.load(a_ptrs); a_s = tl.load(As_ptrs)) ----
-        a_raw = tl.load(a_ptrs, mask=row_mask[:, None] & (offs_k[None, :] < K - k * BLOCK_SIZE_K), other=0.0).to(
-            tl.float32
-        )
-        a_s = tl.max(tl.abs(a_raw), axis=1) / 448.0  # per-row scale  (BLOCK_SIZE_M,)
-        # clamp denominator so masked all-zero rows don't produce NaN
-        # (their a_s multiplier is 0 anyway, so the output row is correct)
-        a = (a_raw / tl.maximum(a_s[:, None], 1e-12)).to(tl.float8e4nv)
-        # ---- same as baseline from here ----
-        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
-
-        k_start = k * BLOCK_SIZE_K
-        offs_ks = k_start // group_k
-        b_s = tl.load(Bs_ptrs + offs_ks * stride_Bsk)
-
-        accumulator += tl.dot(a, b) * a_s[:, None] * b_s[None, :]
-        a_ptrs += BLOCK_SIZE_K * stride_ak
-        b_ptrs += BLOCK_SIZE_K * stride_bk
-
-    if C.dtype.element_ty == tl.bfloat16:
-        c = accumulator.to(tl.bfloat16)
-    elif C.dtype.element_ty == tl.float16:
-        c = accumulator.to(tl.float16)
-    else:
-        c = accumulator.to(tl.float32)
-
-    c_ptrs = C + stride_cm * offs_global_m[:, None] + stride_cn * offs_bn[None, :]
-    c_mask = row_mask[:, None] & (offs_bn[None, :] < N)
-    tl.store(c_ptrs, c, mask=c_mask)
-
-
-@triton_op("transformers::w8a8_block_fp8_matmul_batched", mutates_args=())
-def w8a8_block_fp8_matmul_batched(
-    A: torch.Tensor,
-    B: torch.Tensor,
-    Bs: torch.Tensor,
-    expert_ids: torch.Tensor,
-    block_size: list[int] | None,
-) -> torch.Tensor:
-    """Batched FP8 block-wise matmul with fused activation quantization.
-
-    Mirrors ``_batched_linear`` for FP8 weights: A is the raw (BF16/FP16)
-    activation matrix, B / Bs are the stacked expert weights / scales.
-    The kernel looks up ``expert_ids[batch_id]`` to address the correct expert
-    slice of B directly — no (S, N, K) weight gather is needed.
-    Activation quantization (``act_quant``) is fused into the matmul loop.
-    """
-    assert A.ndim == 2, "A must be (S, K)"
-    assert A.is_contiguous()
-
-    assert B.ndim == 3, "B must be (E, N, K)"
-    assert B.is_contiguous()
-
-    assert A.shape[1] == B.shape[2], "K dimension mismatch between A and B"
-    assert expert_ids.is_contiguous()
-    assert Bs.is_contiguous()
-
-    if block_size is None:
-        block_n, block_k = 128, 128
-    else:
-        assert len(block_size) == 2
-        block_n, block_k = block_size[0], block_size[1]
-
-    S, K = A.shape
-    E, N, _ = B.shape
-    C = A.new_empty(S, N)
-
-    # Adaptive BLOCK_SIZE_M: match the tile to the average tokens per expert
-    BLOCK_SIZE_M = min(max(triton.next_power_of_2((S + E - 1) // E), 16), 128)
-
-    grid = (triton.cdiv(N, block_n), S)
-    wrap_triton(w8a8_block_fp8_matmul_batched_kernel)[grid](
-        A,
-        B,
-        C,
-        Bs,
-        expert_ids,
-        N,
-        K,
-        block_n,
-        block_k,
-        A.stride(1),  # stride_ak
-        B.stride(2),  # stride_bk
-        B.stride(1),  # stride_bn
-        C.stride(1),  # stride_cn
-        Bs.stride(2),  # stride_Bs_k
-        Bs.stride(1),  # stride_Bs_n
-        A.stride(0),  # stride_Ab
-        B.stride(0),  # stride_Eb
-        C.stride(0),  # stride_Cb
-        Bs.stride(0),  # stride_Esb
-        BLOCK_SIZE_M=BLOCK_SIZE_M,
-        BLOCK_SIZE_N=block_n,
-        BLOCK_SIZE_K=block_k,
-    )
-
-    return C
-
-
-@triton_op("transformers::w8a8_block_fp8_matmul_grouped", mutates_args=())
-def w8a8_block_fp8_matmul_grouped(
-    A: torch.Tensor,
-    B: torch.Tensor,
-    Bs: torch.Tensor,
-    offsets: torch.Tensor,
-    tokens_per_expert: torch.Tensor,
-    block_size: list[int] | None,
-) -> torch.Tensor:
-    """Grouped FP8 block-wise matmul with fused activation quantization.
-
-    Mirrors ``_grouped_linear`` / ``_grouped_mm`` for FP8 weights: A is the
-    raw (BF16/FP16) activation matrix sorted by expert, B / Bs are the stacked
-    expert weights / scales.  Activation quantization (``act_quant``) is fused
-    into the matmul loop.  ``tokens_per_expert`` is needed (in addition to
-    ``offsets``) to build the per-expert tile schedule inside the kernel.
-    """
-
-    assert A.ndim == 2, "A must be (S, K)"
-    assert A.is_contiguous()
-
-    assert B.ndim == 3, "B must be (E, N, K)"
-    assert B.is_contiguous()
-
-    assert tokens_per_expert.is_contiguous()
-    assert offsets.is_contiguous()
-    assert Bs.is_contiguous()
-
-    if block_size is None:
-        block_n, block_k = 128, 128
-    else:
-        assert len(block_size) == 2
-        block_n, block_k = block_size[0], block_size[1]
-
-    S, K = A.shape
-    E, N, _ = B.shape
-    C = A.new_empty(S, N)
-
-    # Adaptive BLOCK_SIZE_M: match tile to average tokens per expert.
-    BLOCK_SIZE_M = min(max(triton.next_power_of_2((S + E - 1) // E), 16), 128)
-    tiles_per_expert = (tokens_per_expert + BLOCK_SIZE_M - 1) // BLOCK_SIZE_M
-    tile_offsets = torch.cumsum(tiles_per_expert, dim=0).to(torch.int32)
-    # Upper bound on M-tiles: sum_e ceil(M_e / BLOCK_M) <= ceil(S / BLOCK_M) + E.
-    # Using a static upper bound keeps the grid size data-independent, which is
-    # required for cuda-graph compatibility.  Programs beyond the real tile count
-    # exit immediately via the early-return guard inside the kernel.
-    max_M_tiles = triton.cdiv(S, BLOCK_SIZE_M) + E
-
-    grid = (max_M_tiles * triton.cdiv(N, block_n),)
-    wrap_triton(w8a8_block_fp8_grouped_mm_kernel)[grid](
-        A,
-        B,
-        C,
-        Bs,
-        offsets,
-        tile_offsets,
-        S,
-        N,
-        K,
-        block_n,
-        block_k,
-        A.stride(0),  # stride_am
-        A.stride(1),  # stride_ak
-        B.stride(0),  # stride_Eb
-        B.stride(2),  # stride_bk
-        B.stride(1),  # stride_bn
-        C.stride(0),  # stride_cm
-        C.stride(1),  # stride_cn
-        Bs.stride(0),  # stride_Esb
-        Bs.stride(2),  # stride_Bsk
-        Bs.stride(1),  # stride_Bsn
-        NUM_EXPERTS=E,
-        BLOCK_SIZE_M=BLOCK_SIZE_M,
-        BLOCK_SIZE_N=block_n,
-        BLOCK_SIZE_K=block_k,
-    )
-
-    return C
-
-
 def fp8_batched_mm_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
+    kernel = _get_triton_kernel()
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
@@ -831,7 +292,7 @@ def fp8_batched_mm_experts_forward(
     selected_hidden_states = hidden_states[token_idx]
 
     # --- Up projection per expert (FP8 batched) ---
-    gate_up_out = torch.ops.transformers.w8a8_block_fp8_matmul_batched(
+    gate_up_out = kernel.w8a8_block_fp8_matmul_batched(
         selected_hidden_states,
         self.gate_up_proj,
         self.gate_up_proj_scale_inv,
@@ -843,7 +304,7 @@ def fp8_batched_mm_experts_forward(
     gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 batched) ---
-    out_per_sample = torch.ops.transformers.w8a8_block_fp8_matmul_batched(
+    out_per_sample = kernel.w8a8_block_fp8_matmul_batched(
         gated_out,
         self.down_proj,
         self.down_proj_scale_inv,
@@ -867,6 +328,7 @@ def fp8_grouped_mm_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
+    kernel = _get_triton_kernel()
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
@@ -896,7 +358,7 @@ def fp8_grouped_mm_experts_forward(
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (FP8 grouped) ---
-    gate_up_out = torch.ops.transformers.w8a8_block_fp8_matmul_grouped(
+    gate_up_out = kernel.w8a8_block_fp8_matmul_grouped(
         selected_hidden_states_g,
         self.gate_up_proj,
         self.gate_up_proj_scale_inv,
@@ -909,7 +371,7 @@ def fp8_grouped_mm_experts_forward(
     gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 grouped) ---
-    out_per_sample_g = torch.ops.transformers.w8a8_block_fp8_matmul_grouped(
+    out_per_sample_g = kernel.w8a8_block_fp8_matmul_grouped(
         gated_out,
         self.down_proj,
         self.down_proj_scale_inv,
@@ -951,7 +413,7 @@ class FP8Expert(nn.Module):
 
         bo, bi = self.block_size
 
-        # gate_up tiles: ceil(Wg_out/bo) x ceil(Wg_in/bi)
+        # gate_up_proj tiles: ceil(Wg_out/bo) x ceil(Wg_in/bi)
         gu_scale_o = triton.cdiv(Wg_out, bo)
         gu_scale_i = triton.cdiv(Wg_in, bi)
         self.gate_up_proj_scale_inv = nn.Parameter(
@@ -970,7 +432,6 @@ class FP8Expert(nn.Module):
         self.register_parameter("down_bias", None)
 
         # Activation used in the MLP (same as your config / ACT2FN)
-        # Keep a handle here; actual usage happens in forward of your MoE block
         self.act_fn = ACT2FN[config.hidden_act]
 
     def _apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
@@ -1026,7 +487,8 @@ class FP8Expert(nn.Module):
             # QUESTION: not sure why we would want the fp8 experts to support a fallback to fp16/bf16/fp32
             return F.linear(input, weight, None)
 
-        qinput, scale = torch.ops.transformers.fp8_act_quant(input, self.block_size[1])
+        kernel = _get_triton_kernel()
+        qinput, scale = kernel.fp8_act_quant(input, self.block_size[1])
         output = w8a8_block_fp8_matmul(
             qinput,
             weight,
