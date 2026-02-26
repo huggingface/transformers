@@ -825,6 +825,7 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     def forward(self, boxes, labels=None, mask=None, **kwargs):
         device = mask.device
         batch_size, seq_len = mask.shape

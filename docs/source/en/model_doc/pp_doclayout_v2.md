@@ -133,22 +133,22 @@ for result in results:
 </hfoption>
 </hfoptions>
 
-## PPDocLayoutV2ForObjectDetection
-
-[[autodoc]] PPDocLayoutV2ForObjectDetection
-
 ## PPDocLayoutV2Config
 
 [[autodoc]] PPDocLayoutV2Config
+
+## PPDocLayoutV2ForObjectDetection
+
+[[autodoc]] PPDocLayoutV2ForObjectDetection
 
 ## PPDocLayoutV2Model
 
 [[autodoc]] PPDocLayoutV2Model
 
-## PPDocLayoutV2ImageProcessorFast
-
-[[autodoc]] PPDocLayoutV2ImageProcessorFast
-
 ## PPDocLayoutV2ReadingOrder
 
 [[autodoc]] PPDocLayoutV2ReadingOrder
+
+## PPDocLayoutV2ImageProcessorFast
+
+[[autodoc]] PPDocLayoutV2ImageProcessorFast
