@@ -28,14 +28,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Dropout, LayerNorm
-from torch.nn.init import xavier_normal_
 
+from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
 from .configuration_pp_ocrv5_server_rec import PPOCRV5ServerRecConfig
 
 
-class IdentityBasedConv1x1(nn.Conv2d):
+class PPOCRV5ServerRecIdentityBasedConv1x1(nn.Conv2d):
     def __init__(self, channels, groups=1):
         super().__init__(
             in_channels=channels,
@@ -53,8 +53,6 @@ class IdentityBasedConv1x1(nn.Conv2d):
         for i in range(channels):
             id_value[i, i % input_dim, 0, 0] = 1
         self.register_buffer("id_tensor", torch.from_numpy(id_value))
-        with torch.no_grad():
-            self.weight.zero_()
 
     def forward(self, input):
         kernel = self.weight + self.id_tensor
@@ -73,7 +71,7 @@ class IdentityBasedConv1x1(nn.Conv2d):
         return self.weight + self.id_tensor
 
 
-class BNAndPad(nn.Module):
+class PPOCRV5ServerRecBNAndPad(nn.Module):
     def __init__(
         self,
         pad_pixels,
@@ -127,27 +125,7 @@ class BNAndPad(nn.Module):
         return self.bn.eps
 
 
-class AdaptiveAvgPool2D(nn.AdaptiveAvgPool2d):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self.device = None
-
-        if isinstance(self.output_size, int) and self.output_size == 1:
-            self._gap = True
-        elif isinstance(self.output_size, tuple) and self.output_size[0] == 1 and self.output_size[1] == 1:
-            self._gap = True
-        else:
-            self._gap = False
-
-    def forward(self, x):
-        return F.adaptive_avg_pool2d(
-            x,
-            output_size=self.output_size,
-        )
-
-
-class LearnableAffineBlock(nn.Module):
+class PPOCRV5ServerRecLearnableAffineBlock(nn.Module):
     """
     Create a learnable affine block module. This module can significantly improve accuracy on smaller models.
 
@@ -168,7 +146,7 @@ class LearnableAffineBlock(nn.Module):
         return self.scale * x + self.bias
 
 
-class ConvBNAct(nn.Module):
+class PPOCRV5ServerRecConvBNAct(nn.Module):
     """
     ConvBNAct is a combination of convolution and batchnorm layers.
 
@@ -213,7 +191,7 @@ class ConvBNAct(nn.Module):
         if self.use_act:
             self.act = nn.ReLU()
             if self.use_lab:
-                self.lab = LearnableAffineBlock()
+                self.lab = PPOCRV5ServerRecLearnableAffineBlock()
 
     def forward(self, x):
         x = self.conv(x)
@@ -225,7 +203,7 @@ class ConvBNAct(nn.Module):
         return x
 
 
-class LightConvBNAct(nn.Module):
+class PPOCRV5ServerRecLightConvBNAct(nn.Module):
     """
     LightConvBNAct is a combination of pw and dw layers.
 
@@ -248,7 +226,7 @@ class LightConvBNAct(nn.Module):
     ):
         super().__init__()
 
-        self.conv1 = ConvBNAct(
+        self.conv1 = PPOCRV5ServerRecConvBNAct(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=1,
@@ -256,7 +234,7 @@ class LightConvBNAct(nn.Module):
             use_lab=use_lab,
             lr_mult=lr_mult,
         )
-        self.conv2 = ConvBNAct(
+        self.conv2 = PPOCRV5ServerRecConvBNAct(
             in_channels=out_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
@@ -272,7 +250,7 @@ class LightConvBNAct(nn.Module):
         return x
 
 
-class StemBlock(nn.Module):
+class PPOCRV5ServerRecStemBlock(nn.Module):
     """
     StemBlock for PP-HGNetV2.
 
@@ -294,7 +272,7 @@ class StemBlock(nn.Module):
         text_rec=False,
     ):
         super().__init__()
-        self.stem1 = ConvBNAct(
+        self.stem1 = PPOCRV5ServerRecConvBNAct(
             in_channels=in_channels,
             out_channels=mid_channels,
             kernel_size=3,
@@ -302,7 +280,7 @@ class StemBlock(nn.Module):
             use_lab=use_lab,
             lr_mult=lr_mult,
         )
-        self.stem2a = ConvBNAct(
+        self.stem2a = PPOCRV5ServerRecConvBNAct(
             in_channels=mid_channels,
             out_channels=mid_channels // 2,
             kernel_size=2,
@@ -311,7 +289,7 @@ class StemBlock(nn.Module):
             use_lab=use_lab,
             lr_mult=lr_mult,
         )
-        self.stem2b = ConvBNAct(
+        self.stem2b = PPOCRV5ServerRecConvBNAct(
             in_channels=mid_channels // 2,
             out_channels=mid_channels,
             kernel_size=2,
@@ -320,7 +298,7 @@ class StemBlock(nn.Module):
             use_lab=use_lab,
             lr_mult=lr_mult,
         )
-        self.stem3 = ConvBNAct(
+        self.stem3 = PPOCRV5ServerRecConvBNAct(
             in_channels=mid_channels * 2,
             out_channels=mid_channels,
             kernel_size=3,
@@ -328,7 +306,7 @@ class StemBlock(nn.Module):
             use_lab=use_lab,
             lr_mult=lr_mult,
         )
-        self.stem4 = ConvBNAct(
+        self.stem4 = PPOCRV5ServerRecConvBNAct(
             in_channels=mid_channels,
             out_channels=out_channels,
             kernel_size=1,
@@ -349,7 +327,7 @@ class StemBlock(nn.Module):
         return x
 
 
-class HGV2_Block(nn.Module):
+class PPOCRV5ServerRecHGV2_Block(nn.Module):
     """
     HGV2_Block, the basic unit that constitutes the HGV2_Stage.
 
@@ -383,7 +361,7 @@ class HGV2_Block(nn.Module):
 
         self.identity = identity
         self.layers = nn.ModuleList()
-        block_type = LightConvBNAct if light_block else ConvBNAct
+        block_type = PPOCRV5ServerRecLightConvBNAct if light_block else PPOCRV5ServerRecConvBNAct
         for i in range(layer_num):
             self.layers.append(
                 block_type(
@@ -395,7 +373,7 @@ class HGV2_Block(nn.Module):
                 )
             )
         total_channels = in_channels + layer_num * mid_channels
-        self.aggregation_squeeze_conv = ConvBNAct(
+        self.aggregation_squeeze_conv = PPOCRV5ServerRecConvBNAct(
             in_channels=total_channels,
             out_channels=out_channels // 2,
             kernel_size=1,
@@ -403,7 +381,7 @@ class HGV2_Block(nn.Module):
             use_lab=use_lab,
             lr_mult=lr_mult,
         )
-        self.aggregation_excitation_conv = ConvBNAct(
+        self.aggregation_excitation_conv = PPOCRV5ServerRecConvBNAct(
             in_channels=out_channels // 2,
             out_channels=out_channels,
             kernel_size=1,
@@ -427,7 +405,7 @@ class HGV2_Block(nn.Module):
         return x
 
 
-class HGV2_Stage(nn.Module):
+class PPOCRV5ServerRecHGV2_Stage(nn.Module):
     """
     HGV2_Stage, the basic unit that constitutes the PPHGNetV2.
 
@@ -462,7 +440,7 @@ class HGV2_Stage(nn.Module):
 
         self.is_downsample = is_downsample
         if self.is_downsample:
-            self.downsample = ConvBNAct(
+            self.downsample = PPOCRV5ServerRecConvBNAct(
                 in_channels=in_channels,
                 out_channels=in_channels,
                 kernel_size=3,
@@ -476,7 +454,7 @@ class HGV2_Stage(nn.Module):
         blocks_list = []
         for i in range(block_num):
             blocks_list.append(
-                HGV2_Block(
+                PPOCRV5ServerRecHGV2_Block(
                     in_channels=in_channels if i == 0 else out_channels,
                     mid_channels=mid_channels,
                     out_channels=out_channels,
@@ -497,7 +475,7 @@ class HGV2_Stage(nn.Module):
         return x
 
 
-class PPHGNetV2(nn.Module):
+class PPOCRV5ServerRecPPHGNetV2(nn.Module):
     """
     PPHGNetV2
 
@@ -541,7 +519,7 @@ class PPHGNetV2(nn.Module):
         self.out_channels = []
 
         # stem
-        self.stem = StemBlock(
+        self.stem = PPOCRV5ServerRecStemBlock(
             in_channels=stem_channels[0],
             mid_channels=stem_channels[1],
             out_channels=stem_channels[2],
@@ -565,7 +543,7 @@ class PPHGNetV2(nn.Module):
                 stride,
             ) = stage_config[k]
             self.stages.append(
-                HGV2_Stage(
+                PPOCRV5ServerRecHGV2_Stage(
                     in_channels,
                     mid_channels,
                     out_channels,
@@ -584,7 +562,7 @@ class PPHGNetV2(nn.Module):
         if not self.det:
             self.out_channels = stage_config["stage4"][2]
 
-        self.avg_pool = AdaptiveAvgPool2D(1)
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
 
         if self.use_last_conv:
             self.last_conv = nn.Conv2d(
@@ -597,7 +575,7 @@ class PPHGNetV2(nn.Module):
             )
             self.act = nn.ReLU()
             if self.use_lab:
-                self.lab = LearnableAffineBlock()
+                self.lab = PPOCRV5ServerRecLearnableAffineBlock()
             self.dropout = nn.Dropout(p=dropout_prob)
 
         self.flatten = nn.Flatten(start_dim=1, end_dim=-1)
@@ -606,18 +584,6 @@ class PPHGNetV2(nn.Module):
                 self.class_expand if self.use_last_conv else out_channels,
                 self.class_num,
             )
-
-        self._init_weights()
-
-    def _init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1.0)
-                nn.init.constant_(m.bias, 0.0)
-            elif isinstance(m, nn.Linear):
-                nn.init.constant_(m.bias, 0.0)
 
     def forward(self, x):
         x = self.stem(x)
@@ -638,23 +604,7 @@ class PPHGNetV2(nn.Module):
         return x
 
 
-class DropPath(nn.Module):
-    def __init__(self, drop_prob=None):
-        super().__init__()
-
-        self.drop_prob = drop_prob
-
-    def forward(self, x):
-        if self.drop_prob == 0.0 or not self.training:
-            return x
-        keep_prob = 1 - self.drop_prob
-        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
-        random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
-        random_tensor.floor_()
-        return x.div(keep_prob) * random_tensor
-
-
-class Block(nn.Module):
+class PPOCRV5ServerRecBlock(nn.Module):
     def __init__(
         self,
         dim,
@@ -681,7 +631,7 @@ class Block(nn.Module):
         else:
             self.norm1 = norm_layer(dim)
         if mixer == "Global" or mixer == "Local":
-            self.mixer = Attention(
+            self.mixer = PPOCRV5ServerRecAttention(
                 dim,
                 num_heads=num_heads,
                 mixer=mixer,
@@ -695,7 +645,7 @@ class Block(nn.Module):
         else:
             raise TypeError("The mixer must be one of [Global, Local, Conv]")
 
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else Identity()
+        self.drop_path = PPOCRV5ServerRecIdentity()
         if isinstance(norm_layer, str):
             norm_class = eval(norm_layer.replace("nn.", "nn."))
             self.norm2 = norm_class(dim, eps=epsilon)
@@ -703,12 +653,15 @@ class Block(nn.Module):
             self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp_ratio = mlp_ratio
-        self.mlp = Mlp(
+        self.mlp = PPOCRV5ServerRecMlp(
             in_features=dim,
             hidden_features=mlp_hidden_dim,
             act_layer=act_layer,
             drop=drop,
         )
+        # Block用于SVTR,标记mlp的linear层
+        self.mlp.fc1._is_svtr_linear = True
+        self.mlp.fc2._is_svtr_linear = True
         self.prenorm = prenorm
 
     def forward(self, x):
@@ -722,7 +675,7 @@ class Block(nn.Module):
         return x
 
 
-class FCTranspose(nn.Module):
+class PPOCRV5ServerRecFCTranspose(nn.Module):
     def __init__(self, in_channels, out_channels, only_transpose=False):
         super().__init__()
 
@@ -737,27 +690,18 @@ class FCTranspose(nn.Module):
             return self.fc(x.transpose(1, 2))
 
 
-def zeros_(x):
-    return nn.init.constant_(x, 0.0)
-
-
-def trunc_normal_(tensor, std=0.02):
-    nn.init.trunc_normal_(tensor, std=std)
-
-
-class AddPos(nn.Module):
+class PPOCRV5ServerRecAddPos(nn.Module):
     def __init__(self, dim, w):
         super().__init__()
 
-        self.dec_pos_embed = nn.Parameter(zeros_((1, w, dim)))
-        trunc_normal_(self.dec_pos_embed)
+        self.dec_pos_embed = nn.Parameter(torch.zeros((1, w, dim)))
 
     def forward(self, x):
         x = x + self.dec_pos_embed[:, : x.shape[1], :]
         return x
 
 
-class Identity(nn.Module):
+class PPOCRV5ServerRecIdentity(nn.Module):
     def __init__(self):
         super().__init__()
 
@@ -765,7 +709,7 @@ class Identity(nn.Module):
         return input
 
 
-class Attention(nn.Module):
+class PPOCRV5ServerRecAttention(nn.Module):
     def __init__(
         self,
         dim,
@@ -788,6 +732,9 @@ class Attention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
+        # 标记为SVTR的Linear层
+        self.qkv._is_svtr_linear = True
+        self.proj._is_svtr_linear = True
         self.HW = HW
         if HW is not None:
             H = HW[0]
@@ -822,7 +769,7 @@ class Attention(nn.Module):
         return x
 
 
-class ConvBNLayer(nn.Module):
+class PPOCRV5ServerRecConvBNLayer(nn.Module):
     def __init__(
         self,
         in_channels,
@@ -857,7 +804,7 @@ class ConvBNLayer(nn.Module):
         return out
 
 
-class MultiHead(nn.Module):
+class PPOCRV5ServerRecMultiHead(nn.Module):
     def __init__(self, in_channels, out_channels_list, **kwargs):
         super().__init__()
 
@@ -879,13 +826,13 @@ class MultiHead(nn.Module):
                 if self.use_pos:
                     self.before_gtc = nn.Sequential(
                         nn.Flatten(2),
-                        FCTranspose(in_channels, nrtr_dim),
-                        AddPos(nrtr_dim, 80),
+                        PPOCRV5ServerRecFCTranspose(in_channels, nrtr_dim),
+                        PPOCRV5ServerRecAddPos(nrtr_dim, 80),
                     )
                 else:
-                    self.before_gtc = nn.Sequential(nn.Flatten(2), FCTranspose(in_channels, nrtr_dim))
+                    self.before_gtc = nn.Sequential(nn.Flatten(2), PPOCRV5ServerRecFCTranspose(in_channels, nrtr_dim))
 
-                self.gtc_head = Transformer(
+                self.gtc_head = PPOCRV5ServerRecTransformer(
                     d_model=nrtr_dim,
                     nhead=nrtr_dim // 32,
                     num_encoder_layers=-1,
@@ -897,10 +844,12 @@ class MultiHead(nn.Module):
                 )
             elif name == "CTCHead":
                 # ctc neck
-                self.encoder_reshape = Im2Seq(in_channels)
+                self.encoder_reshape = PPOCRV5ServerRecIm2Seq(in_channels)
                 neck_args = copy.deepcopy(self.head_list[idx][name]["Neck"])
                 encoder_type = neck_args.pop("name")
-                self.ctc_encoder = SequenceEncoder(in_channels=in_channels, encoder_type=encoder_type, **neck_args)
+                self.ctc_encoder = PPOCRV5ServerRecSequenceEncoder(
+                    in_channels=in_channels, encoder_type=encoder_type, **neck_args
+                )
                 # ctc head
                 head_args = self.head_list[idx][name]["Head"]
                 self.ctc_head = eval(name)(
@@ -930,18 +879,6 @@ class MultiHead(nn.Module):
         return head_out
 
 
-def get_para_bias_attr(l2_decay, k):
-    stdv = 1.0 / math.sqrt(k * 1.0)
-
-    def weight_init(m):
-        if isinstance(m, nn.Linear):
-            nn.init.uniform_(m.weight, -stdv, stdv)
-            if m.bias is not None:
-                nn.init.uniform_(m.bias, -stdv, stdv)
-
-    return weight_init
-
-
 class CTCHead(nn.Module):
     def __init__(
         self,
@@ -959,12 +896,14 @@ class CTCHead(nn.Module):
 
         if mid_channels is None:
             self.fc = nn.Linear(in_channels, out_channels)
-            get_para_bias_attr(fc_decay, in_channels)(self.fc)
+            # 标记为CTC的Linear层
+            self.fc._is_ctc_linear = True
         else:
             self.fc1 = nn.Linear(in_channels, mid_channels)
-            get_para_bias_attr(fc_decay, in_channels)(self.fc1)
             self.fc2 = nn.Linear(mid_channels, out_channels)
-            get_para_bias_attr(fc_decay, mid_channels)(self.fc2)
+            # 标记为CTC的Linear层
+            self.fc1._is_ctc_linear = True
+            self.fc2._is_ctc_linear = True
 
     def forward(self, x, targets=None):
         if self.mid_channels is None:
@@ -984,7 +923,7 @@ class CTCHead(nn.Module):
         return result
 
 
-class Mlp(nn.Module):
+class PPOCRV5ServerRecMlp(nn.Module):
     def __init__(
         self,
         in_features,
@@ -1011,7 +950,7 @@ class Mlp(nn.Module):
         return x
 
 
-class Transformer(nn.Module):
+class PPOCRV5ServerRecTransformer(nn.Module):
     def __init__(
         self,
         d_model=512,
@@ -1031,18 +970,18 @@ class Transformer(nn.Module):
 
         self.out_channels = out_channels + 1
         self.max_len = max_len
-        self.embedding = Embeddings(
+        self.embedding = PPOCRV5ServerRecEmbeddings(
             d_model=d_model,
             vocab=self.out_channels,
             padding_idx=0,
             scale_embedding=scale_embedding,
         )
-        self.positional_encoding = PositionalEncoding(dropout=residual_dropout_rate, dim=d_model)
+        self.positional_encoding = PPOCRV5ServerRecPositionalEncoding(dropout=residual_dropout_rate, dim=d_model)
 
         if num_encoder_layers > 0:
             self.encoder = nn.ModuleList(
                 [
-                    TransformerBlock(
+                    PPOCRV5ServerRecTransformerBlock(
                         d_model,
                         nhead,
                         dim_feedforward,
@@ -1059,7 +998,7 @@ class Transformer(nn.Module):
 
         self.decoder = nn.ModuleList(
             [
-                TransformerBlock(
+                PPOCRV5ServerRecTransformerBlock(
                     d_model,
                     nhead,
                     dim_feedforward,
@@ -1076,16 +1015,8 @@ class Transformer(nn.Module):
         self.d_model = d_model
         self.nhead = nhead
         self.tgt_word_prj = nn.Linear(self.out_channels, d_model, bias=False)
-        w0 = np.random.normal(0.0, d_model**-0.5, (d_model, self.out_channels)).astype(np.float32)
-        with torch.no_grad():
-            self.tgt_word_prj.weight.copy_(torch.from_numpy(w0))
-        self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            xavier_normal_(m.weight)
-            if m.bias is not None:
-                zeros_(m.bias)
+        # 标记这是一个特殊的transformer projection layer
+        self.tgt_word_prj._is_transformer_proj = True
 
     def forward_train(self, src, tgt):
         tgt = tgt[:, :-1]
@@ -1230,7 +1161,7 @@ class Transformer(nn.Module):
                 src_enc = images
 
             n_bm = self.beam_size
-            inst_dec_beams = [Beam(n_bm) for _ in range(1)]
+            inst_dec_beams = [PPOCRV5ServerRecBeam(n_bm) for _ in range(1)]
             active_inst_idx_list = list(range(1))
             src_enc = src_enc.repeat(1, n_bm, 1)
             inst_idx_to_position_map = get_inst_idx_to_tensor_position_map(active_inst_idx_list)
@@ -1270,7 +1201,7 @@ class Transformer(nn.Module):
         return mask.unsqueeze(0).unsqueeze(0)
 
 
-class MultiheadAttention(nn.Module):
+class PPOCRV5ServerRecMultiheadAttention(nn.Module):
     def __init__(self, embed_dim, num_heads, dropout=0.0, self_attn=False):
         super().__init__()
 
@@ -1282,11 +1213,15 @@ class MultiheadAttention(nn.Module):
         self.self_attn = self_attn
         if self_attn:
             self.qkv = nn.Linear(embed_dim, embed_dim * 3)
+            self.qkv._is_decoder_transformer_linear = True
         else:
             self.q = nn.Linear(embed_dim, embed_dim)
             self.kv = nn.Linear(embed_dim, embed_dim * 2)
+            self.q._is_decoder_transformer_linear = True
+            self.kv._is_decoder_transformer_linear = True
         self.attn_drop = nn.Dropout(dropout)
         self.out_proj = nn.Linear(embed_dim, embed_dim)
+        self.out_proj._is_decoder_transformer_linear = True
 
     def forward(self, query, key=None, attn_mask=None):
         qN = query.shape[1]
@@ -1314,7 +1249,7 @@ class MultiheadAttention(nn.Module):
         return x
 
 
-class TransformerBlock(nn.Module):
+class PPOCRV5ServerRecTransformerBlock(nn.Module):
     def __init__(
         self,
         d_model,
@@ -1330,23 +1265,25 @@ class TransformerBlock(nn.Module):
 
         self.with_self_attn = with_self_attn
         if with_self_attn:
-            self.self_attn = MultiheadAttention(
+            self.self_attn = PPOCRV5ServerRecMultiheadAttention(
                 d_model, nhead, dropout=attention_dropout_rate, self_attn=with_self_attn
             )
             self.norm1 = LayerNorm(d_model, eps=epsilon)
             self.dropout1 = Dropout(residual_dropout_rate)
         self.with_cross_attn = with_cross_attn
         if with_cross_attn:
-            self.cross_attn = MultiheadAttention(d_model, nhead, dropout=attention_dropout_rate)
+            self.cross_attn = PPOCRV5ServerRecMultiheadAttention(d_model, nhead, dropout=attention_dropout_rate)
             self.norm2 = LayerNorm(d_model, eps=epsilon)
             self.dropout2 = Dropout(residual_dropout_rate)
 
-        self.mlp = Mlp(
+        self.mlp = PPOCRV5ServerRecMlp(
             in_features=d_model,
             hidden_features=dim_feedforward,
             act_layer=nn.ReLU,
             drop=residual_dropout_rate,
         )
+        self.mlp.fc1._is_decoder_transformer_linear = True
+        self.mlp.fc2._is_decoder_transformer_linear = True
 
         self.norm3 = LayerNorm(d_model, eps=epsilon)
         self.dropout3 = Dropout(residual_dropout_rate)
@@ -1363,7 +1300,7 @@ class TransformerBlock(nn.Module):
         return tgt
 
 
-class PositionalEncoding(nn.Module):
+class PPOCRV5ServerRecPositionalEncoding(nn.Module):
     def __init__(self, dropout, dim, max_len=5000):
         super().__init__()
 
@@ -1384,14 +1321,13 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x).permute(1, 0, 2)
 
 
-class Embeddings(nn.Module):
+class PPOCRV5ServerRecEmbeddings(nn.Module):
     def __init__(self, d_model, vocab, padding_idx=None, scale_embedding=True):
         super().__init__()
 
         self.embedding = nn.Embedding(vocab, d_model, padding_idx=padding_idx)
-        w0 = np.random.normal(0.0, d_model**-0.5, (vocab, d_model)).astype(np.float32)
-        with torch.no_grad():
-            self.embedding.weight.copy_(torch.from_numpy(w0))
+        # 标记这是一个PP-OCRv5的embedding层,需要特殊初始化
+        self.embedding._is_ppocrv5_embedding = True
         self.d_model = d_model
         self.scale_embedding = scale_embedding
 
@@ -1402,7 +1338,7 @@ class Embeddings(nn.Module):
         return self.embedding(x)
 
 
-class Beam:
+class PPOCRV5ServerRecBeam:
     def __init__(self, size, device=False):
         self.size = size
         self._done = False
@@ -1465,7 +1401,7 @@ class Beam:
         return [x.item() for x in hyp[::-1]]
 
 
-class Im2Seq(nn.Module):
+class PPOCRV5ServerRecIm2Seq(nn.Module):
     def __init__(self, in_channels, **kwargs):
         super().__init__()
 
@@ -1479,27 +1415,24 @@ class Im2Seq(nn.Module):
         return x
 
 
-class EncoderWithFC(nn.Module):
+class PPOCRV5ServerRecEncoderWithFC(nn.Module):
     def __init__(self, in_channels, hidden_size):
         super().__init__()
 
         self.out_channels = hidden_size
-        weight_attr, bias_attr = get_para_bias_attr(l2_decay=0.00001, k=in_channels)
         self.fc = nn.Linear(
             in_channels,
             hidden_size,
         )
+        # 标记为encoder的Linear层(使用uniform初始化)
+        self.fc._is_ctc_linear = True
 
     def forward(self, x):
         x = self.fc(x)
         return x
 
 
-def ones_(tensor):
-    nn.init.constant_(tensor, 1.0)
-
-
-class EncoderWithSVTR(nn.Module):
+class PPOCRV5ServerRecEncoderWithSVTR(nn.Module):
     def __init__(
         self,
         in_channels,
@@ -1520,18 +1453,18 @@ class EncoderWithSVTR(nn.Module):
 
         self.depth = depth
         self.use_guide = use_guide
-        self.conv1 = ConvBNLayer(
+        self.conv1 = PPOCRV5ServerRecConvBNLayer(
             in_channels,
             in_channels // 8,
             kernel_size=kernel_size,
             padding=[kernel_size[0] // 2, kernel_size[1] // 2],
             act=nn.SiLU,
         )
-        self.conv2 = ConvBNLayer(in_channels // 8, hidden_dims, kernel_size=1, act=nn.SiLU)
+        self.conv2 = PPOCRV5ServerRecConvBNLayer(in_channels // 8, hidden_dims, kernel_size=1, act=nn.SiLU)
 
         self.svtr_block = nn.ModuleList(
             [
-                Block(
+                PPOCRV5ServerRecBlock(
                     dim=hidden_dims,
                     num_heads=num_heads,
                     mixer="Global",
@@ -1551,8 +1484,8 @@ class EncoderWithSVTR(nn.Module):
             ]
         )
         self.norm = nn.LayerNorm(hidden_dims, eps=1e-6)
-        self.conv3 = ConvBNLayer(hidden_dims, in_channels, kernel_size=1, act=nn.SiLU)
-        self.conv4 = ConvBNLayer(
+        self.conv3 = PPOCRV5ServerRecConvBNLayer(hidden_dims, in_channels, kernel_size=1, act=nn.SiLU)
+        self.conv4 = PPOCRV5ServerRecConvBNLayer(
             2 * in_channels,
             in_channels // 8,
             kernel_size=kernel_size,
@@ -1560,18 +1493,8 @@ class EncoderWithSVTR(nn.Module):
             act=nn.SiLU,
         )
 
-        self.conv1x1 = ConvBNLayer(in_channels // 8, dims, kernel_size=1, act=nn.SiLU)
+        self.conv1x1 = PPOCRV5ServerRecConvBNLayer(in_channels // 8, dims, kernel_size=1, act=nn.SiLU)
         self.out_channels = dims
-        self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight)
-            if m.bias is not None:
-                zeros_(m.bias)
-        elif isinstance(m, nn.LayerNorm):
-            zeros_(m.bias)
-            ones_(m.weight)
 
     def forward(self, x):
         if self.use_guide:
@@ -1598,17 +1521,17 @@ class EncoderWithSVTR(nn.Module):
         return z
 
 
-class SequenceEncoder(nn.Module):
+class PPOCRV5ServerRecSequenceEncoder(nn.Module):
     def __init__(self, in_channels, encoder_type, hidden_size=48, **kwargs):
         super().__init__()
 
-        self.encoder_reshape = Im2Seq(in_channels)
+        self.encoder_reshape = PPOCRV5ServerRecIm2Seq(in_channels)
         self.out_channels = self.encoder_reshape.out_channels
         self.encoder_type = encoder_type
         if encoder_type == "reshape":
             self.only_reshape = True
         else:
-            support_encoder_dict = {"svtr": EncoderWithSVTR}
+            support_encoder_dict = {"svtr": PPOCRV5ServerRecEncoderWithSVTR}
             assert encoder_type in support_encoder_dict, f"{encoder_type} must in {support_encoder_dict.keys()}"
             if encoder_type == "svtr":
                 self.encoder = support_encoder_dict[encoder_type](self.encoder_reshape.out_channels, **kwargs)
@@ -1645,6 +1568,66 @@ class PPOCRV5ServerRecPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+
+        # PPOCRV5ServerRecIdentityBasedConv1x1
+        if isinstance(module, PPOCRV5ServerRecIdentityBasedConv1x1):
+            init.zeros_()
+
+        # Conv2d layers (for PPHGNetV2)
+        elif isinstance(module, nn.Conv2d):
+            init.kaiming_normal_(module.weight)
+
+        # BatchNorm2d layers (for PPHGNetV2)
+        elif isinstance(module, nn.BatchNorm2d):
+            init.constant_(module.weight, 1.0)
+            init.constant_(module.bias, 0.0)
+
+        # Linear layers
+        elif isinstance(module, nn.Linear):
+            if hasattr(module, "_is_decoder_transformer_linear"):
+                init.xavier_normal_(module.weight)
+                if module.bias is not None:
+                    init.constant_(module.bias, 0.0)
+            elif hasattr(module, "_is_svtr_linear"):
+                init.trunc_normal_(module.weight, 0.02)
+                if module.bias is not None:
+                    init.constant_(module.bias, 0.0)
+            elif hasattr(module, "_is_ctc_linear"):
+                stdv = 1.0 / math.sqrt(module.in_features * 1.0)
+                init.uniform_(module.weight, -stdv, stdv)
+                if module.bias is not None:
+                    init.uniform_(module.bias, -stdv, stdv)
+            elif hasattr(module, "_is_transformer_proj"):
+                d_model = module.out_features
+                out_channels = module.in_features
+                w0 = np.random.normal(0.0, d_model**-0.5, (d_model, out_channels)).astype(np.float32)
+                module.weight.data[:] = torch.from_numpy(w0)
+            else:
+                if module.bias is not None:
+                    init.constant_(module.bias, 0.0)
+
+        # LayerNorm layers (for SVTR)
+        elif isinstance(module, nn.LayerNorm):
+            init.constant_(module.bias, 0.0)
+            init.constant_(module.weight, 1.0)
+
+        # Embedding layers
+        elif isinstance(module, nn.Embedding):
+            if hasattr(module, "_is_ppocrv5_embedding"):
+                d_model = module.embedding_dim
+                vocab = module.num_embeddings
+                w0 = np.random.normal(0.0, d_model**-0.5, (vocab, d_model)).astype(np.float32)
+                module.weight.data[:] = torch.from_numpy(w0)
+
+        # Parameter initialization for AddPos
+        elif isinstance(module, PPOCRV5ServerRecAddPos):
+            init.constant_(module.dec_pos_embed, 0.0)
+            init.trunc_normal_(module.dec_pos_embed, 0.02)
+
 
 @auto_docstring(custom_intro="The PP-OCRv5_server_rec model.")
 class PPOCRV5ServerRecModel(PPOCRV5ServerRecPreTrainedModel):
@@ -1655,7 +1638,7 @@ class PPOCRV5ServerRecModel(PPOCRV5ServerRecPreTrainedModel):
 
     def __init__(self, config: PPOCRV5ServerRecConfig):
         super().__init__(config)
-        self.backbone = PPHGNetV2(
+        self.backbone = PPOCRV5ServerRecPPHGNetV2(
             stage_config=config.stage_config,
             stem_channels=config.stem_channels,
             text_rec=config.text_rec,
@@ -1668,7 +1651,7 @@ class PPOCRV5ServerRecModel(PPOCRV5ServerRecPreTrainedModel):
             lr_mult_list=config.lr_mult_list,
             out_indices=config.out_indices,
         )
-        self.head = MultiHead(
+        self.head = PPOCRV5ServerRecMultiHead(
             in_channels=self.backbone.out_channels,
             out_channels_list=config.decode_list,
             head_list=config.head_list,
