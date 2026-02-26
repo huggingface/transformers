@@ -854,6 +854,11 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
             module.register_buffer("inv_freq", inv_freq, persistent=False)
 
 
+@auto_docstring(
+    custom_intro="""
+    TODO: Fill me in
+    """
+)
 class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
     # Attention is based on LayoutLMv3 (no interface)
     _supports_sdpa = False
@@ -873,7 +878,15 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    def forward(self, boxes, labels=None, mask=None, **kwargs):
+    def forward(self, boxes, labels=None, mask=None, **kwargs: Unpack[TransformersKwargs]):
+        r"""
+        boxes (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            TODO: give me a description
+        labels (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+            TODO: give me a description
+        mask (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+            TODO: give me a description
+        """
         device = mask.device
         batch_size, seq_len = mask.shape
         num_pred = mask.sum(dim=1)
@@ -984,6 +997,63 @@ class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    TODO: fill me in
+    """
+)
+class PPDocLayoutV2ModelOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
+        Stacked intermediate logits (logits of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Initial reference points used for the first decoder layer.
+    init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the encoder stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
+        Logits of predicted bounding boxes coordinates in the encoder stage.
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    denoising_meta_values (`dict`):
+        Extra dictionary for the denoising related values.
+    """
+
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_logits: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    intermediate_predicted_corners: torch.FloatTensor | None = None
+    initial_reference_points: torch.FloatTensor | None = None
+    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    decoder_attentions: tuple[torch.FloatTensor] | None = None
+    cross_attentions: tuple[torch.FloatTensor] | None = None
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    encoder_attentions: tuple[torch.FloatTensor] | None = None
+    init_reference_points: torch.FloatTensor | None = None
+    enc_topk_logits: torch.FloatTensor | None = None
+    enc_topk_bboxes: torch.FloatTensor | None = None
+    enc_outputs_class: torch.FloatTensor | None = None
+    enc_outputs_coord_logits: torch.FloatTensor | None = None
+    denoising_meta_values: dict | None = None
+
+
 class PPDocLayoutV2MLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
@@ -1039,64 +1109,6 @@ class PPDocLayoutV2DecoderOutput(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     cross_attentions: tuple[torch.FloatTensor] | None = None
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for outputs of the RT-DETR encoder-decoder model.
-    """
-)
-class PPDocLayoutV2ModelOutput(ModelOutput):
-    r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-        Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
-        Stacked intermediate logits (logits of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-        Stacked intermediate reference points (reference points of each layer of the decoder).
-    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-        Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
-    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-        Initial reference points used for the first decoder layer.
-    init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-        Initial reference points sent through the Transformer decoder.
-    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
-        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-        picked as region proposals in the encoder stage. Output of bounding box binary classification (i.e.
-        foreground and background).
-    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
-        Logits of predicted bounding boxes coordinates in the encoder stage.
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-        foreground and background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Logits of predicted bounding boxes coordinates in the first stage.
-    denoising_meta_values (`dict`):
-        Extra dictionary for the denoising related values.
-    """
-
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_logits: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    intermediate_predicted_corners: torch.FloatTensor | None = None
-    initial_reference_points: torch.FloatTensor | None = None
-    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_attentions: tuple[torch.FloatTensor] | None = None
-    cross_attentions: tuple[torch.FloatTensor] | None = None
-    encoder_last_hidden_state: torch.FloatTensor | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    encoder_attentions: tuple[torch.FloatTensor] | None = None
-    init_reference_points: torch.FloatTensor | None = None
-    enc_topk_logits: torch.FloatTensor | None = None
-    enc_topk_bboxes: torch.FloatTensor | None = None
-    enc_outputs_class: torch.FloatTensor | None = None
-    enc_outputs_coord_logits: torch.FloatTensor | None = None
-    denoising_meta_values: dict | None = None
 
 
 class PPDocLayoutV2MLP(nn.Module):
@@ -1999,7 +2011,7 @@ def get_contrastive_denoising_training_group(
 
 @auto_docstring(
     custom_intro="""
-    RT-DETR Model (consisting of a backbone and encoder-decoder) outputting raw hidden states without any head on top.
+    TODO: fill me in
     """
 )
 class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
@@ -2314,8 +2326,7 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    RT-DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further
-    decoded into scores and classes.
+    TODO: fill me in
     """
 )
 class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):

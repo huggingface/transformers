@@ -49,6 +49,7 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrForObjectDetection,
     RTDetrMLPPredictionHead,
     RTDetrModel,
+    RTDetrModelOutput,
     RTDetrPreTrainedModel,
 )
 
@@ -807,6 +808,11 @@ class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
             module.register_buffer("inv_freq", inv_freq, persistent=False)
 
 
+@auto_docstring(
+    custom_intro="""
+    TODO: Fill me in
+    """
+)
 class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
     # Attention is based on LayoutLMv3 (no interface)
     _supports_sdpa = False
@@ -826,7 +832,15 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    def forward(self, boxes, labels=None, mask=None, **kwargs):
+    def forward(self, boxes, labels=None, mask=None, **kwargs: Unpack[TransformersKwargs]):
+        r"""
+        boxes (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            TODO: give me a description
+        labels (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+            TODO: give me a description
+        mask (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+            TODO: give me a description
+        """
         device = mask.device
         batch_size, seq_len = mask.shape
         num_pred = mask.sum(dim=1)
@@ -937,16 +951,35 @@ class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    TODO: fill me in
+    """
+)
+class PPDocLayoutV2ModelOutput(RTDetrModelOutput):
+    pass
+
+
 class PPDocLayoutV2MLPPredictionHead(RTDetrMLPPredictionHead):
     pass
 
 
+@auto_docstring(
+    custom_intro="""
+    TODO: fill me in
+    """
+)
 class PPDocLayoutV2Model(RTDetrModel):
     def __init__(self, config: PPDocLayoutV2Config):
         super().__init__()
         self.denoising_class_embed = nn.Embedding(config.num_labels, config.d_model)
 
 
+@auto_docstring(
+    custom_intro="""
+    TODO: fill me in
+    """
+)
 class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection):
     _keys_to_ignore_on_load_missing = ["num_batches_tracked", "rel_pos_y_bias", "rel_pos_x_bias"]
 
