@@ -25,12 +25,12 @@ This module provides:
     participate in the new ``WeightConverter`` pipeline.
 
 Weight layout (transposed, matching ``affine_qmm_t``):
-  - ``weight``: ``[N, K_packed]`` (``uint32``) -- K is the packed dimension.
+  - ``qweight``: ``[N, K_packed]`` (``uint32``) -- K is the packed dimension.
   - ``scales``:  ``[N, K // group_size]`` (``float16 / bfloat16``)
   - ``qbiases``: ``[N, K // group_size]`` (same dtype as scales)
 
-The kernel call is ``affine_qmm_t(x, weight, scales, qbiases, group_size, bits)``
-which computes ``y = x @ dequant(weight).T``, identical to ``nn.Linear``.
+The kernel call is ``affine_qmm_t(x, qweight, scales, qbiases, group_size, bits)``
+which computes ``y = x @ dequant(qweight).T``, identical to ``nn.Linear``.
 """
 
 from ..core_model_loading import ConversionOps
@@ -98,14 +98,9 @@ class MetalLinear(nn.Linear):
         k_packed = in_features // elems_per_int
         n_groups = in_features // group_size
 
-        # default dtype=torch.uint32 is used for
-        # pre-quantized loading (packed uint32 weights from checkpoint).
-        # When quantize-on-the-fly, replace_with_metal_linear passes dtype=None
-        # which creates a full-shape float weight so the loader can fill it
-        # with the original checkpoint values before MetalQuantize converts them.
-        if dtype == torch.uint32:
-            self.weight = nn.Parameter(torch.zeros(out_features, k_packed, dtype=torch.uint32), requires_grad=False)
-        else:
+        self.qweight = nn.Parameter(torch.zeros(out_features, k_packed, dtype=torch.uint32), requires_grad=False)
+
+        if dtype != torch.uint32:
             self.weight = nn.Parameter(torch.zeros(out_features, in_features, dtype=dtype), requires_grad=False)
 
         scales_dtype = torch.float32 if dtype == torch.uint32 else None
@@ -118,18 +113,14 @@ class MetalLinear(nn.Linear):
             self.register_parameter("bias", None)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        if self.weight.dtype != torch.uint32:
+        if hasattr(self, "weight"):
             return nn.functional.linear(input, self.weight, self.bias)
 
         kernel = _get_metal_kernel()
 
-        # affine_qmm_t: y = x @ dequant(w).T
-        # x: [..., M, K],  w: [N, K_packed],  scales/qbiases: [N, K//gs]
-        # The Metal kernel templates `T` on x.scalar_type() and expects
-        # scales & biases in the same dtype, so we must cast.
         output = kernel.affine_qmm_t(
             input,
-            self.weight,
+            self.qweight,
             self.scales.to(input.dtype),
             self.qbiases.to(input.dtype),
             self.group_size,
@@ -249,15 +240,16 @@ def _affine_dequantize_tensor(
 
 class MetalQuantize(ConversionOps):
     """
-    Quantize a full-precision weight tensor into (weight_packed, scales, qbiases).
+    Quantize a full-precision weight tensor into (qweight, scales, qbiases).
 
-    Used during quantize-on-the-fly.
+    Used during quantize-on-the-fly.  The original ``weight`` parameter is
+    replaced by the packed ``qweight`` and the float ``weight`` is deleted.
     """
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def convert(self, input_dict: dict, **kwargs) -> dict:
+    def convert(self, input_dict: dict, model=None, **kwargs) -> dict:
         target_key, value = next(iter(input_dict.items()))
         value = value[0] if isinstance(value, list) else value
 
@@ -267,12 +259,18 @@ class MetalQuantize(ConversionOps):
         w_packed, scales, biases = _affine_quantize_tensor(value, group_size, bits)
 
         base = target_key.rsplit(".", 1)[0] if "." in target_key else ""
+        qweight_key = f"{base}.qweight" if base else "qweight"
         scale_key = f"{base}.scales" if base else "scales"
         bias_key = f"{base}.qbiases" if base else "qbiases"
 
+        if model is not None and base:
+            module = model.get_submodule(base)
+            if hasattr(module, "weight"):
+                del module.weight
+
         orig_dtype = value.dtype
         return {
-            target_key: w_packed,
+            qweight_key: w_packed,
             scale_key: scales.to(orig_dtype),
             bias_key: biases.to(orig_dtype),
         }
@@ -280,7 +278,7 @@ class MetalQuantize(ConversionOps):
 
 class MetalDequantize(ConversionOps):
     """
-    Dequantize (weight_packed, scales, qbiases) back to a full-precision tensor.
+    Dequantize (qweight, scales, qbiases) back to a full-precision tensor.
 
     Used when ``dequantize=True`` is set in the config to fall back to a normal
     ``nn.Linear`` on devices without MPS.
@@ -293,13 +291,12 @@ class MetalDequantize(ConversionOps):
         bits = self.hf_quantizer.quantization_config.bits
         group_size = self.hf_quantizer.quantization_config.group_size
 
-        if len(input_dict) < 2:
-            # case where we only got weights, need to check for "weight$"
-            return {full_layer_name: input_dict["weight$"]}
-
-        quantized = input_dict["weight$"][0]
+        quantized = input_dict["qweight"][0]
         scales = input_dict["scales"][0]
         qbiases = input_dict["qbiases"][0]
+
+        if len(input_dict) < 2:
+            return {full_layer_name: input_dict["qweight"]}
 
         w_deq = _affine_dequantize_tensor(quantized, scales, qbiases, group_size, bits)
         return {full_layer_name: w_deq.to(scales.dtype)}

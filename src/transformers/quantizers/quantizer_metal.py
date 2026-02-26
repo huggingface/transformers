@@ -1,4 +1,4 @@
-# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -120,7 +120,7 @@ class MetalHfQuantizer(HfQuantizer):
         if self.pre_quantized and self.quantization_config.dequantize:
             return [
                 WeightConverter(
-                    source_patterns=["weight$", "scales", "qbiases"],
+                    source_patterns=["qweight", "scales", "qbiases"],
                     target_patterns="weight",
                     operations=[MetalDequantize(self)],
                 )
