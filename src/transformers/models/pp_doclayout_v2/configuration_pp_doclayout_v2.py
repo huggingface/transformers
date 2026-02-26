@@ -90,7 +90,7 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
             Number of labels or classes for the layout elements.
         relation_bias_embed_dim (`int`, *optional*, defaults to 16):
             Embedding dimension for the relation bias.
-        relation_bias_temperature (`float`, *optional*, defaults to 10000):
+        relation_bias_theta (`float`, *optional*, defaults to 10000):
             Temperature parameter used for relation bias scaling.
         relation_bias_scale (`float`, *optional*, defaults to 100):
             Scale parameter for the relation bias.
@@ -129,7 +129,7 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         shape_size=170,
         num_classes=20,
         relation_bias_embed_dim=16,
-        relation_bias_temperature=10000,
+        relation_bias_theta=10000,
         relation_bias_scale=100,
         global_pointer_head_size=64,
         gp_dropout_value=0.0,
@@ -162,7 +162,7 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         self.shape_size = shape_size
         self.num_classes = num_classes
         self.relation_bias_embed_dim = relation_bias_embed_dim
-        self.relation_bias_temperature = relation_bias_temperature
+        self.relation_bias_theta = relation_bias_theta
         self.relation_bias_scale = relation_bias_scale
         self.global_pointer_head_size = global_pointer_head_size
         self.gp_dropout_value = gp_dropout_value

@@ -152,8 +152,10 @@ class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
 
         order_seqs = self._get_order_seqs(order_logits)
 
-        cxcy, wh = torch.split(boxes, 2, dim=-1)
-        boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
+        box_centers, box_dims = torch.split(boxes, 2, dim=-1)
+        top_left_coords = box_centers - 0.5 * box_dims
+        bottom_right_coords = box_centers + 0.5 * box_dims
+        boxes = torch.cat([top_left_coords, bottom_right_coords], dim=-1)
 
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
@@ -161,11 +163,11 @@ class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
             if isinstance(target_sizes, list):
-                img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
+                img_height, img_width = torch.as_tensor(target_sizes).unbind(1)
             else:
-                img_h, img_w = target_sizes.unbind(1)
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-            boxes = boxes * scale_fct[:, None, :]
+                img_height, img_width = target_sizes.unbind(1)
+            scale_factor = torch.stack([img_width, img_height, img_width, img_height], dim=1).to(boxes.device)
+            boxes = boxes * scale_factor[:, None, :]
 
         num_top_queries = logits.shape[1]
         num_classes = logits.shape[2]

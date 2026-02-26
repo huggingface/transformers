@@ -105,7 +105,7 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        base = config.relation_bias_temperature
+        base = config.relation_bias_theta
         dim = config.relation_bias_embed_dim
         half_dim = dim // 2
 
@@ -849,8 +849,7 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 init.zeros_(module.weight.data[module.padding_idx])
         if isinstance(module, PPDocLayoutV2PositionRelationEmbedding):
-            inv_freq, _ = module.compute_default_rope_parameters(module.config)
-            inv_freq = inv_freq.to(module.inv_freq.device)
+            inv_freq, _ = module.compute_default_rope_parameters(module.config, module.inv_freq.device)
             module.register_buffer("inv_freq", inv_freq, persistent=False)
 
 
@@ -906,10 +905,6 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
             inputs_embeds=final_embeddings,
             attention_mask=input_embeddings,
         )
-        if attention_mask.dtype == torch.bool:
-            attention_mask = torch.zeros_like(attention_mask, dtype=final_embeddings.dtype).masked_fill(
-                ~attention_mask, torch.finfo(final_embeddings.dtype).min
-            )
         encoder_output = self.encoder(hidden_states=final_embeddings, bbox=pad_boxes, attention_mask=attention_mask)
         encoder_output = encoder_output.last_hidden_state
         token = encoder_output[:, 1 : 1 + seq_len, :]
@@ -2070,6 +2065,7 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
 
         # decoder
         self.decoder = PPDocLayoutV2Decoder(config)
+        self.denoising_class_embed = nn.Embedding(config.num_labels, config.d_model)
 
         self.post_init()
 
@@ -2331,7 +2327,6 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
             [PPDocLayoutV2MLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3) for _ in range(num_pred)]
         )
 
-        self.model.denoising_class_embed = nn.Embedding(config.num_labels, config.d_model)
         self.reading_order = PPDocLayoutV2ReadingOrder(config.reading_order_config)
         self.num_queries = config.num_queries
         self.config = config

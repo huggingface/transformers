@@ -123,7 +123,7 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
             Number of labels or classes for the layout elements.
         relation_bias_embed_dim (`int`, *optional*, defaults to 16):
             Embedding dimension for the relation bias.
-        relation_bias_temperature (`float`, *optional*, defaults to 10000):
+        relation_bias_theta (`float`, *optional*, defaults to 10000):
             Temperature parameter used for relation bias scaling.
         relation_bias_scale (`float`, *optional*, defaults to 100):
             Scale parameter for the relation bias.
@@ -162,7 +162,7 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         shape_size=170,
         num_classes=20,
         relation_bias_embed_dim=16,
-        relation_bias_temperature=10000,
+        relation_bias_theta=10000,
         relation_bias_scale=100,
         global_pointer_head_size=64,
         gp_dropout_value=0.0,
@@ -195,7 +195,7 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         self.shape_size = shape_size
         self.num_classes = num_classes
         self.relation_bias_embed_dim = relation_bias_embed_dim
-        self.relation_bias_temperature = relation_bias_temperature
+        self.relation_bias_theta = relation_bias_theta
         self.relation_bias_scale = relation_bias_scale
         self.global_pointer_head_size = global_pointer_head_size
         self.gp_dropout_value = gp_dropout_value
@@ -480,8 +480,10 @@ class PPDocLayoutV2ImageProcessorFast(PPDocLayoutV3ImageProcessorFast):
 
         order_seqs = self._get_order_seqs(order_logits)
 
-        cxcy, wh = torch.split(boxes, 2, dim=-1)
-        boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
+        box_centers, box_dims = torch.split(boxes, 2, dim=-1)
+        top_left_coords = box_centers - 0.5 * box_dims
+        bottom_right_coords = box_centers + 0.5 * box_dims
+        boxes = torch.cat([top_left_coords, bottom_right_coords], dim=-1)
 
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
@@ -489,11 +491,11 @@ class PPDocLayoutV2ImageProcessorFast(PPDocLayoutV3ImageProcessorFast):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
             if isinstance(target_sizes, list):
-                img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
+                img_height, img_width = torch.as_tensor(target_sizes).unbind(1)
             else:
-                img_h, img_w = target_sizes.unbind(1)
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-            boxes = boxes * scale_fct[:, None, :]
+                img_height, img_width = target_sizes.unbind(1)
+            scale_factor = torch.stack([img_width, img_height, img_width, img_height], dim=1).to(boxes.device)
+            boxes = boxes * scale_factor[:, None, :]
 
         num_top_queries = logits.shape[1]
         num_classes = logits.shape[2]
@@ -560,7 +562,7 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        base = config.relation_bias_temperature
+        base = config.relation_bias_theta
         dim = config.relation_bias_embed_dim
         half_dim = dim // 2
 
@@ -800,8 +802,7 @@ class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
             if module.padding_idx is not None:
                 init.zeros_(module.weight.data[module.padding_idx])
         if isinstance(module, PPDocLayoutV2PositionRelationEmbedding):
-            inv_freq, _ = module.compute_default_rope_parameters(module.config)
-            inv_freq = inv_freq.to(module.inv_freq.device)
+            inv_freq, _ = module.compute_default_rope_parameters(module.config, module.inv_freq.device)
             module.register_buffer("inv_freq", inv_freq, persistent=False)
 
 
@@ -857,10 +858,6 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
             inputs_embeds=final_embeddings,
             attention_mask=input_embeddings,
         )
-        if attention_mask.dtype == torch.bool:
-            attention_mask = torch.zeros_like(attention_mask, dtype=final_embeddings.dtype).masked_fill(
-                ~attention_mask, torch.finfo(final_embeddings.dtype).min
-            )
         encoder_output = self.encoder(hidden_states=final_embeddings, bbox=pad_boxes, attention_mask=attention_mask)
         encoder_output = encoder_output.last_hidden_state
         token = encoder_output[:, 1 : 1 + seq_len, :]
@@ -937,7 +934,9 @@ class PPDocLayoutV2MLPPredictionHead(RTDetrMLPPredictionHead):
 
 
 class PPDocLayoutV2Model(RTDetrModel):
-    pass
+    def __init__(self, config: PPDocLayoutV2Config):
+        super().__init__()
+        self.denoising_class_embed = nn.Embedding(config.num_labels, config.d_model)
 
 
 class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection):
@@ -946,7 +945,6 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection):
     def __init__(self, config: PPDocLayoutV2Config):
         super().__init__(config)
 
-        self.model.denoising_class_embed = nn.Embedding(config.num_labels, config.d_model)
         self.reading_order = PPDocLayoutV2ReadingOrder(config.reading_order_config)
         self.num_queries = config.num_queries
         self.config = config

@@ -30,6 +30,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
     require_torch_accelerator,
     require_vision,
@@ -315,6 +316,8 @@ class PPDocLayoutV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     is_encoder_decoder = True
 
     test_missing_keys = False
+    test_inputs_embeds = False
+    test_resize_embeddings = False
 
     def setUp(self):
         self.model_tester = PPDocLayoutV2ModelTester(self)
@@ -331,24 +334,12 @@ class PPDocLayoutV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_pp_doclayout_v2_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="PPDocLayoutV2 does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="PPDocLayoutV2 does not use test_inputs_embeds_matches_input_ids")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip(reason="PPDocLayoutV2 does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="PPDocLayoutV2 does not support input and output embeddings")
     def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="PPDocLayoutV2 does not use token embeddings")
-    def test_resize_tokens_embeddings(self):
         pass
 
     @unittest.skip(reason="Feed forward chunking is not implemented")
@@ -594,6 +585,9 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
         self.image_processor = PPDocLayoutV2ImageProcessorFast.from_pretrained(model_path)
         url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
         self.image = Image.open(requests.get(url, stream=True).raw)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
     def test_inference_object_detection_head(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
