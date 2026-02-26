@@ -745,7 +745,9 @@ def replace_with_fp8_linear(
         with torch.device("meta"):
             if module_name.endswith(".experts"):
                 new_module = FP8Expert(
-                    config=model.config, block_size=quantization_config.weight_block_size, **module_kwargs
+                    config=model.config.get_text_config(),
+                    block_size=quantization_config.weight_block_size,
+                    **module_kwargs,
                 )
             elif isinstance(module, nn.Linear):
                 new_module = FP8Linear(

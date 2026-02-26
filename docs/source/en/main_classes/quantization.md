@@ -98,6 +98,10 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 [[autodoc]] QuarkConfig
 
+## FourOverSixConfig
+
+[[autodoc]] FourOverSixConfig
+
 ## FPQuantConfig
 
 [[autodoc]] FPQuantConfig
@@ -105,3 +109,7 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## AutoRoundConfig
 
 [[autodoc]] AutoRoundConfig
+
+## SinqConfig
+
+[[autodoc]] SinqConfig

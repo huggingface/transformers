@@ -455,23 +455,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             else self.clean_up_tokenization_spaces
         )
         if clean_up_tokenization_spaces:
-            # Call custom cleanup method if it exists (e.g., for CLVP's [SPACE] token replacement)
-            if hasattr(self, "clean_up_tokenization") and callable(self.clean_up_tokenization):
-                text = self.clean_up_tokenization(text)
-            else:
-                # Otherwise apply standard cleanup
-                text = (
-                    text.replace(" .", ".")
-                    .replace(" ?", "?")
-                    .replace(" !", "!")
-                    .replace(" ,", ",")
-                    .replace(" ' ", "'")
-                    .replace(" n't", "n't")
-                    .replace(" 'm", "'m")
-                    .replace(" 's", "'s")
-                    .replace(" 've", "'ve")
-                    .replace(" 're", "'re")
-                )
+            text = self.clean_up_tokenization(text)
 
         return _maybe_remove_lang(text=text, skip_special_tokens=skip_special_tokens)
 
@@ -1595,7 +1579,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
-            f" special_tokens={self.special_tokens_map}"
+            f" special_tokens={self.special_tokens_map})"
         )
 
     def added_tokens_decoder(self):
