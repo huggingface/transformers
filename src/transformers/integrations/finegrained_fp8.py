@@ -15,7 +15,6 @@
 import torch
 import torch.nn as nn
 import triton
-from torch.library import custom_op
 from torch.nn import functional as F
 
 from ..activations import ACT2FN
@@ -338,7 +337,7 @@ def fp8_grouped_mm_experts_forward(
 
     selected_hidden_states = hidden_states[token_idx]
 
-    # Sort by expert for grouped processing.
+    # Sort by expert for grouped processing
     perm = torch.argsort(expert_ids)
     inv_perm = torch.empty_like(perm)
     inv_perm[perm] = torch.arange(perm.size(0), device=device)
@@ -359,9 +358,9 @@ def fp8_grouped_mm_experts_forward(
         selected_hidden_states_g,
         self.gate_up_proj,
         self.gate_up_proj_scale_inv,
-        offsets,
-        tokens_per_expert,
-        self.block_size,
+        tokens_per_expert=tokens_per_expert,
+        block_size=self.block_size,
+        offsets=offsets,
     )  # (S, 2 * intermediate_dim)
 
     # Apply gating
@@ -372,9 +371,9 @@ def fp8_grouped_mm_experts_forward(
         gated_out,
         self.down_proj,
         self.down_proj_scale_inv,
-        offsets,
-        tokens_per_expert,
-        self.block_size,
+        tokens_per_expert=tokens_per_expert,
+        block_size=self.block_size,
+        offsets=offsets,
     )  # (S, hidden_dim)
 
     # Apply routing weights

@@ -346,7 +346,7 @@ def grouped_mm_experts_forward(
     # Get current hidden states for selected samples
     selected_hidden_states = hidden_states[token_idx]
 
-    # Sort by expert for grouped processing.
+    # Sort by expert for grouped processing
     perm = torch.argsort(expert_ids)
     inv_perm = torch.empty_like(perm)
     inv_perm[perm] = torch.arange(perm.size(0), device=device)
