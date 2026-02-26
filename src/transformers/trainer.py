@@ -297,7 +297,7 @@ class Trainer:
             from a new instance of the model as given by this function.
 
             The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to
-            be able to choose different architectures according to hyper parameters (such as layer count, sizes of
+            be able to choose different architectures according to hyperparameters (such as layer count, sizes of
             inner layers, dropout probabilities etc).
         compute_loss_func (`Callable`, *optional*):
             A function that accepts the raw model outputs, labels, and the number of items in the entire accumulated
@@ -1951,13 +1951,14 @@ class Trainer:
             return_outputs (`bool`, *optional*, defaults to `False`):
                 Whether to return the model outputs along with the loss.
             num_items_in_batch (Optional[torch.Tensor], *optional*):
-                The number of items in the batch. If num_items_in_batch is not passed,
+                The number of items in the batch. If not passed, the loss is computed
+                using the default batch size reduction logic.
 
         Returns:
             The loss of the model along with its output if return_outputs was set to True
 
         Subclass and override for custom behavior. If you are not using `num_items_in_batch` when computing your loss,
-        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculating might be slightly inaccurate when performing gradient accumulation.
+        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculation might be slightly inaccurate when performing gradient accumulation.
         """
         pc = getattr(self.accelerator, "parallelism_config", None)
         if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled and self.model.training:
@@ -4152,7 +4153,7 @@ class Trainer:
         **kwargs,
     ) -> BestRun | list[BestRun]:
         """
-        Launch an hyperparameter search using `optuna` or `Ray Tune`. The optimized quantity is determined
+        Launch a hyperparameter search using `optuna` or `Ray Tune`. The optimized quantity is determined
         by `compute_objective`, which defaults to a function returning the evaluation loss when no metric is provided,
         the sum of all metrics otherwise.
 
