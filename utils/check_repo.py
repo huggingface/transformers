@@ -46,7 +46,7 @@ from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_M
 from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
-from transformers.testing_utils import _COMMON_MODEL_NAMES_MAP
+from transformers.testing_utils import _COMMON_MODEL_NAMES_MAP, _VLM_COMMON_MODEL_NAMES_MAP
 from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
 
@@ -733,7 +733,7 @@ def find_tested_models(test_file: str) -> set[str]:
             if tested_class:
                 tested_class = tested_class[0].split("=")[1].strip()
             else:
-                tested_class = model_name + _COMMON_MODEL_NAMES_MAP[test_class_type]
+                tested_class = model_name + _VLM_COMMON_MODEL_NAMES_MAP[test_class_type]
             model_tested.add(tested_class)
 
     return model_tested
