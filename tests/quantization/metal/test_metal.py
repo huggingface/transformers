@@ -270,25 +270,23 @@ class MetalLinearTest(unittest.TestCase):
     """Test the ``MetalLinear`` nn.Module directly (CPU, no kernel calls)."""
 
     def test_prequantized_weight_shape(self):
-        """Pre-quantized mode: qweight should be uint32 with packed K dimension."""
+        """Pre-quantized mode: weight should be uint32 with packed K dimension."""
         from transformers.integrations.metal_quantization import MetalLinear
 
         layer = MetalLinear(in_features=256, out_features=128, bits=4, group_size=64)
         elems_per_int = 32 // 4
-        self.assertEqual(layer.qweight.shape, (128, 256 // elems_per_int))
-        self.assertEqual(layer.qweight.dtype, torch.uint32)
+        self.assertEqual(layer.weight.shape, (128, 256 // elems_per_int))
+        self.assertEqual(layer.weight.dtype, torch.uint32)
         self.assertEqual(layer.scales.shape, (128, 256 // 64))
         self.assertEqual(layer.qbiases.shape, (128, 256 // 64))
 
     def test_quantize_on_the_fly_weight_shape(self):
-        """Quantize-on-the-fly mode (dtype=None): both weight (float) and qweight (uint32) exist."""
+        """Quantize-on-the-fly mode (dtype=None): weight should be full-shape float."""
         from transformers.integrations.metal_quantization import MetalLinear
 
         layer = MetalLinear(in_features=256, out_features=128, bits=4, group_size=64, dtype=None)
         self.assertEqual(layer.weight.shape, (128, 256))
         self.assertNotEqual(layer.weight.dtype, torch.uint32)
-        self.assertTrue(hasattr(layer, "qweight"))
-        self.assertEqual(layer.qweight.dtype, torch.uint32)
 
     def test_no_bias_by_default(self):
         from transformers.integrations.metal_quantization import MetalLinear
@@ -328,14 +326,14 @@ class MetalLinearTest(unittest.TestCase):
 
         layer = MetalLinear(in_features=256, out_features=128, bits=8, group_size=64)
         elems_per_int = 32 // 8  # 4
-        self.assertEqual(layer.qweight.shape, (128, 256 // elems_per_int))
+        self.assertEqual(layer.weight.shape, (128, 256 // elems_per_int))
 
     def test_prequantized_shapes_2bit(self):
         from transformers.integrations.metal_quantization import MetalLinear
 
         layer = MetalLinear(in_features=256, out_features=128, bits=2, group_size=64)
         elems_per_int = 32 // 2  # 16
-        self.assertEqual(layer.qweight.shape, (128, 256 // elems_per_int))
+        self.assertEqual(layer.weight.shape, (128, 256 // elems_per_int))
 
 
 @require_torch
@@ -394,8 +392,7 @@ class ReplaceWithMetalLinearTest(unittest.TestCase):
 
         for m in model.modules():
             if isinstance(m, MetalLinear):
-                self.assertEqual(m.qweight.dtype, torch.uint32)
-                self.assertFalse(hasattr(m, "weight"))
+                self.assertEqual(m.weight.dtype, torch.uint32)
                 break
 
     def test_quantize_on_the_fly_dtype_is_not_uint32(self):
@@ -407,10 +404,7 @@ class ReplaceWithMetalLinearTest(unittest.TestCase):
 
         for m in model.modules():
             if isinstance(m, MetalLinear):
-                self.assertTrue(hasattr(m, "weight"))
                 self.assertNotEqual(m.weight.dtype, torch.uint32)
-                self.assertTrue(hasattr(m, "qweight"))
-                self.assertEqual(m.qweight.dtype, torch.uint32)
                 break
 
 
@@ -431,11 +425,10 @@ class MetalConversionOpsTest(unittest.TestCase):
         op = MetalQuantize(quantizer)
         weight = torch.randn(64, 256)
         result = op.convert({"model.layer.weight": weight})
-        self.assertNotIn("model.layer.weight", result)
-        self.assertIn("model.layer.qweight", result)
+        self.assertIn("model.layer.weight", result)
         self.assertIn("model.layer.scales", result)
         self.assertIn("model.layer.qbiases", result)
-        self.assertEqual(result["model.layer.qweight"].dtype, torch.uint32)
+        self.assertEqual(result["model.layer.weight"].dtype, torch.uint32)
 
     def test_metal_quantize_preserves_original_dtype(self):
         from transformers.integrations.metal_quantization import MetalQuantize
@@ -466,7 +459,7 @@ class MetalConversionOpsTest(unittest.TestCase):
 
             dq_result = dq_op.convert(
                 {
-                    "qweight": [q_result["layer.qweight"]],
+                    "weight$": [q_result["layer.weight"]],
                     "scales": [q_result["layer.scales"]],
                     "qbiases": [q_result["layer.qbiases"]],
                 },
@@ -488,7 +481,7 @@ class MetalConversionOpsTest(unittest.TestCase):
         dq_op = MetalDequantize(dq_quantizer)
         dq_result = dq_op.convert(
             {
-                "qweight": [q_result["layer.qweight"]],
+                "weight$": [q_result["layer.weight"]],
                 "scales": [q_result["layer.scales"]],
                 "qbiases": [q_result["layer.qbiases"]],
             },
@@ -603,8 +596,8 @@ class MetalModelConversionTest(unittest.TestCase):
         for name, module in model.named_modules():
             if isinstance(module, MetalLinear):
                 self.assertFalse(
-                    quantizer.param_needs_quantization(model, f"{name}.qweight"),
-                    "Pre-quantized qweights should not be re-quantized",
+                    quantizer.param_needs_quantization(model, f"{name}.weight"),
+                    "Pre-quantized weights should not be re-quantized",
                 )
 
 

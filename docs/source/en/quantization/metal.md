@@ -55,7 +55,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## Load a pre-quantized model
 
-If a checkpoint already contains quantized weights (`qweight`, `scales`, `qbiases`), they are loaded directly — no re-quantization needed.
+If a checkpoint already contains quantized weights (`weight` as packed uint32, `scales`, `qbiases`), they are loaded directly — no re-quantization needed.
 
 ```python
 from transformers import AutoModelForCausalLM, MetalConfig

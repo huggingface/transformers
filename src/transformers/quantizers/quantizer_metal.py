@@ -1,4 +1,4 @@
-# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ class MetalHfQuantizer(HfQuantizer):
         if device_map is None:
             logger.warning_once(
                 "You have loaded a Metal quantized model on CPU and have an MPS device available. "
-                "We will use the MPS device to load the model."
+                "Set device_map='mps' to use the Metal kernels."
             )
         elif isinstance(device_map, dict):
             if not self.pre_quantized and ("cpu" in device_map.values() or "disk" in device_map.values()):
@@ -120,7 +120,7 @@ class MetalHfQuantizer(HfQuantizer):
         if self.pre_quantized and self.quantization_config.dequantize:
             return [
                 WeightConverter(
-                    source_patterns=["qweight", "scales", "qbiases"],
+                    source_patterns=["weight$", "scales", "qbiases"],
                     target_patterns="weight",
                     operations=[MetalDequantize(self)],
                 )
