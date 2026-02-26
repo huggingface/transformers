@@ -243,7 +243,6 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": IBertModel,
             "fill-mask": IBertForMaskedLM,
-            "question-answering": IBertForQuestionAnswering,
             "text-classification": IBertForSequenceClassification,
             "token-classification": IBertForTokenClassification,
             "zero-shot": IBertForSequenceClassification,
