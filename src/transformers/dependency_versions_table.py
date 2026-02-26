@@ -18,7 +18,7 @@ deps = {
     "fugashi": "fugashi>=1.0",
     "GitPython": "GitPython<3.1.19",
     "hf-doc-builder": "hf-doc-builder>=0.3.0",
-    "huggingface-hub": "huggingface-hub>=1.3.0,<2.0",
+    "huggingface-hub": "huggingface-hub==v1.5.0.rc0",
     "ipadic": "ipadic>=1.0.0,<2.0",
     "jinja2": "jinja2>=3.1.0",
     "jmespath": "jmespath>=1.0.1",
