@@ -466,6 +466,8 @@ class MusicFlamingoEncoder(AudioFlamingo3Encoder):
         super()._init_weights(module)
 
         if isinstance(module, MusicFlamingoRotaryEmbedding):
+            inv_freq = module.compute_default_rote_parameters(module.config)
+            module.inv_freq.data = inv_freq
             module.cached_freqs = module._build_cached_freqs(
                 module.inv_freq, device=module.inv_freq.device, dtype=module.inv_freq.dtype
             )
