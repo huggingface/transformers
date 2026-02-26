@@ -1,0 +1,71 @@
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+
+# NeMo Automodel
+
+NVIDIA [NeMo Automodel](https://github.com/NVIDIA-NeMo/Automodel) is a Pytorch DTensor‑native SPMD open-source training library under NVIDIA [NeMo Framework](https://github.com/NVIDIA-NeMo), designed to streamline and scale pretraining and fine-tuning for [LLMs](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/llm.html) and [VLMs](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/vlm.html). Designed for flexibility, reproducibility, and scale, NeMo AutoModel enables both small-scale experiments and massive multi-GPU, multi-node training for fast experimentation in research and production environments. It supports Fully Sharded Data Parallelism (FSDP2), tensor, pipeline, expert, and context parallel in addition to fast kernels from DeepEP and TransformerEngine to enable high throughput. NeMo Automodel supports both dense models and Mixture-of-Expert (MoE) Models with [benchmarks](https://docs.nvidia.com/nemo/automodel/latest/performance-summary.html) here.
+
+```py
+# Instantiating Nemotron v3 Nano with expert parallelism, FSDP, and TransformerEngine + DeepEP kernels.
+import os
+
+import torch
+import torch.distributed as dist
+
+from nemo_automodel import NeMoAutoModelForCausalLM
+from nemo_automodel.recipes._dist_setup import setup_distributed
+
+dist.init_process_group(backend="nccl")
+torch.cuda.set_device(int(os.environ.get("LOCAL_RANK", 0)))
+torch.manual_seed(1111)
+
+dist_setup = setup_distributed(
+    {
+        "strategy": "fsdp2",
+        "dp_size": None,  # will be inferred from world_size and other parallelism sizes
+        "dp_replicate_size": None,
+        "tp_size": 1,
+        "pp_size": 1,
+        "cp_size": 1,
+        "ep_size": 8,
+    },
+    world_size=dist.get_world_size(),
+)
+kwargs = {
+    "device_mesh": dist_setup.device_mesh,
+    "moe_mesh": dist_setup.moe_mesh,
+    "distributed_config": dist_setup.strategy_config,
+    "moe_config": dist_setup.moe_config,
+}
+model = NeMoAutoModelForCausalLM.from_pretrained("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16", **kwargs)
+print(model)
+dist.destroy_process_group()
+```
+
+Launch the script with `torchrun –nproc-per-node=8 /path/to/script`.
+
+## Transformers integration
+
+1. Tight integration with Transformers allows any LLM or VLM that can be instantiated through Transformers to also be instantiated through NeMo Automodel. Full model coverage can be found [here](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/overview.html).
+2. Builds directly on top of Hugging Face models by instanting ['AutoModel.from_pretrained()'] and dynamically swapping in high performance models and layers, enabling API compatibility, with extensions for more refined parallelisms (e.g., EP).
+3. Scans the architecture field in the [`AutoConfig.from_pretrained`] to automatically instantiate custom model implementations like Nemotron Nano V3.
+4. We follow the Transformers API closely, allowing for a near drop-in compatibility experience.
+
+
+## Resources
+
+- [NeMo Automodel](https://github.com/NVIDIA-NeMo/Automodel)
+- [NeMo Transformers API](https://docs.nvidia.com/nemo/automodel/latest/guides/huggingface-api-compatibility.html)
