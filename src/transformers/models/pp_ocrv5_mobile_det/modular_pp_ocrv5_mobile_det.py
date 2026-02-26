@@ -1209,6 +1209,30 @@ class PPOCRV5MobileDetLCNetV3Block(nn.Module):
         return hidden_state
 
 
+class PPOCRV5MobileDetBlock(nn.Module):
+    def __init__(self, config, block_index):
+        super().__init__()
+        self.config = config
+
+        self.layers = nn.ModuleList()
+        for kernel_size, in_channels, out_channels, stride, squeeze_excitation in config.backbone_config[block_index]:
+            block = PPOCRV5MobileDetLCNetV3Block(
+                in_channels=make_divisible(in_channels * config.scale, config.divisor),
+                out_channels=make_divisible(out_channels * config.scale, config.divisor),
+                act=config.hidden_act,
+                dw_size=kernel_size,
+                stride=stride,
+                use_se=squeeze_excitation,
+                conv_kxk_num=config.conv_kxk_num,
+                reduction=config.reduction,
+            )
+            self.layers.append(block)
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
 class PPOCRV5MobileDetBackbone(nn.Module):
     """
     Backbone network for PPOCRV5 Mobile Det, built with LCNetV3Blocks.
@@ -1225,7 +1249,6 @@ class PPOCRV5MobileDetBackbone(nn.Module):
         """
         super().__init__()
 
-        self.backbone_config = config.backbone_config
         self.out_channels = make_divisible(config.backbone_out_channels * config.scale, config.divisor)
 
         self.conv1 = PPOCRV5MobileDetConvBNLayer(
@@ -1236,36 +1259,20 @@ class PPOCRV5MobileDetBackbone(nn.Module):
             activation=None,
         )
 
-        def _build_blocks(block_key):
-            return nn.Sequential(
-                *[
-                    PPOCRV5MobileDetLCNetV3Block(
-                        in_channels=make_divisible(in_c * config.scale, config.divisor),
-                        out_channels=make_divisible(out_c * config.scale, config.divisor),
-                        act=config.hidden_act,
-                        dw_size=k,
-                        stride=s,
-                        use_se=se,
-                        conv_kxk_num=config.conv_kxk_num,
-                        reduction=config.reduction,
-                    )
-                    for i, (k, in_c, out_c, s, se) in enumerate(self.backbone_config[block_key])
-                ]
-            )
+        self.blocks = nn.ModuleList([])
+        for block_index in config.backbone_config.keys():
+            if "layer_list_out_channels" in block_index:
+                continue
+            block = PPOCRV5MobileDetBlock(config, block_index)
+            self.blocks.append(block)
 
-        self.blocks2 = _build_blocks("blocks2")
-        self.blocks3 = _build_blocks("blocks3")
-        self.blocks4 = _build_blocks("blocks4")
-        self.blocks5 = _build_blocks("blocks5")
-        self.blocks6 = _build_blocks("blocks6")
-
-        mv_c = self.backbone_config["layer_list_out_channels"]
+        mv_c = config.backbone_config["layer_list_out_channels"]
 
         self.out_channels = [
-            make_divisible(self.backbone_config["blocks3"][-1][2] * config.scale, config.divisor),
-            make_divisible(self.backbone_config["blocks4"][-1][2] * config.scale, config.divisor),
-            make_divisible(self.backbone_config["blocks5"][-1][2] * config.scale, config.divisor),
-            make_divisible(self.backbone_config["blocks6"][-1][2] * config.scale, config.divisor),
+            make_divisible(config.backbone_config["blocks3"][-1][2] * config.scale, config.divisor),
+            make_divisible(config.backbone_config["blocks4"][-1][2] * config.scale, config.divisor),
+            make_divisible(config.backbone_config["blocks5"][-1][2] * config.scale, config.divisor),
+            make_divisible(config.backbone_config["blocks6"][-1][2] * config.scale, config.divisor),
         ]
 
         self.layer_list = nn.ModuleList(
@@ -1304,27 +1311,19 @@ class PPOCRV5MobileDetBackbone(nn.Module):
         if output_hidden_states:
             hidden_states = hidden_states + (hidden_state,)
         hidden_state = self.conv1(hidden_state)
+
+        first_block = True
+        for block in self.blocks:
+            if output_hidden_states:
+                hidden_states = hidden_states + (hidden_state,)
+            hidden_state = block(hidden_state)
+            if first_block:
+                first_block = False
+            else:
+                out_list.append(hidden_state)
+
         if output_hidden_states:
             hidden_states = hidden_states + (hidden_state,)
-        hidden_state = self.blocks2(hidden_state)
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        hidden_state = self.blocks3(hidden_state)
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        out_list.append(hidden_state)
-        hidden_state = self.blocks4(hidden_state)
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        out_list.append(hidden_state)
-        hidden_state = self.blocks5(hidden_state)
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        out_list.append(hidden_state)
-        hidden_state = self.blocks6(hidden_state)
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        out_list.append(hidden_state)
         last_hidden_state = hidden_state
         out_list[0] = self.layer_list[0](out_list[0])
         out_list[1] = self.layer_list[1](out_list[1])
