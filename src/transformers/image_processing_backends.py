@@ -195,7 +195,7 @@ class TorchvisionBackend(BaseImageProcessor):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":

@@ -17,55 +17,30 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
-from typing import Optional
 
+import numpy as np
 import torch
-import torch.nn.functional as F
 
+from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
-from .image_processing_ernie4_5_vl_moe import Ernie4_5_VL_MoeImageProcessorKwargs
+from ...utils import TensorType, auto_docstring, is_torchvision_available
+from .image_processing_ernie4_5_vl_moe import Ernie4_5_VL_MoeImageProcessorKwargs, smart_resize
 
 
-def smart_resize(
-    height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
-):
-    """Rescales the image so that the following conditions are met:
-
-    1. Both dimensions (height and width) are divisible by 'factor'.
-
-    2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
-
-    3. The aspect ratio of the image is maintained as closely as possible.
-
-    """
-    if max(height, width) / min(height, width) > 200:
-        raise ValueError(
-            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
-        )
-    h_bar = round(height / factor) * factor
-    w_bar = round(width / factor) * factor
-    if h_bar * w_bar > max_pixels:
-        beta = math.sqrt((height * width) / max_pixels)
-        h_bar = max(factor, math.floor(height / beta / factor) * factor)
-        w_bar = max(factor, math.floor(width / beta / factor) * factor)
-    elif h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (height * width))
-        h_bar = math.ceil(height * beta / factor) * factor
-        w_bar = math.ceil(width * beta / factor) * factor
-    return h_bar, w_bar
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 
 @auto_docstring
-class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
+class Ernie4_5_VL_MoeImageProcessorPil(PilBackend):
     do_resize = True
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}
+    default_to_square = False
     do_rescale = True
+    rescale_factor = 1 / 255
     do_normalize = True
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -78,31 +53,32 @@ class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[Ernie4_5_VL_MoeImageProcessorKwargs]):
         super().__init__(**kwargs)
-        if self.size is not None and (
-            self.size.get("shortest_edge", None) is None or self.size.get("longest_edge", None) is None
-        ):
-            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+        if self.size is not None:
+            if not self.size.shortest_edge or not self.size.longest_edge:
+                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-    def _standardize_kwargs(
-        self,
-        size: SizeDict | None = None,
-        **kwargs,
-    ) -> dict:
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Ernie4_5_VL_MoeImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _standardize_kwargs(self, **kwargs) -> dict:
         """
         Update kwargs that need further processing before being validated
         Can be overridden by subclasses to customize the processing of kwargs.
         """
-        if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
+        kwargs = super()._standardize_kwargs(**kwargs)
+        size = kwargs.get("size", self.size)
+        if not size.shortest_edge or not size.longest_edge:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-        return super()._standardize_kwargs(size=size, **kwargs)
+        return kwargs
 
     def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -110,54 +86,49 @@ class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
         image_std: float | list[float] | None,
         patch_size: int,
         merge_size: int,
-        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """
-        Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
+        Preprocess images one by one for PIL backend.
         """
-        # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            height, width = stacked_images.shape[-2:]
+        processed_images = []
+        processed_grids = []
+
+        for image in images:
+            height, width = image.shape[-2:]
             if do_resize:
                 resized_height, resized_width = smart_resize(
-                    height,
-                    width,
+                    height=height,
+                    width=width,
                     factor=patch_size * merge_size,
-                    min_pixels=size["shortest_edge"],
-                    max_pixels=size["longest_edge"],
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
                 )
-                stacked_images = self.resize(
-                    image=stacked_images,
+                image = self.resize(
+                    image,
                     size=SizeDict(height=resized_height, width=resized_width),
-                    interpolation=interpolation,
+                    resample=resample,
                 )
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        # Group images by size for further processing
-        # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        processed_grids = {}
-        for shape, stacked_images in grouped_images.items():
-            resized_height, resized_width = stacked_images.shape[-2:]
-            # Fused rescale and normalize
-            patches = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            if patches.ndim == 4:
-                # add a temporal dimension if we have images
-                patches = patches.unsqueeze(1)
+            # Rescale and normalize
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
 
-            # Main difference to Qwen2 VL - no temporal patches
-            batch_size, grid_t, channel = patches.shape[:3]
+            # Ensure float32 for patch processing
+            image_array = np.asarray(image, dtype=np.float32)
+            if image_array.ndim == 3:  # (C, H, W)
+                image_array = np.expand_dims(image_array, axis=0)  # (1, C, H, W)
+            if image_array.ndim == 4:  # (B, C, H, W)
+                image_array = np.expand_dims(image_array, axis=1)  # (B, T=1, C, H, W)
+
+            resized_height, resized_width = image_array.shape[-2:]
+            batch_size, grid_t, channel = image_array.shape[:3]
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
-            patches = patches.view(
+            patches = image_array.reshape(
                 batch_size,
                 grid_t,
                 channel,
@@ -170,7 +141,7 @@ class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
             )
             # Reorder dimensions to group grid and patch information for subsequent flattening.
             # [batch, grid_t, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
-            patches = patches.permute(0, 1, 3, 6, 4, 7, 2, 5, 8)
+            patches = np.transpose(patches, (0, 1, 3, 6, 4, 7, 2, 5, 8))
 
             flatten_patches = patches.reshape(
                 batch_size,
@@ -178,13 +149,13 @@ class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
                 channel * patch_size * patch_size,
             )
 
-            processed_images_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            # Remove batch dimension and append: shape is (seq_len, hidden_dim)
+            processed_images.append(flatten_patches.squeeze(0))
+            processed_grids.append([grid_t, grid_h, grid_w])
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_grids = reorder_images(processed_grids, grouped_images_index)
-        pixel_values = torch.cat(processed_images, dim=0)
-        image_grid_thw = torch.tensor(processed_grids)
+        # Concatenate all images along sequence dimension: (total_seq_len, hidden_dim)
+        pixel_values = np.concatenate(processed_images, axis=0)
+        image_grid_thw = np.array(processed_grids)
 
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
@@ -219,13 +190,5 @@ class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
 
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[Ernie4_5_VL_MoeImageProcessorKwargs],
-    ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
 
-
-__all__ = ["Ernie4_5_VL_MoeImageProcessorFast"]
+__all__ = ["Ernie4_5_VL_MoeImageProcessorPil"]

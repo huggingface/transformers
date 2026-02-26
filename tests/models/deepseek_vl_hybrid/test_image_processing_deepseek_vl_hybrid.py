@@ -16,12 +16,10 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -29,11 +27,6 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import DeepseekVLHybridImageProcessor
-
-    if is_torchvision_available():
-        from transformers import DeepseekVLHybridImageProcessorFast
 
 
 class DeepseekVLHybridImageProcessingTester:
@@ -106,22 +99,16 @@ class DeepseekVLHybridImageProcessingTester:
 @require_torch
 @require_vision
 class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = DeepseekVLHybridImageProcessor if is_vision_available() else None
-    fast_image_processing_class = DeepseekVLHybridImageProcessorFast if is_torchvision_available() else None
-
-    # Copied from tests.models.vit.test_image_processing_vit.ViTImageProcessingTester.setUp with ViT->DeepseekVLHybrid
     def setUp(self):
         super().setUp()
         self.image_processor_tester = DeepseekVLHybridImageProcessingTester(self)
 
     @property
-    # Copied from tests.models.vit.test_image_processing_vit.ViTImageProcessingTester.image_processor_dict with ViT->DeepseekVLHybrid
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
-    # Copied from tests.models.vit.test_image_processing_vit.ViTImageProcessingTester.test_image_processor_from_dict_with_kwargs
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
@@ -129,7 +116,7 @@ class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -141,10 +128,8 @@ class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
             self.assertTrue(hasattr(image_processing, "high_res_size"))
 
     def test_call_pil_high_res(self):
-        for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processing = image_processing_class(**self.image_processor_dict)
-            # create random PIL images
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
@@ -166,10 +151,8 @@ class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
             )
 
     def test_call_numpy_high_res(self):
-        for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processing = image_processing_class(**self.image_processor_dict)
-            # create random numpy tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
@@ -191,10 +174,8 @@ class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
             )
 
     def test_call_pytorch_high_res(self):
-        for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processing = image_processing_class(**self.image_processor_dict)
-            # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
             for image in image_inputs:
@@ -217,56 +198,63 @@ class DeepseekVLHybridImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
                 (self.image_processor_tester.batch_size, *expected_output_image_shape),
             )
 
-    @require_vision
-    @require_torch
-    def test_slow_fast_equivalence(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
+    def test_backends_equivalence(self):
+        """Override to also compare high_res_pixel_values."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+        import io
 
-        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        import httpx
 
-        encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
-        encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
-        self._assert_slow_fast_tensors_equivalence(
-            encoding_slow.high_res_pixel_values, encoding_fast.high_res_pixel_values
+        dummy_image = Image.open(
+            io.BytesIO(
+                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
+            )
         )
 
-    @require_vision
-    @require_torch
-    def test_slow_fast_equivalence_batched(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
-
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
-            self.skipTest(
-                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values
             )
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].high_res_pixel_values,
+                encodings[backend_name].high_res_pixel_values,
+            )
+
+    def test_backends_equivalence_batched(self):
+        """Override to also compare high_res_pixel_values (variable shape - list of tensors)."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
-        encoding_slow = image_processor_slow(dummy_images, return_tensors=None)
-        encoding_fast = image_processor_fast(dummy_images, return_tensors=None)
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_images, return_tensors=None)
 
-        # Overwrite as the outputs are not always all of the same shape (kept for BC)
-        for i in range(len(encoding_slow.pixel_values)):
-            self._assert_slow_fast_tensors_equivalence(
-                torch.from_numpy(encoding_slow.pixel_values[i]), encoding_fast.pixel_values[i]
-            )
-        for i in range(len(encoding_slow.high_res_pixel_values)):
-            self._assert_slow_fast_tensors_equivalence(
-                torch.from_numpy(encoding_slow.high_res_pixel_values[i]), encoding_fast.high_res_pixel_values[i]
-            )
+        backend_names = list(encodings.keys())
+        reference_backend = "pil"
+        ref_pixel_values = encodings[reference_backend].pixel_values
+        ref_high_res = encodings[reference_backend].high_res_pixel_values
+
+        for backend_name in [backend_name for backend_name in backend_names if backend_name != reference_backend]:
+            for i in range(len(ref_pixel_values)):
+                self._assert_tensors_equivalence(
+                    torch.from_numpy(ref_pixel_values[i]), encodings[backend_name].pixel_values[i]
+                )
+            for i in range(len(ref_high_res)):
+                self._assert_tensors_equivalence(
+                    torch.from_numpy(ref_high_res[i]), encodings[backend_name].high_res_pixel_values[i]
+                )
 
     @unittest.skip(reason="Not supported")
     def test_call_numpy_4_channels(self):

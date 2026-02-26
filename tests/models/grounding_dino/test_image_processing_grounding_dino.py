@@ -33,10 +33,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import GroundingDinoImageProcessor
+    from transformers import GroundingDinoImageProcessorPil
 
-    if is_torchvision_available():
-        from transformers import GroundingDinoImageProcessorFast
+if is_torchvision_available():
+    from transformers import GroundingDinoImageProcessor
 
 
 class GroundingDinoImageProcessingTester:
@@ -149,11 +149,11 @@ class GroundingDinoImageProcessingTester:
 @require_torch
 @require_vision
 class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = GroundingDinoImageProcessor if is_vision_available() else None
-    fast_image_processing_class = GroundingDinoImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
-        super().setUp()
+        self.image_processing_classes = {
+            "torchvision": GroundingDinoImageProcessor,
+            "pil": GroundingDinoImageProcessorPil,
+        }
         self.image_processor_tester = GroundingDinoImageProcessingTester(self)
 
     @property
@@ -162,7 +162,7 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
 
     # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTest.test_image_processor_properties with DeformableDetr->GroundingDino
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -174,7 +174,7 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
 
     # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTest.test_image_processor_from_dict_with_kwargs with DeformableDetr->GroundingDino
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
             self.assertEqual(image_processor.do_pad, True)
@@ -183,7 +183,7 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
             self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 1333})
 
     def test_post_process_object_detection(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             outputs = self.image_processor_tester.get_fake_grounding_dino_output()
             results = image_processor.post_process_object_detection(outputs, threshold=0.0)
@@ -209,7 +209,7 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
 
         target = {"image_id": 39769, "annotations": target}
 
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # encode them
             image_processing = image_processing_class()
             encoding = image_processing(images=image, annotations=target, return_tensors="pt")
@@ -273,7 +273,7 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
         images = [image_0, image_1]
         annotations = [annotations_0, annotations_1]
 
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processing = image_processing_class()
             encoding = image_processing(
                 images=images,
@@ -377,7 +377,7 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
 
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # encode them
             image_processing = image_processing_class(format="coco_panoptic")
             encoding = image_processing(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
@@ -447,7 +447,7 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
         images = [image_0, image_1]
         annotations = [annotation_0, annotation_1]
 
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # encode them
             image_processing = image_processing_class(format="coco_panoptic")
             encoding = image_processing(
@@ -544,7 +544,7 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
 
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_max_width_max_height_resizing_and_pad_strategy with Detr->GroundingDino
     def test_max_width_max_height_resizing_and_pad_strategy(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_1 = torch.ones([200, 100, 3], dtype=torch.uint8)
 
             # do_pad=False, max_height=100, max_width=100, image=200x100 -> 100x50
@@ -591,53 +591,54 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
             self.assertEqual(inputs["pixel_values"].shape, torch.Size([2, 3, 150, 100]))
 
     def test_longest_edge_shortest_edge_resizing_strategy(self):
-        image_1 = torch.ones([958, 653, 3], dtype=torch.uint8)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_1 = torch.ones([958, 653, 3], dtype=torch.uint8)
 
-        # max size is set; width < height;
-        # do_pad=False, longest_edge=640, shortest_edge=640, image=958x653 -> 640x436
-        image_processor = GroundingDinoImageProcessor(
-            size={"longest_edge": 640, "shortest_edge": 640},
-            do_pad=False,
-        )
-        inputs = image_processor(images=[image_1], return_tensors="pt")
-        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 640, 436]))
+            # max size is set; width < height;
+            # do_pad=False, longest_edge=640, shortest_edge=640, image=958x653 -> 640x436
+            image_processor = image_processing_class(
+                size={"longest_edge": 640, "shortest_edge": 640},
+                do_pad=False,
+            )
+            inputs = image_processor(images=[image_1], return_tensors="pt")
+            self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 640, 436]))
 
-        image_2 = torch.ones([653, 958, 3], dtype=torch.uint8)
-        # max size is set; height < width;
-        # do_pad=False, longest_edge=640, shortest_edge=640, image=653x958 -> 436x640
-        image_processor = GroundingDinoImageProcessor(
-            size={"longest_edge": 640, "shortest_edge": 640},
-            do_pad=False,
-        )
-        inputs = image_processor(images=[image_2], return_tensors="pt")
-        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 436, 640]))
+            image_2 = torch.ones([653, 958, 3], dtype=torch.uint8)
+            # max size is set; height < width;
+            # do_pad=False, longest_edge=640, shortest_edge=640, image=653x958 -> 436x640
+            image_processor = image_processing_class(
+                size={"longest_edge": 640, "shortest_edge": 640},
+                do_pad=False,
+            )
+            inputs = image_processor(images=[image_2], return_tensors="pt")
+            self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 436, 640]))
 
-        image_3 = torch.ones([100, 120, 3], dtype=torch.uint8)
-        # max size is set; width == size; height > max_size;
-        # do_pad=False, longest_edge=118, shortest_edge=100, image=120x100 -> 118x98
-        image_processor = GroundingDinoImageProcessor(
-            size={"longest_edge": 118, "shortest_edge": 100},
-            do_pad=False,
-        )
-        inputs = image_processor(images=[image_3], return_tensors="pt")
-        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 98, 118]))
+            image_3 = torch.ones([100, 120, 3], dtype=torch.uint8)
+            # max size is set; width == size; height > max_size;
+            # do_pad=False, longest_edge=118, shortest_edge=100, image=120x100 -> 118x98
+            image_processor = image_processing_class(
+                size={"longest_edge": 118, "shortest_edge": 100},
+                do_pad=False,
+            )
+            inputs = image_processor(images=[image_3], return_tensors="pt")
+            self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 98, 118]))
 
-        image_4 = torch.ones([128, 50, 3], dtype=torch.uint8)
-        # max size is set; height == size; width < max_size;
-        # do_pad=False, longest_edge=256, shortest_edge=50, image=50x128 -> 50x128
-        image_processor = GroundingDinoImageProcessor(
-            size={"longest_edge": 256, "shortest_edge": 50},
-            do_pad=False,
-        )
-        inputs = image_processor(images=[image_4], return_tensors="pt")
-        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 128, 50]))
+            image_4 = torch.ones([128, 50, 3], dtype=torch.uint8)
+            # max size is set; height == size; width < max_size;
+            # do_pad=False, longest_edge=256, shortest_edge=50, image=50x128 -> 50x128
+            image_processor = image_processing_class(
+                size={"longest_edge": 256, "shortest_edge": 50},
+                do_pad=False,
+            )
+            inputs = image_processor(images=[image_4], return_tensors="pt")
+            self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 128, 50]))
 
-        image_5 = torch.ones([50, 50, 3], dtype=torch.uint8)
-        # max size is set; height == width; width < max_size;
-        # do_pad=False, longest_edge=117, shortest_edge=50, image=50x50 -> 50x50
-        image_processor = GroundingDinoImageProcessor(
-            size={"longest_edge": 117, "shortest_edge": 50},
-            do_pad=False,
-        )
-        inputs = image_processor(images=[image_5], return_tensors="pt")
-        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 50, 50]))
+            image_5 = torch.ones([50, 50, 3], dtype=torch.uint8)
+            # max size is set; height == width; width < max_size;
+            # do_pad=False, longest_edge=117, shortest_edge=50, image=50x50 -> 50x50
+            image_processor = image_processing_class(
+                size={"longest_edge": 117, "shortest_edge": 50},
+                do_pad=False,
+            )
+            inputs = image_processor(images=[image_5], return_tensors="pt")
+            self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 50, 50]))

@@ -163,12 +163,6 @@ class JanusImageProcessorPil(PilBackend):
                 image = self.normalize(image, image_mean, image_std)
             processed_images.append(image)
 
-        if return_tensors == "pt":
-            import torch
-
-            processed_images = [torch.from_numpy(img) for img in processed_images]
-            processed_images = torch.stack(processed_images, dim=0)
-
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def postprocess(

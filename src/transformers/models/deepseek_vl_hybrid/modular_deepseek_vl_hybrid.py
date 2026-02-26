@@ -13,36 +13,22 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Iterable, Union
 
 import torch
 import torch.nn as nn
-import torchvision.transforms.v2.functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    BatchFeature,
-    get_size_dict,
-    group_images_by_shape,
-    reorder_images,
-)
-from ...image_transforms import convert_to_rgb, to_channel_dimension_format
+from ...image_processing_backends import PilBackend, TorchvisionBackend
+from ...image_processing_utils import BatchFeature, get_size_dict
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
-    ChannelDimension,
     ImageInput,
     PILImageResampling,
     SizeDict,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    pil_torch_interpolation_mapping,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
 )
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ImagesKwargs, Unpack
@@ -55,13 +41,13 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    filter_out_non_signature_kwargs,
+    is_torchvision_available,
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..deepseek_vl.configuration_deepseek_vl import DeepseekVLConfig
 from ..deepseek_vl.image_processing_deepseek_vl import DeepseekVLImageProcessor
-from ..deepseek_vl.image_processing_deepseek_vl_fast import DeepseekVLImageProcessorFast
+from ..deepseek_vl.image_processing_pil_deepseek_vl import DeepseekVLImageProcessorPil
 from ..deepseek_vl.modeling_deepseek_vl import (
     DeepseekVLForConditionalGeneration,
     DeepseekVLModel,
@@ -71,6 +57,9 @@ from ..deepseek_vl.processing_deepseek_vl import DeepseekVLProcessor, DeepseekVL
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
 
+
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 logger = logging.get_logger(__name__)
 
@@ -512,305 +501,7 @@ class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
     high_res_image_std: float | list[float] | tuple[float, ...]
 
 
-class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
-    r"""
-    Constructs a DEEPSEEK_VL_HYBRID image processor.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
-            `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*, defaults to `{"height": 384, "width": 384}`):
-            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
-            method.
-        high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
-            Size of the high resolution output image after resizing. Can be overridden by the `high_res_size` parameter in the `preprocess`
-            method.
-        min_size (`int`, *optional*, defaults to 14):
-            The minimum allowed size for the resized image. Ensures that neither the height nor width
-            falls below this value after resizing.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
-            overridden by the `resample` parameter in the `preprocess` method.
-        high_res_resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
-            overridden by the `high_res_resample` parameter in the `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
-            overridden by the `rescale_factor` parameter in the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
-            overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            Can be overridden by the `image_std` parameter in the `preprocess` method.
-        high_res_image_mean (`float` or `list[float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
-            Mean to use if normalizing the high resolution image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `high_res_image_mean` parameter in the `preprocess` method.
-        high_res_image_std (`float` or `list[float]`, *optional*, defaults to `OPENAI_CLIP_STD`):
-            Standard deviation to use if normalizing the high resolution image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `high_res_image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to square or not.
-    """
-
-    model_input_names = ["pixel_values", "high_res_pixel_values"]
-    valid_kwargs = DeepseekVLHybridImageProcessorKwargs
-
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        high_res_size: dict[str, int] | None = None,
-        min_size: int = 14,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        high_res_resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        high_res_image_mean: float | list[float] | None = None,
-        high_res_image_std: float | list[float] | None = None,
-        do_convert_rgb: bool | None = None,
-        do_pad: bool = True,
-        **kwargs,
-    ) -> None:
-        high_res_size = high_res_size if high_res_size is not None else {"height": 1024, "width": 1024}
-        high_res_size = get_size_dict(high_res_size, default_to_square=True)
-
-        self.high_res_size = high_res_size
-        self.high_res_image_mean = high_res_image_mean if high_res_image_mean is not None else OPENAI_CLIP_MEAN
-        self.high_res_image_std = high_res_image_std if high_res_image_std is not None else OPENAI_CLIP_STD
-
-        self.resample = resample
-        self.high_res_resample = high_res_resample
-
-        super().__init__(
-            do_resize=do_resize,
-            size=size,
-            min_size=min_size,
-            resample=resample,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_convert_rgb=do_convert_rgb,
-            do_pad=do_pad,
-            **kwargs,
-        )
-
-        if high_res_image_mean is None:
-            self.high_res_background_color = (127, 127, 127)
-        else:
-            self.high_res_background_color = tuple(int(x * 255) for x in high_res_image_mean)
-
-    @filter_out_non_signature_kwargs()
-    def preprocess(
-        self,
-        images: ImageInput,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        high_res_size: dict[str, int] | None = None,
-        resample: PILImageResampling | None = None,
-        high_res_resample: PILImageResampling | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        high_res_image_mean: float | list[float] | None = None,
-        high_res_image_std: float | list[float] | None = None,
-        return_tensors: str | TensorType | None = None,
-        data_format: str | ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-        do_convert_rgb: bool | None = None,
-        do_pad: bool | None = None,
-        background_color: tuple[int, int, int] | None = None,
-    ):
-        """
-        Preprocess an image or batch of images.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
-                resizing.
-            high_res_size (`Dict[str, int]`, *optional*, defaults to `self.high_res_size`):
-                Dictionary in the format `{"height": h, "width": w}` specifying the size of the high resolution output image after
-                resizing.
-            resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
-                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
-                an effect if `do_resize` is set to `True`.
-            high_res_resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
-                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BICUBIC`. Only has
-                an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use if `do_normalize` is set to `True`.
-            high_res_image_mean (`float` or `List[float]`, *optional*, defaults to `self.high_res_image_mean`):
-                Image mean to use if `do_normalize` is set to `True`.
-            high_res_image_std (`float` or `List[float]`, *optional*, defaults to `self.high_res_image_std`):
-                Image standard deviation to use if `do_normalize` is set to `True`.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-                Whether to pad the image to square or not.
-            background_color (`tuple[int, int, int]`):
-                The background color to use for the padding.
-        """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        resample = resample if resample is not None else self.resample
-        high_res_resample = high_res_resample if high_res_resample is not None else self.high_res_resample
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        high_res_image_mean = high_res_image_mean if high_res_image_mean is not None else self.high_res_image_mean
-        high_res_image_std = high_res_image_std if high_res_image_std is not None else self.high_res_image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        do_pad = do_pad if do_pad is not None else self.do_pad
-        background_color = background_color if background_color is not None else self.background_color
-
-        size = size if size is not None else self.size
-        size_dict = get_size_dict(size)
-        high_res_size = high_res_size if high_res_size is not None else self.high_res_size
-        high_res_size_dict = get_size_dict(high_res_size)
-
-        images = self.fetch_images(images)
-        images = make_flat_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if do_rescale and is_scaled_image(images[0]):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        all_images = []
-        all_high_res_images = []
-        for image in images:
-            # high_res_image: resize (high) -> rescale -> normalize (high)
-            # low_res_image:  resize (high) -> rescale -> resize (low) -> normalize (low)
-            high_res_image = image
-            if do_resize:
-                high_res_image = self.resize(
-                    image=high_res_image,
-                    size=high_res_size_dict,
-                    resample=high_res_resample,
-                    input_data_format=input_data_format,
-                )
-                if do_pad:
-                    # Expand and pad the images to obtain a square image of dimensions `size x size`
-                    high_res_image = self.pad_to_square(
-                        image=high_res_image,
-                        background_color=background_color,
-                        input_data_format=input_data_format,
-                    )
-                image = self.resize(
-                    image=high_res_image,
-                    size=size_dict,
-                    resample=resample,
-                    input_data_format=input_data_format,
-                )
-                if do_pad:
-                    image = self.pad_to_square(
-                        image=image,
-                        background_color=background_color,
-                        input_data_format=input_data_format,
-                    )
-
-            if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                high_res_image = self.rescale(
-                    image=high_res_image, scale=rescale_factor, input_data_format=input_data_format
-                )
-
-            if do_normalize:
-                image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                )
-                high_res_image = self.normalize(
-                    image=high_res_image,
-                    mean=high_res_image_mean,
-                    std=high_res_image_std,
-                    input_data_format=input_data_format,
-                )
-
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            high_res_image = to_channel_dimension_format(
-                high_res_image, data_format, input_channel_dim=input_data_format
-            )
-
-            all_images.append(image)
-            all_high_res_images.append(high_res_image)
-
-        data = {"pixel_values": all_images, "high_res_pixel_values": all_high_res_images}
-        return BatchFeature(data=data, tensor_type=return_tensors)
-
-
-class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
+class DeepseekVLHybridImageProcessorPil(DeepseekVLImageProcessorPil):
     high_res_image_mean = OPENAI_CLIP_MEAN
     high_res_image_std = OPENAI_CLIP_STD
     high_res_size = {"height": 1024, "width": 1024}
@@ -826,20 +517,19 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
             high_res_background_color = (127, 127, 127)
         else:
             high_res_background_color = tuple(int(x * 255) for x in kwargs.get("high_res_image_mean"))
-        BaseImageProcessorFast.__init__(self, **kwargs)
+        PilBackend.__init__(self, **kwargs)
         self.background_color = tuple(background_color)
         self.high_res_background_color = tuple(high_res_background_color)
 
     def _standardize_kwargs(
         self,
-        size: SizeDict | None = None,
-        high_res_size: SizeDict | None = None,
+        size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        high_res_size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
         default_to_square: bool | None = None,
         image_mean: float | list[float] | None = None,
         image_std: float | list[float] | None = None,
         high_res_image_mean: float | list[float] | None = None,
         high_res_image_std: float | list[float] | None = None,
-        data_format: ChannelDimension | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -848,9 +538,9 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
         """
         if kwargs is None:
             kwargs = {}
-        if size is not None:
+        if size is not None and not isinstance(size, SizeDict):
             size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
-        if high_res_size is not None:
+        if high_res_size is not None and not isinstance(high_res_size, SizeDict):
             high_res_size = SizeDict(**get_size_dict(size=high_res_size, default_to_square=default_to_square))
         if isinstance(image_mean, list):
             image_mean = tuple(image_mean)
@@ -860,22 +550,6 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
             high_res_image_mean = tuple(high_res_image_mean)
         if isinstance(high_res_image_std, list):
             high_res_image_std = tuple(high_res_image_std)
-        if data_format is None:
-            data_format = ChannelDimension.FIRST
-
-        high_res_resample = kwargs.pop("high_res_resample")
-        kwargs["high_res_interpolation"] = (
-            pil_torch_interpolation_mapping[high_res_resample]
-            if isinstance(high_res_resample, (int, PILImageResampling))
-            else high_res_resample
-        )
-
-        low_res_resample = kwargs.pop("resample")
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[low_res_resample]
-            if isinstance(low_res_resample, (int, PILImageResampling))
-            else low_res_resample
-        )
 
         kwargs["size"] = size
         kwargs["high_res_size"] = high_res_size
@@ -883,7 +557,6 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
         kwargs["image_std"] = image_std
         kwargs["high_res_image_mean"] = high_res_image_mean
         kwargs["high_res_image_std"] = high_res_image_std
-        kwargs["data_format"] = data_format
 
         return kwargs
 
@@ -894,8 +567,119 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
         size: SizeDict,
         high_res_size: SizeDict,
         min_size: int,
-        interpolation: Optional["tvF.InterpolationMode"],
-        high_res_interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        high_res_resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        high_res_image_mean: float | list[float] | None,
+        high_res_image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
+        do_pad: bool = True,
+        **kwargs,
+    ) -> BatchFeature:
+        high_res_processed_images = []
+        processed_images = []
+        for image in images:
+            # high_res_image: resize (high) -> rescale -> normalize (high)
+            # low_res_image:  resize (high) -> rescale -> resize (low) -> normalize (low)
+            high_res_image = image
+            if do_resize:
+                high_res_image = self.resize(
+                    image=high_res_image, size=high_res_size, min_size=min_size, resample=high_res_resample
+                )
+                if do_pad:
+                    high_res_image = self.pad_to_square(
+                        high_res_image, background_color=self.high_res_background_color
+                    )
+                image = self.resize(image=high_res_image, size=size, min_size=min_size, resample=resample)
+                if do_pad:
+                    image = self.pad_to_square(image, background_color=self.background_color)
+            if do_rescale:
+                high_res_image = self.rescale(high_res_image, rescale_factor)
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                high_res_image = self.normalize(high_res_image, high_res_image_mean, high_res_image_std)
+                image = self.normalize(image, image_mean, image_std)
+            processed_images.append(image)
+            high_res_processed_images.append(high_res_image)
+
+        return BatchFeature(
+            data={"pixel_values": processed_images, "high_res_pixel_values": high_res_processed_images},
+            tensor_type=return_tensors,
+        )
+
+
+class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
+    high_res_image_mean = OPENAI_CLIP_MEAN
+    high_res_image_std = OPENAI_CLIP_STD
+    high_res_size = {"height": 1024, "width": 1024}
+    high_res_resample = PILImageResampling.BICUBIC
+    model_input_names = ["pixel_values", "high_res_pixel_values"]
+
+    def __init__(self, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]):
+        if kwargs.get("image_mean") is None:
+            background_color = (127, 127, 127)
+        else:
+            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
+        if kwargs.get("high_res_image_mean") is None:
+            high_res_background_color = (127, 127, 127)
+        else:
+            high_res_background_color = tuple(int(x * 255) for x in kwargs.get("high_res_image_mean"))
+        TorchvisionBackend.__init__(self, **kwargs)
+        self.background_color = tuple(background_color)
+        self.high_res_background_color = tuple(high_res_background_color)
+
+    def _standardize_kwargs(
+        self,
+        size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        high_res_size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        default_to_square: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        high_res_image_mean: float | list[float] | None = None,
+        high_res_image_std: float | list[float] | None = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Update kwargs that need further processing before being validated
+        Can be overridden by subclasses to customize the processing of kwargs.
+        """
+        if kwargs is None:
+            kwargs = {}
+        if size is not None and not isinstance(size, SizeDict):
+            size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
+        if high_res_size is not None and not isinstance(high_res_size, SizeDict):
+            high_res_size = SizeDict(**get_size_dict(size=high_res_size, default_to_square=default_to_square))
+        if isinstance(image_mean, list):
+            image_mean = tuple(image_mean)
+        if isinstance(image_std, list):
+            image_std = tuple(image_std)
+        if isinstance(high_res_image_mean, list):
+            high_res_image_mean = tuple(high_res_image_mean)
+        if isinstance(high_res_image_std, list):
+            high_res_image_std = tuple(high_res_image_std)
+
+        kwargs["size"] = size
+        kwargs["high_res_size"] = high_res_size
+        kwargs["image_mean"] = image_mean
+        kwargs["image_std"] = image_std
+        kwargs["high_res_image_mean"] = high_res_image_mean
+        kwargs["high_res_image_std"] = high_res_image_std
+
+        return kwargs
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        high_res_size: SizeDict,
+        min_size: int,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        high_res_resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -914,7 +698,7 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_high_res_images = self.resize(
-                    image=stacked_images, size=high_res_size, min_size=min_size, interpolation=high_res_interpolation
+                    image=stacked_images, size=high_res_size, min_size=min_size, resample=high_res_resample
                 )
             high_res_resized_images_grouped[shape] = stacked_high_res_images
         high_res_resized_images = reorder_images(high_res_resized_images_grouped, grouped_images_index)
@@ -933,7 +717,7 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
                 )
                 high_res_padded_images[shape] = stacked_high_res_images
             # Fused rescale and normalize
-            stacked_high_res_images = self.rescale_and_normalize(
+            stacked_high_res_images = self._rescale_and_normalize(
                 stacked_high_res_images,
                 do_rescale,
                 rescale_factor,
@@ -948,7 +732,7 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
         for shape, stacked_high_res_padded_images in high_res_padded_images.items():
             if do_resize:
                 stacked_images = self.resize(
-                    image=stacked_high_res_padded_images, size=size, min_size=min_size, interpolation=interpolation
+                    image=stacked_high_res_padded_images, size=size, min_size=min_size, resample=resample
                 )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_high_res_images_index)
@@ -961,7 +745,7 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
             if do_pad:
                 stacked_images = self.pad_to_square(stacked_images, background_color=self.background_color)
             # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
+            stacked_images = self._rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images
@@ -1029,6 +813,6 @@ __all__ = [
     "DeepseekVLHybridModel",
     "DeepseekVLHybridForConditionalGeneration",
     "DeepseekVLHybridImageProcessor",
-    "DeepseekVLHybridImageProcessorFast",
+    "DeepseekVLHybridImageProcessorPil",
     "DeepseekVLHybridProcessor",
 ]

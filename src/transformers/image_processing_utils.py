@@ -16,7 +16,7 @@ import math
 from collections.abc import Iterable
 from copy import deepcopy
 from functools import partial
-from typing import Any, Union
+from typing import Any
 
 from huggingface_hub.dataclasses import validate_typed_dict
 
@@ -352,7 +352,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         size: SizeDict | None = None,
         do_center_crop: bool | None = None,
         crop_size: SizeDict | None = None,
-        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
         **kwargs,
     ):
         """

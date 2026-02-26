@@ -32,10 +32,14 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings
+from ...utils import TensorType, add_start_docstrings, is_torchvision_available
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_glm46v import smart_resize
+
+
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 
 class Glm46VVideoProcessorInitKwargs(VideosKwargs, total=False):
@@ -182,7 +186,7 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict | None = None,
-        interpolation: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
@@ -214,7 +218,7 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
                 stacked_videos = self.resize(
                     stacked_videos,
                     size=SizeDict(height=resized_height, width=resized_width),
-                    interpolation=interpolation,
+                    resample=resample,
                 )
                 stacked_videos = stacked_videos.view(B, T, C, resized_height, resized_width)
             resized_videos_grouped[shape] = stacked_videos
