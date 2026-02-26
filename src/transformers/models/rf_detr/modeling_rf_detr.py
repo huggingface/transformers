@@ -2030,16 +2030,15 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         target_size = (image_size[0] // self.downsample_ratio, image_size[1] // self.downsample_ratio)
         spatial_features = F.interpolate(spatial_features, size=target_size, mode="bilinear", align_corners=False)
 
-        list_mask_logits = []
         if not skip_blocks:
+            list_mask_logits = []
             for block, query_features in zip(self.blocks, list_query_features):
                 spatial_features = block(spatial_features)
                 spatial_features_proj = self.spatial_features_proj(spatial_features)
                 mask_logits = self.get_mask_logits(query_features, spatial_features_proj)
                 list_mask_logits.append(mask_logits)
         else:
-            mask_logits = self.get_mask_logits(list_query_features, spatial_features)
-            list_mask_logits.append(mask_logits)
+            list_mask_logits = self.get_mask_logits(list_query_features, spatial_features)
 
         return list_mask_logits
 
@@ -2064,14 +2063,12 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         # First stage segmentation proposals
         enc_outputs_class_logits = self.rf_detr.get_encoder_outputs_class_logits(enc_outputs_class)
         enc_outputs_masks = self.segmentation_head(spatial_features, enc_outputs_class, image_size, skip_blocks=True)
-        enc_outputs_masks = torch.cat(enc_outputs_masks, dim=1)
 
         # Second stage segmentation proposals
         logits = self.rf_detr.class_embed(last_hidden_states)
         pred_boxes_delta = self.rf_detr.bbox_embed(last_hidden_states)
         pred_boxes = refine_bboxes(intermediate_reference_points[-1], pred_boxes_delta)
         outputs_masks = self.segmentation_head(spatial_features, outputs.intermediate_hidden_states, image_size)
-
         pred_masks = outputs_masks[-1]
 
         loss, loss_dict, auxiliary_outputs = None, None, None
