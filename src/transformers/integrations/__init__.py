@@ -117,9 +117,9 @@ _import_structure = {
         "run_hp_search_wandb",
     ],
     "liger": ["apply_liger_kernel"],
-    "mlx_quantization": [
-        "MlxLinear",
-        "replace_with_mlx_linear",
+    "metal_quantization": [
+        "MetalLinear",
+        "replace_with_metal_linear",
     ],
     "moe": [
         "batched_mm_experts_forward",
@@ -269,9 +269,9 @@ if TYPE_CHECKING:
         run_hp_search_wandb,
     )
     from .liger import apply_liger_kernel
-    from .mlx_quantization import (
-        MlxLinear,
-        replace_with_mlx_linear,
+    from .metal_quantization import (
+        MetalLinear,
+        replace_with_metal_linear,
     )
     from .moe import (
         batched_mm_experts_forward,

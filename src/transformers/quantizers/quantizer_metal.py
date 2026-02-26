@@ -27,9 +27,9 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class MlxHfQuantizer(HfQuantizer):
+class MetalHfQuantizer(HfQuantizer):
     """
-    Quantizer for MLX affine quantization on Apple Silicon (MPS) devices.
+    Quantizer for Metal affine quantization on Apple Silicon (MPS) devices.
 
     Uses the ``quantization-mlx`` Metal kernels from the Hub to pack weights into
     low-bit (2/4/8) uint32 tensors with per-group scales and biases, and performs
@@ -43,7 +43,7 @@ class MlxHfQuantizer(HfQuantizer):
 
     def validate_environment(self, *args, **kwargs):
         if not is_torch_available():
-            raise ImportError("MLX quantization requires PyTorch. Please install torch.")
+            raise ImportError("Metal quantization requires PyTorch. Please install torch.")
 
         if self.quantization_config.dequantize:
             return
@@ -51,52 +51,51 @@ class MlxHfQuantizer(HfQuantizer):
         if not torch.backends.mps.is_available():
             if self.pre_quantized:
                 logger.warning_once(
-                    "MLX quantization requires an Apple Silicon GPU (MPS), but none is available. "
+                    "Metal quantization requires an Apple Silicon GPU (MPS), but none is available. "
                     "We will default to dequantizing the model to the original dtype."
                 )
                 self.quantization_config.dequantize = True
                 return
             else:
-                raise RuntimeError("MLX quantization requires an Apple Silicon GPU (MPS). No MPS device found.")
+                raise RuntimeError("Metal quantization requires an Apple Silicon GPU (MPS). No MPS device found.")
 
         if not is_kernels_available():
-            raise ImportError("MLX quantization requires kernels: `pip install kernels`")
+            raise ImportError("Metal quantization requires kernels: `pip install kernels`")
 
         if not is_accelerate_available():
-            raise ImportError("MLX quantization requires accelerate: `pip install accelerate`")
+            raise ImportError("Metal quantization requires accelerate: `pip install accelerate`")
 
         device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
-                "You have loaded an MLX quantized model on CPU and have an MPS device available. "
+                "You have loaded a Metal quantized model on CPU and have an MPS device available. "
                 "Set device_map='mps' to use the Metal kernels."
             )
         elif isinstance(device_map, dict):
             if not self.pre_quantized and ("cpu" in device_map.values() or "disk" in device_map.values()):
                 raise ValueError(
-                    "MLX quantization on the fly does not support CPU or disk in the device_map. "
+                    "Metal quantization on the fly does not support CPU or disk in the device_map. "
                     "Please use a pre-quantized checkpoint or remove CPU/disk from device_map."
                 )
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        from ..integrations.mlx_quantization import MlxLinear
+        from ..integrations.metal_quantization import MetalLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, MlxLinear):
-            # Don't quantize bias, scales, or qbiases — only the weight
+        if isinstance(module, MetalLinear):
             if self.pre_quantized or tensor_name != "weight":
                 return False
             return True
         return False
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from ..integrations.mlx_quantization import replace_with_mlx_linear
+        from ..integrations.metal_quantization import replace_with_metal_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
-        model = replace_with_mlx_linear(
+        model = replace_with_metal_linear(
             model,
             modules_to_not_convert=self.modules_to_not_convert,
             quantization_config=self.quantization_config,
@@ -114,20 +113,20 @@ class MlxHfQuantizer(HfQuantizer):
         return False
 
     def get_quantize_ops(self):
-        from ..integrations.mlx_quantization import MlxQuantize
+        from ..integrations.metal_quantization import MetalQuantize
 
-        return MlxQuantize(self)
+        return MetalQuantize(self)
 
     def get_weight_conversions(self):
         from ..core_model_loading import WeightConverter
-        from ..integrations.mlx_quantization import MlxDequantize
+        from ..integrations.metal_quantization import MetalDequantize
 
         if self.pre_quantized and self.quantization_config.dequantize:
             return [
                 WeightConverter(
                     source_patterns=["weight$", "scales", "qbiases"],
                     target_patterns="weight",
-                    operations=[MlxDequantize(self)],
+                    operations=[MetalDequantize(self)],
                 )
             ]
         return []

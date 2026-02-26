@@ -13,19 +13,19 @@
 # limitations under the License.
 
 """
-MLX affine quantization integration for transformers.
+Metal affine quantization integration for transformers.
 
 This module provides:
-  - ``MlxLinear``: a drop-in replacement for ``nn.Linear`` that stores weights
+  - ``MetalLinear``: a drop-in replacement for ``nn.Linear`` that stores weights
     as affine-quantized uint32 packed tensors and uses the ``quantization-mlx``
     Metal kernels for the forward pass.
-  - ``replace_with_mlx_linear``: walks a model and swaps every eligible
-    ``nn.Linear`` with ``MlxLinear``.
-  - ``MlxQuantize`` / ``MlxDequantize``: weight conversion operations that
+  - ``replace_with_metal_linear``: walks a model and swaps every eligible
+    ``nn.Linear`` with ``MetalLinear``.
+  - ``MetalQuantize`` / ``MetalDequantize``: weight conversion operations that
     participate in the new ``WeightConverter`` pipeline.
 
 Weight layout (transposed, matching ``affine_qmm_t``):
-  - ``weight``: ``[N, K_packed]`` (``uint32``) — K is the packed dimension.
+  - ``weight``: ``[N, K_packed]`` (``uint32``) -- K is the packed dimension.
   - ``scales``:  ``[N, K // group_size]`` (``float16 / bfloat16``)
   - ``qbiases``: ``[N, K // group_size]`` (same dtype as scales)
 
@@ -45,33 +45,32 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
-# Lazily loaded kernel module from the Hub
-_mlx_kernel = None
+_metal_kernel = None
 
 
-def _get_mlx_kernel():
+def _get_metal_kernel():
     """Lazily load the quantization-mlx kernel from Hugging Face Hub."""
-    global _mlx_kernel
-    if _mlx_kernel is None:
+    global _metal_kernel
+    if _metal_kernel is None:
         try:
             from .hub_kernels import get_kernel
 
-            _mlx_kernel = get_kernel("medmekk/quantization-mlx")
+            _metal_kernel = get_kernel("medmekk/quantization-mlx")
         except Exception as e:
             raise ImportError(
                 f"Failed to load the quantization-mlx kernel from the Hub: {e}. "
                 "Make sure you have `kernels` installed (`pip install kernels`) "
                 "and are running on an Apple Silicon machine."
             ) from e
-    return _mlx_kernel
+    return _metal_kernel
 
 
 # ---------------------------------------------------------------------------
-# MlxLinear — the quantized nn.Linear replacement
+# MetalLinear -- the quantized nn.Linear replacement
 # ---------------------------------------------------------------------------
 
 
-class MlxLinear(nn.Linear):
+class MetalLinear(nn.Linear):
     """
     A quantized linear layer that stores weights in affine uint32 packed format
     and uses the ``quantization-mlx`` Metal kernels for the forward pass.
@@ -101,23 +100,19 @@ class MlxLinear(nn.Linear):
 
         # default dtype=torch.uint32 is used for
         # pre-quantized loading (packed uint32 weights from checkpoint).
-        # When quantize-on-the-fly, replace_with_mlx_linear passes dtype=None
+        # When quantize-on-the-fly, replace_with_metal_linear passes dtype=None
         # which creates a full-shape float weight so the loader can fill it
-        # with the original checkpoint values before MlxQuantize converts them.
+        # with the original checkpoint values before MetalQuantize converts them.
         if dtype == torch.uint32:
-            # Pre-quantized: packed shape [N, K_packed] in uint32
             self.weight = nn.Parameter(torch.zeros(out_features, k_packed, dtype=torch.uint32), requires_grad=False)
         else:
-            # Quantize-on-the-fly: full shape [N, K] in the original dtype
-            # (dtype=None → PyTorch default float). The MlxQuantize ConversionOp
-            # will transform this into packed uint32 + scales + qbiases.
             self.weight = nn.Parameter(torch.zeros(out_features, in_features, dtype=dtype), requires_grad=False)
 
         # For pre-quantized (dtype==uint32): scales/qbiases will be loaded
         # from the checkpoint in whatever dtype they were saved as.
-        # For quantize-on-the-fly (dtype==None/float): MlxQuantize will set
+        # For quantize-on-the-fly (dtype==None/float): MetalQuantize will set
         # them in the original weight's dtype (e.g. bfloat16).
-        # We use float16 as the placeholder — it gets overwritten either way.
+        # We use float16 as the placeholder -- it gets overwritten either way.
         scales_dtype = torch.float16 if dtype == torch.uint32 else (dtype or torch.float16)
         self.scales = nn.Parameter(torch.zeros(out_features, n_groups, dtype=scales_dtype), requires_grad=False)
         self.qbiases = nn.Parameter(torch.zeros(out_features, n_groups, dtype=scales_dtype), requires_grad=False)
@@ -131,7 +126,7 @@ class MlxLinear(nn.Linear):
         if self.weight.dtype not in (torch.uint32, torch.int32):
             return nn.functional.linear(input, self.weight, self.bias)
 
-        kernel = _get_mlx_kernel()
+        kernel = _get_metal_kernel()
 
         # affine_qmm_t: y = x @ dequant(w).T
         # x: [..., M, K],  w: [N, K_packed],  scales/qbiases: [N, K//gs]
@@ -151,19 +146,19 @@ class MlxLinear(nn.Linear):
         return output
 
 
-def replace_with_mlx_linear(
+def replace_with_metal_linear(
     model,
     modules_to_not_convert: list[str] | None = None,
     quantization_config=None,
     pre_quantized: bool = False,
 ):
     """
-    replace every eligible ``nn.Linear`` with ``MlxLinear``.
+    Replace every eligible ``nn.Linear`` with ``MetalLinear``.
 
     Args:
         model: the ``PreTrainedModel`` (on the meta device at this point).
         modules_to_not_convert: module names to leave untouched.
-        quantization_config: the ``MlxConfig`` instance.
+        quantization_config: the ``MetalConfig`` instance.
         pre_quantized: ``True`` when loading from a quantized checkpoint.
     """
     if quantization_config.dequantize:
@@ -179,15 +174,10 @@ def replace_with_mlx_linear(
             continue
 
         if isinstance(module, nn.Linear):
-            # Following the FP8 pattern: when pre-quantized, don't pass dtype
-            # so the default (torch.uint32) is used → packed uint32 weights.
-            # When quantize-on-the-fly, pass dtype=None so the weight is
-            # created with full shape in the default float dtype, allowing the
-            # loader to fill it before MlxQuantize converts it.
             module_kwargs = {} if pre_quantized else {"dtype": None}
 
             with torch.device("meta"):
-                new_module = MlxLinear(
+                new_module = MetalLinear(
                     in_features=module.in_features,
                     out_features=module.out_features,
                     bias=module.bias is not None,
@@ -201,7 +191,7 @@ def replace_with_mlx_linear(
 
     if not has_been_replaced:
         logger.warning(
-            "You are loading a model with MLX quantization but no nn.Linear modules were found. "
+            "You are loading a model with Metal quantization but no nn.Linear modules were found. "
             "Please double check your model architecture."
         )
 
@@ -264,7 +254,7 @@ def _affine_dequantize_tensor(
     return w_deq.reshape(N, K)
 
 
-class MlxQuantize(ConversionOps):
+class MetalQuantize(ConversionOps):
     """
     Quantize a full-precision weight tensor into (weight_packed, scales, qbiases).
 
@@ -283,15 +273,11 @@ class MlxQuantize(ConversionOps):
 
         w_packed, scales, biases = _affine_quantize_tensor(value, group_size, bits)
 
-        # Derive the sibling key names
         base = target_key.rsplit(".", 1)[0] if "." in target_key else ""
         scale_key = f"{base}.scales" if base else "scales"
         bias_key = f"{base}.qbiases" if base else "qbiases"
 
-        # Store scales/qbiases in the same dtype as the original weight so the
-        # Metal kernel (which templates on x.scalar_type()) can use them
-        # directly without a per-forward cast.
-        orig_dtype = value.dtype  # e.g. bfloat16 for Llama
+        orig_dtype = value.dtype
         return {
             target_key: w_packed,
             scale_key: scales.to(orig_dtype),
@@ -299,7 +285,7 @@ class MlxQuantize(ConversionOps):
         }
 
 
-class MlxDequantize(ConversionOps):
+class MetalDequantize(ConversionOps):
     """
     Dequantize (weight_packed, scales, qbiases) back to a full-precision tensor.
 
@@ -314,7 +300,6 @@ class MlxDequantize(ConversionOps):
         bits = self.hf_quantizer.quantization_config.bits
         group_size = self.hf_quantizer.quantization_config.group_size
 
-        # The WeightConverter collects tensors matching source_patterns
         quantized = input_dict.get("weight$")
         if quantized is None:
             quantized = next(iter(input_dict.values()))
@@ -327,7 +312,6 @@ class MlxDequantize(ConversionOps):
         qbiases = qbiases[0] if isinstance(qbiases, list) else qbiases
 
         if scales is None or qbiases is None:
-            # Only the weight was found; return as-is (probably already float)
             return {full_layer_name: quantized}
 
         w_deq = _affine_dequantize_tensor(quantized, scales, qbiases, group_size, bits)

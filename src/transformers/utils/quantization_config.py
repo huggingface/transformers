@@ -62,7 +62,7 @@ class QuantizationMethod(str, Enum):
     FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
-    MLX = "mlx"
+    METAL = "metal"
     FOUR_OVER_SIX = "fouroversix"
     SINQ = "sinq"
 
@@ -1911,9 +1911,9 @@ class Mxfp4Config(QuantizationConfigMixin):
         return {"quant_method": self.quant_method, "modules_to_not_convert": self.modules_to_not_convert}
 
 
-class MlxConfig(QuantizationConfigMixin):
+class MetalConfig(QuantizationConfigMixin):
     """
-    Configuration class for MLX affine quantization targeting Apple Silicon (MPS) devices.
+    Configuration class for Metal affine quantization targeting Apple Silicon (MPS) devices.
 
     This quantization method uses the ``quantization-mlx`` Metal kernels from the Hugging Face Hub
     to perform affine quantization (scales + qbiases) with configurable bit-width and group size.
@@ -1940,7 +1940,7 @@ class MlxConfig(QuantizationConfigMixin):
         dequantize: bool = False,
         **kwargs,
     ):
-        self.quant_method = QuantizationMethod.MLX
+        self.quant_method = QuantizationMethod.METAL
         self.bits = bits
         self.group_size = group_size
         self.modules_to_not_convert = modules_to_not_convert
@@ -1949,7 +1949,7 @@ class MlxConfig(QuantizationConfigMixin):
 
     def post_init(self):
         if self.bits not in (2, 4, 8):
-            raise ValueError(f"MLX quantization only supports bits in {{2, 4, 8}}, got {self.bits}")
+            raise ValueError(f"Metal quantization only supports bits in {{2, 4, 8}}, got {self.bits}")
         if self.group_size <= 0:
             raise ValueError(f"group_size must be positive, got {self.group_size}")
 
