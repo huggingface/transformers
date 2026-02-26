@@ -30,6 +30,7 @@ from ...utils import auto_docstring, logging
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
+from .image_processing_idefics3 import Idefics3ImageProcessorKwargs
 
 logger = logging.get_logger(__name__)
 
@@ -87,6 +88,7 @@ def get_image_prompt_string(
 
 
 class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Idefics3ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,

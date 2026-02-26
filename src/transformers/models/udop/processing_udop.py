@@ -22,6 +22,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
+from ..layoutlmv3.image_processing_layoutlmv3 import LayoutLMv3ImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
@@ -33,6 +34,7 @@ class UdopTextKwargs(TextKwargs, total=False):
 
 
 class UdopProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: LayoutLMv3ImageProcessorKwargs
     text_kwargs: UdopTextKwargs
     _defaults = {
         "text_kwargs": {

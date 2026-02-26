@@ -27,6 +27,7 @@ from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, Videos
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 from ...video_utils import VideoInput
+from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessorKwargs
 
 
 # Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
@@ -78,6 +79,7 @@ class Qwen2_5_OmniVideosKwargs(VideosKwargs, total=False):
 
 
 class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Qwen2VLImageProcessorKwargs
     videos_kwargs: Qwen2_5_OmniVideosKwargs
 
     _defaults = {

@@ -20,6 +20,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from .image_processing_janus import JanusImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
@@ -43,6 +44,7 @@ class JanusTextKwargs(TextKwargs, total=False):
 
 
 class JanusProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: JanusImageProcessorKwargs
     text_kwargs: JanusTextKwargs
     _defaults = {
         "text_kwargs": {"padding": False, "generation_mode": "text"},

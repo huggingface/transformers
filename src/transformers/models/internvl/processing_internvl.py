@@ -21,9 +21,11 @@ from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 from ...video_utils import VideoInput
+from ..got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessorKwargs
 
 
 class InternVLProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: GotOcr2ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding_side": "left",

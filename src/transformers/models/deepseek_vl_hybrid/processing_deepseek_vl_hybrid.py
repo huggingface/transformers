@@ -23,9 +23,11 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
+from .image_processing_deepseek_vl_hybrid import DeepseekVLHybridImageProcessorKwargs
 
 
 class DeepseekVLHybridProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: DeepseekVLHybridImageProcessorKwargs
     _defaults = {
         "text_kwargs": {"padding": False},
         "common_kwargs": {"return_tensors": "pt"},

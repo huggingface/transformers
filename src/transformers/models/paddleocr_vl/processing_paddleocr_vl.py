@@ -30,9 +30,11 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from .image_processing_paddleocr_vl import PaddleOCRVLImageProcessorKwargs
 
 
 class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: PaddleOCRVLImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,

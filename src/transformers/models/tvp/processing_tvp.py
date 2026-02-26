@@ -17,9 +17,11 @@ Processor class for TVP.
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
+from .image_processing_tvp import TvpImageProcessorKwargs
 
 
 class TvpProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: TvpImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "truncation": True,

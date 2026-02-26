@@ -41,6 +41,7 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
+from .image_processing_fuyu import FuyuImagesKwargs
 
 
 TEXT_REPR_BBOX_OPEN = "<box>"
@@ -56,6 +57,7 @@ BEGINNING_OF_ANSWER_STRING = "<0x04>"  # <boa>
 
 
 class FuyuProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: FuyuImagesKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,

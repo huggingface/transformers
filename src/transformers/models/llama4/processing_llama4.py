@@ -19,9 +19,11 @@ from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...utils import auto_docstring
+from .image_processing_llama4_fast import Llama4ImageProcessorKwargs
 
 
 class Llama4ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Llama4ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding_side": "left",

@@ -18,12 +18,14 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from .image_processing_ovis2 import Ovis2ImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
 
 
 class Ovis2ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Ovis2ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,

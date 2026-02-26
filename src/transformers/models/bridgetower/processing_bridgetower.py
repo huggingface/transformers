@@ -17,9 +17,11 @@ Processor class for BridgeTower.
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
+from .image_processing_bridgetower import BridgeTowerImageProcessorKwargs
 
 
 class BridgeTowerProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: BridgeTowerImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,

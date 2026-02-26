@@ -32,6 +32,7 @@ from ...utils import auto_docstring, logging
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
+from .image_processing_idefics2 import Idefics2ImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
@@ -46,6 +47,7 @@ def is_image_or_image_url(elem):
 
 
 class Idefics2ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Idefics2ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,

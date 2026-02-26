@@ -21,9 +21,11 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, to_py_obj
+from .image_processing_gemma3 import Gemma3ImageProcessorKwargs
 
 
 class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Gemma3ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,

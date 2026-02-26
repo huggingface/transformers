@@ -26,12 +26,14 @@ from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
+from .image_processing_video_llama_3 import VideoLlama3ImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
 
 
 class VideoLlama3ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: VideoLlama3ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,

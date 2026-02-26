@@ -21,9 +21,11 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
+from .image_processing_mllama import MllamaImageProcessorKwargs
 
 
 class MllamaProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: MllamaImageProcessorKwargs
     _defaults = {
         "image_kwargs": {
             "max_image_tiles": 4,

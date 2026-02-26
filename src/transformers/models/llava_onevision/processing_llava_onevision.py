@@ -27,12 +27,14 @@ from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
+from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
 
 
 class LlavaOnevisionProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: LlavaOnevisionImageProcessorKwargs
     # see processing_utils.ProcessingKwargs documentation for usage.
     _defaults = {
         "text_kwargs": {

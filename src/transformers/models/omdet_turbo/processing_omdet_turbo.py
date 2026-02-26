@@ -33,6 +33,7 @@ from ...utils.import_utils import requires
 
 if TYPE_CHECKING:
     from .modeling_omdet_turbo import OmDetTurboObjectDetectionOutput
+from ..detr.image_processing_detr import DetrImageProcessorKwargs
 
 
 class OmDetTurboTextKwargs(TextKwargs, total=False):
@@ -55,6 +56,7 @@ if is_torchvision_available():
 
 
 class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: DetrImageProcessorKwargs
     text_kwargs: OmDetTurboTextKwargs
     _defaults = {
         "text_kwargs": {

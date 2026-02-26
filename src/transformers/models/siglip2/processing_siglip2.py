@@ -17,9 +17,11 @@ Image/Text processor class for SigLIP2.
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
+from .image_processing_siglip2 import Siglip2ImageProcessorKwargs
 
 
 class Siglip2ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Siglip2ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": "max_length",

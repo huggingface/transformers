@@ -24,6 +24,7 @@ from ...processing_utils import AllKwargsForChatTemplate, ProcessingKwargs, Proc
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import auto_docstring, is_num2words_available, is_vision_available, logging
 from ...video_utils import VideoInput
+from .image_processing_smolvlm import SmolVLMImageProcessorKwargs
 
 
 if is_vision_available():
@@ -96,6 +97,7 @@ def get_image_prompt_string(
 
 
 class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: SmolVLMImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,

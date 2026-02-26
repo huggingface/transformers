@@ -19,9 +19,11 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from .image_processing_pix2struct import Pix2StructImageProcessorKwargs
 
 
 class Pix2StructProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Pix2StructImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
