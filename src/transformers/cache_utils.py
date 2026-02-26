@@ -396,10 +396,7 @@ class StaticSlidingWindowLayer(StaticLayer):
         kv_length = key_states.shape[-2]
         cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
 
-        cumulative_length = self.cumulative_length
-        is_full = cumulative_length >= self.max_cache_len
-        # Update it now that we saved the value above
-        self.cumulative_length += kv_length
+        is_full = self.cumulative_length >= self.max_cache_len
 
         if is_full:
             # In general, we should use a much simpler `cat` here as well, independently of the states size. However,
@@ -424,14 +421,14 @@ class StaticSlidingWindowLayer(StaticLayer):
                 full_key_states = torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2)
                 full_value_states = torch.cat((self.values[:, :, 1:, :], value_states), dim=-2)
         # Not yet full, but becoming full on this update
-        elif cumulative_length + key_states.shape[2] > self.max_cache_len:
+        elif self.cumulative_length + key_states.shape[2] > self.max_cache_len:
             # Fast prefill path, no need to cat() in this case, as the cache is currently empty
-            if cumulative_length == 0:
+            if self.cumulative_length == 0:
                 full_key_states = key_states
                 full_value_states = value_states
             else:
-                full_key_states = torch.cat((self.keys[:, :, :cumulative_length, :], key_states), dim=-2)
-                full_value_states = torch.cat((self.values[:, :, :cumulative_length, :], value_states), dim=-2)
+                full_key_states = torch.cat((self.keys[:, :, : self.cumulative_length, :], key_states), dim=-2)
+                full_value_states = torch.cat((self.values[:, :, : self.cumulative_length, :], value_states), dim=-2)
         else:
             try:
                 self.keys.index_copy_(2, cache_position, key_states)
@@ -442,6 +439,10 @@ class StaticSlidingWindowLayer(StaticLayer):
 
             # Very important to return the `self` tensors here, as they have the static dynamo address
             return self.keys, self.values
+
+        # NOTE: it is very important that this update is happening AFTER we used the variable everywhere else - otherwise
+        # compiling with cuda graphs will crash (even if we try to save the previous value in another variable)
+        self.cumulative_length += kv_length
 
         # We only cache the last `sliding_window` tokens
         self.keys.copy_(full_key_states[:, :, -self.max_cache_len :, :])
