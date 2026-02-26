@@ -1446,13 +1446,6 @@ class GenerationTesterMixin:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
 
             config.is_decoder = True
-            # Decoder-only generation expects left padding. Right padding in dummy test inputs can lead to
-            # unstable generation behavior and spurious static-vs-dynamic mismatches.
-            if "attention_mask" in inputs_dict and 0 in inputs_dict["attention_mask"][:, -1]:
-                inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
-            if "attention_mask" in inputs_dict:
-                self.assertFalse(torch.any(inputs_dict["attention_mask"][:, -1] == 0))
-
             batch_size = main_input.shape[0]
             seq_length = self.model_tester.seq_length
             max_new_tokens = 20
