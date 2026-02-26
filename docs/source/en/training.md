@@ -16,18 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Fine-tuning
 
-[[open-in-colab]]
+Fine-tuning continues training a large pretrained model on a smaller dataset specific to a task or domain. For example, fine-tuning on a dataset of coding examples helps the model get better at coding. Fine-tuning is identical to pretraining except you don't start with random weights. It also requires far less compute, data, and time.
 
-Fine-tuning adapts a pretrained model to a specific task with a smaller specialized dataset. This approach requires far less data and compute compared to training a model from scratch, which makes it a more accessible option for many users.
+The tutorial below walks through fine-tuning a large language model with [`Trainer`].
 
-Transformers provides the [`Trainer`] API, which offers a comprehensive set of training features, for fine-tuning any of the models on the [Hub](https://hf.co/models).
-
-> [!TIP]
-> Learn how to fine-tune models for other tasks in our Task Recipes section in Resources!
-
-This guide will show you how to fine-tune a model with [`Trainer`] to classify Yelp reviews.
-
-Log in to your Hugging Face account with your user token to ensure you can access gated models and share your models on the Hub.
+Log in to your Hugging Face account with your user token to push your fine-tuned model to the Hub.
 
 ```py
 from huggingface_hub import login
@@ -35,100 +28,131 @@ from huggingface_hub import login
 login()
 ```
 
-Start by loading the [Yelp Reviews](https://hf.co/datasets/Yelp/yelp_review_full) dataset and [preprocess](./fast_tokenizers#preprocess) (tokenize, pad, and truncate) it for training. Use [`~datasets.Dataset.map`] to preprocess the entire dataset in one step.
+## Tokenization
+
+Load a dataset and [tokenize](./fast_tokenizers) the text column the model trains on (`horoscope` in the dataset below).
+
+<iframe
+  src="https://huggingface.co/datasets/karthiksagarn/astro_horoscope/embed/viewer/default/train"
+  frameborder="0"
+  width="100%"
+  height="560px"
+></iframe>
+
+The tokenizer creates the model inputs, `input_ids` and `attention_mask`. The model's forward method only accepts `input_ids` and `attention_mask`, so set `remove_columns` to drop columns like `horoscope` after tokenization.
+
+- Set `truncation=True` and a `max_length` to truncate longer sequences to a specified maximum length.
+- Use the [`~datasets.train_test_split`] method to create a test split for evaluating the model.
 
 ```py
 from datasets import load_dataset
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, DataCollatorForLanguageModeling
 
-dataset = load_dataset("yelp_review_full")
-tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
+model_name = "Qwen/Qwen3-0.6B"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+dataset = load_dataset("karthiksagarn/astro_horoscope", split="train")
 
-def tokenize(examples):
-    return tokenizer(examples["text"], padding="max_length", truncation=True)
+def tokenize(batch):
+    return tokenizer(
+        batch["horoscope"],
+        truncation=True,
+        max_length=512,
+    )
 
-dataset = dataset.map(tokenize, batched=True)
+dataset = dataset.map(tokenize, batched=True, remove_columns=dataset.column_names)
+dataset = dataset.train_test_split(test_size=0.1)
 ```
 
-> [!TIP]
-> Fine-tune on a smaller subset of the full dataset to reduce the time it takes. The results won't be as good compared to fine-tuning on the full dataset, but it is useful to make sure everything works as expected first before committing to training on the full dataset.
->
-> ```py
-> small_train = dataset["train"].shuffle(seed=42).select(range(1000))
-> small_eval = dataset["test"].shuffle(seed=42).select(range(1000))
-> ```
+A data collator assembles dataset samples into batches for the model to process. [`DataCollatorForLanguageModeling`] *dynamically* pads each batch to the longest sequence in that batch rather than padding every sequence in the dataset to the same length. This saves compute and memory by avoiding computing unnecessary padding tokens.
 
-## Trainer
-
-<Youtube id="nvBXf7s7vTI"/>
-
-[Trainer](./trainer) is an optimized training loop for Transformers models, making it easy to start training right away without manually writing your own training code. Pick and choose from a wide range of training features in [`TrainingArguments`] such as gradient accumulation, mixed precision, and options for reporting and logging training metrics.
-
-Load a model and provide the number of expected labels (you can find this information on the Yelp Review [dataset card](https://huggingface.co/datasets/Yelp/yelp_review_full#data-fields)).
+- Set `mlm=False` to avoid randomly masking tokens.
 
 ```py
-from transformers import AutoModelForSequenceClassification
-
-model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
-"Some weights of BertForSequenceClassification were not initialized from the model checkpoint at google-bert/bert-base-cased and are newly initialized: ['classifier.bias', 'classifier.weight']"
-"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False),
 ```
 
-> [!TIP]
-> The message above is a reminder that the models pretrained head is discarded and replaced with a randomly initialized classification head. The randomly initialized head needs to be fine-tuned on your specific task to output meaningful predictions.
+## Loading a model
 
-With the model loaded, set up your training hyperparameters in [`TrainingArguments`]. Hyperparameters are variables that control the training process - such as the learning rate, batch size, number of epochs - which in turn impacts model performance. Selecting the correct hyperparameters is important and you should experiment with them to find the best configuration for your task.
+Load a pretrained checkpoint to fine-tune (see the [Loading models](./models) guide for more details about loading models).
 
-For this guide, you can use the default hyperparameters which provide a good baseline to begin with. The only settings to configure in this guide are where to save the checkpoint, how to evaluate model performance during training, and pushing the model to the Hub.
-
-[`Trainer`] requires a function to compute and report your metric. For a classification task, you'll use [`evaluate.load`] to load the [accuracy](https://hf.co/spaces/evaluate-metric/accuracy) function from the [Evaluate](https://hf.co/docs/evaluate/index) library. Gather the predictions and labels in [`~evaluate.EvaluationModule.compute`] to calculate the accuracy.
+- Set `dtype="auto"` to load the weights in their saved dtype. Without it, PyTorch loads weights in `torch.float32`, which doubles memory usage if the weights are originally `torch.bfloat16`.
 
 ```py
-import numpy as np
-import evaluate
+from transformers import AutoModelForCausalLM, TrainingArguments, Trainer
 
-metric = evaluate.load("accuracy")
-
-def compute_metrics(eval_pred):
-    logits, labels = eval_pred
-    # convert the logits to their predicted class
-    predictions = np.argmax(logits, axis=-1)
-    return metric.compute(predictions=predictions, references=labels)
+model_name = "Qwen/Qwen3-0.6B"
+model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto")
 ```
 
-Set up [`TrainingArguments`] with where to save the model and when to compute accuracy during training. The example below sets it to `"epoch"`, which reports the accuracy at the end of each epoch. Add `push_to_hub=True` to upload the model to the Hub after training.
+## Training configuration
+
+[`TrainingArguments`] provides all the options for customizing a training run. Only the most common arguments are covered here. Everything else has reasonable defaults or is only relevant to specific scenarios like distributed training. See the [`TrainingArguments`] API docs for a complete list of arguments.
+
+<hfoptions id="training-args">
+<hfoption id="training duration">
+
+- `num_train_epochs` and `per_device_train_batch_size` control training duration and batch size. `learning_rate` sets the initial learning rate for the optimizer.
+
+</hfoption>
+<hfoption id="training optimizations">
+
+- Set `bf16=True` for fast mixed precision training if your hardware supports it (Ampere+ GPUs). Otherwise, fall back to `fp16=True` on older hardware.
+- `gradient_accumulation_steps` simulates a larger effective batch size by accumulating gradients over multiple forward passes before updating weights.
+- `gradient_checkpointing` trades compute for memory by recomputing intermediate activations during the backward pass instead of storing them.
+
+</hfoption>
+<hfoption id="evaluation and checkpointing">
+
+- `eval_strategy` and `save_strategy` determine when to evaluate a model during training and when to save a checkpoint.
+- `load_best_model_at_end` loads the best checkpoint when training finishes. It requires `eval_strategy` to be set.
+
+</hfoption>
+<hfoption id="logging">
+
+- `logging_steps` controls how frequently to update and return loss during training.
+
+</hfoption>
+</hfoptions>
 
 ```py
-from transformers import TrainingArguments
-
-training_args = TrainingArguments(
-    output_dir="yelp_review_classifier",
+TrainingArguments(
+    output_dir="qwen3-finetuned",
+    num_train_epochs=3,
+    per_device_train_batch_size=2,
+    gradient_accumulation_steps=8,
+    gradient_checkpointing=True,
+    bf16=True,
+    learning_rate=2e-5,
+    logging_steps=10,
     eval_strategy="epoch",
-    push_to_hub=True,
+    save_strategy="epoch",
+    load_best_model_at_end=True,
 )
 ```
 
-Create a [`Trainer`] instance and pass it the model, training arguments, training and test datasets, and evaluation function. Call [`~Trainer.train`] to start training.
+## Training
+
+Create a [`Trainer`] instance with all the necessary components, then call [`~Trainer.train`] to begin.
 
 ```py
-from transformers import Trainer
-
 trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=dataset["train"],
     eval_dataset=dataset["test"],
-    compute_metrics=compute_metrics,
+    processing_class=tokenizer,
+    data_collator=DataCollatorForLanguageModeling(tokenizer, mlm=False),
 )
+
 trainer.train()
-```
-
-Finally, use [`~Trainer.push_to_hub`] to upload your model and tokenizer to the Hub.
-
-```py
 trainer.push_to_hub()
 ```
 
-## Resources
+[`~Trainer.push_to_hub`] uploads the fine-tuned weights, generation config, tokenizer, and model config to the Hub.
 
-Refer to the Transformers [examples](https://github.com/huggingface/transformers/tree/main/examples) for more detailed training scripts on various tasks. You can also check out the [notebooks](./notebooks) for interactive examples.
+## Next steps
+
+- Read the [Subclassing Trainer methods](./trainer_customize) guide to learn how to subclass [`Trainer`] methods to support new and custom functionalities.
+- Read the [Callbacks](./trainer_callbacks) guide to learn how to hook into training events for logging, early stopping, and other custom behavior.
+- Read the [Data collators](./data_collators) guide to learn how to customize how samples are assembled into batches.
+- Browse [transformers/examples/pytorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [notebooks](./notebooks), or the **Resources > Task Recipes** section for additional training examples on different text, audio, vision, and multimodal tasks.
