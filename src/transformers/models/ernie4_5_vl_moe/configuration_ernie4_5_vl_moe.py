@@ -18,6 +18,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
@@ -337,4 +341,35 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["Ernie4_5_VLMoeConfig", "Ernie4_5_VLMoeTextConfig", "Ernie4_5_VLMoeVisionConfig"]
+class Ernie4_5_VL_MoeConfig(Ernie4_5_VLMoeConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeConfig` is deprecated; please use `Ernie4_5_VLMoeConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeTextConfig(Ernie4_5_VLMoeTextConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeTextConfig` is deprecated; please use `Ernie4_5_VLMoeTextConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeVisionConfig` is deprecated; please use `Ernie4_5_VLMoeVisionConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+__all__ = [
+    "Ernie4_5_VL_MoeConfig",
+    "Ernie4_5_VL_MoeTextConfig",
+    "Ernie4_5_VL_MoeVisionConfig",
+    "Ernie4_5_VLMoeConfig",
+    "Ernie4_5_VLMoeTextConfig",
+    "Ernie4_5_VLMoeVisionConfig",
+]

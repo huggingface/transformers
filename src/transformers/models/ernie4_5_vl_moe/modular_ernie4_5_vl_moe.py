@@ -1784,7 +1784,124 @@ class Ernie4_5_VLMoeImageProcessorFast(Glm4vImageProcessorFast):
         return grid_h * grid_w
 
 
+# Keep aliases for BC
+class Ernie4_5_VL_MoeForConditionalGeneration(
+    Ernie4_5_VLMoeForConditionalGeneration
+):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeForConditionalGeneration` is deprecated; "
+            "please use `Ernie4_5_VLMoeForConditionalGeneration instead`.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeConfig(Ernie4_5_VLMoeConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeConfig` is deprecated; "
+            "please use `Ernie4_5_VLMoeConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeTextConfig(Ernie4_5_VLMoeTextConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeTextConfig` is deprecated; "
+            "please use `Ernie4_5_VLMoeTextConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeVisionConfig` is deprecated; "
+            "please use `Ernie4_5_VLMoeVisionConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoePreTrainedModel` is deprecated; "
+            "please use `Ernie4_5_VLMoePreTrainedModel` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeModel(Ernie4_5_VLMoeModel):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeModel` is deprecated; "
+            "please use `Ernie4_5_VLMoeModel` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeTextModel(Ernie4_5_VLMoeTextModel):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeTextModel` is deprecated; "
+            "please use `Ernie4_5_VLMoeTextModel` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(
+    Ernie4_5_VLMoeVisionTransformerPretrainedModel
+):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeVisionTransformerPretrainedModel` is deprecated; "
+            "please use `Ernie4_5_VLMoeVisionTransformerPretrainedModel` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeVariableResolutionResamplerModel(
+    Ernie4_5_VLMoeVariableResolutionResamplerModel
+):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeVariableResolutionResamplerModel` is deprecated; "
+            "please use `Ernie4_5_VLMoeVariableResolutionResamplerModel` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeImageProcessor(Ernie4_5_VLMoeImageProcessor):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeImageProcessor` is deprecated; "
+            "please use `Ernie4_5_VLMoeImageProcessor` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeImageProcessorFast(Ernie4_5_VLMoeImageProcessorFast):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeImageProcessorFast` is deprecated; "
+            "please use `Ernie4_5_VLMoeImageProcessorFast` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
 __all__ = [
+    "Ernie4_5_VL_MoeConfig",
+    "Ernie4_5_VL_MoeTextConfig",
+    "Ernie4_5_VL_MoeVisionConfig",
+    "Ernie4_5_VL_MoePreTrainedModel",
+    "Ernie4_5_VL_MoeForConditionalGeneration",
+    "Ernie4_5_VL_MoeModel",
+    "Ernie4_5_VL_MoeTextModel",
+    "Ernie4_5_VL_MoeVisionTransformerPretrainedModel",
+    "Ernie4_5_VL_MoeVariableResolutionResamplerModel",
+    "Ernie4_5_VL_MoeImageProcessor",
+    "Ernie4_5_VL_MoeImageProcessorFast",
     "Ernie4_5_VLMoeConfig",
     "Ernie4_5_VLMoeTextConfig",
     "Ernie4_5_VLMoeVisionConfig",

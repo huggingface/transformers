@@ -27,8 +27,11 @@ from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, logging
 from .image_processing_ernie4_5_vl_moe import Ernie4_5_VLMoeImageProcessorKwargs
+
+
+logger = logging.get_logger(__name__)
 
 
 def smart_resize(
@@ -228,4 +231,13 @@ class Ernie4_5_VLMoeImageProcessorFast(BaseImageProcessorFast):
         return super().preprocess(images, **kwargs)
 
 
-__all__ = ["Ernie4_5_VLMoeImageProcessorFast"]
+class Ernie4_5_VL_MoeImageProcessorFast(Ernie4_5_VLMoeImageProcessorFast):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeImageProcessorFast` is deprecated; "
+            "please use `Ernie4_5_VLMoeImageProcessorFast` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+__all__ = ["Ernie4_5_VL_MoeImageProcessorFast", "Ernie4_5_VLMoeImageProcessorFast"]

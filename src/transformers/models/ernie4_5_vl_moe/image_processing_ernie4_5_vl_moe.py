@@ -452,4 +452,12 @@ class Ernie4_5_VLMoeImageProcessor(BaseImageProcessor):
         return grid_h * grid_w
 
 
-__all__ = ["Ernie4_5_VLMoeImageProcessor"]
+class Ernie4_5_VL_MoeImageProcessor(Ernie4_5_VLMoeImageProcessor):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeImageProcessor` is deprecated; please use `Ernie4_5_VLMoeImageProcessor` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+__all__ = ["Ernie4_5_VL_MoeImageProcessor", "Ernie4_5_VLMoeImageProcessor"]
