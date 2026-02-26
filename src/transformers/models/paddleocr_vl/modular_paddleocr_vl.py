@@ -44,7 +44,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
 )
-from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask, packed_sequence_mask_function
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
@@ -986,17 +986,11 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        device = inputs_embeds.device
         hidden_states = inputs_embeds
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-        )
         split_hids = []
         split_wids = []
         for t, h, w in image_grid_thw:
-            image_pids = torch.arange(t * h * w, device=device) % (h * w)
+            image_pids = torch.arange(t * h * w, device=hidden_states.device) % (h * w)
             sample_hids = image_pids // w
             sample_wids = image_pids % w
             split_hids.append(sample_hids)
@@ -1011,11 +1005,24 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         rotary_embeddings = rotary_embeddings.repeat(1, 2)
         position_embeddings = (rotary_embeddings.cos(), rotary_embeddings.sin())
 
+        seq_lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+        packed_sequence = torch.repeat_interleave(
+            torch.arange(len(seq_lengths), device=hidden_states.device), seq_lengths
+        ).unsqueeze(0)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds[None, ...],
+            attention_mask=None,
+            and_mask_function=packed_sequence_mask_function(packed_sequence),
+        )
+
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
                 **kwargs,
             )
 

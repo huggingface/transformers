@@ -27,10 +27,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...generation import GenerationMixin
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_processing_utils_fast import (
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import group_images_by_shape, reorder_images
 from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
@@ -45,7 +42,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
 )
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask, packed_sequence_mask_function
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -908,13 +905,27 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPret
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
+        seq_lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+        packed_sequence = torch.repeat_interleave(
+            torch.arange(len(seq_lengths), device=hidden_states.device), seq_lengths
+        ).unsqueeze(0)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states[None, ...],
+            attention_mask=None,
+            and_mask_function=packed_sequence_mask_function(packed_sequence),
+        )
+
         for block in self.blocks:
             hidden_states = block(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
+                attention_mask=attention_mask,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
+
         hidden_states = self.ln(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
