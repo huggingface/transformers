@@ -444,21 +444,7 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
 
 
 class MusicFlamingoPreTrainedModel(AudioFlamingo3PreTrainedModel):
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights for MusicFlamingo-specific modules."""
-        parent_init_weights = super()._init_weights
-        parent_init_weights(module)
-
-        if isinstance(module, MusicFlamingoRotaryEmbedding):
-            # Reinitialize inverse frequencies parameter
-            inv_freq = module.compute_default_rote_parameters(module.config)
-
-            module.inv_freq.data = inv_freq
-
-            module.cached_freqs = module._build_cached_freqs(
-                module.inv_freq, device=module.inv_freq.device, dtype=module.inv_freq.dtype
-            )
+    pass
 
 
 @auto_docstring(
@@ -474,6 +460,15 @@ class MusicFlamingoEncoder(AudioFlamingo3Encoder):
     def __init__(self, config: MusicFlamingoConfig):
         super().__init__(config)
         self.pos_emb = MusicFlamingoRotaryEmbedding(config)
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        if isinstance(module, MusicFlamingoRotaryEmbedding):
+            module.cached_freqs = module._build_cached_freqs(
+                module.inv_freq, device=module.inv_freq.device, dtype=module.inv_freq.dtype
+            )
 
     @can_return_tuple
     def forward(
