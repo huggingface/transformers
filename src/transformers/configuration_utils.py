@@ -980,7 +980,15 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         """
 
-        d = dict(x.split("=") for x in update_str.split(","))
+        d = {}
+        for x in update_str.split(","):
+            if "=" not in x:
+                raise ValueError(
+                    f"Invalid update string format: '{x}'. Expected format: 'key=value'. "
+                    f"Full update string: '{update_str}'"
+                )
+            k, v = x.split("=", 1)
+            d[k.strip()] = v.strip()
         for k, v in d.items():
             if not hasattr(self, k):
                 raise ValueError(f"key {k} isn't in the original config dict")

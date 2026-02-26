@@ -2680,7 +2680,7 @@ def run_test_using_subprocess(func):
         if os.getenv("_INSIDE_SUB_PROCESS", None) == "1":
             func(*args, **kwargs)
         else:
-            test = " ".join(os.environ.get("PYTEST_CURRENT_TEST").split(" ")[:-1])
+            test = " ".join(os.environ.get("PYTEST_CURRENT_TEST", "").split(" ")[:-1])
             try:
                 env = copy.deepcopy(os.environ)
                 env["_INSIDE_SUB_PROCESS"] = "1"
