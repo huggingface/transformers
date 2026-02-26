@@ -119,9 +119,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"tracker_neck.", target_patterns="vision_encoder.neck."),
         ],
         "t5gemma2_encoder": [
-            WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)embed_tokens.", "text_model.embed_tokens."),
-            WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)norm.", "text_model.norm."),
-            WeightRenaming(r"(?<!vision_model.encoder\.)(?<!decoder\.)(?<!text_model\.)layers.", "text_model.layers."),
+            WeightRenaming(r"(?<!decoder)(?<!text_model)\.embed_tokens\.", "text_model.embed_tokens."),
+            WeightRenaming(r"(?<!decoder)(?<!text_model)\.norm\.", "text_model.norm."),
+            WeightRenaming(r"(?<!vision_model.encoder)(?<!decoder)(?<!text_model)\.layers.", "text_model.layers."),
         ],
         "gpt_oss": [
             # NOTE: These converters are only applied if the model is being loaded from pre-dequantized checkpoint.
@@ -239,7 +239,7 @@ def _build_checkpoint_conversion_mapping():
             # language model
             WeightRenaming(r"(?<!language_model\.)embed_tokens", "language_model.embed_tokens"),
             WeightRenaming(r"(?<!language_model\.)layers", "language_model.layers"),
-            WeightRenaming(r"(?<!language_model\.)norm", "\1language_model.norm"),
+            WeightRenaming(r"(?<!language_model)\.norm\.", ".language_model.norm."),
             WeightConverter(
                 source_patterns="mlp.gate.weight_1",
                 target_patterns="mlp.vision_moe.gate.weight",
