@@ -325,9 +325,6 @@ class StaticLayer(CacheLayerMixin):
         # Create a tensor to slice the static kv at the correct indices
         kv_length = key_states.shape[-2]
         cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
-        # Note: it is very important to update the cumulative length in-place, as otherwise we cannot use cudagraphs
-        # with mode="reduce_overhead" (it complains about overwriting the tensor)
-        self.cumulative_length.add_(kv_length)
 
         # Update the cache
         try:
@@ -337,6 +334,12 @@ class StaticLayer(CacheLayerMixin):
             # Fallback for devices like MPS where index_copy_ might not be supported.
             self.keys[:, :, cache_position] = key_states
             self.values[:, :, cache_position] = value_states
+
+        # Note: it is very important to update the cumulative length in-place AND after the cache update, as otherwise
+        # we cannot use cudagraphs with mode="reduce_overhead" (without the first, it complains about overwriting the tensor.
+        # without the second, it won't crash but will skip cudagraphs)
+        self.cumulative_length.add_(kv_length)
+
         return self.keys, self.values
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
