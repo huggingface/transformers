@@ -1819,11 +1819,11 @@ class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
 
 
 class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
-    def __init__(self, *args, **kwargs):
+    def post_init(self):
         logger.warning_once(
             "`Ernie4_5_VL_MoePreTrainedModel` is deprecated; please use `Ernie4_5_VLMoePreTrainedModel` instead.",
         )
-        super().__init__(*args, **kwargs)
+        super().post_init()
 
 
 class Ernie4_5_VL_MoeModel(Ernie4_5_VLMoeModel):
