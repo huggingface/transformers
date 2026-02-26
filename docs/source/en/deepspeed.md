@@ -803,6 +803,135 @@ Launch training simultaneously on all nodes with the command below.
 sbatch launch.slurm
 ```
 
+### SkyPilot
+
+[SkyPilot](https://docs.skypilot.co/) is a framework for running AI workloads on any infrastructure, offering unified execution across clouds and Kubernetes. It provides features like auto-recovery from spot preemptions, managed jobs, and cost optimization.
+
+To run DeepSpeed training jobs with SkyPilot, create a YAML configuration file that defines your training task. The example below shows a DeepSpeed training job that runs on spot instances.
+
+```yaml
+# deepspeed_training.yaml
+
+name: deepspeed-glue
+
+resources:
+  accelerators: A100:8
+  use_spot: true
+
+file_mounts:
+  /datasets:
+    name: my-data-bucket  # Bucket for datasets
+    mode: MOUNT
+  /checkpoints:
+    name: my-checkpoint-bucket  # Bucket for model checkpoints
+    mode: MOUNT
+
+workdir: .
+
+setup: |
+  # Install dependencies
+  pip install transformers[deepspeed] datasets evaluate scikit-learn
+  
+  # Clone the transformers repository for example scripts
+  git clone https://github.com/huggingface/transformers.git ~/transformers
+
+run: |
+  cd ~/transformers/examples/pytorch/text-classification
+  
+  deepspeed --num_gpus=8 run_glue.py \
+    --model_name_or_path google-bert/bert-base-uncased \
+    --task_name mrpc \
+    --deepspeed ds_config_zero3.json \
+    --do_train \
+    --do_eval \
+    --max_seq_length 128 \
+    --per_device_train_batch_size 32 \
+    --learning_rate 2e-5 \
+    --num_train_epochs 3 \
+    --output_dir /checkpoints/bert-mrpc \
+    --overwrite_output_dir \
+    --fp16 \
+    --save_strategy epoch \
+    --evaluation_strategy epoch
+```
+
+Create a DeepSpeed config file alongside your YAML. For example, save this as `ds_config_zero3.json` in your working directory:
+
+```json
+{
+    "fp16": {
+        "enabled": true,
+        "loss_scale": 0,
+        "initial_scale_power": 16,
+        "loss_scale_window": 1000,
+        "hysteresis": 2,
+        "min_loss_scale": 1
+    },
+    "zero_optimization": {
+        "stage": 3,
+        "offload_optimizer": {
+            "device": "cpu",
+            "pin_memory": true
+        },
+        "offload_param": {
+            "device": "cpu",
+            "pin_memory": true
+        },
+        "overlap_comm": true,
+        "contiguous_gradients": true,
+        "reduce_bucket_size": "auto",
+        "stage3_prefetch_bucket_size": "auto",
+        "stage3_param_persistence_threshold": "auto",
+        "stage3_max_live_parameters": 1e9,
+        "stage3_max_reuse_distance": 1e9,
+        "stage3_gather_16bit_weights_on_model_save": true
+    },
+    "gradient_accumulation_steps": "auto",
+    "gradient_clipping": "auto",
+    "train_batch_size": "auto",
+    "train_micro_batch_size_per_gpu": "auto"
+}
+```
+
+Launch the job with SkyPilot:
+
+```bash
+sky launch -c deepspeed-cluster deepspeed_training.yaml
+```
+
+SkyPilot automatically handles provisioning compute resources, syncing your code and config files, and setting up the environment. For spot instances (`use_spot: true`), SkyPilot automatically handles preemptions and recovery.
+
+To stream the logs from your job:
+
+```bash
+sky logs deepspeed-cluster
+```
+
+For more advanced use cases, you can configure the DeepSpeed job as a [managed job](https://docs.skypilot.co/en/latest/examples/managed-jobs.html) which provides automatic recovery and multi-region support:
+
+```bash
+sky jobs launch -n deepspeed-job deepspeed_training.yaml
+```
+
+Monitor managed jobs with:
+
+```bash
+sky jobs queue
+```
+
+When training completes, download your checkpoints from the mounted bucket or use `rsync`:
+
+```bash
+rsync -Pavz deepspeed-cluster:/checkpoints ./local-checkpoints
+```
+
+Stop or terminate the cluster when finished:
+
+```bash
+sky stop deepspeed-cluster  # Stop the cluster (disk persists)
+sky down deepspeed-cluster  # Terminate the cluster (disk deleted)
+```
+
 ### Jupyter Notebook
 
 To use DeepSpeed in a Jupyter Notebook, you need to emulate a distributed environment because the launcher doesn't support deployment from a notebook. This is only supported for one GPU. To use multiple GPUs, you must use a multi-process environment, which means you have to use the DeepSpeed launcher which can't be emulated as shown here.
