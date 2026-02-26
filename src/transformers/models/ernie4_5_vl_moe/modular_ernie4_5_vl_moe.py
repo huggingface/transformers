@@ -1785,9 +1785,7 @@ class Ernie4_5_VLMoeImageProcessorFast(Glm4vImageProcessorFast):
 
 
 # Keep aliases for BC
-class Ernie4_5_VL_MoeForConditionalGeneration(
-    Ernie4_5_VLMoeForConditionalGeneration
-):
+class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VLMoeForConditionalGeneration):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
             "`Ernie4_5_VL_MoeForConditionalGeneration` is deprecated; "
@@ -1799,8 +1797,7 @@ class Ernie4_5_VL_MoeForConditionalGeneration(
 class Ernie4_5_VL_MoeConfig(Ernie4_5_VLMoeConfig):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
-            "`Ernie4_5_VL_MoeConfig` is deprecated; "
-            "please use `Ernie4_5_VLMoeConfig` instead.",
+            "`Ernie4_5_VL_MoeConfig` is deprecated; please use `Ernie4_5_VLMoeConfig` instead.",
         )
         super().__init__(*args, **kwargs)
 
@@ -1808,8 +1805,7 @@ class Ernie4_5_VL_MoeConfig(Ernie4_5_VLMoeConfig):
 class Ernie4_5_VL_MoeTextConfig(Ernie4_5_VLMoeTextConfig):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
-            "`Ernie4_5_VL_MoeTextConfig` is deprecated; "
-            "please use `Ernie4_5_VLMoeTextConfig` instead.",
+            "`Ernie4_5_VL_MoeTextConfig` is deprecated; please use `Ernie4_5_VLMoeTextConfig` instead.",
         )
         super().__init__(*args, **kwargs)
 
@@ -1817,8 +1813,7 @@ class Ernie4_5_VL_MoeTextConfig(Ernie4_5_VLMoeTextConfig):
 class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
-            "`Ernie4_5_VL_MoeVisionConfig` is deprecated; "
-            "please use `Ernie4_5_VLMoeVisionConfig` instead.",
+            "`Ernie4_5_VL_MoeVisionConfig` is deprecated; please use `Ernie4_5_VLMoeVisionConfig` instead.",
         )
         super().__init__(*args, **kwargs)
 
@@ -1826,8 +1821,7 @@ class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
 class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
-            "`Ernie4_5_VL_MoePreTrainedModel` is deprecated; "
-            "please use `Ernie4_5_VLMoePreTrainedModel` instead.",
+            "`Ernie4_5_VL_MoePreTrainedModel` is deprecated; please use `Ernie4_5_VLMoePreTrainedModel` instead.",
         )
         super().__init__(*args, **kwargs)
 
@@ -1835,8 +1829,7 @@ class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
 class Ernie4_5_VL_MoeModel(Ernie4_5_VLMoeModel):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
-            "`Ernie4_5_VL_MoeModel` is deprecated; "
-            "please use `Ernie4_5_VLMoeModel` instead.",
+            "`Ernie4_5_VL_MoeModel` is deprecated; please use `Ernie4_5_VLMoeModel` instead.",
         )
         super().__init__(*args, **kwargs)
 
@@ -1844,15 +1837,12 @@ class Ernie4_5_VL_MoeModel(Ernie4_5_VLMoeModel):
 class Ernie4_5_VL_MoeTextModel(Ernie4_5_VLMoeTextModel):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
-            "`Ernie4_5_VL_MoeTextModel` is deprecated; "
-            "please use `Ernie4_5_VLMoeTextModel` instead.",
+            "`Ernie4_5_VL_MoeTextModel` is deprecated; please use `Ernie4_5_VLMoeTextModel` instead.",
         )
         super().__init__(*args, **kwargs)
 
 
-class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(
-    Ernie4_5_VLMoeVisionTransformerPretrainedModel
-):
+class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VLMoeVisionTransformerPretrainedModel):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
             "`Ernie4_5_VL_MoeVisionTransformerPretrainedModel` is deprecated; "
@@ -1861,9 +1851,7 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(
         super().__init__(*args, **kwargs)
 
 
-class Ernie4_5_VL_MoeVariableResolutionResamplerModel(
-    Ernie4_5_VLMoeVariableResolutionResamplerModel
-):
+class Ernie4_5_VL_MoeVariableResolutionResamplerModel(Ernie4_5_VLMoeVariableResolutionResamplerModel):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
             "`Ernie4_5_VL_MoeVariableResolutionResamplerModel` is deprecated; "
@@ -1875,8 +1863,7 @@ class Ernie4_5_VL_MoeVariableResolutionResamplerModel(
 class Ernie4_5_VL_MoeImageProcessor(Ernie4_5_VLMoeImageProcessor):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
-            "`Ernie4_5_VL_MoeImageProcessor` is deprecated; "
-            "please use `Ernie4_5_VLMoeImageProcessor` instead.",
+            "`Ernie4_5_VL_MoeImageProcessor` is deprecated; please use `Ernie4_5_VLMoeImageProcessor` instead.",
         )
         super().__init__(*args, **kwargs)
 
