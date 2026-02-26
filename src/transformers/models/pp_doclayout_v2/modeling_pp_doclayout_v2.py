@@ -212,10 +212,11 @@ class PPDocLayoutV2ReadingOrderSelfAttention(nn.Module):
         # Changing the computational order into QT(K/√d) alleviates the problem. (https://huggingface.co/papers/2105.13290)
         attention_scores = torch.matmul(query_layer / math.sqrt(self.attention_head_size), key_layer.transpose(-1, -2))
 
-        # custom
+        # NOTE:
+        # PPDocLayoutV2ReadingOrder applies unscaled rel_2d_pos
+        # unlike LayoutLMv3 which uses (rel_pos + rel_2d_pos) / math.sqrt(self.attention_head_size)
         if rel_2d_pos is not None:
             attention_scores += rel_2d_pos
-
         elif self.has_relative_attention_bias:
             attention_scores += rel_pos / math.sqrt(self.attention_head_size)
 
@@ -899,12 +900,19 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
         final_embeddings = self.embeddings.norm(final_embeddings)
         final_embeddings = self.embeddings.dropout(final_embeddings)
 
-        input_embeddings = pred_col_idx < (num_pred + 2).unsqueeze(1)
+        attention_mask = pred_col_idx < (num_pred + 2).unsqueeze(1)
         attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=final_embeddings,
-            attention_mask=input_embeddings,
+            attention_mask=attention_mask,
         )
+        if attention_mask.dtype == torch.bool:
+            min_dtype = torch.finfo(final_embeddings.dtype).min
+            attention_mask = torch.where(
+                attention_mask,
+                torch.tensor(0.0, device=attention_mask.device, dtype=final_embeddings.dtype),
+                min_dtype,
+            )
         encoder_output = self.encoder(hidden_states=final_embeddings, bbox=pad_boxes, attention_mask=attention_mask)
         encoder_output = encoder_output.last_hidden_state
         token = encoder_output[:, 1 : 1 + seq_len, :]
