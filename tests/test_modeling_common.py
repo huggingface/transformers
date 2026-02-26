@@ -4674,7 +4674,8 @@ class ModelTesterMixin:
                 # Skip if no conversions
                 conversions = model.get_weight_conversions_recursively(add_legacy=False)
                 if len(conversions) == 0:
-                    self.skipTest("No conversion found for this model")
+                    # No conversion mapping for this model only, needs to test other classes
+                    continue
 
                 # Find the model keys, so the targets according to the conversions
                 model_keys = list(model.state_dict().keys())
@@ -4743,7 +4744,8 @@ class ModelTesterMixin:
                 # Skip if no conversions
                 conversions = model.get_weight_conversions_recursively(add_legacy=False)
                 if len(conversions) == 0:
-                    self.skipTest("No conversion found for this model")
+                    # No conversion mapping for this model only, needs to test other classes
+                    continue
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     # Serialize without reverting the mapping

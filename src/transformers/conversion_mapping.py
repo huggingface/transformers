@@ -55,7 +55,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen3_omni_moe": "qwen2_moe",
     "qwen3_omni_moe_thinker": "qwen2_moe",
     "qwen3_next": "qwen2_moe",
-    "qwen3_5_moe": "qwen2_moe",
     "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
@@ -71,18 +70,22 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
             WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
         ],
+        "llava": [
+            WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
+            WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
+        ],
+        "qwen2_vl": [
+            WeightRenaming(
+                source_patterns=r"(^|\.)model(?!\.(language_model|visual))", target_patterns="model.language_model"
+            ),
+        ],
         "qwen3_5_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
         ],
-        "t5gemma2": [
-            WeightRenaming(r"(?<!vision_model\.)encoder.embed_tokens.", "encoder.text_model.embed_tokens."),
-            WeightRenaming(r"(?<!vision_model\.)encoder.norm.", "encoder.text_model.norm."),
-            WeightRenaming(r"(?<!vision_model\.)encoder.layers.", "encoder.text_model.layers."),
-        ],
         "t5gemma2_encoder": [
-            WeightRenaming("^embed_tokens.", "text_model.embed_tokens."),
-            WeightRenaming("^norm.", "text_model.norm."),
-            WeightRenaming("^layers.", "text_model.layers."),
+            WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)embed_tokens.", "text_model.embed_tokens."),
+            WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)norm.", "text_model.norm."),
+            WeightRenaming(r"(?<!vision_model.encoder\.)(?<!decoder\.)(?<!text_model\.)layers.", "text_model.layers."),
         ],
         "gpt_oss": [
             # NOTE: These converters are only applied if the model is being loaded from pre-dequantized checkpoint.
@@ -303,8 +306,8 @@ def _build_checkpoint_conversion_mapping():
             # For BC with backbone model after deprecating `TimmBackbone` model class
             # TODO: the conversion mapping doesn't work well with literal dots (r'\.') in source
             WeightRenaming(
-                source_patterns=r"(?<!text)(?<!vision)(?<!audio)(?<!image)_backbone",
-                target_patterns=r"timm_model",
+                source_patterns=r"\._backbone\.",
+                target_patterns=r".timm_model.",
             ),
         ],
         "legacy": [
@@ -387,8 +390,6 @@ VLMS = [
     "shieldgemma2",
     "qwen2vl",
     "qwen2_5_vl",
-    "videollava",
-    "vipllava",
     "sam3_video",
     "sam3",
     "sam3_tracker",

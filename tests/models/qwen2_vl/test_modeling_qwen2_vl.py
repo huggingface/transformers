@@ -349,6 +349,12 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
+    @unittest.skip(
+        reason="Conversion happens only with pre-saved ckpt on the hub. Model init from config doesn't rename any keys"
+    )
+    def test_reverse_loading_mapping(self):
+        pass
+
     @unittest.skip(reason="Feedforward chunking is not yet supported")
     def test_feed_forward_chunking(self):
         pass

@@ -510,6 +510,8 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
     # Qwen2.5, Sam3, Ernie4.5 VL MoE!
     pattern = re.sub(r"\(\?.+\)", "", pattern)
+    # Remove the backslash for literal dots
+    pattern = pattern.replace(r"\.", ".")
     # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
     capturing_group_match = re.search(r"\(.+?\)", pattern)
     captured_group = None
