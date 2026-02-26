@@ -654,9 +654,7 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
             Whether to apply the flip-invariance combination. If `None`, defaults to
             `config.force_flip_invariance`.
         """
-        if forecast_context_len is None:
-            forecast_context_len = self.context_len
-
+        forecast_context_len = forecast_context_len or self.context_len
         device = past_values[0].device
 
         inputs = [ts[-forecast_context_len:] for ts in past_values]
