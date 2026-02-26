@@ -394,6 +394,7 @@ VLMS = [
     "paddleocrvl",
     # NOTE: Slightly different from `model_type` (to follow naming conventions in vllm/sglang)
     "ernie4_5_vlmoe",
+    "ernie4_5_vl_moe",  # BC alias
     "detr",
 ]
 
