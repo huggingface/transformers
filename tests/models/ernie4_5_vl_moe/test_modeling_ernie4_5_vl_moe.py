@@ -18,9 +18,9 @@ import unittest
 from transformers import (
     AutoModelForImageTextToText,
     AutoProcessor,
-    Ernie4_5_VL_MoeConfig,
-    Ernie4_5_VL_MoeForConditionalGeneration,
-    Ernie4_5_VL_MoeModel,
+    Ernie4_5_VLMoeConfig,
+    Ernie4_5_VLMoeForConditionalGeneration,
+    Ernie4_5_VLMoeModel,
     is_torch_available,
     is_vision_available,
 )
@@ -54,7 +54,7 @@ if is_vision_available():
     pass
 
 
-class Ernie4_5_VL_MoeVisionText2TextModelTester:
+class Ernie4_5_VLMoeVisionText2TextModelTester:
     def __init__(
         self,
         parent,
@@ -131,7 +131,7 @@ class Ernie4_5_VL_MoeVisionText2TextModelTester:
         self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
-        return Ernie4_5_VL_MoeConfig(
+        return Ernie4_5_VLMoeConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
             image_token_id=self.image_token_id,
@@ -183,11 +183,11 @@ class Ernie4_5_VL_MoeVisionText2TextModelTester:
 
 
 @require_torch
-class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Ernie4_5_VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            Ernie4_5_VL_MoeModel,
-            Ernie4_5_VL_MoeForConditionalGeneration,
+            Ernie4_5_VLMoeModel,
+            Ernie4_5_VLMoeForConditionalGeneration,
         )
         if is_torch_available()
         else ()
@@ -197,8 +197,8 @@ class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = Ernie4_5_VL_MoeVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Ernie4_5_VL_MoeConfig, has_text_modality=False)
+        self.model_tester = Ernie4_5_VLMoeVisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Ernie4_5_VLMoeConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -300,7 +300,7 @@ class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
 @slow
 @require_torch_large_accelerator(memory=64)  # Tested on A100 / torch 2.9.0
 @require_torch
-class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
+class Ernie4_5_VLMoeIntegrationTest(unittest.TestCase):
     model = None
     model_id = "baidu/ERNIE-4.5-VL-28B-A3B-PT"
 
@@ -308,7 +308,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
-        self.processor = AutoProcessor.from_pretrained(self.model_id, revision="refs/pr/10")
+        self.processor = AutoProcessor.from_pretrained(self.model_id, revision="refs/pr/11")
         self.message = [
             {
                 "role": "user",
@@ -344,7 +344,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
             dtype=dtype,
             attn_implementation=attn_implementation,
             experts_implementation="eager",
-            revision="refs/pr/10",
+            revision="refs/pr/11",
         )
 
     def test_small_model_integration_test(self):
@@ -410,7 +410,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test_with_video(self):
         processor = AutoProcessor.from_pretrained(
-            self.model_id, max_image_size={"longest_edge": 50176}, revision="refs/pr/10"
+            self.model_id, max_image_size={"longest_edge": 50176}, revision="refs/pr/11"
         )
         model = self.load_model(dtype=torch.float16)
         questions = ["Only use English during your responses. Describe the following video."]
@@ -538,7 +538,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
 # Garbage output expected as it is a dummy model to be run on the CI
 @slow
 @require_torch
-class Ernie4_5_VL_MoeSmallIntegrationTest(unittest.TestCase):
+class Ernie4_5_VLMoeSmallIntegrationTest(unittest.TestCase):
     model = None
     model_id = "hf-internal-testing/Ernie-VL-Moe-Small"
 

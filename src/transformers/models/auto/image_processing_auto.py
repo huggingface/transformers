@@ -103,7 +103,7 @@ else:
             ("emu3", ("Emu3ImageProcessor", None)),
             ("eomt", ("EomtImageProcessor", "EomtImageProcessorFast")),
             ("eomt_dinov3", ("EomtImageProcessor", "EomtImageProcessorFast")),
-            ("ernie4_5_vl_moe", ("Ernie4_5_VL_MoeImageProcessor", "Ernie4_5_VL_MoeImageProcessorFast")),
+            ("ernie4_5_vl_moe", ("Ernie4_5_VLMoeImageProcessor", "Ernie4_5_VLMoeImageProcessorFast")),
             ("flava", ("FlavaImageProcessor", "FlavaImageProcessorFast")),
             ("florence2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("focalnet", ("BitImageProcessor", "BitImageProcessorFast")),
