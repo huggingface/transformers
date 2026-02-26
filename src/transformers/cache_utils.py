@@ -474,7 +474,7 @@ class StaticSlidingWindowLayer(StaticLayer):
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
         return self.cumulative_length_int
-    
+
     def reset(self):
         super().reset()
         self.cumulative_length_int = 0
