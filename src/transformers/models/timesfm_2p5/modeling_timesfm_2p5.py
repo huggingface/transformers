@@ -279,7 +279,7 @@ class Timesfm2P5Attention(nn.Module):
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
+        self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
@@ -296,12 +296,8 @@ class Timesfm2P5Attention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-        if config.use_qk_norm:
-            self.q_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.k_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-
-        if config.use_per_dim_scale:
-            self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
+        self.q_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -322,13 +318,11 @@ class Timesfm2P5Attention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if self.config.use_qk_norm:
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
 
-        if self.config.use_per_dim_scale:
-            scale = F.softplus(self.scaling).mul(1.442695041 / math.sqrt(self.head_dim))
-            query_states = query_states * scale[None, None, None, :]
+        scale = F.softplus(self.scaling).mul(1.442695041 / math.sqrt(self.head_dim))
+        query_states = query_states * scale[None, None, None, :]
 
         if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}

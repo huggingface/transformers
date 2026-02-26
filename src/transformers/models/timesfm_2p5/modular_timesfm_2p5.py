@@ -92,10 +92,6 @@ class Timesfm2P5Config(TimesFmConfig):
             Length of the quantile output projection dimension.
         decode_index (`int`, *optional*, defaults to 5):
             Index into the quantile dimension used to extract the point (median) forecast.
-        use_qk_norm (`bool`, *optional*, defaults to `True`):
-            Whether to apply RMS normalization to query and key states before attention.
-        use_per_dim_scale (`bool`, *optional*, defaults to `True`):
-            Whether to use a learnable per-dimension scaling parameter on the query.
         use_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in MLP and transformer linear layers.
         activation (`str`, *optional*, defaults to `"swish"`):
@@ -142,8 +138,6 @@ class Timesfm2P5Config(TimesFmConfig):
         initializer_range: float = 0.02,
         output_quantile_len: int = 1024,
         decode_index: int = 5,
-        use_qk_norm: bool = True,
-        use_per_dim_scale: bool = True,
         use_bias: bool = False,
         activation: str = "swish",
         use_continuous_quantile_head: bool = True,
@@ -159,8 +153,6 @@ class Timesfm2P5Config(TimesFmConfig):
         self.attention_bias = attention_bias
         self.output_quantile_len = output_quantile_len
         self.decode_index = decode_index
-        self.use_qk_norm = use_qk_norm
-        self.use_per_dim_scale = use_per_dim_scale
         self.use_bias = use_bias
         self.activation = activation
         self.use_continuous_quantile_head = use_continuous_quantile_head
@@ -268,12 +260,9 @@ class Timesfm2P5Attention(LlamaAttention):
     def __init__(self, config: Timesfm2P5Config, layer_idx: int):
         super().__init__(config, layer_idx)
 
-        if config.use_qk_norm:
-            self.q_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.k_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-
-        if config.use_per_dim_scale:
-            self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
+        self.q_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
 
     def forward(
         self,
@@ -294,13 +283,11 @@ class Timesfm2P5Attention(LlamaAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if self.config.use_qk_norm:
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
 
-        if self.config.use_per_dim_scale:
-            scale = F.softplus(self.scaling).mul(1.442695041 / math.sqrt(self.head_dim))
-            query_states = query_states * scale[None, None, None, :]
+        scale = F.softplus(self.scaling).mul(1.442695041 / math.sqrt(self.head_dim))
+        query_states = query_states * scale[None, None, None, :]
 
         if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}

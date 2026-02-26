@@ -65,10 +65,6 @@ class Timesfm2P5Config(PreTrainedConfig):
             Length of the quantile output projection dimension.
         decode_index (`int`, *optional*, defaults to 5):
             Index into the quantile dimension used to extract the point (median) forecast.
-        use_qk_norm (`bool`, *optional*, defaults to `True`):
-            Whether to apply RMS normalization to query and key states before attention.
-        use_per_dim_scale (`bool`, *optional*, defaults to `True`):
-            Whether to use a learnable per-dimension scaling parameter on the query.
         use_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in MLP and transformer linear layers.
         activation (`str`, *optional*, defaults to `"swish"`):
@@ -117,8 +113,6 @@ class Timesfm2P5Config(PreTrainedConfig):
         initializer_range: float = 0.02,
         output_quantile_len: int = 1024,
         decode_index: int = 5,
-        use_qk_norm: bool = True,
-        use_per_dim_scale: bool = True,
         use_bias: bool = False,
         activation: str = "swish",
         use_continuous_quantile_head: bool = True,
@@ -134,8 +128,6 @@ class Timesfm2P5Config(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.output_quantile_len = output_quantile_len
         self.decode_index = decode_index
-        self.use_qk_norm = use_qk_norm
-        self.use_per_dim_scale = use_per_dim_scale
         self.use_bias = use_bias
         self.activation = activation
         self.use_continuous_quantile_head = use_continuous_quantile_head
