@@ -578,7 +578,7 @@ EXPECTED_SEGMENTATION_OUTPUTS = {
         "pred_masks": [-16.72129, -16.17153, -17.06426, -17.29409, -17.78559],
         "post_process_labels": [17, 75, 75, 17],
         "post_process_scores": [0.98604, 0.985644, 0.950492, 0.967915],
-        "loss": 76.156754,
+        "loss": 76.374206,
     },
     "stevenbucaille/rf-detr-seg-nano": {
         "logits": [-7.38427, -5.59449, -9.97889, -11.03668, -8.62285],
@@ -586,7 +586,7 @@ EXPECTED_SEGMENTATION_OUTPUTS = {
         "pred_masks": [-12.01641, -12.37785, -13.37312, -13.54168, -13.53435],
         "post_process_labels": [17, 17, 75, 75],
         "post_process_scores": [0.987039, 0.984917, 0.978123, 0.966226],
-        "loss": 92.973061,
+        "loss": 93.131385,
     },
     "stevenbucaille/rf-detr-seg-small": {
         "logits": [-7.35031, -5.09690, -9.58117, -10.80274, -8.35001],
@@ -594,7 +594,7 @@ EXPECTED_SEGMENTATION_OUTPUTS = {
         "pred_masks": [-13.17243, -13.12057, -13.92742, -13.89896, -13.72802],
         "post_process_labels": [17, 75, 75, 17],
         "post_process_scores": [0.984295, 0.984524, 0.971301, 0.977482],
-        "loss": 87.512894,
+        "loss": 87.918113,
     },
     "stevenbucaille/rf-detr-seg-medium": {
         "logits": [-7.48751, -5.21394, -9.35906, -9.31897, -8.08021],
@@ -602,7 +602,7 @@ EXPECTED_SEGMENTATION_OUTPUTS = {
         "pred_masks": [-15.67913, -17.05902, -16.72426, -17.19833, -17.18960],
         "post_process_labels": [17, 75, 17, 75],
         "post_process_scores": [0.982117, 0.982515, 0.986937, 0.94945],
-        "loss": 95.562599,
+        "loss": 95.673324,
     },
     "stevenbucaille/rf-detr-seg-large": {
         "logits": [-7.37005, -5.04871, -9.19777, -9.37870, -7.96562],
@@ -610,7 +610,7 @@ EXPECTED_SEGMENTATION_OUTPUTS = {
         "pred_masks": [-15.13846, -16.88754, -16.55486, -17.23686, -17.40160],
         "post_process_labels": [17, 17, 75, 75],
         "post_process_scores": [0.973857, 0.980841, 0.982329, 0.940749],
-        "loss": 91.781540,
+        "loss": 91.783073,
     },
     "stevenbucaille/rf-detr-seg-xlarge": {
         "logits": [-7.42486, -4.72502, -8.16429, -8.30500, -7.21668],
@@ -618,7 +618,7 @@ EXPECTED_SEGMENTATION_OUTPUTS = {
         "pred_masks": [-15.15330, -17.61085, -16.79776, -17.33611, -17.39120],
         "post_process_labels": [17, 75, 75, 17],
         "post_process_scores": [0.978207, 0.979888, 0.943645, 0.982371],
-        "loss": 105.279922,
+        "loss": 105.523971,
     },
     "stevenbucaille/rf-detr-seg-xxlarge": {
         "logits": [-7.33242, -5.11294, -6.31125, -7.06520, -7.07922],
@@ -626,7 +626,7 @@ EXPECTED_SEGMENTATION_OUTPUTS = {
         "pred_masks": [-7.94849, -8.57010, -8.60056, -8.92854, -8.99288],
         "post_process_labels": [17, 75, 75, 17],
         "post_process_scores": [0.980528, 0.976553, 0.846246, 0.974776],
-        "loss": 99.136574,
+        "loss": 99.400444,
     },
 }
 

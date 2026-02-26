@@ -30,15 +30,15 @@ from torch.nn import functional as F
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput, BaseModelOutput
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import meshgrid
 from ...utils import auto_docstring, torch_compilable_check, torch_int
-from ...utils.backbone_utils import BackboneMixin
-from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple, check_model_inputs
+from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_rf_detr import RfDetrConfig, RfDetrDinov2Config
 
 
@@ -200,7 +200,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -242,9 +241,9 @@ class RfDetrDinov2SelfAttention(nn.Module):
         value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
         query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         context_layer, attention_probs = attention_interface(
             self,
@@ -522,10 +521,9 @@ def window_unpartition(
     RfDetrDinov2 backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class RfDetrDinov2Backbone(RfDetrDinov2PreTrainedModel, BackboneMixin):
+class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = RfDetrDinov2Embeddings(config)
@@ -569,6 +567,7 @@ class RfDetrDinov2Backbone(RfDetrDinov2PreTrainedModel, BackboneMixin):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
+        output_hidden_states = kwargs.pop("output_hidden_states", False)
         embedding_output = self.embeddings(pixel_values, **kwargs)
 
         output: BaseModelOutput = self.encoder(embedding_output, output_hidden_states=True, **kwargs)
@@ -601,7 +600,7 @@ class RfDetrDinov2Backbone(RfDetrDinov2PreTrainedModel, BackboneMixin):
 
         return BackboneOutput(
             feature_maps=feature_maps,
-            hidden_states=hidden_states,
+            hidden_states=hidden_states if output_hidden_states else None,
         )
 
 
@@ -854,9 +853,9 @@ class RfDetrAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states_original).view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -969,9 +968,6 @@ class RfDetrMultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -984,10 +980,10 @@ class RfDetrMultiscaleDeformableAttention(nn.Module):
         spatial_shapes_list=None,
         level_start_index=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states + position_embeddings
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
@@ -1210,6 +1206,9 @@ class RfDetrModelOutput(ModelOutput):
     intermediate_reference_points: torch.FloatTensor | None = None
     enc_outputs_class: torch.FloatTensor | None = None
     enc_outputs_coord_logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    cross_attentions: tuple[torch.FloatTensor, ...] | None = None
 
     backbone_features: list[torch.Tensor] = None
 
@@ -1223,24 +1222,22 @@ class RfDetrModelOutput(ModelOutput):
     - a stacked tensor of intermediate reference points.
     """
 )
-class RfDetrDecoderOutput(ModelOutput):
+class RfDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-        Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
-        Stacked intermediate reference points (reference points of each layer of the decoder).
     cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
         Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
         used to compute the weighted average in the cross-attention heads.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
+        Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
+        layernorm.
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
     intermediate_hidden_states: torch.FloatTensor | None = None
+
     intermediate_reference_points: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
 # function to generate sine positional embedding for 4d coordinates
@@ -1286,8 +1283,6 @@ class RfDetrMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
-
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 
     """
 
@@ -1343,6 +1338,8 @@ class RfDetrDecoder(RfDetrPreTrainedModel):
         query_pos = self.ref_point_head(query_sine_embed)
         return reference_points_inputs, query_pos
 
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds: torch.Tensor | None = None,
@@ -1432,11 +1429,11 @@ class RfDetrModel(RfDetrPreTrainedModel):
         self.post_init()
 
     def freeze_backbone(self):
-        for name, param in self.backbone.conv_encoder.model.named_parameters():
+        for name, param in self.backbone.model.named_parameters():
             param.requires_grad_(False)
 
     def unfreeze_backbone(self):
-        for name, param in self.backbone.conv_encoder.model.named_parameters():
+        for name, param in self.backbone.model.named_parameters():
             param.requires_grad_(True)
 
     def get_valid_ratio(self, mask, dtype=torch.float32):
@@ -1457,15 +1454,18 @@ class RfDetrModel(RfDetrPreTrainedModel):
         temperature = 10000
         scale = 2 * math.pi
 
-        dim_t = torch.arange(num_pos_feats, dtype=proposals.dtype, device=proposals.device)
+        # Compute position embeddings in float32 to avoid overflow with large temperature values in fp16
+        proposals_dtype = proposals.dtype
+        dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=proposals.device)
         dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
         # batch_size, num_queries, 4
-        proposals = proposals.sigmoid() * scale
+        proposals = proposals.sigmoid().to(torch.float32) * scale
         # batch_size, num_queries, 4, 128
         pos = proposals[:, :, :, None] / dim_t
         # batch_size, num_queries, 4, 64, 2 -> batch_size, num_queries, 512
         pos = torch.stack((pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4).flatten(2)
-        return pos
+        # Convert back to target dtype after all computations are done
+        return pos.to(proposals_dtype)
 
     def gen_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
         """Generate the encoder output proposals from encoded enc_output.
@@ -1490,7 +1490,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
-            grid_y, grid_x = meshgrid(
+            grid_y, grid_x = torch.meshgrid(
                 torch.linspace(
                     0,
                     height - 1,
@@ -1526,7 +1526,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
         object_query = object_query.masked_fill(~output_proposals_valid, float(0))
         return object_query, output_proposals
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1669,13 +1669,6 @@ class RfDetrModel(RfDetrPreTrainedModel):
             **kwargs,
         )
 
-        # init_reference_points (batch_size, num_queries, 4) : initial reference points
-        # last_hidden_state (batch_size, num_queries, d_model) : final object queries
-        # intermediate_hidden_states (batch_size, num_decoder_layers, num_queries, d_model) : intermediate object queries
-        # intermediate_reference_points (batch_size, num_decoder_layers, num_queries, 4) : intermediate reference points
-        # backbone_features list(batch_size, num_levels, d_model, H, W) : backbone features
-        # enc_outputs_class (batch_size, num_queries, d_model) : encoder outputs object queries
-        # enc_outputs_coord_logits (batch_size, num_queries, 4) : coordinate logits of encoder object queries
         return RfDetrModelOutput(
             init_reference_points=init_reference_points,
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1684,6 +1677,9 @@ class RfDetrModel(RfDetrPreTrainedModel):
             backbone_features=sources,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
+            hidden_states=decoder_outputs.hidden_states,
+            attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
         )
 
 
@@ -1739,6 +1735,9 @@ class RfDetrObjectDetectionOutput(ModelOutput):
     intermediate_reference_points: torch.FloatTensor | None = None
     enc_outputs_class: Any = None
     enc_outputs_coord_logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    cross_attentions: tuple[torch.FloatTensor, ...] | None = None
 
     backbone_features: list[torch.Tensor] = None
 
@@ -1763,7 +1762,7 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1818,19 +1817,13 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
         Detected cat with confidence 0.789 at location [342.19, 24.3, 640.02, 372.25]
         Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
         ```"""
-        outputs = self.model(
-            pixel_values,
-            pixel_mask=pixel_mask,
-            **kwargs,
-        )
+        outputs = self.model(pixel_values, pixel_mask=pixel_mask, **kwargs)
 
         last_hidden_states = outputs.last_hidden_state
         intermediate_reference_points = outputs.intermediate_reference_points
-        enc_outputs_class = outputs.enc_outputs_class
-        enc_outputs_boxes_logits = outputs.enc_outputs_coord_logits
 
         # Get logits and boxes from first stage object queries
-        enc_outputs_class_logits = self.get_encoder_outputs_class_logits(enc_outputs_class)
+        enc_outputs_class_logits = self.get_encoder_outputs_class_logits(outputs.enc_outputs_class)
 
         # Get logits and boxes from second stage object queries
         logits = self.class_embed(last_hidden_states)
@@ -1855,7 +1848,7 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
                 outputs_class,
                 outputs_coord,
                 enc_outputs_class_logits,
-                enc_outputs_boxes_logits,
+                outputs.enc_outputs_coord_logits,
             )
 
         return RfDetrObjectDetectionOutput(
@@ -1869,8 +1862,11 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
             intermediate_reference_points=outputs.intermediate_reference_points,
             init_reference_points=outputs.init_reference_points,
             enc_outputs_class=enc_outputs_class_logits,
-            enc_outputs_coord_logits=enc_outputs_boxes_logits,
+            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
             backbone_features=outputs.backbone_features,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
     def get_encoder_outputs_class_logits(self, enc_outputs_class_logits: torch.Tensor) -> Tensor:
@@ -1938,6 +1934,9 @@ class RfDetrInstanceSegmentationOutput(ModelOutput):
     intermediate_hidden_states: torch.FloatTensor | None = None
     intermediate_reference_points: torch.FloatTensor | None = None
     enc_outputs_mask_logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    cross_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class RfDetrSegmentationBlock(nn.Module):
@@ -2044,7 +2043,6 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
 
         return list_mask_logits
 
-    @check_model_inputs
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -2056,19 +2054,12 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
     ) -> dict[str, torch.Tensor]:
         image_size = pixel_values.shape[-2:]
 
-        outputs = self.rf_detr.model(
-            pixel_values,
-            pixel_mask=pixel_mask,
-            **kwargs,
-        )
+        outputs = self.rf_detr.model(pixel_values, pixel_mask=pixel_mask, **kwargs)
 
         spatial_features = outputs.backbone_features[-1]
         last_hidden_states = outputs.last_hidden_state
         intermediate_reference_points = outputs.intermediate_reference_points
         enc_outputs_class = outputs.enc_outputs_class
-        enc_outputs_boxes_logits = outputs.enc_outputs_coord_logits
-        query_features = outputs.intermediate_hidden_states
-        last_hidden_state = outputs.last_hidden_state
 
         # First stage segmentation proposals
         enc_outputs_class_logits = self.rf_detr.get_encoder_outputs_class_logits(enc_outputs_class)
@@ -2079,7 +2070,7 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         logits = self.rf_detr.class_embed(last_hidden_states)
         pred_boxes_delta = self.rf_detr.bbox_embed(last_hidden_states)
         pred_boxes = refine_bboxes(intermediate_reference_points[-1], pred_boxes_delta)
-        outputs_masks = self.segmentation_head(spatial_features, query_features, image_size)
+        outputs_masks = self.segmentation_head(spatial_features, outputs.intermediate_hidden_states, image_size)
 
         pred_masks = outputs_masks[-1]
 
@@ -2102,7 +2093,7 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
                 outputs_coord,
                 outputs_masks,
                 enc_outputs_class_logits,
-                enc_outputs_boxes_logits,
+                outputs.enc_outputs_coord_logits,
                 enc_outputs_masks,
             )
 
@@ -2113,11 +2104,14 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
             pred_boxes=pred_boxes,
             pred_masks=pred_masks,
             auxiliary_outputs=auxiliary_outputs,
-            last_hidden_state=last_hidden_state,
+            last_hidden_state=outputs.last_hidden_state,
             intermediate_hidden_states=outputs.intermediate_hidden_states,
             intermediate_reference_points=outputs.intermediate_reference_points,
             init_reference_points=outputs.init_reference_points,
             enc_outputs_mask_logits=enc_outputs_masks,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
 
