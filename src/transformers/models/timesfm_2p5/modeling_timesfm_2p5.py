@@ -690,12 +690,17 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         self.post_init()
 
     def _preprocess(
-        self, inputs: Sequence[torch.Tensor], context_len: int | None = None
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        self, inputs: Sequence[torch.Tensor], freq: Sequence[int] | None = None, context_len: int | None = None
+    ) -> tuple[torch.Tensor, ...]:
         """Pad/truncate input time series to `context_len` and build a padding mask.
 
+        Args:
+            inputs: A list of 1d Tensors. Each Tensor is the context time series of a single forecast task.
+            freq: Optional list of frequencies (returned as a tensor when provided).
+            context_len: Optional context length override (defaults to `self.context_len`).
+
         Returns:
-            Tuple of (padded_inputs, padding_mask) both of shape `(batch, context_len + horizon_len)`.
+            Tuple of (padded_inputs, padding_mask) and optionally a freq tensor.
         """
         if context_len is None:
             context_len = self.context_len
@@ -716,7 +721,10 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
             input_ts.append(ts)
             input_padding.append(padding)
 
-        return torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0)
+        result = (torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0))
+        if freq is not None:
+            result = result + (torch.tensor(freq[: len(inputs)], dtype=torch.int32).reshape(-1, 1),)
+        return result
 
     def _postprocess_output(
         self, model_output: torch.Tensor, stats: tuple[torch.Tensor, torch.Tensor]
