@@ -23,7 +23,6 @@ import math
 
 import numpy as np
 import torch
-from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -92,6 +91,17 @@ class PPOCRV5MobileRecImageProcessorFast(BaseImageProcessorFast):
         image_std: float | list[float] | None = None,
         **kwargs,
     ) -> None:
+        r"""
+        rec_image_shape (`List[int]`, *optional*, defaults to `[3, 48, 320]`):
+            The target image shape for recognition in format [channels, height, width].
+        max_img_width (`int`, *optional*, defaults to `3200`):
+            The maximum width allowed for the resized image.
+        character_list (`List[str]` or `str`, *optional*, defaults to `None`):
+            The list of characters for text recognition decoding. If `None`, defaults to
+            "0123456789abcdefghijklmnopqrstuvwxyz".
+        use_space_char (`bool`, *optional*, defaults to `True`):
+            Whether to include space character in the character list.
+        """
         super().__init__(**kwargs)
         self.rec_image_shape = rec_image_shape if rec_image_shape is not None else [3, 48, 320]
         self.max_img_width = max_img_width
@@ -135,7 +145,7 @@ class PPOCRV5MobileRecImageProcessorFast(BaseImageProcessorFast):
         self.character = characters
         self.char_to_idx = {char: idx for idx, char in enumerate(characters)}
 
-    def _pil_resize(self, img: np.ndarray, target_size: tuple[int, int]) -> np.ndarray:
+    def _ocr_resize(self, img: np.ndarray, target_size: tuple[int, int]) -> np.ndarray:
         """
         Resize image to exactly match cv2.resize behavior using fixed-point arithmetic.
 
@@ -175,9 +185,7 @@ class PPOCRV5MobileRecImageProcessorFast(BaseImageProcessorFast):
 
         # Create coordinate grids for output image using float32
         out_y, out_x = np.meshgrid(
-            np.arange(target_h, dtype=np.float32),
-            np.arange(target_w, dtype=np.float32),
-            indexing="ij"
+            np.arange(target_h, dtype=np.float32), np.arange(target_w, dtype=np.float32), indexing="ij"
         )
 
         # Map output coordinates to input coordinates (pixel-center alignment) using float32
@@ -268,7 +276,7 @@ class PPOCRV5MobileRecImageProcessorFast(BaseImageProcessorFast):
 
         if target_w > self.max_img_width:
             # If target width exceeds max, resize to max width
-            resized_image = self._pil_resize(img, (self.max_img_width, img_h))
+            resized_image = self._ocr_resize(img, (self.max_img_width, img_h))
             resized_w = self.max_img_width
             target_w = self.max_img_width
         else:
@@ -278,7 +286,7 @@ class PPOCRV5MobileRecImageProcessorFast(BaseImageProcessorFast):
                 resized_w = target_w
             else:
                 resized_w = int(math.ceil(img_h * ratio))
-            resized_image = self._pil_resize(img, (resized_w, img_h))
+            resized_image = self._ocr_resize(img, (resized_w, img_h))
 
         # Convert to float32
         resized_image = resized_image.astype(np.float32)

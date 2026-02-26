@@ -28,74 +28,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Dropout, LayerNorm
-from torch.nn.init import xavier_normal_
 
+from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
 from .configuration_pp_ocrv5_mobile_rec import PPOCRV5MobileRecConfig
-
-# Import equivalent modules from other models
-from ..donut.modeling_donut_swin import DonutSwinDropPath
-
-
-class PPOCRV5MobileRecSELayer(nn.Module):
-    def __init__(self, channel, reduction=4, lr_mult=1.0):
-        super().__init__()
-
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.conv1 = nn.Conv2d(
-            in_channels=channel, out_channels=channel // reduction, kernel_size=1, stride=1, padding=0, bias=True
-        )
-        self.relu = nn.ReLU()
-        self.conv2 = nn.Conv2d(
-            in_channels=channel // reduction, out_channels=channel, kernel_size=1, stride=1, padding=0, bias=True
-        )
-        self.hardsigmoid = nn.Hardsigmoid()
-
-    def forward(self, x):
-        identity = x
-        x = self.avg_pool(x)
-        x = self.conv1(x)
-        x = self.relu(x)
-        x = self.conv2(x)
-        x = self.hardsigmoid(x)
-        x = identity * x
-        return x
-
-
-class PPOCRV5MobileRecConvBNLayer(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        kernel_size=3,
-        stride=1,
-        padding=0,
-        bias_attr=False,
-        groups=1,
-        act=nn.GELU,
-    ):
-        super().__init__()
-
-        if isinstance(padding, list):
-            padding = tuple(padding)
-        self.conv = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=padding,
-            groups=groups,
-            bias=bias_attr,
-        )
-        self.norm = nn.BatchNorm2d(out_channels)
-        self.act = act()
-
-    def forward(self, inputs):
-        out = self.conv(inputs)
-        out = self.norm(out)
-        out = self.act(out)
-        return out
 
 
 class PPOCRV5MobileRecLearnableAffineBlock(nn.Module):
@@ -121,7 +58,6 @@ class PPOCRV5MobileRecConvBNLayer_PPLCNet(nn.Module):
             groups=groups,
             bias=False,
         )
-        nn.init.kaiming_normal_(self.conv.weight)
         self.bn = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
@@ -290,6 +226,31 @@ class PPOCRV5MobileRecLearnableRepLayer(nn.Module):
         return kernel * t, beta - running_mean * gamma / std
 
 
+class PPOCRV5MobileRecSELayer(nn.Module):
+    def __init__(self, channel, reduction=4, lr_mult=1.0):
+        super().__init__()
+
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.conv1 = nn.Conv2d(
+            in_channels=channel, out_channels=channel // reduction, kernel_size=1, stride=1, padding=0, bias=True
+        )
+        self.relu = nn.ReLU()
+        self.conv2 = nn.Conv2d(
+            in_channels=channel // reduction, out_channels=channel, kernel_size=1, stride=1, padding=0, bias=True
+        )
+        self.hardsigmoid = nn.Hardsigmoid()
+
+    def forward(self, x):
+        identity = x
+        x = self.avg_pool(x)
+        x = self.conv1(x)
+        x = self.relu(x)
+        x = self.conv2(x)
+        x = self.hardsigmoid(x)
+        x = identity * x
+        return x
+
+
 class PPOCRV5MobileRecLCNetV3Block(nn.Module):
     def __init__(
         self,
@@ -334,14 +295,6 @@ class PPOCRV5MobileRecLCNetV3Block(nn.Module):
         return x
 
 
-class PPOCRV5MobileRecIdentity(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, input):
-        return input
-
-
 class PPOCRV5MobileRecBlock(nn.Module):
     def __init__(
         self,
@@ -383,7 +336,7 @@ class PPOCRV5MobileRecBlock(nn.Module):
         else:
             raise TypeError("The mixer must be one of [Global, Local, Conv]")
 
-        self.drop_path = DonutSwinDropPath(drop_path) if drop_path > 0.0 else PPOCRV5MobileRecIdentity()
+        self.drop_path = nn.Identity()
         if isinstance(norm_layer, str):
             norm_class = eval(norm_layer.replace("nn.", "nn."))
             self.norm2 = norm_class(dim, eps=epsilon)
@@ -564,20 +517,15 @@ class PPOCRV5MobileRecFCTranspose(nn.Module):
             return self.fc(x.transpose(1, 2))
 
 
-def ppocrv5_mobile_rec_zeros_(x):
+def zeros_(x):
     return nn.init.constant_(x, 0.0)
-
-
-def ppocrv5_mobile_rec_trunc_normal_(tensor, std=0.02):
-    return nn.init.trunc_normal_(tensor, std=std)
 
 
 class PPOCRV5MobileRecAddPos(nn.Module):
     def __init__(self, dim, w):
         super().__init__()
 
-        self.dec_pos_embed = nn.Parameter(ppocrv5_mobile_rec_zeros_((1, w, dim)))
-        ppocrv5_mobile_rec_trunc_normal_(self.dec_pos_embed)
+        self.dec_pos_embed = nn.Parameter(zeros_((1, w, dim)))
 
     def forward(self, x):
         x = x + self.dec_pos_embed[:, : x.shape[1], :]
@@ -641,6 +589,41 @@ class PPOCRV5MobileRecAttention(nn.Module):
         return x
 
 
+class PPOCRV5MobileRecConvBNLayer(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size=3,
+        stride=1,
+        padding=0,
+        bias_attr=False,
+        groups=1,
+        act=nn.GELU,
+    ):
+        super().__init__()
+
+        if isinstance(padding, list):
+            padding = tuple(padding)
+        self.conv = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            groups=groups,
+            bias=bias_attr,
+        )
+        self.norm = nn.BatchNorm2d(out_channels)
+        self.act = act()
+
+    def forward(self, inputs):
+        out = self.conv(inputs)
+        out = self.norm(out)
+        out = self.act(out)
+        return out
+
+
 class PPOCRV5MobileRecMultiHead(nn.Module):
     def __init__(self, in_channels, out_channels_list, **kwargs):
         super().__init__()
@@ -684,7 +667,9 @@ class PPOCRV5MobileRecMultiHead(nn.Module):
                 self.encoder_reshape = PPOCRV5MobileRecIm2Seq(in_channels)
                 neck_args = copy.deepcopy(self.head_list[idx][name]["Neck"])
                 encoder_type = neck_args.pop("name")
-                self.ctc_encoder = PPOCRV5MobileRecSequenceEncoder(in_channels=in_channels, encoder_type=encoder_type, **neck_args)
+                self.ctc_encoder = PPOCRV5MobileRecSequenceEncoder(
+                    in_channels=in_channels, encoder_type=encoder_type, **neck_args
+                )
                 # ctc head
                 head_args = self.head_list[idx][name]["Head"]
                 self.ctc_head = PPOCRV5MobileRecCTCHead(
@@ -714,18 +699,6 @@ class PPOCRV5MobileRecMultiHead(nn.Module):
         return head_out
 
 
-def ppocrv5_mobile_rec_get_para_bias_attr(l2_decay, k):
-    stdv = 1.0 / math.sqrt(k * 1.0)
-
-    def weight_init(m):
-        if isinstance(m, nn.Linear):
-            nn.init.uniform_(m.weight, -stdv, stdv)
-            if m.bias is not None:
-                nn.init.uniform_(m.bias, -stdv, stdv)
-
-    return weight_init
-
-
 class PPOCRV5MobileRecCTCHead(nn.Module):
     def __init__(
         self,
@@ -740,15 +713,14 @@ class PPOCRV5MobileRecCTCHead(nn.Module):
         self.out_channels = out_channels
         self.mid_channels = mid_channels
         self.return_feats = return_feats
+        self.in_channels = in_channels
+        self.fc_decay = fc_decay
 
         if mid_channels is None:
             self.fc = nn.Linear(in_channels, out_channels)
-            ppocrv5_mobile_rec_get_para_bias_attr(fc_decay, in_channels)(self.fc)
         else:
             self.fc1 = nn.Linear(in_channels, mid_channels)
-            ppocrv5_mobile_rec_get_para_bias_attr(fc_decay, in_channels)(self.fc1)
             self.fc2 = nn.Linear(mid_channels, out_channels)
-            ppocrv5_mobile_rec_get_para_bias_attr(fc_decay, mid_channels)(self.fc2)
 
     def forward(self, x, targets=None):
         if self.mid_channels is None:
@@ -860,16 +832,6 @@ class PPOCRV5MobileRecTransformer(nn.Module):
         self.d_model = d_model
         self.nhead = nhead
         self.tgt_word_prj = nn.Linear(self.out_channels, d_model, bias=False)
-        w0 = np.random.normal(0.0, d_model**-0.5, (d_model, self.out_channels)).astype(np.float32)
-        with torch.no_grad():
-            self.tgt_word_prj.weight.copy_(torch.from_numpy(w0))
-        self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            xavier_normal_(m.weight)
-            if m.bias is not None:
-                ppocrv5_mobile_rec_zeros_(m.bias)
 
     def forward_train(self, src, tgt):
         tgt = tgt[:, :-1]
@@ -1173,10 +1135,8 @@ class PPOCRV5MobileRecEmbeddings(nn.Module):
         super().__init__()
 
         self.embedding = nn.Embedding(vocab, d_model, padding_idx=padding_idx)
-        w0 = np.random.normal(0.0, d_model**-0.5, (vocab, d_model)).astype(np.float32)
-        with torch.no_grad():
-            self.embedding.weight.copy_(torch.from_numpy(w0))
         self.d_model = d_model
+        self.vocab = vocab
         self.scale_embedding = scale_embedding
 
     def forward(self, x):
@@ -1263,12 +1223,24 @@ class PPOCRV5MobileRecIm2Seq(nn.Module):
         return x
 
 
+def get_para_bias_attr(l2_decay, k):
+    stdv = 1.0 / math.sqrt(k * 1.0)
+
+    def weight_init(m):
+        if isinstance(m, nn.Linear):
+            nn.init.uniform_(m.weight, -stdv, stdv)
+            if m.bias is not None:
+                nn.init.uniform_(m.bias, -stdv, stdv)
+
+    return weight_init
+
+
 class PPOCRV5MobileRecEncoderWithFC(nn.Module):
     def __init__(self, in_channels, hidden_size):
         super().__init__()
 
         self.out_channels = hidden_size
-        weight_attr, bias_attr = ppocrv5_mobile_rec_get_para_bias_attr(l2_decay=0.00001, k=in_channels)
+        weight_attr, bias_attr = get_para_bias_attr(l2_decay=0.00001, k=in_channels)
         self.fc = nn.Linear(
             in_channels,
             hidden_size,
@@ -1277,10 +1249,6 @@ class PPOCRV5MobileRecEncoderWithFC(nn.Module):
     def forward(self, x):
         x = self.fc(x)
         return x
-
-
-def ppocrv5_mobile_rec_ones_(tensor):
-    return nn.init.constant_(tensor, 1.0)
 
 
 class PPOCRV5MobileRecEncoderWithSVTR(nn.Module):
@@ -1346,16 +1314,6 @@ class PPOCRV5MobileRecEncoderWithSVTR(nn.Module):
 
         self.conv1x1 = PPOCRV5MobileRecConvBNLayer(in_channels // 8, dims, kernel_size=1, act=nn.SiLU)
         self.out_channels = dims
-        self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            ppocrv5_mobile_rec_trunc_normal_(m.weight)
-            if m.bias is not None:
-                ppocrv5_mobile_rec_zeros_(m.bias)
-        elif isinstance(m, nn.LayerNorm):
-            ppocrv5_mobile_rec_zeros_(m.bias)
-            ppocrv5_mobile_rec_ones_(m.weight)
 
     def forward(self, x):
         if self.use_guide:
@@ -1417,6 +1375,10 @@ class PPOCRV5MobileRecSequenceEncoder(nn.Module):
             return x
 
 
+def trunc_normal_(tensor, std=0.02):
+    nn.init.trunc_normal_(tensor, std=std)
+
+
 class PPOCRV5MobileRecPreTrainedModel(PreTrainedModel):
     """
     Base class for all PP-OCRv5_mobile_rec pre-trained models. Handles model initialization,
@@ -1428,6 +1390,64 @@ class PPOCRV5MobileRecPreTrainedModel(PreTrainedModel):
     base_model_prefix = "pp_ocrv5_mobile_rec"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+
+        # PPOCRV5MobileRecConvBNLayer_PPLCNet: kaiming_normal for conv layers
+        if isinstance(module, PPOCRV5MobileRecConvBNLayer_PPLCNet):
+            init.kaiming_normal_(module.conv.weight)
+
+        # PPOCRV5MobileRecCTCHead: uniform initialization based on fc_decay
+        if isinstance(module, PPOCRV5MobileRecCTCHead):
+            if module.mid_channels is None:
+                stdv = 1.0 / math.sqrt(module.in_channels * 1.0)
+                init.uniform_(module.fc.weight, -stdv, stdv)
+                if module.fc.bias is not None:
+                    init.uniform_(module.fc.bias, -stdv, stdv)
+            else:
+                stdv1 = 1.0 / math.sqrt(module.in_channels * 1.0)
+                init.uniform_(module.fc1.weight, -stdv1, stdv1)
+                if module.fc1.bias is not None:
+                    init.uniform_(module.fc1.bias, -stdv1, stdv1)
+
+                stdv2 = 1.0 / math.sqrt(module.mid_channels * 1.0)
+                init.uniform_(module.fc2.weight, -stdv2, stdv2)
+                if module.fc2.bias is not None:
+                    init.uniform_(module.fc2.bias, -stdv2, stdv2)
+
+        # PPOCRV5MobileRecTransformer: xavier_normal for linear layers, zeros for bias
+        if isinstance(module, PPOCRV5MobileRecTransformer):
+            for m in module.modules():
+                if isinstance(m, nn.Linear):
+                    init.xavier_normal_(m.weight)
+                    if m.bias is not None:
+                        init.constant_(m.bias, 0.0)
+            # Special initialization for tgt_word_prj
+            w0 = np.random.normal(0.0, module.d_model**-0.5, (module.d_model, module.out_channels)).astype(np.float32)
+            module.tgt_word_prj.weight.copy_(torch.from_numpy(w0))
+
+        # PPOCRV5MobileRecAddPos: trunc_normal for dec_pos_embed
+        if isinstance(module, PPOCRV5MobileRecAddPos):
+            init.trunc_normal_(module.dec_pos_embed, std=0.02)
+
+        # PPOCRV5MobileRecEmbeddings: normal initialization with std based on d_model
+        if isinstance(module, PPOCRV5MobileRecEmbeddings):
+            w0 = np.random.normal(0.0, module.d_model**-0.5, (module.vocab, module.d_model)).astype(np.float32)
+            module.embedding.weight.copy_(torch.from_numpy(w0))
+
+        # PPOCRV5MobileRecEncoderWithSVTR: trunc_normal for linear weights, ones/zeros for LayerNorm
+        if isinstance(module, PPOCRV5MobileRecEncoderWithSVTR):
+            for m in module.modules():
+                if isinstance(m, nn.Linear):
+                    init.trunc_normal_(m.weight, std=0.02)
+                    if m.bias is not None:
+                        init.constant_(m.bias, 0.0)
+                elif isinstance(m, nn.LayerNorm):
+                    init.constant_(m.bias, 0.0)
+                    init.constant_(m.weight, 1.0)
 
 
 @auto_docstring(custom_intro="The PP-OCRv5_mobile_rec model.")

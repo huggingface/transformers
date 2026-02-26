@@ -17,14 +17,13 @@ import copy
 import math
 from dataclasses import dataclass
 
-import cv2
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Dropout, LayerNorm
-from torch.nn.init import xavier_normal_
 
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import BaseImageProcessor
@@ -41,40 +40,7 @@ from ...utils.generic import TensorType
 logger = logging.get_logger(__name__)
 
 
-def make_divisible(v, divisor=16, min_value=None):
-    if min_value is None:
-        min_value = divisor
-    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
-    if new_v < 0.9 * v:
-        new_v += divisor
-    return new_v
-
-
-def get_para_bias_attr(l2_decay, k):
-    stdv = 1.0 / math.sqrt(k * 1.0)
-
-    def weight_init(m):
-        if isinstance(m, nn.Linear):
-            nn.init.uniform_(m.weight, -stdv, stdv)
-            if m.bias is not None:
-                nn.init.uniform_(m.bias, -stdv, stdv)
-
-    return weight_init
-
-
-def zeros_(x):
-    return nn.init.constant_(x, 0.0)
-
-
-def ones_(tensor):
-    nn.init.constant_(tensor, 1.0)
-
-
-def trunc_normal_(tensor, std=0.02):
-    nn.init.trunc_normal_(tensor, std=std)
-
-
-class LearnableAffineBlock(nn.Module):
+class PPOCRV5MobileRecLearnableAffineBlock(nn.Module):
     def __init__(self, scale_value=1.0, bias_value=0.0, lr_mult=1.0, lab_lr=0.1):
         super().__init__()
         self.scale = nn.Parameter(torch.full((1,), scale_value, dtype=torch.float32))
@@ -84,7 +50,7 @@ class LearnableAffineBlock(nn.Module):
         return self.scale * x + self.bias
 
 
-class ConvBNLayer_PPLCNet(nn.Module):
+class PPOCRV5MobileRecConvBNLayer_PPLCNet(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, groups=1, lr_mult=1.0):
         super().__init__()
 
@@ -97,7 +63,6 @@ class ConvBNLayer_PPLCNet(nn.Module):
             groups=groups,
             bias=False,
         )
-        nn.init.kaiming_normal_(self.conv.weight)
         self.bn = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
@@ -106,7 +71,7 @@ class ConvBNLayer_PPLCNet(nn.Module):
         return x
 
 
-class Act(nn.Module):
+class PPOCRV5MobileRecAct(nn.Module):
     def __init__(self, act="hswish", lr_mult=1.0, lab_lr=0.1):
         super().__init__()
         if act == "hswish":
@@ -114,13 +79,13 @@ class Act(nn.Module):
         else:
             assert act == "relu"
             self.act = nn.ReLU()
-        self.lab = LearnableAffineBlock(lr_mult=lr_mult, lab_lr=lab_lr)
+        self.lab = PPOCRV5MobileRecLearnableAffineBlock(lr_mult=lr_mult, lab_lr=lab_lr)
 
     def forward(self, x):
         return self.lab(self.act(x))
 
 
-class LearnableRepLayer(nn.Module):
+class PPOCRV5MobileRecLearnableRepLayer(nn.Module):
     def __init__(
         self,
         in_channels,
@@ -147,7 +112,7 @@ class LearnableRepLayer(nn.Module):
 
         self.conv_kxk = nn.ModuleList(
             [
-                ConvBNLayer_PPLCNet(
+                PPOCRV5MobileRecConvBNLayer_PPLCNet(
                     in_channels,
                     out_channels,
                     kernel_size,
@@ -160,13 +125,13 @@ class LearnableRepLayer(nn.Module):
         )
 
         self.conv_1x1 = (
-            ConvBNLayer_PPLCNet(in_channels, out_channels, 1, stride, groups=groups, lr_mult=lr_mult)
+            PPOCRV5MobileRecConvBNLayer_PPLCNet(in_channels, out_channels, 1, stride, groups=groups, lr_mult=lr_mult)
             if kernel_size > 1
             else None
         )
 
-        self.lab = LearnableAffineBlock(lr_mult=lr_mult, lab_lr=lab_lr)
-        self.act = Act(lr_mult=lr_mult, lab_lr=lab_lr)
+        self.lab = PPOCRV5MobileRecLearnableAffineBlock(lr_mult=lr_mult, lab_lr=lab_lr)
+        self.act = PPOCRV5MobileRecAct(lr_mult=lr_mult, lab_lr=lab_lr)
 
     def forward(self, x):
         # for export
@@ -236,7 +201,7 @@ class LearnableRepLayer(nn.Module):
     def _fuse_bn_tensor(self, branch):
         if not branch:
             return 0, 0
-        elif isinstance(branch, ConvBNLayer_PPLCNet):
+        elif isinstance(branch, PPOCRV5MobileRecConvBNLayer_PPLCNet):
             kernel = branch.conv.weight
             running_mean = branch.bn.running_mean
             running_var = branch.bn.running_var
@@ -266,7 +231,7 @@ class LearnableRepLayer(nn.Module):
         return kernel * t, beta - running_mean * gamma / std
 
 
-class SELayer(nn.Module):
+class PPOCRV5MobileRecSELayer(nn.Module):
     def __init__(self, channel, reduction=4, lr_mult=1.0):
         super().__init__()
 
@@ -291,7 +256,7 @@ class SELayer(nn.Module):
         return x
 
 
-class LCNetV3Block(nn.Module):
+class PPOCRV5MobileRecLCNetV3Block(nn.Module):
     def __init__(
         self,
         in_channels,
@@ -305,7 +270,7 @@ class LCNetV3Block(nn.Module):
     ):
         super().__init__()
         self.use_se = use_se
-        self.dw_conv = LearnableRepLayer(
+        self.dw_conv = PPOCRV5MobileRecLearnableRepLayer(
             in_channels=in_channels,
             out_channels=in_channels,
             kernel_size=dw_size,
@@ -316,8 +281,8 @@ class LCNetV3Block(nn.Module):
             lab_lr=lab_lr,
         )
         if use_se:
-            self.se = SELayer(in_channels, lr_mult=lr_mult)
-        self.pw_conv = LearnableRepLayer(
+            self.se = PPOCRV5MobileRecSELayer(in_channels, lr_mult=lr_mult)
+        self.pw_conv = PPOCRV5MobileRecLearnableRepLayer(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=1,
@@ -335,23 +300,7 @@ class LCNetV3Block(nn.Module):
         return x
 
 
-class DropPath(nn.Module):
-    def __init__(self, drop_prob=None):
-        super().__init__()
-
-        self.drop_prob = drop_prob
-
-    def forward(self, x):
-        if self.drop_prob == 0.0 or not self.training:
-            return x
-        keep_prob = 1 - self.drop_prob
-        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
-        random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
-        random_tensor.floor_()
-        return x.div(keep_prob) * random_tensor
-
-
-class Block(nn.Module):
+class PPOCRV5MobileRecBlock(nn.Module):
     def __init__(
         self,
         dim,
@@ -378,7 +327,7 @@ class Block(nn.Module):
         else:
             self.norm1 = norm_layer(dim)
         if mixer == "Global" or mixer == "Local":
-            self.mixer = Attention(
+            self.mixer = PPOCRV5MobileRecAttention(
                 dim,
                 num_heads=num_heads,
                 mixer=mixer,
@@ -392,7 +341,7 @@ class Block(nn.Module):
         else:
             raise TypeError("The mixer must be one of [Global, Local, Conv]")
 
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else Identity()
+        self.drop_path = nn.Identity()
         if isinstance(norm_layer, str):
             norm_class = eval(norm_layer.replace("nn.", "nn."))
             self.norm2 = norm_class(dim, eps=epsilon)
@@ -400,7 +349,7 @@ class Block(nn.Module):
             self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp_ratio = mlp_ratio
-        self.mlp = Mlp(
+        self.mlp = PPOCRV5MobileRecMlp(
             in_features=dim,
             hidden_features=mlp_hidden_dim,
             act_layer=act_layer,
@@ -419,7 +368,16 @@ class Block(nn.Module):
         return x
 
 
-class PPLCNetV3(nn.Module):
+def make_divisible(v, divisor=16, min_value=None):
+    if min_value is None:
+        min_value = divisor
+    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
+    if new_v < 0.9 * v:
+        new_v += divisor
+    return new_v
+
+
+class PPOCRV5MobileRecPPLCNetV3(nn.Module):
     def __init__(
         self,
         net_config,
@@ -439,7 +397,7 @@ class PPLCNetV3(nn.Module):
         )
         assert len(self.lr_mult_list) == 6, f"lr_mult_list length should be 6 but got {len(self.lr_mult_list)}"
 
-        self.conv1 = ConvBNLayer_PPLCNet(
+        self.conv1 = PPOCRV5MobileRecConvBNLayer_PPLCNet(
             in_channels=3,
             out_channels=make_divisible(16 * scale),
             kernel_size=3,
@@ -449,7 +407,7 @@ class PPLCNetV3(nn.Module):
 
         self.blocks2 = nn.Sequential(
             *[
-                LCNetV3Block(
+                PPOCRV5MobileRecLCNetV3Block(
                     in_channels=make_divisible(in_c * scale),
                     out_channels=make_divisible(out_c * scale),
                     dw_size=k,
@@ -465,7 +423,7 @@ class PPLCNetV3(nn.Module):
 
         self.blocks3 = nn.Sequential(
             *[
-                LCNetV3Block(
+                PPOCRV5MobileRecLCNetV3Block(
                     in_channels=make_divisible(in_c * scale),
                     out_channels=make_divisible(out_c * scale),
                     dw_size=k,
@@ -481,7 +439,7 @@ class PPLCNetV3(nn.Module):
 
         self.blocks4 = nn.Sequential(
             *[
-                LCNetV3Block(
+                PPOCRV5MobileRecLCNetV3Block(
                     in_channels=make_divisible(in_c * scale),
                     out_channels=make_divisible(out_c * scale),
                     dw_size=k,
@@ -497,7 +455,7 @@ class PPLCNetV3(nn.Module):
 
         self.blocks5 = nn.Sequential(
             *[
-                LCNetV3Block(
+                PPOCRV5MobileRecLCNetV3Block(
                     in_channels=make_divisible(in_c * scale),
                     out_channels=make_divisible(out_c * scale),
                     dw_size=k,
@@ -513,7 +471,7 @@ class PPLCNetV3(nn.Module):
 
         self.blocks6 = nn.Sequential(
             *[
-                LCNetV3Block(
+                PPOCRV5MobileRecLCNetV3Block(
                     in_channels=make_divisible(in_c * scale),
                     out_channels=make_divisible(out_c * scale),
                     dw_size=k,
@@ -549,7 +507,7 @@ class PPLCNetV3(nn.Module):
         return x
 
 
-class FCTranspose(nn.Module):
+class PPOCRV5MobileRecFCTranspose(nn.Module):
     def __init__(self, in_channels, out_channels, only_transpose=False):
         super().__init__()
 
@@ -564,27 +522,22 @@ class FCTranspose(nn.Module):
             return self.fc(x.transpose(1, 2))
 
 
-class AddPos(nn.Module):
+def zeros_(x):
+    return nn.init.constant_(x, 0.0)
+
+
+class PPOCRV5MobileRecAddPos(nn.Module):
     def __init__(self, dim, w):
         super().__init__()
 
         self.dec_pos_embed = nn.Parameter(zeros_((1, w, dim)))
-        trunc_normal_(self.dec_pos_embed)
 
     def forward(self, x):
         x = x + self.dec_pos_embed[:, : x.shape[1], :]
         return x
 
 
-class Identity(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, input):
-        return input
-
-
-class Attention(nn.Module):
+class PPOCRV5MobileRecAttention(nn.Module):
     def __init__(
         self,
         dim,
@@ -641,7 +594,7 @@ class Attention(nn.Module):
         return x
 
 
-class ConvBNLayer(nn.Module):
+class PPOCRV5MobileRecConvBNLayer(nn.Module):
     def __init__(
         self,
         in_channels,
@@ -676,7 +629,7 @@ class ConvBNLayer(nn.Module):
         return out
 
 
-class MultiHead(nn.Module):
+class PPOCRV5MobileRecMultiHead(nn.Module):
     def __init__(self, in_channels, out_channels_list, **kwargs):
         super().__init__()
 
@@ -698,13 +651,13 @@ class MultiHead(nn.Module):
                 if self.use_pos:
                     self.before_gtc = nn.Sequential(
                         nn.Flatten(2),
-                        FCTranspose(in_channels, nrtr_dim),
-                        AddPos(nrtr_dim, 80),
+                        PPOCRV5MobileRecFCTranspose(in_channels, nrtr_dim),
+                        PPOCRV5MobileRecAddPos(nrtr_dim, 80),
                     )
                 else:
-                    self.before_gtc = nn.Sequential(nn.Flatten(2), FCTranspose(in_channels, nrtr_dim))
+                    self.before_gtc = nn.Sequential(nn.Flatten(2), PPOCRV5MobileRecFCTranspose(in_channels, nrtr_dim))
 
-                self.gtc_head = Transformer(
+                self.gtc_head = PPOCRV5MobileRecTransformer(
                     d_model=nrtr_dim,
                     nhead=nrtr_dim // 32,
                     num_encoder_layers=-1,
@@ -716,13 +669,15 @@ class MultiHead(nn.Module):
                 )
             elif name == "CTCHead":
                 # ctc neck
-                self.encoder_reshape = Im2Seq(in_channels)
+                self.encoder_reshape = PPOCRV5MobileRecIm2Seq(in_channels)
                 neck_args = copy.deepcopy(self.head_list[idx][name]["Neck"])
                 encoder_type = neck_args.pop("name")
-                self.ctc_encoder = SequenceEncoder(in_channels=in_channels, encoder_type=encoder_type, **neck_args)
+                self.ctc_encoder = PPOCRV5MobileRecSequenceEncoder(
+                    in_channels=in_channels, encoder_type=encoder_type, **neck_args
+                )
                 # ctc head
                 head_args = self.head_list[idx][name]["Head"]
-                self.ctc_head = eval(name)(
+                self.ctc_head = PPOCRV5MobileRecCTCHead(
                     in_channels=self.ctc_encoder.out_channels,
                     out_channels=out_channels_list["CTCLabelDecode"],
                     **head_args,
@@ -749,7 +704,7 @@ class MultiHead(nn.Module):
         return head_out
 
 
-class CTCHead(nn.Module):
+class PPOCRV5MobileRecCTCHead(nn.Module):
     def __init__(
         self,
         in_channels,
@@ -763,15 +718,14 @@ class CTCHead(nn.Module):
         self.out_channels = out_channels
         self.mid_channels = mid_channels
         self.return_feats = return_feats
+        self.in_channels = in_channels
+        self.fc_decay = fc_decay
 
         if mid_channels is None:
             self.fc = nn.Linear(in_channels, out_channels)
-            get_para_bias_attr(fc_decay, in_channels)(self.fc)
         else:
             self.fc1 = nn.Linear(in_channels, mid_channels)
-            get_para_bias_attr(fc_decay, in_channels)(self.fc1)
             self.fc2 = nn.Linear(mid_channels, out_channels)
-            get_para_bias_attr(fc_decay, mid_channels)(self.fc2)
 
     def forward(self, x, targets=None):
         if self.mid_channels is None:
@@ -791,7 +745,7 @@ class CTCHead(nn.Module):
         return result
 
 
-class Mlp(nn.Module):
+class PPOCRV5MobileRecMlp(nn.Module):
     def __init__(
         self,
         in_features,
@@ -818,7 +772,7 @@ class Mlp(nn.Module):
         return x
 
 
-class Transformer(nn.Module):
+class PPOCRV5MobileRecTransformer(nn.Module):
     def __init__(
         self,
         d_model=512,
@@ -838,18 +792,18 @@ class Transformer(nn.Module):
 
         self.out_channels = out_channels + 1
         self.max_len = max_len
-        self.embedding = Embeddings(
+        self.embedding = PPOCRV5MobileRecEmbeddings(
             d_model=d_model,
             vocab=self.out_channels,
             padding_idx=0,
             scale_embedding=scale_embedding,
         )
-        self.positional_encoding = PositionalEncoding(dropout=residual_dropout_rate, dim=d_model)
+        self.positional_encoding = PPOCRV5MobileRecPositionalEncoding(dropout=residual_dropout_rate, dim=d_model)
 
         if num_encoder_layers > 0:
             self.encoder = nn.ModuleList(
                 [
-                    TransformerBlock(
+                    PPOCRV5MobileRecTransformerBlock(
                         d_model,
                         nhead,
                         dim_feedforward,
@@ -866,7 +820,7 @@ class Transformer(nn.Module):
 
         self.decoder = nn.ModuleList(
             [
-                TransformerBlock(
+                PPOCRV5MobileRecTransformerBlock(
                     d_model,
                     nhead,
                     dim_feedforward,
@@ -883,16 +837,6 @@ class Transformer(nn.Module):
         self.d_model = d_model
         self.nhead = nhead
         self.tgt_word_prj = nn.Linear(self.out_channels, d_model, bias=False)
-        w0 = np.random.normal(0.0, d_model**-0.5, (d_model, self.out_channels)).astype(np.float32)
-        with torch.no_grad():
-            self.tgt_word_prj.weight.copy_(torch.from_numpy(w0))
-        self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            xavier_normal_(m.weight)
-            if m.bias is not None:
-                zeros_(m.bias)
 
     def forward_train(self, src, tgt):
         tgt = tgt[:, :-1]
@@ -1037,7 +981,7 @@ class Transformer(nn.Module):
                 src_enc = images
 
             n_bm = self.beam_size
-            inst_dec_beams = [Beam(n_bm) for _ in range(1)]
+            inst_dec_beams = [PPOCRV5MobileRecBeam(n_bm) for _ in range(1)]
             active_inst_idx_list = list(range(1))
             src_enc = src_enc.repeat(1, n_bm, 1)
             inst_idx_to_position_map = get_inst_idx_to_tensor_position_map(active_inst_idx_list)
@@ -1077,7 +1021,7 @@ class Transformer(nn.Module):
         return mask.unsqueeze(0).unsqueeze(0)
 
 
-class MultiheadAttention(nn.Module):
+class PPOCRV5MobileRecMultiheadAttention(nn.Module):
     def __init__(self, embed_dim, num_heads, dropout=0.0, self_attn=False):
         super().__init__()
 
@@ -1121,7 +1065,7 @@ class MultiheadAttention(nn.Module):
         return x
 
 
-class TransformerBlock(nn.Module):
+class PPOCRV5MobileRecTransformerBlock(nn.Module):
     def __init__(
         self,
         d_model,
@@ -1137,18 +1081,18 @@ class TransformerBlock(nn.Module):
 
         self.with_self_attn = with_self_attn
         if with_self_attn:
-            self.self_attn = MultiheadAttention(
+            self.self_attn = PPOCRV5MobileRecMultiheadAttention(
                 d_model, nhead, dropout=attention_dropout_rate, self_attn=with_self_attn
             )
             self.norm1 = LayerNorm(d_model, eps=epsilon)
             self.dropout1 = Dropout(residual_dropout_rate)
         self.with_cross_attn = with_cross_attn
         if with_cross_attn:
-            self.cross_attn = MultiheadAttention(d_model, nhead, dropout=attention_dropout_rate)
+            self.cross_attn = PPOCRV5MobileRecMultiheadAttention(d_model, nhead, dropout=attention_dropout_rate)
             self.norm2 = LayerNorm(d_model, eps=epsilon)
             self.dropout2 = Dropout(residual_dropout_rate)
 
-        self.mlp = Mlp(
+        self.mlp = PPOCRV5MobileRecMlp(
             in_features=d_model,
             hidden_features=dim_feedforward,
             act_layer=nn.ReLU,
@@ -1170,7 +1114,7 @@ class TransformerBlock(nn.Module):
         return tgt
 
 
-class PositionalEncoding(nn.Module):
+class PPOCRV5MobileRecPositionalEncoding(nn.Module):
     def __init__(self, dropout, dim, max_len=5000):
         super().__init__()
 
@@ -1191,15 +1135,13 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x).permute(1, 0, 2)
 
 
-class Embeddings(nn.Module):
+class PPOCRV5MobileRecEmbeddings(nn.Module):
     def __init__(self, d_model, vocab, padding_idx=None, scale_embedding=True):
         super().__init__()
 
         self.embedding = nn.Embedding(vocab, d_model, padding_idx=padding_idx)
-        w0 = np.random.normal(0.0, d_model**-0.5, (vocab, d_model)).astype(np.float32)
-        with torch.no_grad():
-            self.embedding.weight.copy_(torch.from_numpy(w0))
         self.d_model = d_model
+        self.vocab = vocab
         self.scale_embedding = scale_embedding
 
     def forward(self, x):
@@ -1209,7 +1151,7 @@ class Embeddings(nn.Module):
         return self.embedding(x)
 
 
-class Beam:
+class PPOCRV5MobileRecBeam:
     def __init__(self, size, device=False):
         self.size = size
         self._done = False
@@ -1272,7 +1214,7 @@ class Beam:
         return [x.item() for x in hyp[::-1]]
 
 
-class Im2Seq(nn.Module):
+class PPOCRV5MobileRecIm2Seq(nn.Module):
     def __init__(self, in_channels, **kwargs):
         super().__init__()
 
@@ -1286,7 +1228,19 @@ class Im2Seq(nn.Module):
         return x
 
 
-class EncoderWithFC(nn.Module):
+def get_para_bias_attr(l2_decay, k):
+    stdv = 1.0 / math.sqrt(k * 1.0)
+
+    def weight_init(m):
+        if isinstance(m, nn.Linear):
+            nn.init.uniform_(m.weight, -stdv, stdv)
+            if m.bias is not None:
+                nn.init.uniform_(m.bias, -stdv, stdv)
+
+    return weight_init
+
+
+class PPOCRV5MobileRecEncoderWithFC(nn.Module):
     def __init__(self, in_channels, hidden_size):
         super().__init__()
 
@@ -1302,7 +1256,7 @@ class EncoderWithFC(nn.Module):
         return x
 
 
-class EncoderWithSVTR(nn.Module):
+class PPOCRV5MobileRecEncoderWithSVTR(nn.Module):
     def __init__(
         self,
         in_channels,
@@ -1323,18 +1277,18 @@ class EncoderWithSVTR(nn.Module):
 
         self.depth = depth
         self.use_guide = use_guide
-        self.conv1 = ConvBNLayer(
+        self.conv1 = PPOCRV5MobileRecConvBNLayer(
             in_channels,
             in_channels // 8,
             kernel_size=kernel_size,
             padding=[kernel_size[0] // 2, kernel_size[1] // 2],
             act=nn.SiLU,
         )
-        self.conv2 = ConvBNLayer(in_channels // 8, hidden_dims, kernel_size=1, act=nn.SiLU)
+        self.conv2 = PPOCRV5MobileRecConvBNLayer(in_channels // 8, hidden_dims, kernel_size=1, act=nn.SiLU)
 
         self.svtr_block = nn.ModuleList(
             [
-                Block(
+                PPOCRV5MobileRecBlock(
                     dim=hidden_dims,
                     num_heads=num_heads,
                     mixer="Global",
@@ -1354,8 +1308,8 @@ class EncoderWithSVTR(nn.Module):
             ]
         )
         self.norm = nn.LayerNorm(hidden_dims, eps=1e-6)
-        self.conv3 = ConvBNLayer(hidden_dims, in_channels, kernel_size=1, act=nn.SiLU)
-        self.conv4 = ConvBNLayer(
+        self.conv3 = PPOCRV5MobileRecConvBNLayer(hidden_dims, in_channels, kernel_size=1, act=nn.SiLU)
+        self.conv4 = PPOCRV5MobileRecConvBNLayer(
             2 * in_channels,
             in_channels // 8,
             kernel_size=kernel_size,
@@ -1363,18 +1317,8 @@ class EncoderWithSVTR(nn.Module):
             act=nn.SiLU,
         )
 
-        self.conv1x1 = ConvBNLayer(in_channels // 8, dims, kernel_size=1, act=nn.SiLU)
+        self.conv1x1 = PPOCRV5MobileRecConvBNLayer(in_channels // 8, dims, kernel_size=1, act=nn.SiLU)
         self.out_channels = dims
-        self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight)
-            if m.bias is not None:
-                zeros_(m.bias)
-        elif isinstance(m, nn.LayerNorm):
-            zeros_(m.bias)
-            ones_(m.weight)
 
     def forward(self, x):
         if self.use_guide:
@@ -1401,17 +1345,17 @@ class EncoderWithSVTR(nn.Module):
         return z
 
 
-class SequenceEncoder(nn.Module):
+class PPOCRV5MobileRecSequenceEncoder(nn.Module):
     def __init__(self, in_channels, encoder_type, hidden_size=48, **kwargs):
         super().__init__()
 
-        self.encoder_reshape = Im2Seq(in_channels)
+        self.encoder_reshape = PPOCRV5MobileRecIm2Seq(in_channels)
         self.out_channels = self.encoder_reshape.out_channels
         self.encoder_type = encoder_type
         if encoder_type == "reshape":
             self.only_reshape = True
         else:
-            support_encoder_dict = {"svtr": EncoderWithSVTR}
+            support_encoder_dict = {"svtr": PPOCRV5MobileRecEncoderWithSVTR}
             assert encoder_type in support_encoder_dict, f"{encoder_type} must in {support_encoder_dict.keys()}"
             if encoder_type == "svtr":
                 self.encoder = support_encoder_dict[encoder_type](self.encoder_reshape.out_channels, **kwargs)
@@ -1434,6 +1378,10 @@ class SequenceEncoder(nn.Module):
             x = self.encoder(x)
             x = self.encoder_reshape(x)
             return x
+
+
+def trunc_normal_(tensor, std=0.02):
+    nn.init.trunc_normal_(tensor, std=std)
 
 
 @auto_docstring(custom_intro="ImageProcessor for the PP-OCRv5_mobile_rec model.")
@@ -1536,7 +1484,7 @@ class PPOCRV5MobileRecImageProcessor(BaseImageProcessor):
 
         if target_w > self.max_img_width:
             # If target width exceeds max, resize to max width
-            resized_image = cv2.resize(img, (self.max_img_width, img_h))
+            resized_image = self._ocr_resize(img, (self.max_img_width, img_h))
             resized_w = self.max_img_width
             target_w = self.max_img_width
         else:
@@ -1546,7 +1494,7 @@ class PPOCRV5MobileRecImageProcessor(BaseImageProcessor):
                 resized_w = target_w
             else:
                 resized_w = int(math.ceil(img_h * ratio))
-            resized_image = cv2.resize(img, (resized_w, img_h))
+            resized_image = self._ocr_resize(img, (resized_w, img_h))
 
         # Convert to float32
         resized_image = resized_image.astype(np.float32)
@@ -1646,6 +1594,107 @@ class PPOCRV5MobileRecImageProcessor(BaseImageProcessor):
             self.max_img_width = original_max_img_width
             self.do_rescale = original_do_rescale
             self.do_normalize = original_do_normalize
+
+    def _ocr_resize(self, img: np.ndarray, target_size: tuple[int, int]) -> np.ndarray:
+        """
+        Resize image to exactly match cv2.resize behavior using fixed-point arithmetic.
+
+        This implementation uses fixed-point arithmetic (matching OpenCV's internal approach)
+        with float32 precision for coordinate calculations to achieve maximum compatibility.
+
+        Args:
+            img (`np.ndarray`):
+                Input image in HWC format (height, width, channels).
+            target_size (`tuple[int, int]`):
+                Target size as (width, height) to match cv2.resize convention.
+
+        Returns:
+            `np.ndarray`: Resized image in HWC format.
+        """
+        h, w = img.shape[:2]
+        target_w, target_h = target_size
+
+        # Ensure uint8 format
+        if img.dtype != np.uint8:
+            img = np.clip(img, 0, 255).astype(np.uint8)
+
+        # Handle grayscale images
+        if len(img.shape) == 2:
+            img = img[:, :, np.newaxis]
+            squeeze_output = True
+        else:
+            squeeze_output = False
+
+        # OpenCV uses fixed-point arithmetic with these constants
+        INTER_RESIZE_COEF_BITS = 11
+        INTER_RESIZE_COEF_SCALE = 1 << INTER_RESIZE_COEF_BITS  # 2048
+
+        # Calculate scaling factors using float32 (like cv2)
+        scale_x = np.float32(w) / np.float32(target_w)
+        scale_y = np.float32(h) / np.float32(target_h)
+
+        # Create coordinate grids for output image using float32
+        out_y, out_x = np.meshgrid(
+            np.arange(target_h, dtype=np.float32), np.arange(target_w, dtype=np.float32), indexing="ij"
+        )
+
+        # Map output coordinates to input coordinates (pixel-center alignment) using float32
+        src_x = (out_x + np.float32(0.5)) * scale_x - np.float32(0.5)
+        src_y = (out_y + np.float32(0.5)) * scale_y - np.float32(0.5)
+
+        # Clip to valid range
+        src_x = np.clip(src_x, np.float32(0), np.float32(w - 1))
+        src_y = np.clip(src_y, np.float32(0), np.float32(h - 1))
+
+        # Get integer parts
+        x0 = np.floor(src_x).astype(np.int32)
+        y0 = np.floor(src_y).astype(np.int32)
+        x1 = np.minimum(x0 + 1, w - 1)
+        y1 = np.minimum(y0 + 1, h - 1)
+
+        # Calculate fractional parts (keep in float32)
+        fx = src_x - x0.astype(np.float32)
+        fy = src_y - y0.astype(np.float32)
+
+        # Convert to fixed-point (with rounding, matching cv2's behavior)
+        wx = np.round(fx * np.float32(INTER_RESIZE_COEF_SCALE)).astype(np.int32)
+        wy = np.round(fy * np.float32(INTER_RESIZE_COEF_SCALE)).astype(np.int32)
+
+        # Clamp to valid range
+        wx = np.minimum(wx, INTER_RESIZE_COEF_SCALE)
+        wy = np.minimum(wy, INTER_RESIZE_COEF_SCALE)
+
+        # Calculate the four interpolation weights in fixed-point
+        w0 = (INTER_RESIZE_COEF_SCALE - wx) * (INTER_RESIZE_COEF_SCALE - wy)
+        w1 = wx * (INTER_RESIZE_COEF_SCALE - wy)
+        w2 = (INTER_RESIZE_COEF_SCALE - wx) * wy
+        w3 = wx * wy
+
+        # Perform bilinear interpolation for each channel using fixed-point arithmetic
+        output = np.zeros((target_h, target_w, img.shape[2]), dtype=np.uint8)
+
+        for c in range(img.shape[2]):
+            # Get the four corner pixel values (as int32 for fixed-point math)
+            Ia = img[y0, x0, c].astype(np.int32)
+            Ib = img[y0, x1, c].astype(np.int32)
+            Ic = img[y1, x0, c].astype(np.int32)
+            Id = img[y1, x1, c].astype(np.int32)
+
+            # Fixed-point interpolation
+            val = w0 * Ia + w1 * Ib + w2 * Ic + w3 * Id
+
+            # Divide by INTER_RESIZE_COEF_SCALE^2 with rounding
+            # This is equivalent to: (val + (1 << 21)) >> 22
+            shift_bits = INTER_RESIZE_COEF_BITS * 2
+            val = (val + (1 << (shift_bits - 1))) >> shift_bits
+
+            # Clamp to [0, 255]
+            output[:, :, c] = np.clip(val, 0, 255).astype(np.uint8)
+
+        if squeeze_output:
+            output = output[:, :, 0]
+
+        return output
 
     def _ctc_decode(
         self,
@@ -1835,6 +1884,107 @@ class PPOCRV5MobileRecImageProcessorFast(BaseImageProcessorFast):
         self.character = characters
         self.char_to_idx = {char: idx for idx, char in enumerate(characters)}
 
+    def _ocr_resize(self, img: np.ndarray, target_size: tuple[int, int]) -> np.ndarray:
+        """
+        Resize image to exactly match cv2.resize behavior using fixed-point arithmetic.
+
+        This implementation uses fixed-point arithmetic (matching OpenCV's internal approach)
+        with float32 precision for coordinate calculations to achieve maximum compatibility.
+
+        Args:
+            img (`np.ndarray`):
+                Input image in HWC format (height, width, channels).
+            target_size (`tuple[int, int]`):
+                Target size as (width, height) to match cv2.resize convention.
+
+        Returns:
+            `np.ndarray`: Resized image in HWC format.
+        """
+        h, w = img.shape[:2]
+        target_w, target_h = target_size
+
+        # Ensure uint8 format
+        if img.dtype != np.uint8:
+            img = np.clip(img, 0, 255).astype(np.uint8)
+
+        # Handle grayscale images
+        if len(img.shape) == 2:
+            img = img[:, :, np.newaxis]
+            squeeze_output = True
+        else:
+            squeeze_output = False
+
+        # OpenCV uses fixed-point arithmetic with these constants
+        INTER_RESIZE_COEF_BITS = 11
+        INTER_RESIZE_COEF_SCALE = 1 << INTER_RESIZE_COEF_BITS  # 2048
+
+        # Calculate scaling factors using float32 (like cv2)
+        scale_x = np.float32(w) / np.float32(target_w)
+        scale_y = np.float32(h) / np.float32(target_h)
+
+        # Create coordinate grids for output image using float32
+        out_y, out_x = np.meshgrid(
+            np.arange(target_h, dtype=np.float32), np.arange(target_w, dtype=np.float32), indexing="ij"
+        )
+
+        # Map output coordinates to input coordinates (pixel-center alignment) using float32
+        src_x = (out_x + np.float32(0.5)) * scale_x - np.float32(0.5)
+        src_y = (out_y + np.float32(0.5)) * scale_y - np.float32(0.5)
+
+        # Clip to valid range
+        src_x = np.clip(src_x, np.float32(0), np.float32(w - 1))
+        src_y = np.clip(src_y, np.float32(0), np.float32(h - 1))
+
+        # Get integer parts
+        x0 = np.floor(src_x).astype(np.int32)
+        y0 = np.floor(src_y).astype(np.int32)
+        x1 = np.minimum(x0 + 1, w - 1)
+        y1 = np.minimum(y0 + 1, h - 1)
+
+        # Calculate fractional parts (keep in float32)
+        fx = src_x - x0.astype(np.float32)
+        fy = src_y - y0.astype(np.float32)
+
+        # Convert to fixed-point (with rounding, matching cv2's behavior)
+        wx = np.round(fx * np.float32(INTER_RESIZE_COEF_SCALE)).astype(np.int32)
+        wy = np.round(fy * np.float32(INTER_RESIZE_COEF_SCALE)).astype(np.int32)
+
+        # Clamp to valid range
+        wx = np.minimum(wx, INTER_RESIZE_COEF_SCALE)
+        wy = np.minimum(wy, INTER_RESIZE_COEF_SCALE)
+
+        # Calculate the four interpolation weights in fixed-point
+        w0 = (INTER_RESIZE_COEF_SCALE - wx) * (INTER_RESIZE_COEF_SCALE - wy)
+        w1 = wx * (INTER_RESIZE_COEF_SCALE - wy)
+        w2 = (INTER_RESIZE_COEF_SCALE - wx) * wy
+        w3 = wx * wy
+
+        # Perform bilinear interpolation for each channel using fixed-point arithmetic
+        output = np.zeros((target_h, target_w, img.shape[2]), dtype=np.uint8)
+
+        for c in range(img.shape[2]):
+            # Get the four corner pixel values (as int32 for fixed-point math)
+            Ia = img[y0, x0, c].astype(np.int32)
+            Ib = img[y0, x1, c].astype(np.int32)
+            Ic = img[y1, x0, c].astype(np.int32)
+            Id = img[y1, x1, c].astype(np.int32)
+
+            # Fixed-point interpolation
+            val = w0 * Ia + w1 * Ib + w2 * Ic + w3 * Id
+
+            # Divide by INTER_RESIZE_COEF_SCALE^2 with rounding
+            # This is equivalent to: (val + (1 << 21)) >> 22
+            shift_bits = INTER_RESIZE_COEF_BITS * 2
+            val = (val + (1 << (shift_bits - 1))) >> shift_bits
+
+            # Clamp to [0, 255]
+            output[:, :, c] = np.clip(val, 0, 255).astype(np.uint8)
+
+        if squeeze_output:
+            output = output[:, :, 0]
+
+        return output
+
     def _resize_norm_img(
         self,
         img: np.ndarray,
@@ -1844,8 +1994,8 @@ class PPOCRV5MobileRecImageProcessorFast(BaseImageProcessorFast):
         """
         Resize and normalize a single image while maintaining aspect ratio.
 
-        This method is identical to the one in [`PPOCRV5MobileRecImageProcessor`] to ensure
-        consistent preprocessing results.
+        This method uses PIL-based resizing instead of cv2 while maintaining
+        consistent preprocessing results with [`PPOCRV5MobileRecImageProcessor`].
 
         Args:
             img (`np.ndarray`):
@@ -1865,7 +2015,7 @@ class PPOCRV5MobileRecImageProcessorFast(BaseImageProcessorFast):
 
         if target_w > self.max_img_width:
             # If target width exceeds max, resize to max width
-            resized_image = cv2.resize(img, (self.max_img_width, img_h))
+            resized_image = self._ocr_resize(img, (self.max_img_width, img_h))
             resized_w = self.max_img_width
             target_w = self.max_img_width
         else:
@@ -1875,7 +2025,7 @@ class PPOCRV5MobileRecImageProcessorFast(BaseImageProcessorFast):
                 resized_w = target_w
             else:
                 resized_w = int(math.ceil(img_h * ratio))
-            resized_image = cv2.resize(img, (resized_w, img_h))
+            resized_image = self._ocr_resize(img, (resized_w, img_h))
 
         # Convert to float32
         resized_image = resized_image.astype(np.float32)
@@ -2083,6 +2233,64 @@ class PPOCRV5MobileRecPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+
+        # PPOCRV5MobileRecConvBNLayer_PPLCNet: kaiming_normal for conv layers
+        if isinstance(module, PPOCRV5MobileRecConvBNLayer_PPLCNet):
+            init.kaiming_normal_(module.conv.weight)
+
+        # PPOCRV5MobileRecCTCHead: uniform initialization based on fc_decay
+        if isinstance(module, PPOCRV5MobileRecCTCHead):
+            if module.mid_channels is None:
+                stdv = 1.0 / math.sqrt(module.in_channels * 1.0)
+                init.uniform_(module.fc.weight, -stdv, stdv)
+                if module.fc.bias is not None:
+                    init.uniform_(module.fc.bias, -stdv, stdv)
+            else:
+                stdv1 = 1.0 / math.sqrt(module.in_channels * 1.0)
+                init.uniform_(module.fc1.weight, -stdv1, stdv1)
+                if module.fc1.bias is not None:
+                    init.uniform_(module.fc1.bias, -stdv1, stdv1)
+
+                stdv2 = 1.0 / math.sqrt(module.mid_channels * 1.0)
+                init.uniform_(module.fc2.weight, -stdv2, stdv2)
+                if module.fc2.bias is not None:
+                    init.uniform_(module.fc2.bias, -stdv2, stdv2)
+
+        # PPOCRV5MobileRecTransformer: xavier_normal for linear layers, zeros for bias
+        if isinstance(module, PPOCRV5MobileRecTransformer):
+            for m in module.modules():
+                if isinstance(m, nn.Linear):
+                    init.xavier_normal_(m.weight)
+                    if m.bias is not None:
+                        init.constant_(m.bias, 0.0)
+            # Special initialization for tgt_word_prj
+            w0 = np.random.normal(0.0, module.d_model**-0.5, (module.d_model, module.out_channels)).astype(np.float32)
+            module.tgt_word_prj.weight.copy_(torch.from_numpy(w0))
+
+        # PPOCRV5MobileRecAddPos: trunc_normal for dec_pos_embed
+        if isinstance(module, PPOCRV5MobileRecAddPos):
+            init.trunc_normal_(module.dec_pos_embed, std=0.02)
+
+        # PPOCRV5MobileRecEmbeddings: normal initialization with std based on d_model
+        if isinstance(module, PPOCRV5MobileRecEmbeddings):
+            w0 = np.random.normal(0.0, module.d_model**-0.5, (module.vocab, module.d_model)).astype(np.float32)
+            module.embedding.weight.copy_(torch.from_numpy(w0))
+
+        # PPOCRV5MobileRecEncoderWithSVTR: trunc_normal for linear weights, ones/zeros for LayerNorm
+        if isinstance(module, PPOCRV5MobileRecEncoderWithSVTR):
+            for m in module.modules():
+                if isinstance(m, nn.Linear):
+                    init.trunc_normal_(m.weight, std=0.02)
+                    if m.bias is not None:
+                        init.constant_(m.bias, 0.0)
+                elif isinstance(m, nn.LayerNorm):
+                    init.constant_(m.bias, 0.0)
+                    init.constant_(m.weight, 1.0)
+
 
 @auto_docstring(custom_intro="The PP-OCRv5_mobile_rec model.")
 class PPOCRV5MobileRecModel(PPOCRV5MobileRecPreTrainedModel):
@@ -2093,14 +2301,14 @@ class PPOCRV5MobileRecModel(PPOCRV5MobileRecPreTrainedModel):
 
     def __init__(self, config: PPOCRV5MobileRecConfig):
         super().__init__(config)
-        self.backbone = PPLCNetV3(
+        self.backbone = PPOCRV5MobileRecPPLCNetV3(
             scale=config.scale,
             net_config=config.net_config,
             conv_kxk_num=config.conv_kxk_num,
             lr_mult_list=config.lr_mult_list,
             lab_lr=config.lab_lr,
         )
-        self.head = MultiHead(
+        self.head = PPOCRV5MobileRecMultiHead(
             in_channels=self.backbone.out_channels,
             out_channels_list=config.decode_list,
             head_list=config.head_list,
