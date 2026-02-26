@@ -111,6 +111,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 - Pad inputs on the right because GPT-2 uses absolute position embeddings.
 - GPT-2 can reuse previously computed key-value attention pairs. Access this feature with the [past_key_values](https://huggingface.co/docs/transformers//en/model_doc/gpt2#transformers.GPT2Model.forward.past_key_values) parameter in [`GPT2Model.forward`].
 - Enable the [scale_attn_by_inverse_layer_idx](https://huggingface.co/docs/transformers/en/model_doc/gpt2#transformers.GPT2Config.scale_attn_by_inverse_layer_idx) and [reorder_and_upcast_attn](https://huggingface.co/docs/transformers/en/model_doc/gpt2#transformers.GPT2Config.reorder_and_upcast_attn) parameters to apply the training stability improvements from [Mistral](./mistral).
+- Models trained on large text corpora can reflect societal biases. GPT-2 models trained on internet text may reproduce biases related to demographic factors (race, gender, religion) and species (anthropocentric value hierarchies). For applications in food systems, agriculture, or environmental science, consult the model card for bias documentation and consider evaluation on relevant benchmarks.
 
 ## GPT2Config
 
