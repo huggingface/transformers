@@ -57,12 +57,6 @@ class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     pass
 
 
-# TODO: 
-# the following class-level attributes come from Qwen3OmniMoeTextConfig and might need to be removed
-#    keys_to_ignore_at_inference = ["past_key_values"]
-#    default_theta
-#    base_model_tp_plan
-#    base_model_pp_plan
 class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRTextModel`]. It is used to instantiate a
@@ -75,8 +69,7 @@ class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the Qwen3ASR model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Qwen3ASRModel`]
+            Vocabulary size of the model.
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 22016):
@@ -92,8 +85,7 @@ class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details, check out [this
             paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-        head_dim (`int`, *optional*, defaults to 128):
-            The dimension of the head. If not specified, will default to `hidden_size // num_attention_heads`.
+
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 128000):
@@ -105,59 +97,30 @@ class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 5000000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        sliding_window (`int`, *optional*, defaults to 4096):
+            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3ASRTextModel, Qwen3ASRTextConfig
 
-    >>> # Initializing a Qwen3ASR style configuration
+    >>> # Initializing a configuration
     >>> configuration = Qwen3ASRTextConfig()
 
-    >>> # Initializing a model from the Qwen3-VL-7B style configuration
+    >>> # Initializing a model with random weights
     >>> model = Qwen3ASRTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -173,51 +136,49 @@ class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
         num_hidden_layers=32,
         num_attention_heads=32,
         num_key_value_heads=32,
-        head_dim=128,
         hidden_act="silu",
         max_position_embeddings=128000,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=5000000.0,
-        rope_scaling=None,
+        rope_parameters=None,
         attention_bias=False,
+        sliding_window=None,
         attention_dropout=0.0,
-        attn_implementation=None,
+        pad_token_id=None,
+        bos_token_id= None,
+        eos_token_id=None,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-    
-        PreTrainedConfig.__init__(
-            self,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs
+        super().__init__(
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_key_value_heads=num_key_value_heads,
+            hidden_act=hidden_act,
+            max_position_embeddings=max_position_embeddings,
+            initializer_range=initializer_range,
+            rms_norm_eps=rms_norm_eps,
+            use_cache=use_cache,
+            rope_parameters=rope_parameters,
+            attention_bias=attention_bias,
+            sliding_window=sliding_window,
+            attention_dropout=attention_dropout,
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
         )
+        del self.decoder_sparse_step
+        del self.moe_intermediate_size
+        del self.num_experts_per_tok
+        del self.num_experts
+        del self.norm_topk_prob
+        del self.output_router_logits
+        del self.router_aux_loss_coef
+        del self.mlp_only_layers
 
 
 class Qwen3ASRThinkerConfig(Qwen3OmniMoeThinkerConfig):
