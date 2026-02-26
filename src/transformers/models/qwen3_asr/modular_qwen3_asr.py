@@ -534,18 +534,14 @@ class Qwen3ASRProcessor(AudioFlamingo3Processor):
             )
         )
 
-
 class Qwen3ASRTextRMSNorm(Qwen3OmniMoeThinkerTextRMSNorm):
     pass
-
 
 class Qwen3ASRTextAttention(Qwen3OmniMoeThinkerTextAttention):
     pass
 
-
 class Qwen3ASRTextMLP(Qwen3OmniMoeThinkerTextMLP):
     pass
-
 
 class Qwen3ASRThinkerTextDecoderLayer(Qwen3OmniMoeThinkerTextDecoderLayer):
     def __init__(self, config: Qwen3ASRConfig, layer_idx: int):
@@ -555,7 +551,6 @@ class Qwen3ASRThinkerTextDecoderLayer(Qwen3OmniMoeThinkerTextDecoderLayer):
         self.mlp = Qwen3ASRTextMLP(config)
         self.input_layernorm = Qwen3ASRTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen3ASRTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
 
 @auto_docstring
 class Qwen3ASRPreTrainedModel(PreTrainedModel):
@@ -573,7 +568,6 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
         "attentions": Qwen3ASRTextAttention,
     }
 
-
 @dataclass
 class Qwen3ASRThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
@@ -583,7 +577,6 @@ class Qwen3ASRThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     """
 
     rope_deltas: Optional[torch.LongTensor] = None
-
 
 class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedModelForConditionalGeneration):
     def _prepare_4d_causal_attention_mask_with_cache_position(
@@ -684,14 +677,11 @@ class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedMode
 
         return position_ids, mrope_position_deltas
 
-
 class Qwen3ASRAudioAttention(Qwen3OmniMoeAudioAttention):
     pass
 
-
 class Qwen3ASRAudioEncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
     pass
-
 
 @auto_docstring(
     custom_intro="""
@@ -710,7 +700,6 @@ class Qwen3ASRThinkerTextRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding)
 
 class Qwen3ASRThinkerTextMLP(Qwen3OmniMoeThinkerTextMLP):
     pass
-
 
 class Qwen3ASRThinkerTextRMSNorm(Qwen3OmniMoeThinkerTextRMSNorm):
     pass

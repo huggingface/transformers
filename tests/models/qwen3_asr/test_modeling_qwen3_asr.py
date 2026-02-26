@@ -122,7 +122,6 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         """
         reproducer (creates JSON directly in repo): https://gist.github.com/TODO
         """
-        torch.manual_seed(0)
         path = Path(__file__).parent.parent.parent / "fixtures/qwen3_asr/expected_results_single.json"
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
@@ -181,7 +180,6 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         """
         reproducer (creates JSON directly in repo): https://gist.github.com/TODO
         """
-        torch.manual_seed(0)
         path = Path(__file__).parent.parent.parent / "fixtures/qwen3_asr/expected_results_batched.json"
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
