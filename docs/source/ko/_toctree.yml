@@ -255,8 +255,6 @@
         title: 제로샷(zero-shot) 이미지 분류
       - local: tasks/monocular_depth_estimation
         title: 단일 영상 기반 깊이 추정
-      - local: tasks/image_to_image
-        title: Image-to-Image
       - local: tasks/image_feature_extraction
         title: 이미지 특징 추출
       - local: tasks/mask_generation

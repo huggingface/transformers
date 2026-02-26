@@ -142,14 +142,23 @@
   - isExpanded: false
     sections:
     - local: trainer
-      title: Trainer
+      title: Trainer overview
     - local: training
       title: Fine-tuning
+    title: Get started
+  - isExpanded: false
+    sections:
+    - local: trainer_customize
+      title: Subclassing Trainer methods
+    - local: trainer_callbacks
+      title: Callbacks
+    - local: data_collators
+      title: Data collators
     - local: optimizers
       title: Optimizers
     - local: hpo_train
       title: Hyperparameter search
-    title: Trainer API
+    title: Customization
   - isExpanded: false
     sections:
     - local: accelerator_selection
@@ -179,11 +188,11 @@
       title: Intel Gaudi
     - local: perf_hardware
       title: Build your own machine
+    - local: model_memory_anatomy
+      title: Model training anatomy
     title: Hardware
   - local: peft
     title: PEFT
-  - local: model_memory_anatomy
-    title: Model training anatomy
   title: Training
 - isExpanded: false
   sections:
@@ -211,6 +220,8 @@
     title: FBGEMM
   - local: quantization/finegrained_fp8
     title: Fine-grained FP8
+  - local: quantization/fouroversix
+    title: Four Over Six
   - local: quantization/fp_quant
     title: FP-Quant
   - local: gguf
@@ -323,8 +334,6 @@
         title: Zero-shot image classification
       - local: tasks/monocular_depth_estimation
         title: Depth estimation
-      - local: tasks/image_to_image
-        title: Image-to-Image
       - local: tasks/image_feature_extraction
         title: Image Feature Extraction
       - local: tasks/mask_generation
@@ -671,6 +680,8 @@
         title: ModernBert
       - local: model_doc/modernbert-decoder
         title: ModernBERTDecoder
+      - local: model_doc/modernvbert
+        title: ModernVBert
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -1097,6 +1108,8 @@
         title: Code World Model (CWM)
       - local: model_doc/cohere2_vision
         title: Cohere2Vision
+      - local: model_doc/colmodernvbert
+        title: ColModernVBert
       - local: model_doc/colpali
         title: ColPali
       - local: model_doc/colqwen2

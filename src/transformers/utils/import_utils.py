@@ -971,6 +971,11 @@ def is_faiss_available() -> bool:
 
 
 @lru_cache
+def is_fouroversix_available() -> bool:
+    return _is_package_available("fouroversix")
+
+
+@lru_cache
 def is_scipy_available() -> bool:
     return _is_package_available("scipy")[0]
 
@@ -1439,7 +1444,9 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
     if isinstance(cond, torch.Tensor):
         torch._check_tensor_all_with(error_type, cond, msg_callable)
     else:
-        torch._check_with(error_type, cond, msg_callable)
+        if not cond:
+            raise error_type(msg_callable())
+        torch._check(cond)
 
 
 @lru_cache
