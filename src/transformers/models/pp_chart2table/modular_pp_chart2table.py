@@ -1,9 +1,9 @@
+import collections
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torchvision.transforms.v2.functional import InterpolationMode
 
 from transformers.cache_utils import Cache
@@ -26,8 +26,20 @@ from transformers.image_utils import (
 from transformers.modeling_outputs import ModelOutput
 from transformers.modeling_rope_utils import RopeParameters
 from transformers.modeling_utils import PreTrainedModel
-from transformers.models.qwen2.modeling_qwen2 import Qwen2Attention, Qwen2DecoderLayer, Qwen2Model, Qwen2PreTrainedModel
-from transformers.models.got_ocr2.modeling_got_ocr2 import GotOcr2VisionNeck, GotOcr2MLPBlock, GotOcr2LayerNorm, GotOcr2PatchEmbeddings, GotOcr2VisionAttention, GotOcr2VisionLayer
+from transformers.models.got_ocr2.modeling_got_ocr2 import (
+    GotOcr2LayerNorm,
+    GotOcr2MLPBlock,
+    GotOcr2PatchEmbeddings,
+    GotOcr2VisionAttention,
+    GotOcr2VisionLayer,
+    GotOcr2VisionNeck,
+)
+from transformers.models.qwen2.modeling_qwen2 import (
+    Qwen2Attention,
+    Qwen2DecoderLayer,
+    Qwen2Model,
+    Qwen2PreTrainedModel,
+)
 from transformers.processing_utils import ProcessorMixin, TensorType
 from transformers.utils import (
     can_return_tuple,
@@ -46,34 +58,61 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        im_patch_token (`int`, *optional*, defaults to 151859):
-            The token ID used to represent individual image patches in the multimodal input sequence.
-        im_start_token (`int`, *optional*, defaults to 151857):
-            The token ID representing the start of an image token sequence in the multimodal input.
-        depth (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the vision Transformer encoder.
-        embed_dim (`int`, *optional*, defaults to 768):
-            Dimensionality of the patch embedding layer in the vision encoder.
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the hidden layers in the vision Transformer encoder.
-        image_size (`int`, *optional*, defaults to 1024):
-            The size (resolution) of input chart images (assumed to be square).
-        mlp_ratio (`float`, *optional*, defaults to 4.0):
-            Ratio of the dimensionality of the feed-forward layer to the hidden size in the vision Transformer blocks.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each self-attention layer in the vision Transformer encoder.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each image patch extracted from the input chart image.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add bias terms to the query, key, and value projection layers in the self-attention mechanism.
-        use_rel_pos (`bool`, *optional*, defaults to `True`):
-            Whether to use relative positional embeddings in the self-attention layers of the vision encoder.
-        global_attn_indexes (`list`, *optional*, defaults to `[2, 5, 8, 11]`):
-            List of layer indexes where global attention (instead of windowed attention) is applied in the vision encoder.
-        window_size (`int`, *optional*, defaults to 14):
-            The size of the attention window for windowed self-attention in the vision Transformer layers.
-        output_channels (`int`, *optional*, defaults to 256):
-            Number of output channels from the convolutional stem layer before patch embedding.
+            depth (`int`, *optional*, defaults to 12):
+                Number of hidden layers in the vision Transformer encoder.
+            embed_dim (`int`, *optional*, defaults to 768):
+                Dimensionality of the patch embedding layer in the vision encoder.
+            hidden_size (`int`, *optional*, defaults to 1024):
+                Dimensionality of the hidden layers in the vision Transformer encoder.
+            num_channels (`int`, *optional*, defaults to 3):
+                Number of input channels for the convolutional stem layer (default: RGB images with 3 channels).
+            image_size (`int`, *optional*, defaults to 1024):
+                The size (resolution) of input chart images (assumed to be square).
+            mlp_ratio (`float`, *optional*, defaults to 4.0):
+                Ratio of the dimensionality of the feed-forward layer to the hidden size in the vision Transformer blocks.
+            num_attention_heads (`int`, *optional*, defaults to 12):
+                Number of attention heads for each self-attention layer in the vision Transformer encoder.
+            patch_size (`int`, *optional*, defaults to 16):
+                The size (resolution) of each image patch extracted from the input chart image.
+            qkv_bias (`bool`, *optional*, defaults to `True`):
+                Whether to add bias terms to the query, key, and value projection layers in the self-attention mechanism.
+            use_rel_pos (`bool`, *optional*, defaults to `True`):
+                Whether to use relative positional embeddings in the self-attention layers of the vision encoder.
+            global_attn_indexes (`Optional[List[int]]`, *optional*, defaults to `None`):
+                List of layer indexes where global attention (instead of windowed attention) is applied in the vision encoder.
+                If `None`, defaults to `[2, 5, 8, 11]`.
+            window_size (`int`, *optional*, defaults to 14):
+                The size of the attention window for windowed self-attention in the vision Transformer layers.
+            output_channels (`int`, *optional*, defaults to 256):
+                Number of output channels from the convolutional stem layer before patch embedding.
+            net_channels (`int`, *optional*, defaults to 512):
+                Number of channels in the intermediate convolutional layers.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                Dropout probability for the attention layers in the vision Transformer.
+            output_hidden_states (`bool`, *optional*, defaults to `False`): <fill_docstring>
+            output_attentions (`bool`, *optional*, defaults to `False`): <fill_docstring>
+            return_dict (`bool`, *optional*, defaults to `True`): <fill_docstring>
+            dtype (`Union`, *optional*): <fill_docstring>
+            tie_word_embeddings (`bool`, *optional*, defaults to `True`): <fill_docstring>
+            chunk_size_feed_forward (`int`, *optional*, defaults to 0): <fill_docstring>
+            is_encoder_decoder (`bool`, *optional*, defaults to `False`): <fill_docstring>
+            is_decoder (`bool`, *optional*, defaults to `False`): <fill_docstring>
+            cross_attention_hidden_size (`Optional`, *optional*): <fill_docstring>
+            add_cross_attention (`bool`, *optional*, defaults to `False`): <fill_docstring>
+            architectures (`Optional`, *optional*): <fill_docstring>
+            finetuning_task (`Optional`, *optional*): <fill_docstring>
+            id2label (`Optional`, *optional*): <fill_docstring>
+            label2id (`Optional`, *optional*): <fill_docstring>
+            num_labels (`Optional`, *optional*): <fill_docstring>
+            task_specific_params (`Optional`, *optional*): <fill_docstring>
+            problem_type (`Optional`, *optional*): <fill_docstring>
+            tokenizer_class (`Optional`, *optional*): <fill_docstring>
+            prefix (`Optional`, *optional*): <fill_docstring>
+            bos_token_id (`Optional`, *optional*): <fill_docstring>
+            pad_token_id (`Optional`, *optional*): <fill_docstring>
+            eos_token_id (`Optional`, *optional*): <fill_docstring>
+            sep_token_id (`Optional`, *optional*): <fill_docstring>
+            decoder_start_token_id (`Optional`, *optional*): <fill_docstring>
 
     Example:
 
@@ -93,10 +132,8 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
     model_type = "pp_chart2table_vision"
     base_config_key = "vision_config"
 
-    def __init__(
+    def init(
         self,
-        im_patch_token: int = 151859,
-        im_start_token: int = 151857,
         depth: int = 12,
         embed_dim: int = 768,
         hidden_size: int = 1024,
@@ -107,16 +144,13 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         patch_size: int = 16,
         qkv_bias: bool = True,
         use_rel_pos: bool = True,
-        global_attn_indexes: Optional[list] = None,
+        global_attn_indexes: Optional[List[int]] = None,
         window_size: int = 14,
         output_channels: int = 256,
         net_channels: int = 512,
         attention_dropout: float = 0.0,
         **kwargs,
     ):
-        self.im_patch_token = im_patch_token
-        self.im_start_token = im_start_token
-
         self.depth = depth
         self.embed_dim = embed_dim
         self.hidden_size = hidden_size
@@ -132,8 +166,7 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         self.output_channels = output_channels
         self.net_channels = net_channels
         self.attention_dropout = attention_dropout
-
-        super().__init__(**kwargs)
+        super().init(**kwargs)
 
 
 class PPChart2TableTextConfig(PreTrainedConfig):
@@ -292,30 +325,25 @@ class PPChart2TableTextConfig(PreTrainedConfig):
 
 class PPChart2TableConfig(PreTrainedConfig):
     r"""
-    This is the main configuration class to store the configuration of a [`PPChart2TableModel`] or [`PPChart2TableForConditionalGeneration`].
+    This is the main configuration class to store the configuration of a [PPChart2TableModel] or [PPChart2TableForConditionalGeneration].
     It is used to instantiate a PP-Chart2Table multimodal model according to the specified arguments, defining the vision and text
-    sub-model architectures. This configuration class inherits from [`PreTrainedConfig`] and combines the configurations of:
-    - [`PPChart2TableVisionConfig`] (for the chart vision encoder)
-    - [`PPChart2TableTextConfig`] (for the table text decoder)
-    PP-Chart2Table [PaddlePaddle/PP-Chart2Table_safetensors](https://huggingface.co/PaddlePaddle/PP-Chart2Table_safetensors).
+    sub-model architectures. This configuration class inherits from [PreTrainedConfig] and combines the configurations of:
+    [PPChart2TableVisionConfig] (for the chart vision encoder)
+    [PPChart2TableTextConfig] (for the table text decoder)
+    PP-Chart2Table PaddlePaddle/PP-Chart2Table_safetensors.
 
-    Instantiating a `PPChart2TableConfig` with the defaults will yield a similar configuration to the base PP-Chart2Table model
+    Instantiating a PPChart2TableConfig with the defaults will yield a similar configuration to the base PP-Chart2Table model
     developed by the PaddlePaddle team for chart-to-table parsing tasks.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [PreTrainedConfig] and can be used to control the model outputs. Read the
+    documentation from [PreTrainedConfig] for more information.
 
     Args:
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`PPChart2TableVisionConfig`]. If `None`, the default
-            `PPChart2TableVisionConfig` configuration will be used.
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`PPChart2TableTextConfig`]. If `None`, the default
-            `PPChart2TableTextConfig` configuration will be used.
-        im_start_token (`int`, *optional*, defaults to 151857):
-            The token ID representing the start of an image token sequence in the multimodal input (shared across vision/text sub-configs).
-        im_patch_token (`int`, *optional*, defaults to 151859):
-            The token ID used to represent individual image patches in the multimodal input sequence (shared across vision/text sub-configs).
+            vision_config (Optional[Dict], optional, defaults to None, *optional*):
+            text_config (Optional[Dict], optional, defaults to None, *optional*):
+            image_token_index (Optional[int], optional, defaults to 151859, *optional*, defaults to 151859):
+            image_seq_length (Optional[int], optional, defaults to 576, *optional*, defaults to 576):
+            pad_token_id (Optional[int], optional, defaults to -1, *optional*, defaults to -1):
 
     Example:
 
@@ -368,7 +396,6 @@ class PPChart2TableConfig(PreTrainedConfig):
             text_config = {}
         self.text_config = PPChart2TableTextConfig(**text_config)
 
-        self.model_type = "pp_chart2table"
 
         text_config_keys = [
             "attention_dropout",
@@ -622,6 +649,7 @@ class PPChart2TableProcessor(ProcessorMixin):
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
+
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -663,7 +691,16 @@ class PPChart2TableProcessor(ProcessorMixin):
 class PPChart2TableVisionPatchEmbed(GotOcr2PatchEmbeddings):
     def __init__(self, config):
         super().__init__()
+        image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.embed_dim
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
 
 class PPChart2TableVisionMLPBlock(GotOcr2MLPBlock):
@@ -683,6 +720,7 @@ class PPChart2TableVisionAttention(GotOcr2VisionAttention):
     def __init__(self, config, window_size):
         super().__init__()
         head_dim = config.embed_dim // config.num_attention_heads
+        self.scale = head_dim**-0.5
         self.qkv = nn.Linear(config.embed_dim, config.embed_dim * 3, bias=config.qkv_bias)
         self.proj = nn.Linear(config.embed_dim, config.embed_dim)
 
@@ -757,7 +795,6 @@ class PPChart2TableVisionPreTrainedModel(PreTrainedModel):
 
 
 class PPChart2TableVisionModel(PPChart2TableVisionPreTrainedModel):
-
     main_input_name = "pixel_values"
     input_modalities = "image"
 
@@ -786,12 +823,14 @@ class PPChart2TableVisionModel(PPChart2TableVisionPreTrainedModel):
 
         self.neck = PPChart2TableVisionNeck(config)
 
-        self.net_2 = nn.Conv2d(config.output_channels, config.net_channels, kernel_size=3, stride=2, padding=1, bias=False)
+        self.net_2 = nn.Conv2d(
+            config.output_channels, config.net_channels, kernel_size=3, stride=2, padding=1, bias=False
+        )
         self.net_3 = nn.Conv2d(config.net_channels, config.hidden_size, kernel_size=3, stride=2, padding=1, bias=False)
 
         self.post_init()
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
         hidden_states = self.patch_embed(hidden_states)
         hidden_states = hidden_states + self.pos_embed
         for block in self.blocks:
@@ -800,6 +839,7 @@ class PPChart2TableVisionModel(PPChart2TableVisionPreTrainedModel):
         hidden_states = self.net_2(hidden_states)
         hidden_states = self.net_3(hidden_states)
         return hidden_states
+
 
 class PPChart2TableTextAttention(Qwen2Attention):
     pass
@@ -811,6 +851,7 @@ class PPChart2TableTextDecoderLayer(Qwen2DecoderLayer):
 
 class PPChart2TableTextPreTrainedModel(Qwen2PreTrainedModel):
     pass
+
 
 class PPChart2TableTextModel(Qwen2Model):
     pass
@@ -1117,10 +1158,10 @@ class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, Genera
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
-    
+
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-    
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -1174,6 +1215,7 @@ class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, Genera
             )
 
         return PPChart2TableCausalLMOutputWithPast(
+            loss=loss,
             logits=logits,
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,

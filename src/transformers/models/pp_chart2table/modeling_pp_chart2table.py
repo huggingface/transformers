@@ -18,6 +18,7 @@ from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import ModelOutput
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import can_return_tuple
+from transformers.utils.generic import check_model_inputs
 
 from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
@@ -30,7 +31,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast
 from .configuration_pp_chart2table import PPChart2TableConfig, PPChart2TableTextConfig, PPChart2TableVisionConfig
 
 
@@ -52,7 +53,6 @@ class PPChart2TableVisionPatchEmbed(nn.Module):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.num_patches = num_patches
-
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, pixel_values):
@@ -429,7 +429,7 @@ class PPChart2TableVisionModel(PPChart2TableVisionPreTrainedModel):
 
         self.post_init()
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
         hidden_states = self.patch_embed(hidden_states)
         hidden_states = hidden_states + self.pos_embed
         for block in self.blocks:
@@ -1194,6 +1194,7 @@ class PPChart2TableForConditionalGeneration(PPChart2TablePreTrainedModel, Genera
             )
 
         return PPChart2TableCausalLMOutputWithPast(
+            loss=loss,
             logits=logits,
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,

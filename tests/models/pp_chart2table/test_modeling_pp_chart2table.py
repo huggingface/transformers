@@ -86,7 +86,7 @@ class PPChart2TableVisionText2TextModelTester:
             "window_size": 14,
             "output_channels": 256,
             "net_channels": 512,
-            "attention_dropout": 0.0
+            "attention_dropout": 0.0,
         },
         bos_token_id=151643,
         eos_token_id=151643,
@@ -172,7 +172,7 @@ class PPChart2TableVisionText2TextModelTester:
 class PPChart2TableModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PPChart2TableForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": PPChart2TableForConditionalGeneration}
-    
+
     _is_composite = True
     test_resize_embeddings = False
 
