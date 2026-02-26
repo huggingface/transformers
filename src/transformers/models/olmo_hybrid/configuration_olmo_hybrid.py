@@ -26,7 +26,7 @@ class OlmoHybridConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`OlmoHybridModel`]. It is used to instantiate
     an OLMo Hybrid model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
-    [allenai/OLMo-Hybrid](https://huggingface.co/allenai/OLMo-Hybrid) model.
+    [allenai/Olmo-Hybrid-7B](https://huggingface.co/allenai/Olmo-Hybrid-7B) model.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.

@@ -51,11 +51,11 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained(
-    "allenai/OLMo-Hybrid-7B"
+    "allenai/Olmo-Hybrid-7B"
 )
 
 model = AutoModelForCausalLM.from_pretrained(
-    "allenai/OLMo-Hybrid-7B",
+    "allenai/Olmo-Hybrid-7B",
     device_map="auto",
 )
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
@@ -67,7 +67,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoption>
 <hfoption id="transformers CLI">
 ```bash
-echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model allenai/OLMo-Hybrid-7B --device 0
+echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model allenai/Olmo-Hybrid-7B --device 0
 ```
 
 </hfoption>
