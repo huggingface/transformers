@@ -346,7 +346,7 @@ class StaticLayer(CacheLayerMixin):
 
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
-        return self.cumulative_length.item()
+        return self.cumulative_length if self.is_initialized else 0
 
     def get_max_cache_shape(self) -> int:
         """Return the maximum cache shape of the cache"""
