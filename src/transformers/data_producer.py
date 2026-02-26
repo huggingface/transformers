@@ -215,10 +215,11 @@ class AsyncDataProducer:
     first dataset and seeds the prefetch queue.
     """
 
-    def __init__(self, inner: DataProducer):
+    def __init__(self, inner: DataProducer, background_produce_kwargs: dict | None = None):
         self._inner = inner
         self._depth = inner.config.prefetch_depth
         self._warmup_remaining = inner.config.sync_warmup_rollouts
+        self._background_kwargs = background_produce_kwargs or {}
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="async-producer")
         self._queue: deque[Future] = deque()
         self._initialized = False
@@ -250,9 +251,10 @@ class AsyncDataProducer:
         if not self._initialized:
             # First async call: produce synchronously, then seed the queue
             dataset = self._inner.produce(model, global_step, **kwargs)
+            bg_kwargs = {**kwargs, **self._background_kwargs}
             for i in range(1, self._depth + 1):
                 self._queue.append(
-                    self._executor.submit(self._inner.produce, model, global_step + i, **kwargs)
+                    self._executor.submit(self._inner.produce, model, global_step + i, **bg_kwargs)
                 )
             self._initialized = True
             return dataset
@@ -261,9 +263,10 @@ class AsyncDataProducer:
         dataset = self._queue.popleft().result()
 
         # Submit a new future to keep the queue full
+        bg_kwargs = {**kwargs, **self._background_kwargs}
         next_step = global_step + self._depth
         self._queue.append(
-            self._executor.submit(self._inner.produce, model, next_step, **kwargs)
+            self._executor.submit(self._inner.produce, model, next_step, **bg_kwargs)
         )
         return dataset
 
