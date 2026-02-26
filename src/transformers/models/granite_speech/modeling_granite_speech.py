@@ -386,8 +386,9 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         use_hidden_states = (self.config.encoder_hidden_layers is not None) and (len(self.config.encoder_hidden_layers) > 0)
-        audio_outputs = self.encoder(input_features, output_hidden_states=use_hidden_states,
-                                     return_dict=True, **kwargs)
+        if use_hidden_states:
+            kwargs["output_hidden_states"] = True
+        audio_outputs = self.encoder(input_features, return_dict=True, **kwargs)
         encoder_embeds = audio_outputs.last_hidden_state
         if use_hidden_states and (audio_outputs.hidden_states is not None):
             other_embeds = [audio_outputs.hidden_states[l] for l in self.config.encoder_hidden_layers]
