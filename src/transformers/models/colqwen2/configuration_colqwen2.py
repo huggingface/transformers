@@ -61,6 +61,7 @@ class ColQwen2Config(PreTrainedConfig):
         vlm_config=None,
         embedding_dim: int = 128,
         initializer_range: float = 0.02,
+        tie_word_embeddings: bool = True,
         **kwargs,
     ):
         if vlm_config is None:
@@ -86,6 +87,7 @@ class ColQwen2Config(PreTrainedConfig):
         self.vlm_config = vlm_config
         self.embedding_dim = embedding_dim
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
     def get_text_config(self, *args, **kwargs) -> PreTrainedConfig:

@@ -236,7 +236,6 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     """
 )
 class PaliGemmaModel(PaliGemmaPreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
 
@@ -428,12 +427,6 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
     """
 )
 class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^language_model.lm_head": "lm_head",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: PaliGemmaConfig):

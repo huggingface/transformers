@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any, Literal, Optional
 from ..conversion_mapping import (
     _MODEL_TO_CONVERSION_PATTERN,
     get_checkpoint_conversion_mapping,
-    get_model_conversion_mapping,
 )
 from ..core_model_loading import (
     Concatenate,
@@ -519,7 +518,7 @@ class PeftAdapterMixin:
                 **load_config.download_kwargs,
             )
 
-        weight_conversions = get_model_conversion_mapping(self)
+        weight_conversions = self.get_weight_conversions_recursively()
         peft_config = convert_peft_config_for_transformers(peft_config, model=self, conversions=weight_conversions)
 
         if hasattr(peft_config, "inference_mode"):
