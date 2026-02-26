@@ -161,11 +161,24 @@ def diff_tokenizers(t1, t2, label_a="auto", label_b="backend") -> list:
 
 
 def _canonical_diff(diff_lines: list[str]) -> str:
-    """Strip --- / +++ header lines (contain model-specific paths) and return a stable key."""
-    return "\n".join(
-        line for line in diff_lines
-        if not line.startswith("---") and not line.startswith("+++")
-    )
+    """Return a stable grouping key for a diff.
+
+    Strips:
+    - ``---`` / ``+++`` file-header lines (contain model-specific paths)
+    - Line numbers from ``@@`` hunk headers (``@@ -71,11 +71,7 @@`` → ``@@ @@``)
+      so that structurally identical diffs at different offsets collapse into the
+      same pattern.
+    """
+    import re
+    _hunk_re = re.compile(r"@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@")
+    out = []
+    for line in diff_lines:
+        if line.startswith("---") or line.startswith("+++"):
+            continue
+        if line.startswith("@@"):
+            line = _hunk_re.sub("@@ @@", line)
+        out.append(line)
+    return "\n".join(out)
 
 
 def get_converter_name(tok) -> str:
@@ -491,23 +504,29 @@ def _write_html_report(
             return ""
         return f'<a class="badge" href="#pattern-{pnum}">P#{pnum}</a>'
 
-    type_details_parts = []
+    # Section 1: one card per model type — hover to reveal model list
+    type_card_parts = []
     for model_type, model_ids in sorted(all_mismatches.items()):
-        rows = "".join(
-            f"<tr><td>{_hf_link(mid)}</td><td>{_pattern_badge(mid)}</td></tr>"
+        model_rows = "".join(
+            f'<div class="model-row">{_hf_link(mid)} {_pattern_badge(mid)}</div>'
             for mid in sorted(model_ids)
         )
         n = len(model_ids)
-        type_details_parts.append(
-            f'<details open>'
-            f'<summary><span class="mtype">{html.escape(model_type)}</span>'
-            f'<span class="mtype-count">·  {n} model{"s" if n != 1 else ""}</span></summary>'
-            f'<table><thead><tr><th>Model ID</th><th>Diff pattern</th></tr></thead>'
-            f'<tbody>{rows}</tbody></table>'
-            f'</details>'
+        type_card_parts.append(
+            f'<div class="type-card">'
+            f'<div class="type-header">'
+            f'<span class="mtype">{html.escape(model_type)}</span>'
+            f'<span class="mtype-count">{n} model{"s" if n != 1 else ""}</span>'
+            f'</div>'
+            f'<div class="model-list">{model_rows}</div>'
+            f'</div>'
         )
 
-    section1_html = "\n".join(type_details_parts) if type_details_parts else "<p>No mismatches found.</p>"
+    section1_html = (
+        '<div class="type-grid">' + "\n".join(type_card_parts) + "</div>"
+        if type_card_parts
+        else "<p>No mismatches found.</p>"
+    )
 
     # --- Section 2: diff pattern cards with per-type sub-tables ---
     pattern_sections = []
@@ -534,8 +553,10 @@ def _write_html_report(
             f'<h2>Pattern <span class="pnum">#{i}</span> '
             f'<span class="count">({len(model_ids)} model{"s" if len(model_ids) != 1 else ""})</span></h2>'
             f'<pre class="diff">{diff_html}</pre>'
-            f'<div class="affected-header">Affected models</div>'
+            f'<details class="affected-details">'
+            f'<summary class="affected-header">Affected models</summary>'
             f'{sub_table}'
+            f'</details>'
             f'</section>'
         )
 
@@ -576,22 +597,6 @@ def _write_html_report(
     tr:hover td {{ background: #f1f3f5; }}
     a {{ color: #0d6efd; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
-    /* details / summary for model-type groups */
-    details {{ background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.1);
-               margin-bottom: 0.75rem; overflow: hidden; }}
-    details > summary {{
-      list-style: none; cursor: pointer; padding: 0.65rem 1rem;
-      background: #e9ecef; font-weight: 600; display: flex; align-items: center; gap: 0.75rem;
-      user-select: none;
-    }}
-    details > summary::-webkit-details-marker {{ display: none; }}
-    details > summary::before {{
-      content: "▶"; font-size: 0.7rem; color: #6c757d; transition: transform .15s;
-    }}
-    details[open] > summary::before {{ transform: rotate(90deg); }}
-    .mtype {{ font-family: monospace; font-size: 0.95rem; }}
-    .mtype-count {{ color: #6c757d; font-weight: normal; font-size: 0.85rem; }}
-    details table {{ border-radius: 0; box-shadow: none; margin: 0; }}
     /* badge pills */
     a.badge {{
       display: inline-block; padding: 0.15em 0.55em; border-radius: 999px;
@@ -599,24 +604,71 @@ def _write_html_report(
       text-decoration: none; white-space: nowrap;
     }}
     a.badge:hover {{ background: #0b5ed7; text-decoration: none; }}
-    /* pattern gallery grid */
+    /* ── Section 1: type-card gallery ── */
+    .type-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1rem;
+      align-items: start;
+      margin-bottom: 2rem;
+    }}
+    .type-card {{
+      background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.1);
+      overflow: hidden; cursor: default;
+    }}
+    .type-header {{
+      padding: 0.7rem 1rem; display: flex; flex-direction: column; gap: 0.2rem;
+      background: #e9ecef;
+    }}
+    .mtype {{ font-family: monospace; font-size: 0.95rem; font-weight: 600; color: #212529; }}
+    .mtype-count {{ font-size: 0.78rem; color: #6c757d; }}
+    /* model list: hidden by default, slides in on hover */
+    .model-list {{
+      max-height: 0; overflow: hidden;
+      transition: max-height .25s ease;
+      padding: 0 1rem;
+    }}
+    .type-card:hover .model-list {{
+      max-height: 400px; overflow-y: auto;
+      padding: 0.5rem 1rem;
+    }}
+    .model-row {{
+      font-size: 0.82rem; padding: 0.2rem 0;
+      display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+      border-bottom: 1px solid #f1f3f5;
+    }}
+    .model-row:last-child {{ border-bottom: none; }}
+    /* ── Section 2: pattern gallery grid ── */
     .pattern-grid {{
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
       gap: 1.25rem;
       align-items: start;
     }}
-    /* pattern cards */
     .pattern {{ background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.1);
                 padding: 1.25rem 1.5rem; }}
-    pre.diff {{ background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px;
-                overflow-x: auto; font-size: 0.82rem; line-height: 1.5; margin: 0 0 1rem;
-                white-space: pre; }}
+    pre.diff {{
+      background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px;
+      height: 260px; overflow-x: auto; overflow-y: auto;
+      font-size: 0.82rem; line-height: 1.5; margin: 0 0 0.75rem; white-space: pre;
+    }}
     span.add  {{ color: #4ec9b0; }}
     span.del  {{ color: #f48771; }}
     span.hunk {{ color: #9cdcfe; }}
-    .affected-header {{ font-size: 0.8rem; font-weight: 600; text-transform: uppercase;
-                        letter-spacing: .06em; color: #6c757d; margin-bottom: 0.4rem; }}
+    /* affected-models collapsible inside pattern cards */
+    details.affected-details {{ border-top: 1px solid #dee2e6; margin-top: 0.25rem; }}
+    details.affected-details > summary.affected-header {{
+      list-style: none; cursor: pointer; padding: 0.45rem 0;
+      font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .06em; color: #6c757d; user-select: none;
+      display: flex; align-items: center; gap: 0.4rem;
+    }}
+    details.affected-details > summary.affected-header::-webkit-details-marker {{ display: none; }}
+    details.affected-details > summary.affected-header::before {{
+      content: "▶"; font-size: 0.6rem; transition: transform .15s;
+    }}
+    details.affected-details[open] > summary.affected-header::before {{ transform: rotate(90deg); }}
+    table.sub-table {{ margin-top: 0.4rem; }}
     table.sub-table th {{ background: #495057; }}
     table.sub-table td:first-child {{ font-family: monospace; font-size: 0.85rem; white-space: nowrap; }}
     hr {{ border: none; border-top: 1px solid #dee2e6; margin: 2rem 0; }}
