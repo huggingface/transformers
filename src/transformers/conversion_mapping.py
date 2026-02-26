@@ -75,7 +75,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "mistral3": "llava",
     "mllama": "llava",
     "qwen2_5_vl": "qwen2_vl",
-    "sam3_video": "sam3",
     "sam3_tracker_video": "sam3_tracker",
 }
 
