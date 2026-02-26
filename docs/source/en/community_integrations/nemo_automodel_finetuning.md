@@ -26,11 +26,13 @@ model:
   _target_: nemo_automodel.NeMoAutoModelForCausalLM.from_pretrained
   pretrained_model_name_or_path: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
 
+# Run SFT on HellaSwag
 dataset:
   _target_: nemo_automodel.components.datasets.llm.hellaswag.HellaSwag
   path_or_dataset: rowan/hellaswag
   split: train
 
+# Train PEFT adapters
 peft:
   _target_: nemo_automodel.components._peft.lora.PeftConfig
   exclude_modules: ["*.out_proj"]  # mamba layers use custom kernels that take in the out_proj.weight directly, thus lora doesn't work here.
@@ -38,6 +40,7 @@ peft:
   alpha: 32
   use_triton: True
 
+# Use EP + FSDP2 for training
 distributed:
   strategy: fsdp2
   dp_size: none
