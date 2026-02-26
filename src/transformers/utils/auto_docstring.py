@@ -52,6 +52,7 @@ PLACEHOLDER_TO_AUTO_MODULE = {
     "feature_extractor_class": ("feature_extraction_auto", "FEATURE_EXTRACTOR_MAPPING_NAMES"),
     "processor_class": ("processing_auto", "PROCESSOR_MAPPING_NAMES"),
     "config_class": ("configuration_auto", "CONFIG_MAPPING_NAMES"),
+    "model_class": ("modeling_auto", "MODEL_MAPPING_NAMES"),
 }
 
 UNROLL_KWARGS_METHODS = {
@@ -517,6 +518,141 @@ class ProcessorArgs:
     Word-level integer labels (for token classification tasks such as FUNSD, CORD).
     """,
         "type": "list[int] or list[list[int]]",
+    }
+
+
+class ConfigArgs:
+    vocab_size = {
+        "description": """
+    Vocabulary size of the model. Defines the number of different tokens that can be represented by the `input_ids`.
+    """,
+    }
+
+    hidden_size = {"description": """
+    Dimension of the hidden representations.
+    """,
+    }
+
+    intermediate_size = {"description": """
+    Dimension of the MLP representations.
+    """,
+    }
+
+    head_dim = {
+        "description": """
+    The attention head dimension. If None, it will default to hidden_size // num_attention_heads
+    """
+    }
+
+    num_hidden_layers = {"description": """
+    Number of hidden layers in the Transformer decoder.
+    """,
+    }
+
+    num_attention_heads = {
+        "description": """
+    Number of attention heads for each attention layer in the Transformer decoder.
+    """,
+    }
+
+    num_key_value_heads = {
+        "description": """
+    This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+    `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+    `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+    converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+    by meanpooling all the original heads within that group. For more details, check out [this
+    paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
+    `num_attention_heads`.
+    """,
+    }
+    hidden_act = {"description": """
+    The non-linear activation function (function or string) in the decoder.
+    """,
+    }
+
+    max_position_embeddings = {
+        "description": """
+    The maximum sequence length that this model might ever be used with.
+    """,
+    }
+
+    initializer_range = {
+        "description": """
+    The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    """,
+    }
+
+    rms_norm_eps = {
+        "description": """
+    The epsilon used by the rms normalization layers.
+    """,
+    }
+
+    use_cache = {
+        "description": """
+    Whether or not the model should return the last key/values attentions (not used by all models). Only
+    relevant if `config.is_decoder=True`.
+    """,
+    }
+
+    rope_parameters = {
+        "description": """
+    Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+    a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+    with longer `max_position_embeddings`.
+    """,
+    }
+
+    attention_bias = {
+        "description": """
+    Whether to use a bias in the query, key, value and output projection layers during self-attention.
+    """,
+    }
+
+    mlp_bias = {
+        "description": """
+    Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+    """,
+    }
+
+    attention_dropout = {
+        "description": """
+    The dropout ratio for the attention probabilities.
+    """,
+    }
+
+    pretraining_tp = {
+        "description": """
+    Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
+    document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to
+    understand more about it. This value is necessary to ensure exact reproducibility of the pretraining
+    results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
+    """,
+    }
+
+    pad_token_id = {
+        "description": """
+    Padding token id.
+    """,
+    }
+
+    eos_token_id = {
+        "description": """
+    End of stream token id.
+    """,
+    }
+
+    bos_token_id = {
+        "description": """
+    Beginning of stream token id.
+    """,
+    }
+
+    tie_word_embeddings = {
+        "description": """
+    Whether to tie weight embeddings
+    """,
     }
 
 
@@ -1130,6 +1266,15 @@ class ModelOutputArgs:
 
 
 class ClassDocstring:
+    Config = r"""
+    This is the configuration class to store the configuration of a {model_base_class}. It is used to instantiate a {model_name}
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the [{model_checkpoint}](https://huggingface.co/{model_checkpoint})
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+    """
+
     PreTrainedModel = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1611,7 +1756,6 @@ def _get_model_info(func, parent_class):
                 print(
                     f"[ERROR] Config not found for {model_name_lowercase}. You can manually add it to HARDCODED_CONFIG_FOR_MODELS in utils/auto_docstring.py"
                 )
-
     return model_name_lowercase, class_name, config_class
 
 
@@ -2362,9 +2506,28 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             checkpoint=checkpoint,
             source_args_dict=get_args_doc_from_source(ModelOutputArgs),
         ).__doc__
+    if "PreTrainedConfig" in (x.__name__ for x in cls.__mro__):
+        docstring_init = auto_method_docstring(
+            cls.__init__,
+            parent_class=cls,
+            custom_args=custom_args,
+            checkpoint=checkpoint,
+            source_args_dict=get_args_doc_from_source([ConfigArgs]),
+        ).__doc__
+
     indent_level = get_indent_level(cls)
     model_name_lowercase = get_model_name(cls)
     model_name_title = " ".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
+    model_base_class = f"{model_name_title.title()}Model"
+    if model_name_lowercase is not None:
+        try:
+            model_base_class = getattr(
+                getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["model_class"][0]),
+                PLACEHOLDER_TO_AUTO_MODULE["model_class"][1],
+            )[model_name_lowercase]
+        except KeyError:
+            pass
+
     if model_name_lowercase and model_name_lowercase not in getattr(
         getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
         PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
@@ -2379,6 +2542,9 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         )
     if name != [] or custom_intro is not None or is_dataclass or is_processor:
         name = name[0] if name else None
+        formatting_kwargs = {"model_name": model_name_title}
+        if name == "Config":
+            formatting_kwargs.update( {"model_base_class": model_base_class, "model_checkpoint": checkpoint})
         if custom_intro is not None:
             pre_block = equalize_indent(custom_intro, indent_level)
             if not pre_block.endswith("\n"):
@@ -2392,7 +2558,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         elif model_name_title is None or name is None:
             pre_block = ""
         else:
-            pre_block = getattr(ClassDocstring, name).format(model_name=model_name_title)
+            pre_block = getattr(ClassDocstring, name).format(**formatting_kwargs)
         # Start building the docstring
         docstring = set_min_indent(f"{pre_block}", indent_level) if len(pre_block) else ""
         if name != "PreTrainedModel" and "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
