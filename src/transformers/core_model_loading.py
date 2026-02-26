@@ -1150,7 +1150,6 @@ def convert_and_load_state_dict_in_model(
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
 
             _dtype = dtype
-            print(tensor.get_dtype())
             if (
                 hf_quantizer
                 and hf_quantizer.pre_quantized
