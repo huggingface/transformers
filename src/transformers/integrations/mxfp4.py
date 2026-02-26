@@ -142,9 +142,7 @@ class Mxfp4Dequantize(ConversionOps):
                 param_data[f"{proj}_scales"] = input_dict[f"{proj}_scales"]
 
         # Here we are dequantizing the weights
-        dequantized = dequantize_convertops(
-            param_data[f"{proj}_blocks"], param_data[f"{proj}_scales"]
-        )
+        dequantized = dequantize_convertops(param_data[f"{proj}_blocks"], param_data[f"{proj}_scales"])
         return {full_layer_name: dequantized}
 
 
