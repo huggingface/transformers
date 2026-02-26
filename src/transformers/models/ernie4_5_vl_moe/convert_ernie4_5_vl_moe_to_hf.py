@@ -343,7 +343,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     convert_config(args.checkpoint_path, args.output_folder)
-    #if args.convert_preprocessor:
-    #    convert_processor(args.checkpoint_path, args.output_folder)
+    if args.convert_preprocessor:
+        convert_processor(args.checkpoint_path, args.output_folder)
 
     print(f"Saved converted checkpoint to {args.output_folder}")
