@@ -45,9 +45,6 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
 
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-
     # We require `self.resize(..., antialias=False)` to approximate the output of `cv2.resize`
     def _preprocess(
         self,
