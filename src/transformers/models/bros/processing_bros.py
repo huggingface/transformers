@@ -16,6 +16,7 @@ Processor class for Bros.
 """
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
 
 
 class BrosProcessorKwargs(ProcessingKwargs, total=False):
@@ -33,18 +34,8 @@ class BrosProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class BrosProcessor(ProcessorMixin):
-    r"""
-    Constructs a Bros processor which wraps a BERT tokenizer.
-
-    [`BrosProcessor`] offers all the functionalities of [`BertTokenizerFast`]. See the docstring of
-    [`~BrosProcessor.__call__`] and [`~BrosProcessor.decode`] for more information.
-
-    Args:
-        tokenizer (`BertTokenizerFast`, *optional*):
-            An instance of ['BertTokenizerFast`]. The tokenizer is a required input.
-    """
-
     valid_processor_kwargs = BrosProcessorKwargs
 
     def __init__(self, tokenizer=None, **kwargs):

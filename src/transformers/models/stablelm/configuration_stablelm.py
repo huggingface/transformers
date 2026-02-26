@@ -87,6 +87,8 @@ class StableLmConfig(PreTrainedConfig):
             The id of the `BOS` token in the vocabulary.
         eos_token_id (int, *optional*, defaults to 0):
             The id of the `EOS` token in the vocabulary.
+        pad_token_id (int, *optional*):
+            The id of the `PAD` token in the vocabulary.
 
     Example:
 
@@ -122,6 +124,7 @@ class StableLmConfig(PreTrainedConfig):
         attention_dropout: float | None = 0.0,
         bos_token_id: int | None = 0,
         eos_token_id: int | None = 0,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -145,12 +148,11 @@ class StableLmConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters
         kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
 
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["StableLmConfig"]

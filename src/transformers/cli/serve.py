@@ -839,6 +839,17 @@ class Serve:
                 for result in self.running_continuous_batching_manager.request_id_iter(request_id):
                     n_tokens_generated += 1
 
+                    # Always yield the token content (even for the final FINISHED token)
+                    if result.generated_tokens:
+                        token_id = result.generated_tokens[-1]
+                        yield self.build_chat_completion_chunk(
+                            request_id=request_id,
+                            content=token_id,
+                            model=model_id_and_revision,
+                            decode_stream=decode_stream,
+                            tokenizer=tokenizer,
+                        )
+
                     if result.status == RequestStatus.FINISHED:
                         generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
 
@@ -855,14 +866,6 @@ class Serve:
                             model=model_id_and_revision,
                         )
                         break
-                    else:
-                        yield self.build_chat_completion_chunk(
-                            request_id=request_id,
-                            content=result.generated_tokens[-1],
-                            model=model_id_and_revision,
-                            decode_stream=decode_stream,
-                            tokenizer=tokenizer,
-                        )
 
             except Exception as e:
                 logger.error(str(e))

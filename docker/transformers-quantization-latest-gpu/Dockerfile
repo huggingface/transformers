@@ -65,7 +65,7 @@ RUN python3 -m pip install --no-cache-dir auto-round
 RUN python3 -m pip install --no-cache-dir torchao
 
 # Add transformers in editable mode
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch]
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev]
 
 # install kernels for some qunatization methods like eetq, mxfp4
 RUN python3 -m pip install --no-cache-dir kernels
@@ -76,6 +76,9 @@ RUN python3 -m pip uninstall -y flash-attn
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
+
+# Add fouroversix for quantization testing
+RUN python3 -m pip install --no-cache-dir "fouroversix>=1.0.2" --no-build-isolation
 
 # Add fp-quant for quantization testing
 RUN python3 -m pip install --no-cache-dir "fp-quant>=0.3.2"

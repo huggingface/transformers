@@ -584,10 +584,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     pipeline_model_mapping = (
         {
             "feature-extraction": T5GemmaModel,
-            "summarization": T5GemmaForConditionalGeneration,
             "text-classification": T5GemmaForSequenceClassification,
-            "text2text-generation": T5GemmaForConditionalGeneration,
-            "translation": T5GemmaForConditionalGeneration,
             "zero-shot": T5GemmaForSequenceClassification,
         }
         if is_torch_available()
@@ -1504,20 +1501,20 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_token_classification_head(*config_and_inputs)
 
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     # Based on tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads

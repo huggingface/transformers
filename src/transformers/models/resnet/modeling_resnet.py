@@ -20,6 +20,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
@@ -28,7 +29,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_resnet import ResNetConfig
 
 
@@ -372,12 +372,11 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
     ResNet backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
+class ResNetBackbone(BackboneMixin, ResNetPreTrainedModel):
     has_attentions = False
 
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.embedding_size] + config.hidden_sizes
         self.embedder = ResNetEmbeddings(config)
@@ -401,10 +400,12 @@ class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
         >>> model = AutoBackbone.from_pretrained(

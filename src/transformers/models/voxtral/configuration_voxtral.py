@@ -189,7 +189,6 @@ class VoxtralConfig(PreTrainedConfig):
             text_config = CONFIG_MAPPING["llama"](**self._default_text_config_kwargs)
         self.text_config = text_config
 
-        self.vocab_size = text_config.vocab_size
         self.hidden_size = text_config.hidden_size
         self.audio_token_id = audio_token_id
         self.projector_hidden_act = projector_hidden_act

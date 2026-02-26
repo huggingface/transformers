@@ -13,10 +13,8 @@
 # limitations under the License.
 """BEiT model configuration"""
 
-import warnings
-
+from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
@@ -153,6 +151,8 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
         reshape_hidden_states=True,
         **kwargs,
     ):
+        if "segmentation_indices" in kwargs and out_indices is None:
+            out_indices = kwargs.pop("segmentation_indices")
         super().__init__(**kwargs)
 
         self.vocab_size = vocab_size
@@ -186,19 +186,9 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
         self.auxiliary_concat_input = auxiliary_concat_input
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
-        # handle backwards compatibility
-        if "segmentation_indices" in kwargs:
-            warnings.warn(
-                "The `segmentation_indices` argument is deprecated and will be removed in a future version, use `out_indices` instead.",
-                FutureWarning,
-            )
-            out_indices = kwargs.pop("segmentation_indices")
-
         # backbone attributes
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
+        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
         self.add_fpn = add_fpn
         self.reshape_hidden_states = reshape_hidden_states
 

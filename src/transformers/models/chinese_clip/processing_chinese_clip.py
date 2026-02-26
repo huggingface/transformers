@@ -16,23 +16,11 @@ Image/Text processor class for Chinese-CLIP
 """
 
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 
 
+@auto_docstring
 class ChineseCLIPProcessor(ProcessorMixin):
-    r"""
-    Constructs a Chinese-CLIP processor which wraps a Chinese-CLIP image processor and a Chinese-CLIP tokenizer into a
-    single processor.
-
-    [`ChineseCLIPProcessor`] offers all the functionalities of [`ChineseCLIPImageProcessor`] and [`BertTokenizerFast`].
-    See the [`~ChineseCLIPProcessor.__call__`] and [`~ChineseCLIPProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`ChineseCLIPImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`BertTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 

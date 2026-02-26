@@ -25,10 +25,10 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_hgnet_v2 import HGNetV2Config
 
 
@@ -338,12 +338,11 @@ class HGNetV2Encoder(nn.Module):
         )
 
 
-class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
+class HGNetV2Backbone(BackboneMixin, HGNetV2PreTrainedModel):
     has_attentions = False
 
     def __init__(self, config: HGNetV2Config):
         super().__init__(config)
-        super()._init_backbone(config)
         self.depths = config.depths
         self.num_features = [config.embedding_size] + config.hidden_sizes
         self.embedder = HGNetV2Embeddings(config)
@@ -448,12 +447,14 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
         Examples:
         ```python
         >>> import torch
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import HGNetV2ForImageClassification, AutoImageProcessor
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> model = HGNetV2ForImageClassification.from_pretrained("ustc-community/hgnet-v2")
         >>> processor = AutoImageProcessor.from_pretrained("ustc-community/hgnet-v2")

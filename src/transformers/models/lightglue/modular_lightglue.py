@@ -13,7 +13,6 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Union
 
 import numpy as np
 import torch
@@ -286,9 +285,9 @@ class LightGlueAttention(LlamaAttention):
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -928,7 +927,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, "LightGlueKeypointMatchingOutput"]:
+    ) -> tuple | LightGlueKeypointMatchingOutput:
         loss = None
         if labels is not None:
             raise ValueError("LightGlue is not trainable, no labels should be provided.")

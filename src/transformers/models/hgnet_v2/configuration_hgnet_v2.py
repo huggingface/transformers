@@ -19,8 +19,8 @@
 # limitations under the License.
 
 
+from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 # TODO: Modular conversion for resnet must be fixed as
@@ -120,9 +120,7 @@ class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
         self.hidden_sizes = hidden_sizes
         self.hidden_act = hidden_act
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
+        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
         self.stem_channels = stem_channels
         self.stage_in_channels = stage_in_channels
         self.stage_mid_channels = stage_mid_channels

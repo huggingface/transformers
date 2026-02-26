@@ -15,8 +15,6 @@
 Processor class for PaliGemma.
 """
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
@@ -29,7 +27,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -39,7 +37,13 @@ EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i i
 
 
 class PaliGemmaTextKwargs(TextKwargs):
-    suffix: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
+    """
+    suffix (`str`, `list[str]`, `list[list[str]]`):
+        The suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
+        for more information. If your prompt is "<image> What is on the image", the suffix corresponds to the expected prediction "a cow sitting on a bench".
+    """
+
+    suffix: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
 
 
 class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
@@ -91,22 +95,8 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token, num_i
     return f"{image_token * image_seq_len * num_images}{bos_token}{prompt}\n"
 
 
+@auto_docstring
 class PaliGemmaProcessor(ProcessorMixin):
-    r"""
-    Constructs a PaliGemma processor which wraps a PaliGemma image processor and a PaliGemma tokenizer into a single processor.
-
-    [`PaliGemmaProcessor`] offers all the functionalities of [`SiglipImageProcessor`] and [`GemmaTokenizerFast`]. See the
-    [`~PaliGemmaProcessor.__call__`] and [`~PaliGemmaProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`SiglipImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`GemmaTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
-
     def __init__(
         self,
         image_processor=None,
@@ -135,56 +125,14 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[PaliGemmaProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to GemmaTokenizerFast's [`~GemmaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        The usage for PaliGemma fine-tuning preparation is slightly different than usual. suffix passed are suffixes to
-        the prompt in `text`, and will be placed after the prompt. This is because attention is handled differently for
-        the prefix and the suffix. For instance,
-        ```python
-        image = PIL_cow_image
-        prompt = "answer en Where is the cow standing?"
-        suffix = "on the beach"
-        inputs = processor(text=prompt, images=image, suffix=suffix)
-        ```
-        Here `inputs` will contain the `input_ids` and `token_type_ids` that follow
-        ```python
-        inputs["input_ids"][:, 256:]
-        # tensor([[     2,   6006,    603,    573,  13910,   9980, 235336,    108,    477,   573,   8318]])
-        inputs["token_type_ids"][:, 256:]
-        tensor([[0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]])
-        ```
-        Meaning the last three tokens are of "label" ("suffix") type while the other ones are of "prefix" type.
-
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-            suffix (`str`, `list[str]`, `list[list[str]]`):
-                The suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
-                for more information. If your prompt is "<image> What is on the image", the suffix corresponds to the expected prediction "a cow sitting on a bench".
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

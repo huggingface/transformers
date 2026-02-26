@@ -206,6 +206,7 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ## LlavaNextProcessor
 
 [[autodoc]] LlavaNextProcessor
+    - __call__
 
 ## LlavaNextModel
 
@@ -215,3 +216,4 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] LlavaNextForConditionalGeneration
     - forward
+    - get_image_features

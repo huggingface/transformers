@@ -317,7 +317,6 @@ class FastSpeech2ConformerConfig(PreTrainedConfig):
         self.num_languages = num_languages
         self.speaker_embed_dim = speaker_embed_dim
         self.duration_predictor_dropout_rate = duration_predictor_dropout_rate
-        self.is_encoder_decoder = is_encoder_decoder
         self.convolution_bias = convolution_bias
 
         super().__init__(

@@ -13,15 +13,13 @@
 # limitations under the License.
 
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_vision_available, logging
+from ...utils import auto_docstring, is_vision_available, logging
 
 
 if is_vision_available():
@@ -31,15 +29,47 @@ logger = logging.get_logger(__name__)
 
 
 class GotOcr2TextKwargs(TextKwargs, total=False):
-    format: Optional[bool]
+    """
+    format (`bool`, *optional*, defaults to `False`):
+        Whether to request formatted output from the OCR model. When enabled, the model is instructed to return
+        structured and formatted text output rather than raw OCR results.
+    """
+
+    format: bool | None
 
 
 class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
+    """
+    crop_to_patches (`bool`, *optional*, defaults to `False`):
+        Whether to crop images into patches before processing. When enabled, large images are divided into
+        smaller patches for more efficient OCR processing.
+    min_patches (`int`, *optional*, defaults to `1`):
+        Minimum number of patches to generate when cropping images. This ensures that even small images are
+        processed with at least this many patches.
+    max_patches (`int`, *optional*, defaults to `12`):
+        Maximum number of patches to generate when cropping images. Large images will be divided into at most
+        this many patches to control computational complexity.
+    box (`list`, `tuple[float, float]`, or `tuple[float, float, float, float]`, *optional*):
+        Bounding box coordinates for OCR region of interest. Can be specified as a single box `[x1, y1, x2, y2]`
+        or a list of boxes. Coordinates are normalized to the range [0, 1000] based on the image dimensions.
+        If not provided, OCR is performed on the entire image.
+    color (`str`, *optional*):
+        Color filter specification for OCR. When provided, the OCR query is prefixed with the color information
+        to focus on text of a specific color (e.g., "red", "blue").
+    num_image_tokens (`int`, *optional*, defaults to `256`):
+        Number of image tokens (patches) to use per image. This controls the resolution of the image representation
+        passed to the model. Higher values provide more detail but increase computational cost.
+    multi_page (`bool`, *optional*, defaults to `False`):
+        Whether the input consists of multi-page documents. When enabled, images can be provided as nested lists
+        where each inner list represents a page, and OCR is performed across all pages with appropriate handling
+        of page boundaries.
+    """
+
     crop_to_patches: bool
     min_patches: int
     max_patches: int
-    box: Optional[Union[list, tuple[float, float], tuple[float, float, float, float]]]
-    color: Optional[str]
+    box: list | tuple[float, float] | tuple[float, float, float, float] | None
+    color: str | None
     num_image_tokens: int
     multi_page: bool
 
@@ -62,7 +92,7 @@ class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def preprocess_box_annotation(box: Union[list, tuple], image_size: tuple[int, int]) -> list:
+def preprocess_box_annotation(box: list | tuple, image_size: tuple[int, int]) -> list:
     """
     Convert box annotation to the format [x1, y1, x2, y2] in the range [0, 1000].
     """
@@ -78,20 +108,8 @@ def preprocess_box_annotation(box: Union[list, tuple], image_size: tuple[int, in
     return list(box)
 
 
+@auto_docstring
 class GotOcr2Processor(ProcessorMixin):
-    r"""
-    Constructs a GotOcr2 processor which wraps a [`GotOcr2ImageProcessor`] and
-    [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
-    tokenizer functionalities. See the [`~GotOcr2Processor.__call__`] and [`~GotOcr2Processor.decode`] for more information.
-    Args:
-        image_processor ([`GotOcr2ImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
-
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -126,52 +144,14 @@ class GotOcr2Processor(ProcessorMixin):
 
         return images, text, box, color
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[GotOcr2ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text if `text`
-        is not `None`, otherwise encode default OCR queries which depends on the `format`, `box`, `color`, `multi_page` and
-        `crop_to_patches` arguments. To prepare the vision inputs, this method forwards the `images` and `kwargs` arguments to
-        GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            format (`bool`, *optional*):
-                If set, will add the format token to the query, and the model will return the OCR result with formatting.
-            box (`list[float]`, `list[tuple[float, float]]`, `list[tuple[float, float, float, float]]`, *optional*):
-                The box annotation to be added to the query. If a list of floats or a tuple of floats is provided, it
-                will be interpreted as [x1, y1, x2, y2]. If a list of tuples is provided, each tuple should be in the
-                form (x1, y1, x2, y2).
-            color (`str`, *optional*):
-                The color annotation to be added to the query. The model will return the OCR result within the box with
-                the specified color.
-            multi_page (`bool`, *optional*):
-                If set, will enable multi-page inference. The model will return the OCR result across multiple pages.
-            crop_to_patches (`bool`, *optional*):
-                If set, will crop the image to patches. The model will return the OCR result upon the patch reference.
-            min_patches (`int`, *optional*):
-                The minimum number of patches to be cropped from the image. Only used when `crop_to_patches` is set to
-                `True`.
-            max_patches (`int`, *optional*):
-                The maximum number of patches to be cropped from the image. Only used when `crop_to_patches` is set to
-                `True`.
-
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

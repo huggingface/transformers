@@ -178,7 +178,6 @@ class HGNetV2ForImageClassificationTest(ModelTesterMixin, PipelineTesterMixin, u
     pipeline_model_mapping = {"image-classification": HGNetV2ForImageClassification} if is_torch_available() else {}
 
     test_resize_embeddings = False
-    test_torch_exportable = True
     has_attentions = False
 
     def setUp(self):

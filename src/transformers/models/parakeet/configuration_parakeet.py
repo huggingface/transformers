@@ -213,11 +213,9 @@ class ParakeetCTCConfig(PreTrainedConfig):
 
         self.encoder_config = self.encoder_config
         self.initializer_range = self.encoder_config.initializer_range
+        self.pad_token_id = pad_token_id
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     @classmethod
     def from_encoder_config(cls, encoder_config: ParakeetEncoderConfig, **kwargs):

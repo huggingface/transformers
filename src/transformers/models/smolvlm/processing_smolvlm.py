@@ -16,13 +16,13 @@ Processor class for SmolVLM.
 """
 
 from datetime import timedelta
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import AllKwargsForChatTemplate, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
-from ...utils import is_num2words_available, is_vision_available, logging
+from ...utils import auto_docstring, is_num2words_available, is_vision_available, logging
 from ...video_utils import VideoInput
 
 
@@ -111,37 +111,23 @@ class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class SmolVLMProcessor(ProcessorMixin):
-    r"""
-    Constructs a SmolVLM processor which wraps a LLama tokenizer and SmolVLM image processor into a single processor.
-
-    [`SmolVLMProcessor`] offers all the functionalities of [`SmolVLMImageProcessor`] and [`SmolVLMTokenizerFast`]. See
-    the docstring of [`~IdeficsProcessor.__call__`] and [`~IdeficsProcessor.decode`] for more information.
-
-    Args:
-        image_processor (`SmolVLMImageProcessor`):
-            An instance of [`SmolVLMImageProcessor`]. The image processor is a required input.
-        tokenizer (`PreTrainedTokenizerBase`):
-            An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
-        video_processor (`SmolVLMImageProcessor`):
-            n instance of [`SmolVLMImageProcessor`]. The video processor is a required input.
-        image_seq_len (`int`, *optional*, defaults to 169):
-            The length of the image sequence i.e. the number of <image> tokens per image in the input.
-            This parameter is used to build the string from the input prompt and image tokens and should match the
-            value the model used. It is computed as: image_seq_len = int(((image_size // patch_size) ** 2) / (scale_factor**2))
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
-
     def __init__(
         self,
         image_processor,
         tokenizer,
         video_processor,
         image_seq_len: int = 169,
-        chat_template: Optional[str] = None,
+        chat_template: str | None = None,
         **kwargs,
     ):
+        r"""
+        image_seq_len (`int`, *optional*, defaults to 169):
+            The length of the image sequence i.e. the number of <image> tokens per image in the input.
+            This parameter is used to build the string from the input prompt and image tokens and should match the
+            value the model used. It is computed as: image_seq_len = int(((image_size // patch_size) ** 2) / (scale_factor**2))
+        """
         self.fake_image_token = getattr(tokenizer, "fake_image_token", "<fake_token_around_image>")
         self.image_token = getattr(tokenizer, "image_token", "<image>")
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
@@ -222,60 +208,14 @@ class SmolVLMProcessor(ProcessorMixin):
             prompt_strings.append(sample)
         return prompt_strings
 
+    @auto_docstring
     def __call__(
         self,
-        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        videos: Optional[VideoInput] = None,
+        videos: VideoInput | None = None,
         **kwargs: Unpack[SmolVLMProcessorKwargs],
     ) -> BatchEncoding:
-        """
-        Processes the input prompts and returns a BatchEncoding.
-
-        Example:
-
-        ```python
-        >>> import requests
-        >>> from transformers import SmolVLMProcessor
-        >>> from transformers.image_utils import load_image
-
-        >>> processor = SmolVLMProcessor.from_pretrained("HuggingFaceM4/SmolVLM2-256M-Video-Instruct")
-        >>> processor.image_processor.do_image_splitting = False  # Force as False to simplify the example
-
-        >>> url1 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-        >>> url2 = "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg"
-
-        >>> image1, image2 = load_image(url1), load_image(url2)
-        >>> images = [[image1], [image2]]
-
-        >>> text = [
-        ...     "<image>In this image, we see",
-        ...     "bla bla bla<image>",
-        ... ]
-        >>> outputs = processor(images=images, text=text, return_tensors="pt", padding=True)
-        >>> input_ids = outputs.input_ids
-        >>> input_tokens = processor.tokenizer.batch_decode(input_ids)
-        >>> print(input_tokens)
-        ['<|begin_of_text|><fake_token_around_image><global-img>((<image>)*169)<fake_token_around_image> In this image, we see', '<|reserved_special_token_0|><|reserved_special_token_0|><|reserved_special_token_0|><|begin_of_text|>bla bla bla<fake_token_around_image><global-img>((<image>)*169)<fake_token_around_image>']
-        ```
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`, *optional*):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. If is of type `list[ImageInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
-            text (`Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]`, *optional*):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-                Wherever an image token, `<image>` is encountered it is expanded to
-                `<fake_token_around_image>` + `<row_x_col_y>` + `<image>` * `image_seq_len` * <fake_token_around_image>`.
-            videos (`list[PIL.Image.Image]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`, *optional*):
-                The video or batch of videos to be prepared. Each video can be a list of PIL frames, NumPy array or PyTorch
-                tensor. If is of type `list[VideoInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
-            return_tensors (`Union[str, TensorType]`, *optional*):
-                If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
-                information.
-        """
         if text is None and images is None and videos is None:
             raise ValueError("You must provide one of `text`, `images` or `videos'.")
 
@@ -350,8 +290,8 @@ class SmolVLMProcessor(ProcessorMixin):
 
     def apply_chat_template(
         self,
-        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
-        chat_template: Optional[str] = None,
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
+        chat_template: str | None = None,
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ) -> str:
         """

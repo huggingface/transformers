@@ -100,11 +100,11 @@ class GenerationConfig(PushToHubMixin):
 
     </Tip>
 
-    Note: the configuration field that are still `None` will be overriden by `GenerationConfig._get_default_generation_params()`
+    Note: the configuration fields that are still `None` will be overridden by `GenerationConfig._get_default_generation_params()`
     during the generation loop. If you want to use different values for these fields, make sure to explicitly set them in the
     generation config.
 
-    Arg:
+    Args:
         > Parameters that control the length of the output
 
         max_length (`int`, *optional*):
@@ -687,7 +687,7 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # 2.5. check cache-related arguments
-        if self.use_cache is not True:
+        if self.use_cache is False:
             # In this case, all cache-related arguments should be unset. However, since `use_cache=False` is often used
             # passed to `generate` directly to hot-fix cache issues, let's raise a warning instead of an error
             # (otherwise a user might need to overwrite several parameters).
@@ -1193,7 +1193,7 @@ class GenerationConfig(PushToHubMixin):
         generation_config._original_object_hash = hash(generation_config)
         return generation_config
 
-    def update(self, defaults_only=False, **kwargs):
+    def update(self, defaults_only=False, allow_custom_entries=False, **kwargs):
         """
         Updates attributes of this class instance with attributes from `kwargs` if they match existing attributes,
         returning all the unused kwargs.
@@ -1201,6 +1201,8 @@ class GenerationConfig(PushToHubMixin):
         Args:
             defaults_only (`bool`, *optional*, defaults to `False`):
                 Whether to update all keys in config with `kwargs` or only those that are set to `None` (i.e. default value).
+            allow_custom_entries (`bool`, *optional*, defaults to `False`):
+                Whether to allow updating custom entries into the config with `kwargs` if not present in the current config.
             kwargs (`dict[str, Any]`):
                 Dictionary of attributes to tentatively update this class.
 
@@ -1209,7 +1211,10 @@ class GenerationConfig(PushToHubMixin):
         """
         to_remove = []
         for key, value in kwargs.items():
-            if hasattr(self, key):
+            if allow_custom_entries and not hasattr(self, key):
+                setattr(self, key, value)
+                to_remove.append(key)
+            elif hasattr(self, key):
                 if not defaults_only or getattr(self, key) is None:
                     setattr(self, key, value)
                     to_remove.append(key)
@@ -1480,7 +1485,7 @@ class CompileConfig:
 
     Args:
         fullgraph (`bool`, *optional*, defaults to `False`):
-            If False (default), attempts to discover compileable regions that will be optimized. If True, then require
+            If False (default), attempts to discover compilable regions that will be optimized. If True, then require
             that the entire function be capturable into a single graph. If this is not possible (that is, if there are
             graph breaks), then an error will be raised.
         dynamic (`bool` or `None`, *optional*):

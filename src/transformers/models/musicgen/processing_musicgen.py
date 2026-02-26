@@ -20,36 +20,19 @@ from typing import Any
 import numpy as np
 
 from ...processing_utils import ProcessorMixin
-from ...utils import to_numpy
+from ...utils import auto_docstring, to_numpy
 
 
+@auto_docstring
 class MusicgenProcessor(ProcessorMixin):
-    r"""
-    Constructs a MusicGen processor which wraps an EnCodec feature extractor and a T5 tokenizer into a single processor
-    class.
-
-    [`MusicgenProcessor`] offers all the functionalities of [`EncodecFeatureExtractor`] and [`TTokenizer`]. See
-    [`~MusicgenProcessor.__call__`] and [`~MusicgenProcessor.decode`] for more information.
-
-    Args:
-        feature_extractor (`EncodecFeatureExtractor`):
-            An instance of [`EncodecFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`T5Tokenizer`):
-            An instance of [`T5Tokenizer`]. The tokenizer is a required input.
-    """
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
 
+    @auto_docstring
     def __call__(self, *args, **kwargs):
-        """
-        Forwards the `audio` argument to EncodecFeatureExtractor's [`~EncodecFeatureExtractor.__call__`] and the `text`
-        argument to [`~T5Tokenizer.__call__`]. Please refer to the docstring of the above two methods for more
-        information.
-        """
         if len(args) > 0:
             kwargs["audio"] = args[0]
         return super().__call__(*args, **kwargs)

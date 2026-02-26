@@ -13,10 +13,10 @@
 # limitations under the License.
 """Fast Image processor class for GLPN."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
@@ -50,7 +50,7 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         size_divisor: int,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -82,16 +82,16 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
-        size_divisor: Optional[int] = None,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        size_divisor: int | None = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         do_rescale: bool = True,
-        rescale_factor: Optional[float] = 1 / 255,
+        rescale_factor: float | None = 1 / 255,
         do_normalize: bool = False,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        disable_grouping: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        resample: Optional[PILImageResampling] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        disable_grouping: bool | None = None,
+        return_tensors: str | TensorType | None = None,
+        resample: PILImageResampling | None = None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_index = group_images_by_shape(images, disable_grouping=disable_grouping)

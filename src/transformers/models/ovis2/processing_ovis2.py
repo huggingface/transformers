@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -33,26 +32,8 @@ class Ovis2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Ovis2Processor(ProcessorMixin):
-    r"""
-    Constructs a Ovis2 processor which wraps Ovis2 image processor and a Qwen2 tokenizer into a single processor.
-
-    [`Ovis2Processor`] offers all the functionalities of [`Ovis2VideoProcessor`], [`Ovis2ImageProcessor`] and [`Qwen2TokenizerFast`]. See the
-    [`~Ovis2Processor.__call__`] and [`~Ovis2Processor.decode`] for more information.
-
-    Args:
-        image_processor ([`Ovis2ImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`Qwen2TokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        image_token (`str`, *optional*, defaults to `"<image>"`):
-            Special token used to denote image location.
-        image_seq_length (`int`, *optional*, defaults to 256):
-            The number of image tokens to be used for each image in the input.
-    """
-
     def __init__(
         self,
         image_processor=None,
@@ -62,6 +43,12 @@ class Ovis2Processor(ProcessorMixin):
         image_seq_length=256,
         **kwargs,
     ):
+        r"""
+        image_token (`str`, *optional*, defaults to `"<image>"`):
+            Special token used to denote image location.
+        image_seq_length (`int`, *optional*, defaults to 256):
+            The number of image tokens to be used for each image in the input.
+        """
         self.image_seq_length = image_seq_length
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.image_token_id = (
@@ -71,28 +58,14 @@ class Ovis2Processor(ProcessorMixin):
         )
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Ovis2ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        Ovis2ImageProcessor's [`~Ovis2ImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

@@ -27,7 +27,10 @@ on:
       commit_sha:
         required: false
         type: string
-
+    outputs:
+      is_slack_reporting_job_ok:
+        description: "Whether the send_results job succeeded (not failed)"
+        value: ${{ jobs.send_results.result != 'failure' }}
 
 env:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
@@ -94,13 +97,14 @@ jobs:
           pip install huggingface_hub
           pip install slack_sdk
           pip show slack_sdk
+          pip install .
           if [ "$quantization_matrix" != "" ]; then
             python utils/notification_service.py "$quantization_matrix"
           else
             python utils/notification_service.py "$folder_slices"
           fi
 
-      # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
+      # Upload the directory containing CI reports prepared in `notification_service.py`
       - name: Failure table artifacts
         uses: actions/upload-artifact@v4
         with:

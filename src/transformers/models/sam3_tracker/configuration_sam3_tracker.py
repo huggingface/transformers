@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -158,6 +157,14 @@ class Sam3TrackerConfig(PreTrainedConfig):
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
+    <Tip>
+
+    SAM3 Tracker checkpoints with `model_type="sam3_tracker_video"` are compatible with `Sam3TrackerModel` since the
+    video variant weights are a superset of the image-only model weights. You may see a warning about model type
+    mismatch when loading such checkpoints, which can be safely ignored in this case.
+
+    </Tip>
+
     Args:
         vision_config (Union[`dict`, `Sam3TrackerVisionConfig`], *optional*):
             Dictionary of configuration options used to initialize [`Sam3TrackerVisionConfig`].
@@ -179,7 +186,7 @@ class Sam3TrackerConfig(PreTrainedConfig):
     ... )
 
     >>> # Initializing a Sam3TrackerConfig with `"facebook/sam3_tracker.1_hiera_tiny"` style configuration
-    >>> configuration = Sam3Trackerconfig()
+    >>> configuration = Sam3TrackerConfig()
 
     >>> # Initializing a Sam3TrackerModel (with random weights) from the `"facebook/sam3_tracker.1_hiera_tiny"` style configuration
     >>> model = Sam3TrackerModel(configuration)
@@ -188,14 +195,14 @@ class Sam3TrackerConfig(PreTrainedConfig):
     >>> configuration = model.config
 
     >>> # We can also initialize a Sam3TrackerConfig from a Sam3TrackerVisionConfig, Sam3TrackerPromptEncoderConfig, and Sam3TrackerMaskDecoderConfig
-
     >>> # Initializing SAM3_TRACKER vision encoder, memory attention, and memory encoder configurations
     >>> vision_config = Sam3TrackerVisionConfig()
     >>> prompt_encoder_config = Sam3TrackerPromptEncoderConfig()
     >>> mask_decoder_config = Sam3TrackerMaskDecoderConfig()
 
     >>> config = Sam3TrackerConfig(vision_config, prompt_encoder_config, mask_decoder_config)
-    ```"""
+    ```
+    """
 
     model_type = "sam3_tracker"
     sub_configs = {

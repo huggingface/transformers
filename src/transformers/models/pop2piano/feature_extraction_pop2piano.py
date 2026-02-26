@@ -33,7 +33,6 @@ from ...utils.import_utils import requires
 
 
 if is_essentia_available():
-    import essentia
     import essentia.standard
 
 if is_librosa_available():

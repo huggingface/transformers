@@ -23,13 +23,13 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import load_backbone
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import auto_docstring, is_accelerate_available, logging
-from ...utils.backbone_utils import load_backbone
+from ...utils import auto_docstring, is_accelerate_available, logging, torch_compilable_check
 from .configuration_mask2former import Mask2FormerConfig
 
 
@@ -939,10 +939,10 @@ class Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         total_elements = sum(height * width for height, width in spatial_shapes_list)
-        if total_elements != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            total_elements == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
@@ -1060,7 +1060,7 @@ class Mask2FormerPixelDecoderEncoderLayer(nn.Module):
         hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -1298,19 +1298,19 @@ class Mask2FormerPixelDecoder(nn.Module):
         )
 
         # Apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        input_embeds = []
+        inputs_embeds = []
         position_embeddings = []
         for level, x in enumerate(features[::-1][: self.num_feature_levels]):
-            input_embeds.append(self.input_projections[level](x))
+            inputs_embeds.append(self.input_projections[level](x))
             position_embeddings.append(self.position_embedding(x.shape, x.device, x.dtype))
 
         masks = [
-            torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in input_embeds
+            torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in inputs_embeds
         ]
 
         # Prepare encoder inputs (by flattening)
-        spatial_shapes_list = [(embed.shape[2], embed.shape[3]) for embed in input_embeds]
-        input_embeds_flat = torch.cat([embed.flatten(2).transpose(1, 2) for embed in input_embeds], 1)
+        spatial_shapes_list = [(embed.shape[2], embed.shape[3]) for embed in inputs_embeds]
+        input_embeds_flat = torch.cat([embed.flatten(2).transpose(1, 2) for embed in inputs_embeds], 1)
         spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=input_embeds_flat.device)
         masks_flat = torch.cat([mask.flatten(1) for mask in masks], 1)
 
@@ -2331,7 +2331,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> # Load Mask2Former trained on COCO instance segmentation dataset
@@ -2341,7 +2342,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ... )
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(image, return_tensors="pt")
 
         >>> with torch.no_grad():
@@ -2364,7 +2366,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> # Load Mask2Former trained on ADE20k semantic segmentation dataset
@@ -2374,7 +2377,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
         ... )
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(image, return_tensors="pt")
 
         >>> with torch.no_grad():
@@ -2398,7 +2402,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> # Load Mask2Former trained on CityScapes panoptic segmentation dataset
@@ -2408,7 +2413,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ... )
 
         >>> url = "https://cdn-media.huggingface.co/Inference-API/Sample-results-on-the-Cityscapes-dataset-The-above-images-show-how-our-method-can-handle.png"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(image, return_tensors="pt")
 
         >>> with torch.no_grad():

@@ -863,31 +863,43 @@ def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = Fals
                 paired_grouped_values[paired_index][shape].append(paired_value)
             grouped_images_index[key] = (shape, len(grouped_images[shape]) - 1)
 
+    # Store structure size for nested inputs to handle empty sublists during reconstruction
+    if is_nested:
+        grouped_images_index["_num_sublists"] = len(normalized_images)
+
     return grouped_images, *paired_grouped_values, grouped_images_index
 
 
 def _reconstruct_nested_structure(indices, processed_images):
     """Helper function to reconstruct a single level nested structure."""
-    # Find the maximum outer index
-    max_outer_idx = max(idx[0] for idx in indices)
-
-    # Create the outer list
-    result = [None] * (max_outer_idx + 1)
+    # Get the number of sublists (handles empty sublists like in [[], [image]])
+    num_sublists = indices.pop("_num_sublists", None)
 
     # Group indices by outer index
     nested_indices = defaultdict(list)
     for i, j in indices:
         nested_indices[i].append(j)
 
+    # Determine the number of outer sublists
+    if num_sublists is not None:
+        max_outer_idx = num_sublists - 1
+    elif nested_indices:
+        max_outer_idx = max(nested_indices.keys())
+    else:
+        return []
+
+    # Create the result structure
+    result = []
     for i in range(max_outer_idx + 1):
-        if i in nested_indices:
+        if i not in nested_indices:
+            result.append([])
+        else:
             inner_max_idx = max(nested_indices[i])
             inner_list = [None] * (inner_max_idx + 1)
-            for j in range(inner_max_idx + 1):
-                if (i, j) in indices:
-                    shape, idx = indices[(i, j)]
-                    inner_list[j] = processed_images[shape][idx]
-            result[i] = inner_list
+            for j in nested_indices[i]:
+                shape, idx = indices[(i, j)]
+                inner_list[j] = processed_images[shape][idx]
+            result.append(inner_list)
 
     return result
 
@@ -906,6 +918,21 @@ def _iterate_items(items, is_nested: bool):
     else:
         for i, item in enumerate(items):
             yield i, item
+
+
+def _get_device_from_images(images, is_nested: bool) -> "torch.device":
+    """
+    Get the device from the first non-empty element in a (potentially nested) list of images.
+
+    Handles cases like `images = [[], [image]]` where the first sublist may be empty.
+    """
+    if is_nested:
+        for row in images:
+            if isinstance(row, torch.Tensor):
+                return row.device
+            if isinstance(row, list) and len(row) > 0:
+                return row[0].device
+    return images[0].device
 
 
 def group_images_by_shape(
@@ -945,17 +972,21 @@ def group_images_by_shape(
     """
     # If disable grouping is not explicitly provided, we favor disabling it if the images are on CPU, and enabling it otherwise.
     if disable_grouping is None:
-        device = images[0][0].device if is_nested else images[0].device
+        device = _get_device_from_images(images, is_nested)
         disable_grouping = device == "cpu"
 
     if disable_grouping:
+        grouped_images_index = {key: (key, 0) for key, _ in _iterate_items(images, is_nested)}
+        if is_nested:
+            grouped_images_index["_num_sublists"] = len(images)
+
         return (
             {key: img.unsqueeze(0) for key, img in _iterate_items(images, is_nested)},
             *[
                 {key: item.unsqueeze(0) for key, item in _iterate_items(paired_list, is_nested)}
                 for paired_list in paired_inputs
             ],
-            {key: (key, 0) for key, _ in _iterate_items(images, is_nested)},
+            grouped_images_index,
         )
 
     # Handle single level nested structure

@@ -1185,7 +1185,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
             )
         else:
             expected_slice = torch.tensor(
-                [-5.6844, -5.8372, 1.1518, -6.8984, 6.8587, -2.4453, 1.2347, -1.0241, -1.9649, -3.9109],
+                [-5.6832, -5.8361, 1.1500, -6.8975, 6.8576, -2.4450, 1.2335, -1.0246, -1.9654, -3.9127],
                 device=torch_device,
             )
 

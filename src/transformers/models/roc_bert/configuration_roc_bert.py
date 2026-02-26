@@ -125,8 +125,14 @@ class RoCBertConfig(PreTrainedConfig):
         shape_embed_dim=512,
         shape_vocab_size=24858,
         concat_input=True,
+        is_decoder=False,
+        add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -148,7 +154,8 @@ class RoCBertConfig(PreTrainedConfig):
         self.shape_vocab_size = shape_vocab_size
         self.concat_input = concat_input
         self.classifier_dropout = classifier_dropout
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
 
 
 __all__ = ["RoCBertConfig"]

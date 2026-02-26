@@ -25,7 +25,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
-from ...utils import is_torch_available
+from ...utils import auto_docstring, is_torch_available
 
 
 if is_torch_available():
@@ -71,27 +71,8 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token, num_i
     return f"{image_token * image_seq_len * num_images}{bos_token}{prompt}\n"
 
 
+@auto_docstring
 class ColPaliProcessor(ProcessorMixin):
-    r"""
-    Constructs a ColPali processor which wraps a PaliGemmaProcessor and special methods to process images and queries, as
-    well as to compute the late-interaction retrieval score.
-
-    [`ColPaliProcessor`] offers all the functionalities of [`PaliGemmaProcessor`]. See the [`~PaliGemmaProcessor.__call__`]
-    for more information.
-
-    Args:
-        image_processor ([`SiglipImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        visual_prompt_prefix (`str`, *optional*, defaults to `"Describe the image."`):
-            A string that gets tokenized and prepended to the image tokens.
-        query_prefix (`str`, *optional*, defaults to `"Question: "`):
-            A prefix to be used for the query.
-    """
-
     def __init__(
         self,
         image_processor=None,
@@ -100,6 +81,12 @@ class ColPaliProcessor(ProcessorMixin):
         visual_prompt_prefix: str = "Describe the image.",
         query_prefix: str = "Question: ",
     ):
+        r"""
+        visual_prompt_prefix (`str`, *optional*, defaults to `"Describe the image."`):
+            A string that gets tokenized and prepended to the image tokens.
+        query_prefix (`str`, *optional*, defaults to `"Question: "`):
+            A prefix to be used for the query.
+        """
         self.visual_prompt_prefix = visual_prompt_prefix
         self.query_prefix = query_prefix
         if not hasattr(image_processor, "image_seq_length"):
@@ -123,38 +110,14 @@ class ColPaliProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is a custom
-        wrapper around the PaliGemmaProcessor's [`~PaliGemmaProcessor.__call__`] method adapted for the ColPali model. It cannot process
-        both text and images at the same time.
-
-        When preparing the text(s), this method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's
-        [`~LlamaTokenizerFast.__call__`].
-        When preparing the image(s), this method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's
-        [`~SiglipImageProcessor.__call__`].
-        Please refer to the docstring of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

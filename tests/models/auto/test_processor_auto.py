@@ -423,7 +423,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
     def test_auto_processor_creates_image_processor(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-convnext")
-        self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessor")
+        self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessorFast")
 
     def test_auto_processor_save_load(self):
         processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")

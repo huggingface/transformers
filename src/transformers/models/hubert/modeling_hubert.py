@@ -33,7 +33,7 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, get_torch_context_manager_or_global_device
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from .configuration_hubert import HubertConfig
@@ -248,7 +248,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -324,9 +323,9 @@ class HubertAttention(nn.Module):
         key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
         value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -434,12 +433,12 @@ class HubertEncoder(nn.Module):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
+        hidden_states = hidden_states + position_embeddings.to(hidden_states.device)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -579,7 +578,7 @@ class HubertEncoderStableLayerNorm(nn.Module):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 
@@ -631,6 +630,7 @@ class HubertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "hubert"
     main_input_name = "input_values"
     input_modalities = "audio"
+    _no_split_modules = ["HubertEncoderLayer", "ParametrizedConv1d"]
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -1003,6 +1003,9 @@ class HubertForCTC(HubertPreTrainedModel):
 
         This method is **not** supposed to be called by the user and is prone to be changed in the future.
         """
+
+        if get_torch_context_manager_or_global_device() == torch.device("meta"):
+            return
 
         # Note that `tie_weights` is usually used to tie input and output embedding weights. The method is re-purposed to
         # correctly load adapter layers for Hubert so that we do not have to introduce a new API to

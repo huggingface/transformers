@@ -96,6 +96,7 @@ This model was contributed by [Yih-Dar SHIEH](https://huggingface.co/ydshieh). T
 
 [[autodoc]] Kosmos2Model
     - forward
+    - get_image_features
 
 ## Kosmos2ForConditionalGeneration
 

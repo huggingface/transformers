@@ -154,8 +154,6 @@ class Emu3TextConfig(PreTrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 151850):
             End of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -168,6 +166,8 @@ class Emu3TextConfig(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
 
 
     ```python
@@ -203,12 +203,12 @@ class Emu3TextConfig(PreTrainedConfig):
         pad_token_id: int = 151643,
         bos_token_id: int = 151849,
         eos_token_id: int = 151850,
-        tie_word_embeddings: bool = False,
         rope_parameters: RopeParameters | None = None,
         mlp_bias=False,
         attention_bias=False,
         attention_dropout: float = 0.1,
         initializer_range: float = 0.02,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -227,13 +227,11 @@ class Emu3TextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 class Emu3Config(PreTrainedConfig):
@@ -254,6 +252,8 @@ class Emu3Config(PreTrainedConfig):
             Emu3TextConfig instance containing the configuration for the language model.
         vocabulary_map (`dict`, *optional*):
             A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
     """
 
     model_type = "emu3"
@@ -265,6 +265,7 @@ class Emu3Config(PreTrainedConfig):
         vq_config: dict | Emu3VQVAEConfig = None,
         text_config: dict | Emu3TextConfig = None,
         vocabulary_map: dict[int, int] | None = None,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         if vq_config is None:
@@ -281,6 +282,7 @@ class Emu3Config(PreTrainedConfig):
         self.text_config = text_config
         self.vocabulary_map = vocabulary_map
         self.image_token_id = vocabulary_map.get("<image>") if vocabulary_map is not None else None
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

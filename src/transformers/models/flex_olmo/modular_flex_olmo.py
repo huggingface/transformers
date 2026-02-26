@@ -14,7 +14,6 @@
 
 
 import torch
-from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +22,8 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel
 from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RMSNorm, Olmo2RotaryEmbedding
 from ..olmoe.modeling_olmoe import (
@@ -31,6 +31,7 @@ from ..olmoe.modeling_olmoe import (
     OlmoeForCausalLM,
     OlmoeMLP,
     OlmoeSparseMoeBlock,
+    OlmoeTopKRouter,
 )
 
 
@@ -121,13 +122,12 @@ class FlexOlmoConfig(PreTrainedConfig):
     attribute_map = {"num_local_experts": "num_experts"}
     default_theta = 500000.0
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.k_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.v_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here due to the added norm on q and k
-        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
-        "layers.*.mlp.experts.down_proj": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.self_attn.q_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.k_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.v_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the added norm on q and k
+        "layers.*.mlp.experts.gate_up_proj": "rowwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -187,13 +187,11 @@ class FlexOlmoConfig(PreTrainedConfig):
         self.norm_topk_prob = norm_topk_prob
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 # FlexOlmo RMS norm reuses Olmo2 RMS norm, which handles low precision slightly differently than the original Olmoe.
@@ -214,6 +212,10 @@ class FlexOlmoMLP(OlmoeMLP):
 # FlexOlmo uses Olmo2 attention instead of OlmoE Attention since its `apply_rotary_pos_emb`
 # implementation handles lower precision more faithfully to the Olmo codebase.
 class FlexOlmoAttention(Olmo2Attention):
+    pass
+
+
+class FlexOlmoTopKRouter(OlmoeTopKRouter):
     pass
 
 
@@ -268,7 +270,7 @@ class FlexOlmoDecoderLayer(OlmoeDecoderLayer):
 # of the transformers library. For example, it uses the newer mechanisms of recording submodule outputs.
 class FlexOlmoPreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(FlexOlmoTopKRouter, index=0),
         "hidden_states": FlexOlmoDecoderLayer,
         "attentions": FlexOlmoAttention,
     }
@@ -279,7 +281,8 @@ class FlexOlmoPreTrainedModel(MixtralPreTrainedModel):
 # FlexOlmo model is identical to Mixtral model except:
 # - FlexOlmo does not use sliding window attention.
 class FlexOlmoModel(MixtralModel):
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -311,7 +314,7 @@ class FlexOlmoModel(MixtralModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
