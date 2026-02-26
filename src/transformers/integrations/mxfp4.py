@@ -128,19 +128,23 @@ class Mxfp4Dequantize(ConversionOps):
         missing_keys: list[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        if "_blocks" in input_dict.keys():
-            if isinstance(input_dict["_blocks"], list):
-                blocks = input_dict["_blocks"][0]
+        param_data = {}
+        proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
+        if f"{proj}_blocks" in input_dict.keys():
+            if isinstance(input_dict[f"{proj}_blocks"], list):
+                param_data[f"{proj}_blocks"] = input_dict[f"{proj}_blocks"][0]
             else:
-                blocks = input_dict["_blocks"]
-        if "_scales" in input_dict.keys():
-            if isinstance(input_dict["_scales"], list):
-                scales = input_dict["_scales"][0]
+                param_data[f"{proj}_blocks"] = input_dict[f"{proj}_blocks"]
+        if f"{proj}_scales" in input_dict.keys():
+            if isinstance(input_dict[f"{proj}_scales"], list):
+                param_data[f"{proj}_scales"] = input_dict[f"{proj}_scales"][0]
             else:
-                scales = input_dict["_scales"]
+                param_data[f"{proj}_scales"] = input_dict[f"{proj}_scales"]
 
         # Here we are dequantizing the weights
-        dequantized = dequantize_convertops(blocks, scales)
+        dequantized = dequantize_convertops(
+            param_data[f"{proj}_blocks"], param_data[f"{proj}_scales"]
+        )
         return {full_layer_name: dequantized}
 
 
