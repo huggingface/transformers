@@ -22,7 +22,6 @@ Usage:
     python utils/check_tokenizers_backend_equivalence.py --xnli --v4-python /tmp/transformers_v4_env/bin/python
     python utils/check_tokenizers_backend_equivalence.py --model-type xlm-roberta --xnli --v4-python /tmp/v4/bin/python --xnli-samples 100
 """
-import re
 import argparse
 import difflib
 import hashlib
@@ -159,6 +158,14 @@ def diff_tokenizers(t1, t2, label_a="auto", label_b="backend") -> list:
     j1 = json.dumps(_prepare(t1), indent=2).splitlines()
     j2 = json.dumps(_prepare(t2), indent=2).splitlines()
     return list(difflib.unified_diff(j1, j2, fromfile=label_a, tofile=label_b, lineterm=""))
+
+
+def _canonical_diff(diff_lines: list[str]) -> str:
+    """Strip --- / +++ header lines (contain model-specific paths) and return a stable key."""
+    return "\n".join(
+        line for line in diff_lines
+        if not line.startswith("---") and not line.startswith("+++")
+    )
 
 
 def get_converter_name(tok) -> str:
@@ -366,7 +373,7 @@ def check_one_model(
     output_dir: str,
     v4_python: str | None,
     xnli_samples: int,
-) -> tuple[str | None, list[str]]:
+) -> tuple[str | None, list[str], str | None]:
     """
     Check a single model.  Returns (mismatch_id_or_None, output_lines).
     Nothing is printed directly — all output is buffered so the caller can
@@ -375,6 +382,7 @@ def check_one_model(
     """
     out: list[str] = []
     mismatch: str | None = None
+    canonical: str | None = None
 
     try:
         auto_tok = AutoTokenizer.from_pretrained(model_id)
@@ -384,12 +392,12 @@ def check_one_model(
                 out.append(f"  [yellow dim][SKIP][/] [cyan]{model_id}[/]: gated repo")
         elif verbose:
             out.append(f"  [yellow dim][SKIP][/] [cyan]{model_id}[/]: AutoTokenizer.from_pretrained failed: {e}")
-        return mismatch, out
+        return mismatch, out, canonical
 
     if not hasattr(auto_tok, "_tokenizer") or auto_tok._tokenizer is None:
         if verbose:
             out.append(f"  [yellow dim][SKIP][/] [cyan]{model_id}[/]: no fast tokenizer (_tokenizer is None)")
-        return mismatch, out
+        return mismatch, out, canonical
 
     try:
         backend_tok = TokenizersBackend.from_pretrained(model_id)
@@ -399,12 +407,12 @@ def check_one_model(
                 out.append(f"  [yellow dim][SKIP][/] [cyan]{model_id}[/]: gated repo")
         elif verbose:
             out.append(f"  [yellow dim][SKIP][/] [cyan]{model_id}[/]: TokenizersBackend.from_pretrained failed: {e}")
-        return mismatch, out
+        return mismatch, out, canonical
 
     if backend_tok._tokenizer is None:
         if verbose:
             out.append(f"  [yellow dim][SKIP][/] [cyan]{model_id}[/]: TokenizersBackend._tokenizer is None")
-        return mismatch, out
+        return mismatch, out, canonical
 
     try:
         diff_lines = diff_tokenizers(
@@ -415,20 +423,11 @@ def check_one_model(
         )
         if diff_lines:
             mismatch = model_id
+            canonical = _canonical_diff(diff_lines)
             converter = get_converter_name(auto_tok)
-            list_repo = set(list_repo_files(model_id))
-            patt = re.compile(r"tokenizer\.json|sentencepiece\.model|spiece\.model|tokenizer\.model|tiktoken\.model", re.IGNORECASE)
-            if "tokenizer.json" in list_repo and patt.search("".join(list_repo)) is not None:
-                out.append(
-                    f"\n[bold red]MISMATCH[/]: Auto-converted to `tokenizer.json` from "
-                    f"{list_repo} for [cyan]{model_id}[/] => "
-                    f"AutoConversion is wrong (maybe incorrect converter!) converter={converter}\n"
-                )
             out.append(
-                f"[bold red]MISMATCH[/]: No conversion -> Model should not map to `converter` "
-                f"[cyan]{model_id}[/] model_type={model_type}  converter={converter}\n\n"
+                f"[bold red]MISMATCH[/]: [cyan]{model_id}[/] model_type={model_type}  converter={converter}"
             )
-            out.extend(_format_diff(diff_lines))
         else:
             xnli_ok = True
             if v4_python and xnli_samples:
@@ -441,7 +440,130 @@ def check_one_model(
         if verbose:
             out.append(f"  [red][ERROR][/] [cyan]{model_id}[/]: comparison failed: {e}")
 
-    return mismatch, out
+    return mismatch, out, canonical
+
+
+# ---------------------------------------------------------------------------
+# HTML report
+# ---------------------------------------------------------------------------
+
+def _diff_line_to_html(line: str) -> str:
+    """Wrap a single diff line in a <span> with appropriate class."""
+    import html
+    escaped = html.escape(line)
+    if line.startswith("+") and not line.startswith("+++"):
+        return f'<span class="add">{escaped}</span>'
+    if line.startswith("-") and not line.startswith("---"):
+        return f'<span class="del">{escaped}</span>'
+    if line.startswith("@@"):
+        return f'<span class="hunk">{escaped}</span>'
+    return f'<span>{escaped}</span>'
+
+
+def _write_html_report(
+    path: str,
+    all_mismatches: dict[str, set[str]],
+    diff_groups: dict[str, list[str]],
+) -> None:
+    import html
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    total_models = sum(len(v) for v in all_mismatches.values())
+
+    # Build mismatches table rows
+    mismatch_rows = []
+    for model_type, model_ids in sorted(all_mismatches.items()):
+        for mid in sorted(model_ids):
+            mismatch_rows.append(
+                f"<tr><td>{html.escape(model_type)}</td>"
+                f'<td><a href="https://huggingface.co/{html.escape(mid)}" target="_blank">'
+                f"{html.escape(mid)}</a></td></tr>"
+            )
+
+    # Build diff pattern sections
+    pattern_sections = []
+    for i, (canonical, model_ids) in enumerate(diff_groups.items(), 1):
+        model_links = ", ".join(
+            f'<a href="https://huggingface.co/{html.escape(m)}" target="_blank">{html.escape(m)}</a>'
+            for m in model_ids
+        )
+        diff_html = "\n".join(_diff_line_to_html(l) for l in canonical.splitlines())
+        pattern_sections.append(f"""
+        <section class="pattern">
+          <h2>Pattern #{i} <span class="count">({len(model_ids)} model{"s" if len(model_ids) != 1 else ""})</span></h2>
+          <p class="affected"><strong>Affected:</strong> {model_links}</p>
+          <pre class="diff">{diff_html}</pre>
+        </section>""")
+
+    patterns_html = "\n".join(pattern_sections) if pattern_sections else "<p>No diff patterns recorded.</p>"
+    mismatch_table = (
+        "<table><thead><tr><th>Model type</th><th>Model ID</th></tr></thead><tbody>"
+        + "\n".join(mismatch_rows)
+        + "</tbody></table>"
+        if mismatch_rows
+        else "<p>No mismatches found.</p>"
+    )
+
+    html_doc = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tokenizer backend equivalence report</title>
+  <style>
+    *, *::before, *::after {{ box-sizing: border-box; }}
+    body {{ font-family: system-ui, sans-serif; margin: 0; padding: 2rem; background: #f8f9fa; color: #212529; }}
+    h1 {{ font-size: 1.6rem; margin-bottom: 0.25rem; }}
+    .meta {{ color: #6c757d; font-size: 0.875rem; margin-bottom: 2rem; }}
+    h2 {{ font-size: 1.2rem; margin: 0 0 0.5rem; }}
+    .count {{ font-weight: normal; color: #6c757d; font-size: 0.9rem; }}
+    table {{ border-collapse: collapse; width: 100%; background: #fff; border-radius: 6px; overflow: hidden;
+             box-shadow: 0 1px 3px rgba(0,0,0,.1); margin-bottom: 2rem; }}
+    th {{ background: #343a40; color: #fff; text-align: left; padding: 0.6rem 1rem; }}
+    td {{ padding: 0.5rem 1rem; border-bottom: 1px solid #dee2e6; }}
+    tr:last-child td {{ border-bottom: none; }}
+    tr:hover td {{ background: #f1f3f5; }}
+    a {{ color: #0d6efd; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    .pattern {{ background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.1);
+                padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }}
+    .affected {{ font-size: 0.9rem; margin: 0.25rem 0 0.75rem; color: #495057; }}
+    pre.diff {{ background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px;
+                overflow-x: auto; font-size: 0.82rem; line-height: 1.5; margin: 0;
+                white-space: pre; }}
+    span.add  {{ color: #4ec9b0; }}
+    span.del  {{ color: #f48771; }}
+    span.hunk {{ color: #9cdcfe; }}
+    .summary-bar {{ display: flex; gap: 1.5rem; margin-bottom: 2rem; }}
+    .stat {{ background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.1);
+             padding: 1rem 1.5rem; min-width: 140px; }}
+    .stat .num {{ font-size: 2rem; font-weight: 700; color: {'#dc3545' if total_models else '#198754'}; }}
+    .stat .label {{ font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: .05em; }}
+    hr {{ border: none; border-top: 1px solid #dee2e6; margin: 2rem 0; }}
+  </style>
+</head>
+<body>
+  <h1>Tokenizer backend equivalence report</h1>
+  <p class="meta">Generated {now}</p>
+
+  <div class="summary-bar">
+    <div class="stat"><div class="num">{total_models}</div><div class="label">Mismatched models</div></div>
+    <div class="stat"><div class="num">{len(diff_groups)}</div><div class="label">Unique diff patterns</div></div>
+    <div class="stat"><div class="num">{len(all_mismatches)}</div><div class="label">Model types affected</div></div>
+  </div>
+
+  <h2 style="margin-bottom:0.75rem">All mismatches</h2>
+  {mismatch_table}
+
+  <hr>
+  <h2 style="margin-bottom:1rem">Unique diff patterns</h2>
+  {patterns_html}
+</body>
+</html>
+"""
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(html_doc)
 
 
 # ---------------------------------------------------------------------------
@@ -500,6 +622,13 @@ def main():
         default=50,
         help="Number of XNLI examples per language to tokenize (default: 50).",
     )
+    parser.add_argument(
+        "--report",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Write an HTML report to this path (e.g. --report report.html).",
+    )
     args = parser.parse_args()
 
     v4_python = None
@@ -524,6 +653,8 @@ def main():
                 model_types.append(model_type)
 
     all_mismatches: dict[str, set[str]] = {}
+    diff_groups: dict[str, list[str]] = {}
+    diff_groups_lock = threading.Lock()
     spm_registry: dict = {}
     spm_lock = threading.Lock()
 
@@ -593,16 +724,20 @@ def main():
                 for future in as_completed(check_futures):
                     model_id, model_type = check_futures[future]
                     try:
-                        mismatch, output_lines = future.result()
+                        mismatch, output_lines, canonical = future.result()
                     except Exception as e:
                         output_lines = [f"  [red][ERROR][/] [cyan]{model_id}[/]: unexpected exception: {e}"]
                         mismatch = None
+                        canonical = None
 
                     for line in output_lines:
                         console.print(line)
 
                     if mismatch is not None:
                         all_mismatches.setdefault(model_type, set()).add(mismatch)
+                        if canonical:
+                            with diff_groups_lock:
+                                diff_groups.setdefault(canonical, []).append(mismatch)
 
     finally:
         print_diffs(spm_registry)
@@ -617,6 +752,17 @@ def main():
             for model_type, mismatched_models in all_mismatches.items():
                 table.add_row(f"{model_type} : {mismatched_models}")
             console.print(table)
+
+        if diff_groups:
+            console.print(Rule("[bold]Unique diff patterns[/]"))
+            for i, (canonical, model_ids) in enumerate(diff_groups.items(), 1):
+                console.print(f"\n[bold yellow]Pattern #{i}[/] — {len(model_ids)} model(s): {', '.join(model_ids)}")
+                for line in _format_diff(canonical.splitlines()):
+                    console.print(line)
+
+        if args.report:
+            _write_html_report(args.report, all_mismatches, diff_groups)
+            console.print(f"\n[bold green]Report written →[/] [cyan]{args.report}[/]")
 
 
 if __name__ == "__main__":
