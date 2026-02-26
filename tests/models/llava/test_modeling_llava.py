@@ -187,7 +187,6 @@ class LlavaForConditionalGenerationModelTest(
     )
     pipeline_model_mapping = (
         {
-            "image-to-text": LlavaForConditionalGeneration,
             "image-text-to-text": LlavaForConditionalGeneration,
             "any-to-any": LlavaForConditionalGeneration,
         }

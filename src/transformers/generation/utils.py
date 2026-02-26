@@ -493,6 +493,7 @@ class GenerationMixin(ContinuousMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
+        next_sequence_length: int | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
@@ -512,15 +513,18 @@ class GenerationMixin(ContinuousMixin):
         model_inputs = {}
 
         # 1. Prepare base model inputs
-        # input_ids/input_embeds are the source of truth for input shapes: they are always sliced correctly already
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step for every prompt.
         if not self.config.is_encoder_decoder and inputs_embeds is not None and is_first_iteration:
             model_inputs[input_ids_key] = None
+            inputs_embeds = (
+                inputs_embeds[:, -next_sequence_length:, :] if next_sequence_length is not None else inputs_embeds
+            )
             model_inputs["inputs_embeds"] = inputs_embeds.clone(memory_format=torch.contiguous_format)
             batch_size, sequence_length = inputs_embeds.shape[:2]
         else:
             # `clone` calls in this function ensure a consistent stride. See #32227
+            input_ids = input_ids[:, -next_sequence_length:] if next_sequence_length is not None else input_ids
             model_inputs[input_ids_key] = input_ids.clone(memory_format=torch.contiguous_format)
             batch_size, sequence_length = input_ids.shape[:2]  # we slice here as some models may have them 3D
 
@@ -535,17 +539,12 @@ class GenerationMixin(ContinuousMixin):
             model_inputs["token_type_ids"] = token_type_ids
 
         # 3. Slice model inputs if it's an input that should have the same length as `input_ids`
-        use_cache = kwargs.get("use_cache", getattr(self.config, "use_cache", False))
-        # We check `use_cache` below because some stateful models (like `recurrent_gemma`) expect input slicing if
-        # their caching mechanism is used. To define `use_cache`, the user-defined argument takes precedence.
-        if past_key_values is not None or use_cache:
-            for model_input_name in [position_ids_key, "cache_position", "token_type_ids"]:
-                model_input = model_inputs.get(model_input_name)
-                if model_input is not None:
-                    # Input can be 2D or 3D, and we always slice on `seq-length` (last dim)
-                    model_input = model_input[..., -sequence_length:]
-                    model_input = model_input.clone(memory_format=torch.contiguous_format)
-                    model_inputs[model_input_name] = model_input
+        for model_input_name in [position_ids_key, "cache_position", "token_type_ids"]:
+            model_input = model_inputs.get(model_input_name)
+            if model_input is not None and model_input.shape[-1] != sequence_length:
+                # Input can be 2D or 3D, and we always slice on `seq-length` (last dim)
+                model_input = model_input[..., -sequence_length:].clone(memory_format=torch.contiguous_format)
+                model_inputs[model_input_name] = model_input
 
         # 4. Create 4D attention mask is we are using a compilable cache (important for performant compiled forward
         # pass)
@@ -587,6 +586,7 @@ class GenerationMixin(ContinuousMixin):
 
         # 6. Remove unexpected `generate` inputs (TODO @joao: fix trainer and examples)
         model_inputs.pop("labels", None)
+        model_inputs.pop("next_sequence_length", None)  # if the method is overriden, usually it becomes a kwarg
 
         return model_inputs
 
@@ -1546,7 +1546,7 @@ class GenerationMixin(ContinuousMixin):
     def _validate_generated_length(self, generation_config, input_ids_length, has_default_max_length):
         """Performs validation related to the resulting generated length"""
         # 1. Max length warnings related to poor parameterization
-        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
+        if has_default_max_length and generation_config.max_new_tokens is None:
             # 20 is the default max_length of the generation config
             warnings.warn(
                 f"Using the model-agnostic default `max_length` (={generation_config.max_length}) to control the "
@@ -1614,6 +1614,7 @@ class GenerationMixin(ContinuousMixin):
             model_input_name == "inputs_embeds"
             and input_ids_length != inputs_tensor.shape[1]
             and not self.config.is_encoder_decoder
+            and not has_default_max_length
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
         elif has_default_max_length:  # by default let's always generate 20 new tokens
@@ -2327,11 +2328,15 @@ class GenerationMixin(ContinuousMixin):
         )
 
         # Check length values before updating the config with defaults. We'll use it later to define the final min/max length (# 6)
-        has_default_max_length = kwargs.get("max_length") is None and (
-            generation_config is None or generation_config.max_length is None
+        has_default_max_length = (
+            kwargs.get("max_length") is None
+            and (generation_config is None or generation_config.max_length is None)
+            and self.generation_config.max_length is None
         )
-        has_default_min_length = kwargs.get("min_length") is None and (
-            generation_config is None or generation_config.min_length is None
+        has_default_min_length = (
+            kwargs.get("min_length") is None
+            and (generation_config is None or generation_config.min_length is None)
+            and self.generation_config.min_length is None
         )
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
@@ -2729,9 +2734,10 @@ class GenerationMixin(ContinuousMixin):
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
-                use_cache = model_kwargs.get("use_cache", True)
-                new_inputs_ids = input_ids[:, -1:] if use_cache else input_ids
-                model_inputs = self.prepare_inputs_for_generation(new_inputs_ids, **model_kwargs)
+                next_sequence_length = 1 if model_kwargs["use_cache"] else None
+                model_inputs = self.prepare_inputs_for_generation(
+                    input_ids, next_sequence_length=next_sequence_length, **model_kwargs
+                )
                 with self._optimize_model_for_decode():
                     outputs = model_forward(**model_inputs, return_dict=True)
             prefill_consumed = True
@@ -3218,9 +3224,10 @@ class GenerationMixin(ContinuousMixin):
             if prefill_consumed:
                 # a. Forward current tokens, obtain the logits
                 flat_running_sequences = self._flatten_beam_dim(running_sequences[:, :, :cur_len])
-                use_cache = model_kwargs.get("use_cache", True)
-                new_flat_running_sequences = flat_running_sequences[:, -1:] if use_cache else flat_running_sequences
-                model_inputs = self.prepare_inputs_for_generation(new_flat_running_sequences, **model_kwargs)
+                next_sequence_length = 1 if model_kwargs["use_cache"] else None
+                model_inputs = self.prepare_inputs_for_generation(
+                    flat_running_sequences, next_sequence_length=next_sequence_length, **model_kwargs
+                )
                 model_outputs = self(**model_inputs, return_dict=True)
             prefill_consumed = True
 
@@ -3550,11 +3557,12 @@ class GenerationMixin(ContinuousMixin):
                     dim=0,
                 )
 
-            new_candidate_input_ids = (
-                candidate_input_ids if is_first_iteration else candidate_input_ids[:, -candidate_length - 1 :]
-            )
+            next_sequence_length = candidate_length + 1 if not is_first_iteration else None
             model_inputs = self.prepare_inputs_for_generation(
-                new_candidate_input_ids, is_first_iteration=is_first_iteration, **candidate_kwargs
+                candidate_input_ids,
+                next_sequence_length=next_sequence_length,
+                is_first_iteration=is_first_iteration,
+                **candidate_kwargs,
             )
 
             if "logits_to_keep" in model_inputs:
@@ -3730,30 +3738,40 @@ class GenerationMixin(ContinuousMixin):
         should be treated as if it's the first iteration. However, for assisted decoding, assistants call `generate`
         several time in a row for a same batch of inputs, so we need to pass `is_first_iteration` here for such cases.
         """
-        # When restarting from previous cache, the `input_ids` or `inputs_embeds` are either the FULL sequence,
-        # including previous inputs, or only the new tokens but in this case the attention_mask still contains the
-        # FULL sequence (because otherwise we may lose some early padding tokens information). So slice inputs
-        # according to that if needed
+        # When restarting from previous cache, the `input_ids` are either the FULL sequence, including previous inputs,
+        # or only the new tokens but in this case the attention_mask still contains the FULL sequence (because otherwise we may
+        # lose some early padding tokens information). So slice inputs according to that if needed
+        # When restarting from `inputs_embeds`, it's always the FULL sequence, and we always need to slice
+        next_sequence_length = None
+        inputs_embeds = model_kwargs.get("inputs_embeds")
+        use_inputs_embeds = False
+        if not self.config.is_encoder_decoder and inputs_embeds is not None and is_first_iteration:
+            use_inputs_embeds = True
         if (cache := model_kwargs.get("past_key_values")) is not None:
-            attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
-            attention_mask = model_kwargs.get(attention_mask_key)
-            inputs_embeds = model_kwargs.get("inputs_embeds")
-            current_input_length = input_ids.shape[1] if inputs_embeds is None else inputs_embeds.shape[1]
-            # In this case we need to slice - if it's smaller than the mask, only the new inputs were passed -> no need to do anything
-            if attention_mask is not None and current_input_length == attention_mask.shape[1]:
-                past_length = cache.get_seq_length()
-                input_ids = input_ids[:, past_length:]
-                if inputs_embeds is not None:
-                    model_kwargs["inputs_embeds"] = inputs_embeds[:, past_length:, :]
-                # When inputs_embeds are present, input_ids may be in the model_kwargs as well
-                if "input_ids" in model_kwargs:
-                    model_kwargs["input_ids"] = model_kwargs["input_ids"][:, past_length:]
+            past_length = cache.get_seq_length()
+            # Always directly slice the inputs_embeds if present, as `prepare_inputs_for_generation` never need them full and `_get_initial_cache_position`
+            # rely on its size explicitly. For input_ids, we need to use `next_sequence_length` to slice later instead of explicit slicing,
+            # as some model need them full for correct input preparation inside `prepare_inputs_for_generation` (i.e. audio models)
+            if use_inputs_embeds:
+                model_kwargs["inputs_embeds"] = inputs_embeds[:, past_length:, :]
+            else:
+                attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+                attention_mask = model_kwargs.get(attention_mask_key)
+                # In this case we need to slice - if it's smaller than the mask, only the new inputs were passed -> no need to do anything
+                if attention_mask is not None and input_ids.shape[1] == attention_mask.shape[1]:
+                    # inputs will be sliced as `input_ids[:, -next_sequence_length :]` in `prepare_inputs_for_generation`
+                    next_sequence_length = input_ids.shape[1] - past_length
 
         # Usual prefill
         if generation_config.prefill_chunk_size is None:
-            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+            # The cache is already taken into account in `_get_initial_cache_position`, so the length is only the new tokens if we slice
+            effective_input_length = next_sequence_length if next_sequence_length is not None else input_ids.shape[1]
+            model_kwargs = self._get_initial_cache_position(effective_input_length, input_ids.device, model_kwargs)
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, is_first_iteration=is_first_iteration, **model_kwargs
+                input_ids,
+                next_sequence_length=next_sequence_length,
+                is_first_iteration=is_first_iteration,
+                **model_kwargs,
             )
             return self(**model_inputs, return_dict=True)
 
@@ -3776,11 +3794,14 @@ class GenerationMixin(ContinuousMixin):
             )
 
             attention_mask = model_kwargs.pop("attention_mask", None)
+            position_ids = model_kwargs.pop("position_ids", None)
             past_length = 0
             for input_chunk in input_chunks:
                 current_length = past_length + input_chunk.shape[-1]
                 if attention_mask is not None:
                     model_kwargs["attention_mask"] = attention_mask[:, :current_length]
+                if position_ids is not None:
+                    model_kwargs["position_ids"] = position_ids[:, past_length:current_length]
                 model_kwargs["cache_position"] = torch.arange(
                     past_length, current_length, dtype=torch.long, device=input_chunk.device
                 )
@@ -3796,7 +3817,7 @@ class GenerationMixin(ContinuousMixin):
             model_kwargs["cache_position"] = torch.arange(
                 input_ids.shape[1], dtype=torch.long, device=input_ids.device
             )
-            model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(input_ids, model_kwargs)
+            model_kwargs["position_ids"] = position_ids
 
             # Latest outputs contain next token logits
             return outputs
