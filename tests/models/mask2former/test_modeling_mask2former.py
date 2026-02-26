@@ -18,7 +18,6 @@ import unittest
 from functools import cached_property
 
 import numpy as np
-import pytest
 
 from tests.test_modeling_common import floats_tensor
 from transformers import Mask2FormerConfig, is_torch_available, is_vision_available

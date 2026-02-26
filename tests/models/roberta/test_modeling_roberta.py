@@ -14,9 +14,7 @@
 
 import unittest
 
-import pytest
-
-from transformers import AutoTokenizer, RobertaConfig, is_torch_available
+from transformers import RobertaConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin

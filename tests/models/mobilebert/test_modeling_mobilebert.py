@@ -15,9 +15,7 @@
 
 import unittest
 
-import pytest
-
-from transformers import AutoTokenizer, MobileBertConfig, MobileBertForMaskedLM, is_torch_available
+from transformers import MobileBertConfig, MobileBertForMaskedLM, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 

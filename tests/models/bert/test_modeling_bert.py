@@ -13,9 +13,7 @@
 # limitations under the License.
 import unittest
 
-import pytest
-
-from transformers import AutoTokenizer, BertConfig, is_torch_available
+from transformers import BertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_torch,
