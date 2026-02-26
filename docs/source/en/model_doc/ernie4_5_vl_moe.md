@@ -59,7 +59,7 @@ pipe = pipeline(
     task="image-text-to-text",
     model="baidu/ERNIE-4.5-VL-28B-A3B-PT",
     device_map="auto",
-    revision="refs/pr/10",
+    revision="refs/pr/11",
 )
 message = [
     {
@@ -86,12 +86,12 @@ model = AutoModelForImageTextToText.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
     dtype="auto",
     device_map="auto",  # Use tp_plan="auto" instead to enable Tensor Parallelism!
-    revision="refs/pr/10",
+    revision="refs/pr/11",
 )
 processor = AutoProcessor.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
     # use_fast=False,  # closer to the original implementation for less speed
-    revision="refs/pr/10",
+    revision="refs/pr/11",
 )
 message = [
     {
@@ -137,9 +137,9 @@ model = AutoModelForImageTextToText.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
     dtype="auto",
     device_map="auto",  # Use tp_plan="auto" instead to enable Tensor Parallelism!
-    revision="refs/pr/10",
+    revision="refs/pr/11",
 )
-processor = AutoProcessor.from_pretrained("baidu/ERNIE-4.5-VL-28B-A3B-PT", revision="refs/pr/10")
+processor = AutoProcessor.from_pretrained("baidu/ERNIE-4.5-VL-28B-A3B-PT", revision="refs/pr/11")
 message = [
     {
         "role": "user",

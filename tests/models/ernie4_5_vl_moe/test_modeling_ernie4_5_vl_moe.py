@@ -308,7 +308,7 @@ class Ernie4_5_VLMoeIntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
-        self.processor = AutoProcessor.from_pretrained(self.model_id, revision="refs/pr/10")
+        self.processor = AutoProcessor.from_pretrained(self.model_id, revision="refs/pr/11")
         self.message = [
             {
                 "role": "user",
@@ -344,7 +344,7 @@ class Ernie4_5_VLMoeIntegrationTest(unittest.TestCase):
             dtype=dtype,
             attn_implementation=attn_implementation,
             experts_implementation="eager",
-            revision="refs/pr/10",
+            revision="refs/pr/11",
         )
 
     def test_small_model_integration_test(self):
@@ -410,7 +410,7 @@ class Ernie4_5_VLMoeIntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test_with_video(self):
         processor = AutoProcessor.from_pretrained(
-            self.model_id, max_image_size={"longest_edge": 50176}, revision="refs/pr/10"
+            self.model_id, max_image_size={"longest_edge": 50176}, revision="refs/pr/11"
         )
         model = self.load_model(dtype=torch.float16)
         questions = ["Only use English during your responses. Describe the following video."]
