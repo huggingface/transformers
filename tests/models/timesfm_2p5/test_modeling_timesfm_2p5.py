@@ -28,7 +28,6 @@ from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERI
 if is_torch_available():
     from transformers import Timesfm2P5ModelForPrediction
 
-TOLERANCE = 1e-4
 
 
 class Timesfm2P5ModelTester:
