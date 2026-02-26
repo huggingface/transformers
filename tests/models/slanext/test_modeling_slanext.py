@@ -72,14 +72,14 @@ class SLANeXtModelTester:
 
     def get_config(self) -> SLANeXtConfig:
         config = SLANeXtConfig(
-            encoder_embed_dim = 768,
-            encoder_depth = 12,
-            encoder_num_heads = 12,
-            encoder_global_attn_indexes = [2, 5, 8, 11],
-            out_channels = 50,
-            hidden_size = 512,
-            max_text_length = 500,
-            loc_reg_num = 8,
+            encoder_embed_dim=768,
+            encoder_depth=12,
+            encoder_num_heads=12,
+            encoder_global_attn_indexes=[2, 5, 8, 11],
+            out_channels=50,
+            hidden_size=512,
+            max_text_length=500,
+            loc_reg_num=8,
         )
 
         return config
@@ -209,13 +209,38 @@ class SLANeXtModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(inputs)
 
-        pred_table_structure = self.image_processor.post_process_table_recognition(outputs)['structure']
+        pred_table_structure = self.image_processor.post_process_table_recognition(outputs)["structure"]
         expected_table_structure = [
-            '<html>', '<body>', '<table>', '<tr>', '<td', ' colspan="4"', '>', '</td>',
-            '</tr>', '<tr>', '<td></td>', '<td></td>', '<td></td>', '<td></td>', '</tr>',
-            '<tr>', '<td></td>', '<td></td>', '<td></td>', '<td></td>', '</tr>', '<tr>',
-            '<td></td>', '<td></td>', '<td></td>', '<td></td>', '</tr>', '</table>', '</body>',
-            '</html>'
+            "<html>",
+            "<body>",
+            "<table>",
+            "<tr>",
+            "<td",
+            ' colspan="4"',
+            ">",
+            "</td>",
+            "</tr>",
+            "<tr>",
+            "<td></td>",
+            "<td></td>",
+            "<td></td>",
+            "<td></td>",
+            "</tr>",
+            "<tr>",
+            "<td></td>",
+            "<td></td>",
+            "<td></td>",
+            "<td></td>",
+            "</tr>",
+            "<tr>",
+            "<td></td>",
+            "<td></td>",
+            "<td></td>",
+            "<td></td>",
+            "</tr>",
+            "</table>",
+            "</body>",
+            "</html>",
         ]
 
         self.assertEqual(pred_table_structure, expected_table_structure)

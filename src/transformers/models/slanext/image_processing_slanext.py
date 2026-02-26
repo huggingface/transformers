@@ -19,7 +19,6 @@
 # limitations under the License.
 
 
-import cv2
 import numpy as np
 import torch
 
@@ -34,6 +33,114 @@ class SLANeXtImageProcessor(BaseImageProcessor):
         self.target_long_edge = 512
         self.target_pad_size = 512
         self.init_decoder()
+
+    def _tablerec_resize(self, img: np.ndarray, target_size: tuple[int, int]) -> np.ndarray:
+        """
+        Resize image to match cv2.resize with INTER_LINEAR as closely as possible.
+
+        This implementation uses OpenCV's approach with vectorized operations:
+        1. Float32 precision for all floating-point calculations
+        2. Fixed-point arithmetic with 11-bit precision (scale = 2048)
+        3. Vectorized bilinear interpolation for efficiency
+        4. Proper boundary handling
+
+        Args:
+            img (`np.ndarray`):
+                Input image in HWC format (height, width, channels).
+            target_size (`tuple[int, int]`):
+                Target size as (width, height) to match cv2.resize convention.
+
+        Returns:
+            `np.ndarray`: Resized image in HWC format.
+        """
+        h, w = img.shape[:2]
+        target_w, target_h = target_size
+
+        # Ensure uint8 format
+        if img.dtype != np.uint8:
+            img = np.clip(img, 0, 255).astype(np.uint8)
+
+        # Handle grayscale images
+        if len(img.shape) == 2:
+            img = img[:, :, np.newaxis]
+            squeeze_output = True
+        else:
+            squeeze_output = False
+
+        # OpenCV's fixed-point arithmetic constants
+        INTER_RESIZE_COEF_BITS = 11
+        INTER_RESIZE_COEF_SCALE = 1 << INTER_RESIZE_COEF_BITS  # 2048
+
+        # Calculate scale factors using float32 (matching OpenCV)
+        scale_x = np.float32(w) / np.float32(target_w)
+        scale_y = np.float32(h) / np.float32(target_h)
+
+        # Pre-compute X interpolation tables (vectorized)
+        dx_arr = np.arange(target_w, dtype=np.float32)
+        fx_arr = (dx_arr + np.float32(0.5)) * scale_x - np.float32(0.5)
+        sx_arr = np.floor(fx_arr).astype(np.int32)
+        fx_frac_arr = fx_arr - sx_arr.astype(np.float32)
+
+        # Handle X boundaries
+        mask_left = sx_arr < 0
+        mask_right = sx_arr >= w - 1
+        sx_arr[mask_left] = 0
+        fx_frac_arr[mask_left] = 0.0
+        sx_arr[mask_right] = w - 2
+        fx_frac_arr[mask_right] = 1.0
+
+        xalpha = np.round(fx_frac_arr * np.float32(INTER_RESIZE_COEF_SCALE)).astype(np.int32)
+        xofs = sx_arr
+
+        # Pre-compute Y interpolation tables (vectorized)
+        dy_arr = np.arange(target_h, dtype=np.float32)
+        fy_arr = (dy_arr + np.float32(0.5)) * scale_y - np.float32(0.5)
+        sy_arr = np.floor(fy_arr).astype(np.int32)
+        fy_frac_arr = fy_arr - sy_arr.astype(np.float32)
+
+        # Handle Y boundaries
+        mask_top = sy_arr < 0
+        mask_bottom = sy_arr >= h - 1
+        sy_arr[mask_top] = 0
+        fy_frac_arr[mask_top] = 0.0
+        sy_arr[mask_bottom] = h - 2
+        fy_frac_arr[mask_bottom] = 1.0
+
+        yalpha = np.round(fy_frac_arr * np.float32(INTER_RESIZE_COEF_SCALE)).astype(np.int32)
+        yofs = sy_arr
+
+        # Create meshgrid for vectorized operations
+        sy_grid = yofs[:, np.newaxis]  # (target_h, 1)
+        sx_grid = xofs[np.newaxis, :]  # (1, target_w)
+        ay_grid = yalpha[:, np.newaxis]  # (target_h, 1)
+        ax_grid = xalpha[np.newaxis, :]  # (1, target_w)
+
+        ay_inv = INTER_RESIZE_COEF_SCALE - ay_grid
+        ax_inv = INTER_RESIZE_COEF_SCALE - ax_grid
+
+        # Perform vectorized bilinear interpolation for each channel
+        output = np.zeros((target_h, target_w, img.shape[2]), dtype=np.uint8)
+
+        for c in range(img.shape[2]):
+            # Get 4 corner pixels using advanced indexing
+            p00 = img[sy_grid, sx_grid, c].astype(np.int32)  # (target_h, target_w)
+            p10 = img[sy_grid, sx_grid + 1, c].astype(np.int32)
+            p01 = img[sy_grid + 1, sx_grid, c].astype(np.int32)
+            p11 = img[sy_grid + 1, sx_grid + 1, c].astype(np.int32)
+
+            # Vectorized bilinear interpolation
+            val = ay_inv * (ax_inv * p00 + ax_grid * p10) + ay_grid * (ax_inv * p01 + ax_grid * p11)
+
+            # Divide with rounding
+            shift_bits = INTER_RESIZE_COEF_BITS * 2
+            val = (val + (1 << (shift_bits - 1))) >> shift_bits
+
+            output[:, :, c] = np.clip(val, 0, 255).astype(np.uint8)
+
+        if squeeze_output:
+            output = output[:, :, 0]
+
+        return output
 
     def calc_padding(self, img):
         h, w = img.shape[:2]
@@ -50,7 +157,7 @@ class SLANeXtImageProcessor(BaseImageProcessor):
 
     def preprocess(self, img):
         img = np.array(img)
-        img = cv2.resize(img, self.calc_resize(img), interpolation=1)
+        img = self._tablerec_resize(img, self.calc_resize(img))
         img = img / 255.0
         img = normalize(image=img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         img = pad(image=img, padding=self.calc_padding(img))
