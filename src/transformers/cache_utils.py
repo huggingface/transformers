@@ -414,6 +414,11 @@ class StaticSlidingWindowLayer(StaticLayer):
                 # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
                 self.keys.copy_(new_keys)
                 self.values.copy_(new_values)
+
+                # NOTE: it is very important that this update is happening AFTER we used the variable everywhere else - otherwise
+                # compiling with cuda graphs will crash (even if we try to save the previous value in another variable)
+                self.cumulative_length += kv_length
+
                 # Very important to return the `self` tensors here, as they have the static dynamo address
                 return self.keys, self.values
             # Already full but using more than 1 new token (e.g. prefill caching, chat continuation, etc...)
@@ -436,6 +441,10 @@ class StaticSlidingWindowLayer(StaticLayer):
             except NotImplementedError:
                 self.keys[:, :, cache_position] = key_states
                 self.values[:, :, cache_position] = value_states
+
+            # NOTE: it is very important that this update is happening AFTER we used the variable everywhere else - otherwise
+            # compiling with cuda graphs will crash (even if we try to save the previous value in another variable)
+            self.cumulative_length += kv_length
 
             # Very important to return the `self` tensors here, as they have the static dynamo address
             return self.keys, self.values
