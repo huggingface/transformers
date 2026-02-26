@@ -91,6 +91,7 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 ## Notes
 
 - Inputs should be padded on the right because BERT uses absolute position embeddings.
+- Models trained on large text corpora can reflect societal biases. BERT models trained on internet text may reproduce biases related to demographic factors (race, gender, religion) and species (anthropocentric value hierarchies). For applications in food systems, agriculture, or environmental science, consult the model card for bias documentation and consider evaluation on relevant benchmarks.
 
 ## BertConfig
 
