@@ -635,7 +635,6 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
         window_size: int | None = None,
         future_values: torch.Tensor | None = None,
         forecast_context_len: int | None = None,
-        return_forecast_on_context: bool = False,
         truncate_negative: bool | None = None,
         force_flip_invariance: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -649,8 +648,6 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
             Optional future values used to compute the loss.
         forecast_context_len (`int`, *optional*):
             Optional context length override used during forecasting.
-        return_forecast_on_context (`bool`, *optional*):
-            Whether to return forecasts on context positions when available.
         truncate_negative (`bool`, *optional*):
             Whether to clamp outputs to non-negative values. If `None`, defaults to `config.infer_is_positive`.
         force_flip_invariance (`bool`, *optional*):
@@ -661,9 +658,6 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
             forecast_context_len = self.context_len
 
         device = past_values[0].device
-
-        if return_forecast_on_context:
-            raise NotImplementedError("`return_forecast_on_context` is not supported for TimesFM 2.5 yet.")
 
         inputs = [ts[-forecast_context_len:] for ts in past_values]
         input_min = torch.min(torch.stack([torch.min(ts) for ts in inputs]))
