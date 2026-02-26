@@ -87,6 +87,13 @@ class ProducerConfig:
             rollout in the queue was generated with a model that is
             ``~steps_per_generation × num_iterations`` more optimizer
             steps behind.  Default is 1 (one rollout ahead).
+        sync_warmup_rollouts: Number of initial rollouts to produce
+            synchronously before switching to async prefetch.  During
+            warmup, each rollout is generated on-policy (using the
+            latest model weights) so the model can bootstrap learning
+            from sparse reward signals.  After the warmup period, async
+            prefetch resumes for maximum throughput.  ``0`` (default)
+            disables warmup and uses async prefetch from the start.
         eval_during_produce: Switch the model to ``eval()`` mode during
             ``produce()``.  Recommended for generation quality.
         empty_cache_before_produce: Call ``torch.cuda.empty_cache()`` before
@@ -101,6 +108,7 @@ class ProducerConfig:
     num_iterations: int = 1
     async_prefetch: bool = False
     prefetch_depth: int = 1
+    sync_warmup_rollouts: int = 0
     eval_during_produce: bool = True
     empty_cache_before_produce: bool = False
     empty_cache_after_produce: bool = False
@@ -116,6 +124,8 @@ class ProducerConfig:
             raise ValueError(f"steps_per_generation must be >= 1 or None, got {self.steps_per_generation}")
         if self.prefetch_depth < 1:
             raise ValueError(f"prefetch_depth must be >= 1, got {self.prefetch_depth}")
+        if self.sync_warmup_rollouts < 0:
+            raise ValueError(f"sync_warmup_rollouts must be >= 0, got {self.sync_warmup_rollouts}")
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +218,7 @@ class AsyncDataProducer:
     def __init__(self, inner: DataProducer):
         self._inner = inner
         self._depth = inner.config.prefetch_depth
+        self._warmup_remaining = inner.config.sync_warmup_rollouts
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="async-producer")
         self._queue: deque[Future] = deque()
         self._initialized = False
@@ -223,9 +234,21 @@ class AsyncDataProducer:
         and the prefetch queue is seeded with ``prefetch_depth`` futures.
         Subsequent calls pop the oldest future from the queue and submit a
         new one to maintain the queue at ``prefetch_depth``.
+
+        When ``sync_warmup_rollouts > 0``, the first *N* rollouts are
+        produced synchronously (on-policy) so the model can bootstrap
+        learning from sparse reward signals before async prefetch begins.
         """
+        # During warmup, produce synchronously (on-policy) without prefetching
+        if self._warmup_remaining > 0:
+            self._warmup_remaining -= 1
+            logger.info(
+                f"AsyncDataProducer: sync warmup rollout (remaining={self._warmup_remaining})"
+            )
+            return self._inner.produce(model, global_step, **kwargs)
+
         if not self._initialized:
-            # First call: produce synchronously, then seed the queue
+            # First async call: produce synchronously, then seed the queue
             dataset = self._inner.produce(model, global_step, **kwargs)
             for i in range(1, self._depth + 1):
                 self._queue.append(
