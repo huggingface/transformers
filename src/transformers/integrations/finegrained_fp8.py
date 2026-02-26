@@ -126,7 +126,6 @@ def _supports_cutlass(
         return False
 
 
-@custom_op("transformers::w8a8_block_fp8_matmul_cutlass", mutates_args=())
 def w8a8_block_fp8_matmul_cutlass(
     A: torch.Tensor,
     B: torch.Tensor,
@@ -189,7 +188,7 @@ def w8a8_block_fp8_matmul(
 
     if _supports_cutlass(A, B, block_size, output_dtype):
         try:
-            return torch.ops.transformers.w8a8_block_fp8_matmul_cutlass(A, B, As, Bs, output_dtype)
+            return w8a8_block_fp8_matmul_cutlass(A, B, As, Bs, output_dtype)
         except Exception as e:
             logger.warning_once(f"CUTLASS kernel failed: {e}. Falling back to Triton.")
 
