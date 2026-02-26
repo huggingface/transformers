@@ -43,7 +43,7 @@ from transformers import (
     logging,
     set_seed,
 )
-from transformers.core_model_loading import WeightRenaming, process_target_pattern
+from transformers.core_model_loading import WeightRenaming, process_pattern_for_reverse_mapping
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -4698,7 +4698,9 @@ class ModelTesterMixin:
                         if isinstance(conversion, WeightRenaming):
                             # We need to revert the target pattern to make it compatible with regex search
                             target_pattern_reversed = conversion.target_patterns[0]
-                            captured_group = process_target_pattern(source_pattern)[1]
+                            captured_group = process_pattern_for_reverse_mapping(
+                                source_pattern, target_pattern_reversed
+                            )[1]
                             if captured_group:
                                 target_pattern_reversed = target_pattern_reversed.replace(r"\1", captured_group)
                             if any(re.search(target_pattern_reversed, k) for k in model.all_tied_weights_keys.keys()):

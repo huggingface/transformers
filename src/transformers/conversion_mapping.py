@@ -97,7 +97,13 @@ def _build_checkpoint_conversion_mapping():
         ],
         "qwen2_vl": [
             WeightRenaming(
-                source_patterns=r"(^|\.)model(?!\.(language_model|visual))", target_patterns="model.language_model"
+                source_patterns=r"^model(?!\.(language_model|visual))", target_patterns="model.language_model"
+            ),
+        ],
+        "colqwen2": [
+            WeightRenaming(
+                source_patterns=r"vlm_model.model(?!\.(language_model|visual))",
+                target_patterns="vlm_model.model.language_model",
             ),
         ],
         "gemma3n_text": [
@@ -233,7 +239,7 @@ def _build_checkpoint_conversion_mapping():
             # language model
             WeightRenaming(r"(?<!language_model\.)embed_tokens", "language_model.embed_tokens"),
             WeightRenaming(r"(?<!language_model\.)layers", "language_model.layers"),
-            WeightRenaming(r"(^|^model)\.norm", ".language_model.norm"),
+            WeightRenaming(r"(^|^model\.)norm", "\1language_model.norm"),
             WeightConverter(
                 source_patterns="mlp.gate.weight_1",
                 target_patterns="mlp.vision_moe.gate.weight",
