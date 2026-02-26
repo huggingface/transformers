@@ -392,7 +392,8 @@ VLMS = [
     "sam3_tracker",
     "sam3_tracker_video",
     "paddleocrvl",
-    "ernie4_5_vl_moe",
+    # NOTE: Slightly different from `model_type` (to follow naming conventions in vllm/sglang)
+    "ernie4_5_vlmoe",
     "detr",
 ]
 
