@@ -169,10 +169,7 @@ class AudioFlamingo3Config(PretrainedConfig):
     ```"""
 
     model_type = "audioflamingo3"
-    sub_configs = {
-        "audio_config": AudioFlamingo3EncoderConfig,
-        "text_config": AutoConfig,
-    }
+    sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}
 
     def __init__(
         self,

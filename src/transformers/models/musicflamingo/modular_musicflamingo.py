@@ -199,11 +199,6 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
     ```"""
 
     model_type = "musicflamingo"
-    sub_configs = {
-        "audio_config": MusicFlamingoEncoderConfig,
-        "text_config": AutoConfig,
-    }
-
     def __init__(
         self,
         audio_config=None,
