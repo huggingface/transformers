@@ -147,8 +147,6 @@ class Timesfm2P5Config(TimesFmConfig):
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
-        # Set all attributes before super().__init__() so RotaryEmbeddingConfigMixin
-        # can find rope_parameters and max_position_embeddings during initialization.
         self.num_key_value_heads = num_key_value_heads
         self.attention_bias = attention_bias
         self.output_quantile_len = output_quantile_len
