@@ -808,6 +808,12 @@ class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
 
 
 class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
+    # Attention is based on LayoutLMv3 (no interface)
+    _supports_sdpa = False
+    _supports_flash_attn = False
+    _supports_attention_backend = False
+    _supports_flex_attn = False
+
     def __init__(self, config):
         super().__init__(config)
         self.embeddings = PPDocLayoutV2TextEmbeddings(config)
@@ -859,13 +865,6 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
             inputs_embeds=final_embeddings,
             attention_mask=attention_mask,
         )
-        if attention_mask.dtype == torch.bool:
-            min_dtype = torch.finfo(final_embeddings.dtype).min
-            attention_mask = torch.where(
-                attention_mask,
-                torch.tensor(0.0, device=attention_mask.device, dtype=final_embeddings.dtype),
-                min_dtype,
-            )
         encoder_output = self.encoder(hidden_states=final_embeddings, bbox=pad_boxes, attention_mask=attention_mask)
         encoder_output = encoder_output.last_hidden_state
         token = encoder_output[:, 1 : 1 + seq_len, :]
