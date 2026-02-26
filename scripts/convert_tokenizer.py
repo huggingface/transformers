@@ -127,6 +127,24 @@ def try_fix_pretokenizer(tok_converted, tok_original, pattern=None):
     return False, None
 
 
+def validate_roundtrip(tok, dataset, num_samples=1000):
+    """Check decode(encode(text)) == text for all XNLI samples"""
+    failed, total = [], 0
+    for i, example in enumerate(tqdm(dataset, total=min(num_samples, len(dataset)), desc="Roundtrip")):
+        if i >= num_samples:
+            break
+        for field in ["premise", "hypothesis"]:
+            text = example.get(field, "")
+            if not text:
+                continue
+            total += 1
+            ids = tok.encode(text, add_special_tokens=False)
+            decoded = tok.decode(ids, skip_special_tokens=True)
+            if decoded != text:
+                failed.append({"index": i, "field": field, "text": text[:60], "decoded": decoded[:60]})
+    return failed, total
+
+
 def validate_tokenizers(tok_original, tok_converted, dataset, num_samples=1000):
     """Validate that both tokenizers produce identical outputs on the dataset."""
     mismatches = []
@@ -182,7 +200,30 @@ def main():
     parser.add_argument("--push-to-hub", action="store_true", help="Push converted tokenizer to Hub as PR")
     parser.add_argument("--num-samples", type=int, default=1000, help="Number of XNLI samples to validate")
     parser.add_argument("--skip-validation", action="store_true", help="Skip validation step")
+    parser.add_argument(
+        "--only-roundtrip",
+        action="store_true",
+        help="Run only the XNLI roundtrip check with the original tokenizer (trust_remote_code=True) and exit",
+    )
     args = parser.parse_args()
+
+    if args.only_roundtrip:
+        print(f"Loading tokenizer for {args.model_name} (trust_remote_code=True)...")
+        tok = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True, use_fast=True)
+        print(f"  Type: {type(tok).__name__}")
+
+        print("\nLoading XNLI dataset for validation...")
+        dataset = load_dataset("facebook/xnli", "en", split="validation")
+
+        print("\nOriginal tokenizer (trust_remote_code=True) XNLI roundtrip...")
+        roundtrip_failed, roundtrip_total = validate_roundtrip(tok, dataset, args.num_samples)
+        if not roundtrip_failed:
+            print(f"  ✓ All {roundtrip_total} XNLI roundtrips match (works out of the box)")
+        else:
+            print(f"  ✗ {len(roundtrip_failed)}/{roundtrip_total} roundtrips failed")
+            for f in roundtrip_failed[:3]:
+                print(f"    e.g. #{f['index']} {f['field']}: {f['text']!r} -> {f['decoded']!r}")
+        return 0
 
     print(f"Loading original tokenizer from {args.model_name} (trust_remote_code=True)...")
     tok_original = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
@@ -224,7 +265,17 @@ def main():
         print("\nLoading XNLI dataset for validation...")
         dataset = load_dataset("facebook/xnli", "en", split="validation")
 
-        print(f"Validating on {args.num_samples} samples...")
+        # Check original (trust_remote_code=True) works out of the box: roundtrip on XNLI
+        print("\nOriginal tokenizer (trust_remote_code=True) XNLI roundtrip...")
+        roundtrip_failed, roundtrip_total = validate_roundtrip(tok_original, dataset, args.num_samples)
+        if not roundtrip_failed:
+            print(f"  ✓ All {roundtrip_total} XNLI roundtrips match (works out of the box)")
+        else:
+            print(f"  ✗ {len(roundtrip_failed)}/{roundtrip_total} roundtrips failed")
+            for f in roundtrip_failed[:3]:
+                print(f"    e.g. #{f['index']} {f['field']}: {f['text']!r} -> {f['decoded']!r}")
+
+        print(f"\nValidating original vs converted on {args.num_samples} samples...")
         mismatches, decode_failures = validate_tokenizers(tok_original, tok_converted, dataset, args.num_samples)
 
         if mismatches:
