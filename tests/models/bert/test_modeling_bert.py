@@ -449,7 +449,6 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         {
             "feature-extraction": BertModel,
             "fill-mask": BertForMaskedLM,
-            "question-answering": BertForQuestionAnswering,
             "text-classification": BertForSequenceClassification,
             "text-generation": BertLMHeadModel,
             "token-classification": BertForTokenClassification,

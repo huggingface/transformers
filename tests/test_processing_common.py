@@ -106,6 +106,24 @@ class ProcessorTesterMixin:
     videos_input_name = "pixel_values_videos"
     audio_input_name = "input_features"
 
+    # Max-length values used in image-text kwargs tests. Override in subclasses if needed.
+    image_text_kwargs_max_length = 117
+    image_text_kwargs_override_max_length = 112
+    image_unstructured_max_length = 76
+
+    # Max-length values used in audio-text kwargs tests. Override in subclasses if needed.
+    audio_text_kwargs_max_length = 300
+    audio_processor_tester_max_length = 117
+    audio_unstructured_max_length = 76
+
+    # Max-length values used in video-text kwargs tests. Override in subclasses if needed.
+    video_text_kwargs_max_length = 167
+    video_text_kwargs_override_max_length = 162
+    video_unstructured_max_length = 176
+
+    # Max-length value used in chat template tests. Override in subclasses if needed.
+    chat_template_max_length = 100  # max_length in test_apply_chat_template_*
+
     @classmethod
     def setUpClass(cls):
         """
@@ -288,7 +306,7 @@ class ProcessorTesterMixin:
             from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING
 
             component_class = IMAGE_PROCESSOR_MAPPING.get(config_class, None)
-        elif mapping_name == "feature_extractor":
+        elif mapping_name == "feature_extractor" or mapping_name == "audio_processor":
             from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING
 
             component_class = FEATURE_EXTRACTOR_MAPPING.get(config_class, None)
@@ -475,7 +493,8 @@ class ProcessorTesterMixin:
         attributes = self.processor_class.get_attributes()
 
         if not any(
-            attr in ["tokenizer", "image_processor", "feature_extractor", "video_processor"] for attr in attributes
+            attr in ["tokenizer", "image_processor", "feature_extractor", "audio_processor", "video_processor"]
+            for attr in attributes
         ):
             self.skipTest("Processor has no tokenizer or image_processor to test additional features")
         additional_kwargs = {}
@@ -712,6 +731,7 @@ class ProcessorTesterMixin:
             "image_processor": ("images", "prepare_image_inputs", "images_input_name"),
             "video_processor": ("videos", "prepare_video_inputs", "videos_input_name"),
             "feature_extractor": ("audio", "prepare_audio_inputs", "audio_input_name"),
+            "audio_processor": ("audio", "prepare_audio_inputs", "audio_input_name"),
         }
 
         # Prepare inputs dynamically based on processor attributes
@@ -856,7 +876,9 @@ class ProcessorTesterMixin:
         if "tokenizer" not in self.processor_class.get_attributes():
             self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+        processor_components["tokenizer"] = self.get_component(
+            "tokenizer", max_length=self.image_text_kwargs_max_length, padding="max_length"
+        )
         processor_kwargs = self.prepare_processor_dict()
 
         processor = self.processor_class(**processor_components, **processor_kwargs)
@@ -864,7 +886,7 @@ class ProcessorTesterMixin:
         input_str = self.prepare_text_inputs(modalities="image")
         image_input = self.prepare_image_inputs()
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 117)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], self.image_text_kwargs_max_length)
 
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
         """
@@ -880,7 +902,9 @@ class ProcessorTesterMixin:
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=-1.0
         )
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+        processor_components["tokenizer"] = self.get_component(
+            "tokenizer", max_length=self.image_text_kwargs_max_length, padding="max_length"
+        )
         processor_kwargs = self.prepare_processor_dict()
 
         processor = self.processor_class(**processor_components, **processor_kwargs)
@@ -906,9 +930,13 @@ class ProcessorTesterMixin:
         input_str = self.prepare_text_inputs(modalities="image")
         image_input = self.prepare_image_inputs()
         inputs = processor(
-            text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            max_length=self.image_text_kwargs_override_max_length,
+            padding="max_length",
         )
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 112)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], self.image_text_kwargs_override_max_length)
 
     def test_kwargs_overrides_default_image_processor_kwargs(self):
         if "image_processor" not in self.processor_class.get_attributes():
@@ -919,7 +947,9 @@ class ProcessorTesterMixin:
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=1
         )
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+        processor_components["tokenizer"] = self.get_component(
+            "tokenizer", max_length=self.image_text_kwargs_max_length, padding="max_length"
+        )
         processor_kwargs = self.prepare_processor_dict()
 
         processor = self.processor_class(**processor_components, **processor_kwargs)
@@ -950,11 +980,11 @@ class ProcessorTesterMixin:
             do_rescale=True,
             rescale_factor=-1.0,
             padding="max_length",
-            max_length=76,
+            max_length=self.image_unstructured_max_length,
         )
 
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], self.image_unstructured_max_length)
 
     def test_unstructured_kwargs_batched(self):
         if "image_processor" not in self.processor_class.get_attributes():
@@ -973,13 +1003,13 @@ class ProcessorTesterMixin:
             do_rescale=True,
             rescale_factor=-1.0,
             padding="longest",
-            max_length=76,
+            max_length=self.image_unstructured_max_length,
         )
 
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
         self.assertTrue(
             len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
-            and len(inputs[self.text_input_name][1]) < 76
+            and len(inputs[self.text_input_name][1]) < self.image_unstructured_max_length
         )
 
     def test_doubly_passed_kwargs(self):
@@ -1028,14 +1058,14 @@ class ProcessorTesterMixin:
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
             "images_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
+            "text_kwargs": {"padding": "max_length", "max_length": self.image_unstructured_max_length},
         }
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], self.image_unstructured_max_length)
 
     def test_structured_kwargs_nested_from_dict(self):
         if "image_processor" not in self.processor_class.get_attributes():
@@ -1051,22 +1081,27 @@ class ProcessorTesterMixin:
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
             "images_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
+            "text_kwargs": {"padding": "max_length", "max_length": self.image_unstructured_max_length},
         }
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], self.image_unstructured_max_length)
 
     # text + audio kwargs testing
     @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.get_attributes():
+        if (
+            "feature_extractor" not in self.processor_class.get_attributes()
+            or "audio_processor" not in self.processor_class.get_attributes()
+        ):
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
         if "tokenizer" not in self.processor_class.get_attributes():
             self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=300, padding="max_length")
+        processor_components["tokenizer"] = self.get_component(
+            "tokenizer", max_length=self.audio_text_kwargs_max_length, padding="max_length"
+        )
         processor_kwargs = self.prepare_processor_dict()
 
         processor = self.processor_class(**processor_components, **processor_kwargs)
@@ -1075,16 +1110,21 @@ class ProcessorTesterMixin:
         input_str = self.prepare_text_inputs(batch_size=3, modalities="audio")
         raw_speech = self.prepare_audio_inputs(batch_size=3)
         inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt")
-        self.assertEqual(len(inputs[self.text_input_name][0]), 300)
+        self.assertEqual(len(inputs[self.text_input_name][0]), self.audio_text_kwargs_max_length)
 
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.get_attributes():
+        if (
+            "feature_extractor" not in self.processor_class.get_attributes()
+            or "audio_processor" not in self.processor_class.get_attributes()
+        ):
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
         if "tokenizer" not in self.processor_class.get_attributes():
             self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117)
+        processor_components["tokenizer"] = self.get_component(
+            "tokenizer", max_length=self.audio_processor_tester_max_length
+        )
         processor_kwargs = self.prepare_processor_dict()
 
         processor = self.processor_class(**processor_components, **processor_kwargs)
@@ -1092,13 +1132,22 @@ class ProcessorTesterMixin:
 
         input_str = self.prepare_text_inputs(batch_size=3, modalities="audio")
         raw_speech = self.prepare_audio_inputs(batch_size=3)
-        inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt", max_length=300, padding="max_length")
+        inputs = processor(
+            text=input_str,
+            audio=raw_speech,
+            return_tensors="pt",
+            max_length=self.audio_text_kwargs_max_length,
+            padding="max_length",
+        )
 
-        self.assertEqual(len(inputs[self.text_input_name][0]), 300)
+        self.assertEqual(len(inputs[self.text_input_name][0]), self.audio_text_kwargs_max_length)
 
     @require_torch
     def test_unstructured_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.get_attributes():
+        if (
+            "feature_extractor" not in self.processor_class.get_attributes()
+            or "audio_processor" not in self.processor_class.get_attributes()
+        ):
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
@@ -1108,13 +1157,22 @@ class ProcessorTesterMixin:
 
         input_str = self.prepare_text_inputs(batch_size=3, modalities="audio")
         raw_speech = self.prepare_audio_inputs(batch_size=3)
-        inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt", max_length=300, padding="max_length")
+        inputs = processor(
+            text=input_str,
+            audio=raw_speech,
+            return_tensors="pt",
+            max_length=self.audio_text_kwargs_max_length,
+            padding="max_length",
+        )
 
-        self.assertEqual(len(inputs[self.text_input_name][0]), 300)
+        self.assertEqual(len(inputs[self.text_input_name][0]), self.audio_text_kwargs_max_length)
 
     @require_torch
     def test_doubly_passed_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.get_attributes():
+        if (
+            "feature_extractor" not in self.processor_class.get_attributes()
+            or "audio_processor" not in self.processor_class.get_attributes()
+        ):
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
@@ -1135,12 +1193,17 @@ class ProcessorTesterMixin:
     @require_torch
     @require_vision
     def test_structured_kwargs_audio_nested(self):
-        if "feature_extractor" not in self.processor_class.get_attributes():
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+        if (
+            "feature_extractor" not in self.processor_class.get_attributes()
+            or "audio_processor" not in self.processor_class.get_attributes()
+        ):
+            self.skipTest(f"feature_extractor or audio_processor attribute not present in {self.processor_class}")
         if "tokenizer" not in self.processor_class.get_attributes():
             self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117)
+        processor_components["tokenizer"] = self.get_component(
+            "tokenizer", max_length=self.audio_processor_tester_max_length
+        )
         processor_kwargs = self.prepare_processor_dict()
 
         processor = self.processor_class(**processor_components, **processor_kwargs)
@@ -1152,12 +1215,12 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
-            "audio_kwargs": {"padding": "max_length", "max_length": 300},
+            "text_kwargs": {"padding": "max_length", "max_length": self.audio_unstructured_max_length},
+            "audio_kwargs": {"padding": "max_length", "max_length": self.audio_text_kwargs_max_length},
         }
 
         inputs = processor(text=input_str, audio=raw_speech, **all_kwargs)
-        self.assertEqual(len(inputs[self.text_input_name][0]), 76)
+        self.assertEqual(len(inputs[self.text_input_name][0]), self.audio_unstructured_max_length)
 
     def test_tokenizer_defaults_preserved_by_kwargs_video(self):
         if "video_processor" not in self.processor_class.get_attributes():
@@ -1165,7 +1228,9 @@ class ProcessorTesterMixin:
         if "tokenizer" not in self.processor_class.get_attributes():
             self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=167, padding="max_length")
+        processor_components["tokenizer"] = self.get_component(
+            "tokenizer", max_length=self.video_text_kwargs_max_length, padding="max_length"
+        )
         processor_kwargs = self.prepare_processor_dict()
 
         processor = self.processor_class(**processor_components, **processor_kwargs)
@@ -1173,7 +1238,7 @@ class ProcessorTesterMixin:
         input_str = self.prepare_text_inputs(modalities="video")
         video_input = self.prepare_video_inputs()
         inputs = processor(text=input_str, videos=video_input, do_sample_frames=False, return_tensors="pt")
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 167)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], self.video_text_kwargs_max_length)
 
     def test_video_processor_defaults_preserved_by_video_kwargs(self):
         """
@@ -1189,7 +1254,9 @@ class ProcessorTesterMixin:
         processor_components["video_processor"] = self.get_component(
             "video_processor", do_rescale=True, rescale_factor=-1.0
         )
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=167, padding="max_length")
+        processor_components["tokenizer"] = self.get_component(
+            "tokenizer", max_length=self.video_text_kwargs_max_length, padding="max_length"
+        )
         processor_kwargs = self.prepare_processor_dict()
 
         processor = self.processor_class(**processor_components, **processor_kwargs)
@@ -1219,10 +1286,10 @@ class ProcessorTesterMixin:
             videos=video_input,
             do_sample_frames=False,
             return_tensors="pt",
-            max_length=162,
+            max_length=self.video_text_kwargs_override_max_length,
             padding="max_length",
         )
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 162)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], self.video_text_kwargs_override_max_length)
 
     def test_kwargs_overrides_default_video_processor_kwargs(self):
         if "video_processor" not in self.processor_class.get_attributes():
@@ -1233,7 +1300,9 @@ class ProcessorTesterMixin:
         processor_components["video_processor"] = self.get_component(
             "video_processor", do_rescale=True, rescale_factor=1
         )
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=167, padding="max_length")
+        processor_components["tokenizer"] = self.get_component(
+            "tokenizer", max_length=self.video_text_kwargs_max_length, padding="max_length"
+        )
         processor_kwargs = self.prepare_processor_dict()
 
         processor = self.processor_class(**processor_components, **processor_kwargs)
@@ -1270,11 +1339,11 @@ class ProcessorTesterMixin:
             do_rescale=True,
             rescale_factor=-1.0,
             padding="max_length",
-            max_length=176,
+            max_length=self.video_unstructured_max_length,
         )
 
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 176)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], self.video_unstructured_max_length)
 
     def test_unstructured_kwargs_batched_video(self):
         if "video_processor" not in self.processor_class.get_attributes():
@@ -1294,13 +1363,13 @@ class ProcessorTesterMixin:
             do_rescale=True,
             rescale_factor=-1.0,
             padding="longest",
-            max_length=176,
+            max_length=self.video_unstructured_max_length,
         )
 
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
         self.assertTrue(
             len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
-            and len(inputs[self.text_input_name][1]) < 176
+            and len(inputs[self.text_input_name][1]) < self.video_unstructured_max_length
         )
 
     def test_doubly_passed_kwargs_video(self):
@@ -1338,14 +1407,14 @@ class ProcessorTesterMixin:
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
             "videos_kwargs": {"do_rescale": True, "rescale_factor": -1.0, "do_sample_frames": False},
-            "text_kwargs": {"padding": "max_length", "max_length": 176},
+            "text_kwargs": {"padding": "max_length", "max_length": self.video_unstructured_max_length},
         }
 
         inputs = processor(text=input_str, videos=video_input, **all_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 176)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], self.video_unstructured_max_length)
 
     def test_structured_kwargs_nested_from_dict_video(self):
         if "video_processor" not in self.processor_class.get_attributes():
@@ -1361,12 +1430,12 @@ class ProcessorTesterMixin:
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
             "videos_kwargs": {"do_rescale": True, "rescale_factor": -1.0, "do_sample_frames": False},
-            "text_kwargs": {"padding": "max_length", "max_length": 176},
+            "text_kwargs": {"padding": "max_length", "max_length": self.video_unstructured_max_length},
         }
 
         inputs = processor(text=input_str, videos=video_input, **all_kwargs)
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
-        self.assertEqual(inputs[self.text_input_name].shape[-1], 176)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], self.video_unstructured_max_length)
 
     # TODO: the same test, but for audio + text processors that have strong overlap in kwargs
     # TODO (molbap) use the same structure of attribute kwargs for other tests to avoid duplication
@@ -1396,7 +1465,10 @@ class ProcessorTesterMixin:
         Checks that `padding`, or any other overlap arg between audio extractor and tokenizer
         is be passed to only text and ignored for audio for BC purposes
         """
-        if "feature_extractor" not in self.processor_class.get_attributes():
+        if (
+            "feature_extractor" not in self.processor_class.get_attributes()
+            or "audio_processor" not in self.processor_class.get_attributes()
+        ):
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 
         processor_components = self.prepare_components()
@@ -1503,9 +1575,9 @@ class ProcessorTesterMixin:
             padding="max_length",
             truncation=True,
             return_tensors=return_tensors,
-            max_length=100,
+            max_length=self.chat_template_max_length,
         )
-        self.assertEqual(len(tokenized_prompt_100[0]), 100)
+        self.assertEqual(len(tokenized_prompt_100[0]), self.chat_template_max_length)
 
         # Test that `return_dict=True` returns text related inputs in the dict
         out_dict_text = processor.apply_chat_template(
@@ -1555,9 +1627,24 @@ class ProcessorTesterMixin:
     @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
-        self._test_apply_chat_template(
-            "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
-        )
+        if "feature_extractor" in self.processor_class.get_attributes():
+            self._test_apply_chat_template(
+                "audio",
+                batch_size,
+                return_tensors,
+                "audio_input_name",
+                "feature_extractor",
+                MODALITY_INPUT_DATA["audio"],
+            )
+        else:
+            self._test_apply_chat_template(
+                "audio",
+                batch_size,
+                return_tensors,
+                "audio_input_name",
+                "audio_processor",
+                MODALITY_INPUT_DATA["audio"],
+            )
 
     @require_av
     @parameterized.expand([(1, "pt")])
@@ -1725,7 +1812,10 @@ class ProcessorTesterMixin:
         ):
             self.skipTest(f"{self.processor_class} does not support video inputs")
 
-        if "feature_extractor" not in self.processor_class.get_attributes():
+        if (
+            "feature_extractor" not in self.processor_class.get_attributes()
+            or "audio_processor" not in self.processor_class.get_attributes()
+        ):
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 
         video_file_path = hf_hub_download(

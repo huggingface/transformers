@@ -26,6 +26,7 @@ from ...integrations import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, is_torchdynamo_compiling, logging
+from ...utils.import_utils import resolve_internal_import
 from .configuration_mamba2 import Mamba2Config
 
 
@@ -265,9 +266,15 @@ class Mamba2Mixer(nn.Module):
 
         global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
         mamba_ssm = lazy_load_kernel("mamba-ssm")
-        selective_state_update = getattr(mamba_ssm, "selective_state_update", None)
-        mamba_chunk_scan_combined = getattr(mamba_ssm, "mamba_chunk_scan_combined", None)
-        mamba_split_conv1d_scan_combined = getattr(mamba_ssm, "mamba_split_conv1d_scan_combined", None)
+        selective_state_update = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
+        )
+        mamba_chunk_scan_combined = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.ssd_combined.mamba_chunk_scan_combined"
+        )
+        mamba_split_conv1d_scan_combined = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.ssd_combined.mamba_split_conv1d_scan_combined"
+        )
 
         global is_fast_path_available
         is_fast_path_available = all(
@@ -978,7 +985,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
             model_inputs["cache_params"] = Mamba2Cache(
                 self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype
             )
-        elif use_cache and cache_position[0] > 0:
+        elif use_cache and model_inputs["cache_position"][0] > 0:
             model_inputs["attention_mask"] = None
 
         return model_inputs

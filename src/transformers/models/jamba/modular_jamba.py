@@ -32,6 +32,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
+from ...utils.import_utils import resolve_internal_import
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, eager_attention_forward
 from ..mistral.modeling_mistral import MistralMLP
@@ -247,9 +248,11 @@ class JambaMambaMixer(nn.Module):
 
         global selective_state_update, mamba_inner_fn, selective_scan_fn
         mamba_ssm = lazy_load_kernel("mamba-ssm")
-        selective_state_update = getattr(mamba_ssm, "selective_state_update", None)
-        mamba_inner_fn = getattr(mamba_ssm, "mamba_inner_fn", None)
+        selective_state_update = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
+        )
         selective_scan_fn = getattr(mamba_ssm, "selective_scan_fn", None)
+        mamba_inner_fn = getattr(mamba_ssm, "mamba_inner_fn", None)
 
         global is_fast_path_available
         is_fast_path_available = all(
