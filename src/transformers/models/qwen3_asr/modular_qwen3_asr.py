@@ -57,7 +57,6 @@ from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     pass
 
-
 class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRTextModel`]. It is used to instantiate a
@@ -297,19 +296,34 @@ class Qwen3ASRConfig(Qwen3OmniMoeConfig):
     def __init__(
         self,
         thinker_config=None,
+        talker_config=None,
+        code2wav_config=None,
         support_languages=None,
         attn_implementation=None,
         **kwargs,
     ):
-        PreTrainedConfig.__init__(**kwargs)
-        if thinker_config is None:
-            thinker_config = {}
-
-        self.thinker_config = Qwen3ASRThinkerConfig(**thinker_config)
+        super().__init__(
+            thinker_config=thinker_config,
+            support_languages=support_languages,
+            attn_implementation=attn_implementation,
+            **kwargs,
+        )
         self.support_languages = support_languages
         self._attn_implementation = attn_implementation
+        del self.talker_config
+        del self.code2wav_config
+        del self.initializer_range
+        del self.enable_audio_output
+        del self.enable_audio_output
+        del self.im_start_token_id
+        del self.im_end_token_id
+        del self.tts_pad_token_id
+        del self.tts_bos_token_id
+        del self.tts_eos_token_id 
+        del self.system_token_id
+        del self.user_token_id
+        del self.assistant_token_id
 
-    ###
     @property
     def num_attention_heads(self):
         return self.thinker_config.text_config.num_attention_heads
@@ -325,7 +339,6 @@ class Qwen3ASRConfig(Qwen3OmniMoeConfig):
     @vocab_size.setter
     def vocab_size(self, value):
         self.thinker_config.text_config.vocab_size = value
-    ###
 
 class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
