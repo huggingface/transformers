@@ -246,6 +246,7 @@ def convert_config(model_path, save_dir):
                 vision_config=vision_config,
                 image_token_id=image_token_id,
             )
+            setattr(final_config, "architectures", original_config["architectures"])  # carry over
 
             final_config.save_pretrained(save_dir)
             break

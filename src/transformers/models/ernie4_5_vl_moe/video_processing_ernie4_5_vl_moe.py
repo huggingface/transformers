@@ -54,7 +54,7 @@ from ...video_utils import (
     infer_channel_dimension_format,
     reorder_videos,
 )
-from .image_processing_ernie4_5_VLMoe import smart_resize
+from .image_processing_ernie4_5_vl_moe import smart_resize
 
 
 logger = logging.get_logger(__name__)
