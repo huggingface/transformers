@@ -15,13 +15,13 @@ rendered properly in your Markdown viewer.
 
 # Hyperparameter search
 
-Hyperparameters - learning rate, batch size, number of epochs - are choices that affect training and can produce very different results depending on your choice. [`Trainer.hyperparameter_search`] finds the best combination of hyperparameters by running multiple training trials, each with a different set of values, and returning the best one.
+Hyperparameters like learning rate, batch size, and number of epochs significantly affect training results. [`Trainer.hyperparameter_search`] finds the best combination by running multiple trials, each with a different set of values, and returning the best one.
 
-For each trial, [`Trainer.hyperparameter_search`] initializes a model from scratch with `model_init`, samples a new set of hyperparameters and runs a full training loop with them, evaluates and computes an objective, and reports the objective to the search backend which is used to inform the next trial. After a number of trials, the best set of hyperparameters are returned in [`~trainer.utils.BestRun`].
+Each trial initializes a fresh model with `model_init`, samples new hyperparameters, runs a full training loop, and reports an objective to the search backend. The backend uses each objective to inform the next trial. After all trials complete, the best hyperparameters are returned in a [`~trainer.utils.BestRun`].
 
 ## Initializing a model
 
-Start each trial with a fresh model to avoid the previous runs training state. `model_init` is called at the start of each trial and returns a new model instance, so every trial starts from the same initial weights.
+Start each trial with a fresh model to avoid the previous runs' state. `model_init` is called at the start of each trial and returns a new model instance, so every trial begins from the same initial weights.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -37,11 +37,12 @@ trainer = Trainer(
 )
 ```
 
-Don't pass `model=` with `model_init=`, otherwise it'll return an error.
+Don't pass `model=` and `model_init=` together or [`Trainer`] raises an error.
 
 ## Define the search space
 
-Create a function that defines the search space. The format depends on the backend. If you don't define a `hp_space` function, the default searches over `learning_rate`, `num_train_epochs`, and `per_device_train_batch_size`.
+Create a function that defines the search space. The format depends on the backend. If you don't define a `hp_space` function, the default 
+search covers `learning_rate`, `num_train_epochs`, and `per_device_train_batch_size`.
 
 ```bash
 # install one of these hyperparam search backends
@@ -100,7 +101,7 @@ def hp_space(trial):
 
 ## Run the search
 
-Optionally provide a `compute_objective` function that describes what to optimize for. It defaults to `eval_loss`, or the sum of all eval metrics if no loss is reported. The search `backend` optimizes for this value over `n_trials` search runs in your desired `direction`.
+Provide an optional `compute_objective` function to define the optimization target. It defaults to `eval_loss` if present, or the sum of all metric values otherwise. Pass an explicit function to avoid relying on this fallback. The search `backend` optimizes the objective over `n_trials` runs in a given `direction`.
 
 ```py
 def compute_objective(metrics):
@@ -115,7 +116,7 @@ best_run = trainer.hyperparameter_search(
 )
 ```
 
-This returns a [`~trainer.utils.BestRun`] object that contains the objective and best combination of hyperparameters.
+[`~Trainer.hyperparameter_search`] returns a [`~trainer.utils.BestRun`] containing the objective value and best hyperparameter combination.
 
 ```py
 best_run = trainer.hyperparameter_search(...)
