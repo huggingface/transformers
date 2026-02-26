@@ -13,12 +13,11 @@
 # limitations under the License.
 
 import gc
-import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
 
-from transformers import AutoConfig, AutoModelForCausalLM, MetalConfig, OPTForCausalLM, AutoTokenizer
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, MetalConfig, OPTForCausalLM
 from transformers.quantizers.quantizer_metal import MetalHfQuantizer
 from transformers.testing_utils import (
     require_torch,
@@ -30,6 +29,7 @@ from transformers.utils import is_torch_available
 if is_torch_available():
     import torch
     import torch.nn as nn
+
 
 @contextmanager
 def _patch_mps_available(available: bool = True):
@@ -52,6 +52,7 @@ def _patch_has_mps():
         stack.enter_context(_patch_mps_available(True))
         stack.enter_context(patch("transformers.quantizers.quantizer_metal.is_kernels_available", return_value=True))
         yield
+
 
 @require_torch
 class MetalConfigTest(unittest.TestCase):
@@ -116,6 +117,7 @@ class MetalConfigTest(unittest.TestCase):
         self.assertIn("dequantize", attrs)
         self.assertTrue(attrs["dequantize"])
 
+
 @require_torch
 class MetalQuantizerEnvironmentTest(unittest.TestCase):
     """Validate ``MetalHfQuantizer.validate_environment`` under various conditions."""
@@ -153,7 +155,7 @@ class MetalQuantizerEnvironmentTest(unittest.TestCase):
             stack.enter_context(
                 patch("transformers.quantizers.quantizer_metal.is_kernels_available", return_value=False)
             )
-            config = MetalConfig() 
+            config = MetalConfig()
             quantizer = MetalHfQuantizer(config)
             quantizer.pre_quantized = False
             with self.assertRaises(ImportError):
@@ -262,6 +264,7 @@ class AffineQuantizeDequantizeTest(unittest.TestCase):
         w_deq = _affine_dequantize_tensor(w_packed, scales, biases, group_size=64, bits=4)
         self.assertEqual(w_deq.dtype, torch.float32)
 
+
 @require_torch
 class MetalLinearTest(unittest.TestCase):
     """Test the ``MetalLinear`` nn.Module directly (CPU, no kernel calls)."""
@@ -333,6 +336,7 @@ class MetalLinearTest(unittest.TestCase):
         layer = MetalLinear(in_features=256, out_features=128, bits=2, group_size=64)
         elems_per_int = 32 // 2  # 16
         self.assertEqual(layer.qweight.shape, (128, 256 // elems_per_int))
+
 
 @require_torch
 class ReplaceWithMetalLinearTest(unittest.TestCase):
@@ -409,6 +413,7 @@ class ReplaceWithMetalLinearTest(unittest.TestCase):
                 self.assertEqual(m.qweight.dtype, torch.uint32)
                 break
 
+
 @require_torch
 class MetalConversionOpsTest(unittest.TestCase):
     """Test the ``MetalQuantize`` and ``MetalDequantize`` weight conversion operations."""
@@ -467,7 +472,9 @@ class MetalConversionOpsTest(unittest.TestCase):
                 },
                 full_layer_name="layer.weight",
             )
-            self.assertEqual(dq_result["layer.weight"].dtype, dtype, f"dequantized dtype should match scales ({dtype})")
+            self.assertEqual(
+                dq_result["layer.weight"].dtype, dtype, f"dequantized dtype should match scales ({dtype})"
+            )
 
     def test_quantize_then_dequantize_roundtrip(self):
         from transformers.integrations.metal_quantization import MetalDequantize, MetalQuantize
@@ -512,6 +519,7 @@ class MetalWeightConversionsTest(unittest.TestCase):
         quantizer = MetalHfQuantizer(config)
         quantizer.pre_quantized = False
         self.assertEqual(quantizer.get_weight_conversions(), [])
+
 
 @require_torch
 class MetalModelConversionTest(unittest.TestCase):
@@ -620,9 +628,7 @@ class MetalSlowIntegrationTest(unittest.TestCase):
         """Load a quantized checkpoint with dequantize=True on CPU and run a forward pass."""
         with _patch_no_mps():
             config = MetalConfig(dequantize=True)
-            model = AutoModelForCausalLM.from_pretrained(
-                self.model_id, quantization_config=config, device_map="cpu"
-            )
+            model = AutoModelForCausalLM.from_pretrained(self.model_id, quantization_config=config, device_map="cpu")
             self.assertIsNotNone(model)
             for param in model.parameters():
                 self.assertNotEqual(param.dtype, torch.uint32, "All weights should be dequantized")
@@ -630,9 +636,7 @@ class MetalSlowIntegrationTest(unittest.TestCase):
     def test_quantized_model(self):
         with _patch_no_mps():
             config = MetalConfig(bits=4, group_size=64)
-            model = AutoModelForCausalLM.from_pretrained(
-                self.model_id, quantization_config=config, device_map="mps"
-            )
+            model = AutoModelForCausalLM.from_pretrained(self.model_id, quantization_config=config, device_map="mps")
             tokenizer = AutoTokenizer.from_pretrained(self.model_id)
             self.assertIsNotNone(model)
             input = "Hello, how are you?"
