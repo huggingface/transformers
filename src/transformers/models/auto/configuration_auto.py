@@ -699,7 +699,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("hunyuan_v1_dense", "HunYuanDenseV1"),
         ("hunyuan_v1_moe", "HunYuanMoeV1"),
         ("ibert", "I-BERT"),
-        ("idefics", "IDEFICS"), 
+        ("idefics", "IDEFICS"),
         ("idefics2", "Idefics2"),
         ("idefics3", "Idefics3"),
         ("idefics3_vision", "Idefics3VisionTransformer"),

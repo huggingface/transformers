@@ -1,22 +1,22 @@
-import unittest
-import tempfile
 import shutil
-import numpy as np
-import torch
-from parameterized import parameterized
-from transformers.models.qwen3_asr.processing_qwen3_asr import Qwen3ASRProcessor
+import tempfile
+import unittest
+
 from transformers import (
     AutoProcessor,
     AutoTokenizer,
-    WhisperFeatureExtractor,
     Qwen2TokenizerFast,
+    WhisperFeatureExtractor,
 )
+from transformers.models.qwen3_asr.processing_qwen3_asr import Qwen3ASRProcessor
 from transformers.testing_utils import (
-    require_librosa, 
-    require_torch, 
+    require_librosa,
+    require_torch,
     require_torchaudio,
 )
+
 from ...test_processing_common import ProcessorTesterMixin
+
 
 class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3ASRProcessor
@@ -27,7 +27,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.checkpoint = "Qwen/Qwen3-ASR-0.6B"
         cls.tmpdirname = tempfile.mkdtemp()
-        processor = Qwen3ASRProcessor.from_pretrained(cls.checkpoint) 
+        processor = Qwen3ASRProcessor.from_pretrained(cls.checkpoint)
         processor.save_pretrained(cls.tmpdirname)
 
     @require_torch
@@ -58,7 +58,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     @require_torchaudio
-    def test_save_load_pretrained_default(self):    
+    def test_save_load_pretrained_default(self):
         tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
         processor = Qwen3ASRProcessor.from_pretrained(self.checkpoint)
         feature_extractor = processor.feature_extractor
@@ -81,7 +81,84 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_tokenizer_integration(self):
         tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
         prompt = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
-        EXPECTED_OUTPUT = ['This', 'Ġis', 'Ġa', 'Ġtest', 'ĠðŁĺ', 'Ĭ', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ', '9', '2', '0', '0', '0', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.Ċ', 'çĶŁæ´»çļĦ', 'çľŁ', 'è°Ľ', 'æĺ¯', 'Ċ', 'Hi', 'Ġ', 'ĠHello', 'Ċ', 'Hi', 'ĠĠ', 'ĠHello', 'ĊĊ', 'ĠĊĠĠĊ', 'ĠHello', 'Ċ', '<s', '>Ċ', 'hi', '<s', '>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġencoded', ':', 'ĠHello', '.Ċ', 'But', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à¸Ľ', 'à¸µ', 'ĠĠ', 'Ġ', 'ird', 'ĠĠ', 'Ġ', 'à¸Ķ', 'Ċ', 'Hey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']
+        EXPECTED_OUTPUT = [
+            "This",
+            "Ġis",
+            "Ġa",
+            "Ġtest",
+            "ĠðŁĺ",
+            "Ĭ",
+            "Ċ",
+            "I",
+            "Ġwas",
+            "Ġborn",
+            "Ġin",
+            "Ġ",
+            "9",
+            "2",
+            "0",
+            "0",
+            "0",
+            ",",
+            "Ġand",
+            "Ġthis",
+            "Ġis",
+            "Ġfals",
+            "Ã©",
+            ".Ċ",
+            "çĶŁæ´»çļĦ",
+            "çľŁ",
+            "è°Ľ",
+            "æĺ¯",
+            "Ċ",
+            "Hi",
+            "Ġ",
+            "ĠHello",
+            "Ċ",
+            "Hi",
+            "ĠĠ",
+            "ĠHello",
+            "ĊĊ",
+            "ĠĊĠĠĊ",
+            "ĠHello",
+            "Ċ",
+            "<s",
+            ">Ċ",
+            "hi",
+            "<s",
+            ">",
+            "there",
+            "Ċ",
+            "The",
+            "Ġfollowing",
+            "Ġstring",
+            "Ġshould",
+            "Ġbe",
+            "Ġproperly",
+            "Ġencoded",
+            ":",
+            "ĠHello",
+            ".Ċ",
+            "But",
+            "Ġ",
+            "ird",
+            "Ġand",
+            "Ġ",
+            "à¸Ľ",
+            "à¸µ",
+            "ĠĠ",
+            "Ġ",
+            "ird",
+            "ĠĠ",
+            "Ġ",
+            "à¸Ķ",
+            "Ċ",
+            "Hey",
+            "Ġhow",
+            "Ġare",
+            "Ġyou",
+            "Ġdoing",
+        ]
         tokens = tokenizer.tokenize(prompt)
         self.assertEqual(tokens, EXPECTED_OUTPUT)
 
@@ -110,12 +187,9 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         formatted_prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         self.assertEqual(expected_prompt, formatted_prompt)
 
-
-
     ### FOR DEBUGGING ###
     @require_librosa
     def test_apply_chat_template_audio(self):
-
         processor = self.get_processor()
 
         batch_messages = [
@@ -128,9 +202,9 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # this fails because of continue_final_message
         # chat template is correctly loading from model checkpoint: Qwen/Qwen3-ASR-0.6B
-        #print(processor.chat_template)
+        # print(processor.chat_template)
         rendered = processor.apply_chat_template(
             batch_messages,
-            continue_final_message=True,    
+            continue_final_message=True,
             tokenize=False,
         )
