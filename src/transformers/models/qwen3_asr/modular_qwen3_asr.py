@@ -181,7 +181,7 @@ class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
         del self.router_aux_loss_coef
         del self.mlp_only_layers
 
-
+# TODO: cannot inherit from Qwen3OmniMoeThinkerConfig due to vision_config block
 class Qwen3ASRThinkerConfig(Qwen3OmniMoeThinkerConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRThinker`]. It is used to instantiate a
