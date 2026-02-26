@@ -4,16 +4,12 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_jina_embeddings_v3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import math
 from collections.abc import Callable
-from functools import partial
 from typing import Optional
 
 import torch
-import torch.nn.utils.parametrize as parametrize
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.nn import functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN, gelu
@@ -59,7 +55,6 @@ class JinaEmbeddingsV3Embeddings(nn.Module):
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        adapter_mask: torch.LongTensor | None = None,
     ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.shape
@@ -77,39 +72,11 @@ class JinaEmbeddingsV3Embeddings(nn.Module):
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         if inputs_embeds is None:
-            if adapter_mask is not None:
-                embeddings = torch.empty(
-                    *input_shape,
-                    self.word_embeddings.embedding_dim,
-                    dtype=self.word_embeddings.weight.dtype,
-                    device=device,
-                )
-                unique_tasks = torch.unique(adapter_mask)
-                for task_id in unique_tasks:
-                    task_indices = (adapter_mask == task_id).nonzero(as_tuple=True)[0]
-                    task_input_ids = input_ids[task_indices]
-                    task_embeddings = self.word_embeddings(task_input_ids, task_id=task_id)
-                    embeddings[task_indices] = task_embeddings
-            else:
-                embeddings = self.word_embeddings(input_ids)
+            embeddings = self.word_embeddings(input_ids)
         else:
             embeddings = inputs_embeds
 
-        if adapter_mask is not None:
-            token_type_embeddings = torch.empty(
-                *input_shape,
-                self.token_type_embeddings.embedding_dim,
-                dtype=self.token_type_embeddings.weight.dtype,
-                device=device,
-            )
-            unique_tasks = torch.unique(adapter_mask)
-            for task_id in unique_tasks:
-                task_indices = (adapter_mask == task_id).nonzero(as_tuple=True)[0]
-                task_token_type_ids = token_type_ids[task_indices]
-                task_token_type_embeddings = self.token_type_embeddings(task_token_type_ids, task_id=task_id)
-                token_type_embeddings[task_indices] = task_token_type_embeddings
-        else:
-            token_type_embeddings = self.token_type_embeddings(token_type_ids)
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = embeddings + token_type_embeddings
         embeddings = self.LayerNorm(embeddings)
@@ -267,44 +234,18 @@ class JinaEmbeddingsV3SelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         batch_size, seq_len = hidden_states.shape[:-1]
         out_shape = (batch_size, self.num_attention_heads, seq_len, self.attention_head_size)
         hidden_shape = (batch_size, seq_len, 3, self.num_attention_heads, self.attention_head_size)
 
-        if adapter_mask is not None:
-            query_states = torch.empty(out_shape, dtype=hidden_states.dtype, device=hidden_states.device)
-            key_states = torch.empty(out_shape, dtype=hidden_states.dtype, device=hidden_states.device)
-            value_states = torch.empty(out_shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        qkv = self.Wqkv(hidden_states).view(hidden_shape)
+        query_states, key_states, value_states = qkv.unbind(dim=-3)
 
-            unique_tasks = torch.unique(adapter_mask)
-            for task_id in unique_tasks:
-                task_indices = (adapter_mask == task_id).nonzero(as_tuple=True)[0]
-                task_hidden_states = hidden_states[task_indices]
-                task_qkv_states = self.Wqkv(task_hidden_states, task_id=task_id)
-
-                task_batch_size = task_indices.shape[0]
-                task_view_shape = (task_batch_size, seq_len, 3, self.num_attention_heads, self.attention_head_size)
-                task_qkv_states = task_qkv_states.view(task_view_shape)
-
-                task_query_states, task_key_states, task_value_states = task_qkv_states.unbind(dim=-3)
-
-                task_query_states = task_query_states.transpose(1, 2)
-                task_key_states = task_key_states.transpose(1, 2)
-                task_value_states = task_value_states.transpose(1, 2)
-
-                query_states[task_indices] = task_query_states
-                key_states[task_indices] = task_key_states
-                value_states[task_indices] = task_value_states
-        else:
-            qkv = self.Wqkv(hidden_states).view(hidden_shape)
-            query_states, key_states, value_states = qkv.unbind(dim=-3)
-
-            query_states = query_states.transpose(1, 2)
-            key_states = key_states.transpose(1, 2)
-            value_states = value_states.transpose(1, 2)
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -338,25 +279,8 @@ class JinaEmbeddingsV3SelfOutput(nn.Module):
         self,
         hidden_states: torch.Tensor,
         input_tensor: torch.Tensor,
-        adapter_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if adapter_mask is not None:
-            output_dim = self.dense.out_features
-            output_tensor = torch.empty(
-                *hidden_states.shape[:-1], output_dim, dtype=hidden_states.dtype, device=hidden_states.device
-            )
-
-            unique_tasks = torch.unique(adapter_mask)
-            for task_id in unique_tasks:
-                task_indices = (adapter_mask == task_id).nonzero(as_tuple=True)[0]
-                task_hidden_states = hidden_states[task_indices]
-                task_hidden_states = self.dense(task_hidden_states, task_id=task_id)
-                output_tensor[task_indices] = task_hidden_states
-
-            hidden_states = output_tensor
-        else:
-            hidden_states = self.dense(hidden_states)
-
+        hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
@@ -373,17 +297,15 @@ class JinaEmbeddingsV3Attention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         attention_output, attn_weights = self.attention_class(
             hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            adapter_mask=adapter_mask,
             **kwargs,
         )
-        attention_output = self.output(attention_output, hidden_states, adapter_mask=adapter_mask)
+        attention_output = self.output(attention_output, hidden_states)
         return attention_output, attn_weights
 
 
@@ -399,25 +321,8 @@ class JinaEmbeddingsV3Intermediate(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        adapter_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if adapter_mask is not None:
-            output_dim = self.dense.out_features
-            output_tensor = torch.empty(
-                *hidden_states.shape[:-1], output_dim, dtype=hidden_states.dtype, device=hidden_states.device
-            )
-
-            unique_tasks = torch.unique(adapter_mask)
-            for task_id in unique_tasks:
-                task_indices = (adapter_mask == task_id).nonzero(as_tuple=True)[0]
-                task_hidden_states = hidden_states[task_indices]
-                task_hidden_states = self.dense(task_hidden_states, task_id=task_id)
-                output_tensor[task_indices] = task_hidden_states
-
-            hidden_states = output_tensor
-        else:
-            hidden_states = self.dense(hidden_states)
-
+        hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
@@ -433,27 +338,8 @@ class JinaEmbeddingsV3Output(nn.Module):
         self,
         hidden_states: torch.Tensor,
         input_tensor: torch.Tensor,
-        adapter_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if adapter_mask is not None:
-            output_tensor = torch.empty(
-                *hidden_states.shape[:-1],
-                self.dense.out_features,
-                dtype=hidden_states.dtype,
-                device=hidden_states.device,
-            )
-
-            unique_tasks = torch.unique(adapter_mask)
-            for task_id in unique_tasks:
-                task_indices = (adapter_mask == task_id).nonzero(as_tuple=True)[0]
-                task_hidden_states = hidden_states[task_indices]
-                task_hidden_states = self.dense(task_hidden_states, task_id=task_id)
-                output_tensor[task_indices] = task_hidden_states
-
-            hidden_states = output_tensor
-        else:
-            hidden_states = self.dense(hidden_states)
-
+        hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
@@ -471,23 +357,21 @@ class JinaEmbeddingsV3Layer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
             position_embeddings,
-            adapter_mask,
             **kwargs,
         )
 
-        layer_output = self.feed_forward_chunk(attention_output, adapter_mask)
+        layer_output = self.feed_forward_chunk(attention_output)
         return layer_output
 
-    def feed_forward_chunk(self, attention_output, adapter_mask):
-        intermediate_output = self.intermediate(attention_output, adapter_mask)
-        layer_output = self.output(intermediate_output, attention_output, adapter_mask)
+    def feed_forward_chunk(self, attention_output):
+        intermediate_output = self.intermediate(attention_output)
+        layer_output = self.output(intermediate_output, attention_output)
         return layer_output
 
 
@@ -502,7 +386,6 @@ class JinaEmbeddingsV3Encoder(nn.Module):
         hidden_states: torch.FloatTensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         for layer_module in self.layer:
@@ -510,7 +393,6 @@ class JinaEmbeddingsV3Encoder(nn.Module):
                 hidden_states,
                 attention_mask,
                 position_embeddings,
-                adapter_mask,
                 **kwargs,
             )
 
@@ -525,249 +407,14 @@ class JinaEmbeddingsV3Pooler(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def forward(
-        self, hidden_states: torch.Tensor, pool: bool = True, adapter_mask: torch.Tensor | None = None
-    ) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor, pool: bool = True) -> torch.FloatTensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0, :] if pool else hidden_states
 
-        if adapter_mask is not None:
-            output_tensor = torch.empty(
-                *first_token_tensor.shape[:-1],
-                self.dense.out_features,
-                dtype=hidden_states.dtype,
-                device=hidden_states.device,
-            )
-
-            unique_tasks = torch.unique(adapter_mask)
-            for task_id in unique_tasks:
-                task_indices = (adapter_mask == task_id).nonzero(as_tuple=True)[0]
-                task_first_token_tensor = first_token_tensor[task_indices]
-                task_pooled_output = self.dense(task_first_token_tensor, task_id=task_id)
-                output_tensor[task_indices] = task_pooled_output
-
-            pooled_output = output_tensor
-        else:
-            pooled_output = self.dense(first_token_tensor)
-
+        pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
-
-
-def initialized_weights(shape: tuple[int], num_adaptations: int, init: str = "kaiming") -> torch.Tensor:
-    weight_data = []
-    for _ in range(num_adaptations):
-        new_adaption = torch.zeros(shape)
-        if init == "kaiming":
-            nn.init.kaiming_uniform_(new_adaption, a=math.sqrt(5))
-        elif init == "normal":
-            nn.init.normal_(new_adaption)
-        else:
-            raise NotImplementedError
-        weight_data.append(new_adaption)
-    return torch.stack(weight_data, dim=0)
-
-
-class LoRAParametrization(nn.Module):
-    """
-    This LoRA implementation was inspired by  https://github.com/cccntu/minLoRA
-    The MIT License (MIT) Copyright (c) 2020 Andrej Karpathy
-    Permission is hereby granted, free of charge, to any person obtaining a copy of this software
-    and associated documentation files (the "Software"), to deal in the Software without restriction,
-    including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
-    and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so,
-    subject to the following conditions:
-    The above copyright notice and this permission notice shall be included in all copies or substantial
-    portions of the Software.
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
-    LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-    WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-    SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-    A Low-Rank Adaptation (LoRA) parametrization that can be attached to Linear and Embedding layers.
-    It supports multi-task adaptation by maintaining a stack of adapter weights (A and B matrices)
-    and selecting the appropriate one based on a `task_id` provided during the forward pass.
-    """
-
-    def __init__(
-        self,
-        fan_in: int,
-        fan_out: int,
-        layer_type: str = "linear",
-        num_adaptations: int = 1,
-        rank: int = 4,
-        dropout_p: float = 0.0,
-        alpha: float = 1,
-    ):
-        super().__init__()
-        # if weight is stored as (fan_out, fan_in), the memory layout of A & B follows (W + BA)x
-        # otherwise, it's x(W + AB). This allows us to tie the weights between linear layers and embeddings
-        fan_in_fan_out = layer_type == "embedding"
-        self.swap = (lambda x: (x[1], x[0])) if fan_in_fan_out else (lambda x: x)
-
-        if layer_type == "linear":
-            self.lora_A = nn.Parameter(initialized_weights((rank, fan_in), num_adaptations, init="kaiming"))
-            self.lora_B = nn.Parameter(torch.zeros((num_adaptations, fan_out, rank)))
-        elif layer_type == "embedding":
-            self.lora_A = nn.Parameter(torch.zeros((num_adaptations, fan_in, rank)))
-            self.lora_B = nn.Parameter(
-                initialized_weights((rank, fan_out), num_adaptations=num_adaptations, init="normal")
-            )
-        else:
-            raise NotImplementedError
-
-        self.lora_alpha, self.rank = alpha, rank
-        self.scaling = alpha / rank
-        self.lora_dropout = nn.Dropout(p=dropout_p) if dropout_p > 0 else lambda x: x
-        self.dropout_fn = self._dropout if dropout_p > 0 else lambda x: x
-        self.register_buffer(
-            "lora_dropout_mask",
-            torch.ones(self.swap((1, fan_in)), dtype=self.lora_A.dtype),
-            persistent=False,
-        )
-
-    def _dropout(self, A):
-        # to mimic the original implementation: A @ dropout(x), we do (A * dropout(ones)) @ x
-        return A * self.lora_dropout(self.lora_dropout_mask)
-
-    def lora_forward(self, X, current_task):
-        return (
-            X
-            + torch.matmul(
-                *self.swap(
-                    (
-                        self.lora_B[current_task],
-                        self.dropout_fn(self.lora_A[current_task]),
-                    )
-                )
-            ).view(X.shape)
-            * self.scaling
-        )
-
-    def forward(self, X):
-        return X
-
-    @classmethod
-    def from_linear(
-        cls,
-        layer: nn.Module,
-        num_adaptations: int,
-        rank: int,
-        dropout_p: float,
-        alpha: float,
-    ):
-        assert isinstance(layer, nn.Linear)
-        fan_out, fan_in = layer.weight.shape
-        return cls(
-            fan_in,
-            fan_out,
-            num_adaptations=num_adaptations,
-            layer_type="linear",
-            rank=rank,
-            dropout_p=dropout_p,
-            alpha=alpha,
-        )
-
-    @classmethod
-    def from_embedding(
-        cls,
-        layer: nn.Module,
-        num_adaptations: int,
-        rank: int,
-        dropout_p: float,
-        alpha: float,
-    ):
-        assert isinstance(layer, nn.Embedding)
-        fan_in, fan_out = layer.weight.shape
-        return cls(
-            fan_in,
-            fan_out,
-            num_adaptations=num_adaptations,
-            layer_type="embedding",
-            rank=rank,
-            dropout_p=dropout_p,
-            alpha=alpha,
-        )
-
-    @classmethod
-    def add_to_layer(
-        cls,
-        layer: nn.Module,
-        num_adaptations: int,
-        rank: int,
-        dropout_p: float,
-        alpha: float,
-    ):
-        """
-        Registering LoRA adapters to all embedding and linear layers.
-        Additionally, we implement a custom forward function for LoRA parametrization.
-        This function modifies the layer's forward pass to optionally use task-specific
-        parameters. When a `task_id` is provided, it employs a LoRA parametrization
-        to modify the original weights according to the specific task. This allows
-        the layer to adapt dynamically to different tasks at runtime. If no `task_id`
-        is specified, the layer uses its original weights.
-        """
-        if isinstance(layer, nn.Linear):
-            parametrize.register_parametrization(
-                layer,
-                "weight",
-                cls.from_linear(
-                    layer,
-                    num_adaptations=num_adaptations,
-                    rank=rank,
-                    dropout_p=dropout_p,
-                    alpha=alpha,
-                ),
-            )
-
-            def new_forward(self, input, task_id=None, residual=False):
-                if task_id is not None:
-                    weights = self.parametrizations.weight[0].lora_forward(self.weight, current_task=task_id)
-                else:
-                    weights = self.weight
-
-                out = F.linear(input, weights, self.bias)
-
-                if residual:
-                    return out, input
-                return out
-
-            layer.forward = new_forward.__get__(layer, layer.__class__)
-
-        elif isinstance(layer, nn.Embedding):
-            parametrize.register_parametrization(
-                layer,
-                "weight",
-                cls.from_embedding(
-                    layer,
-                    num_adaptations=num_adaptations,
-                    rank=rank,
-                    dropout_p=dropout_p,
-                    alpha=alpha,
-                ),
-            )
-
-            def new_forward(self, input, task_id=None):
-                if task_id is not None:
-                    weights = self.parametrizations.weight[0].lora_forward(self.weight, current_task=task_id)
-                else:
-                    weights = self.weight
-
-                out = F.embedding(
-                    input,
-                    weights,
-                    self.padding_idx,
-                    self.max_norm,
-                    self.norm_type,
-                    self.scale_grad_by_freq,
-                    self.sparse,
-                )
-
-                return out
-
-            layer.forward = new_forward.__get__(layer, layer.__class__)
 
 
 class JinaEmbeddingsV3PreTrainedModel(PreTrainedModel):
@@ -809,38 +456,8 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
         self.pooler = JinaEmbeddingsV3Pooler(config) if add_pooling_layer else None
         self.rotary_emb = JinaEmbeddingsV3RotaryEmbedding(config)
 
-        self._setup_lora_config()
-        self._register_lora()
-
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _setup_lora_config(self):
-        self._lora_adaptations = self.config.lora_adaptations
-        if not isinstance(self._lora_adaptations, list) or len(self._lora_adaptations) < 1:
-            raise ValueError("`lora_adaptations` must be a list and contain at least one element")
-        self._task_instructions = self.config.task_instructions
-        if (
-            not isinstance(self._task_instructions, dict)
-            or len(self._task_instructions) != len(self._lora_adaptations)
-            or not all(v in self._lora_adaptations for v in self._task_instructions.keys())
-        ):
-            raise ValueError(
-                "`task_instructions` must be a dict and contain the same number of elements "
-                "as `lora_adaptations` with all keys in `task_instructions` present in `lora_adaptations`."
-            )
-        self._adaptation_map = {name: idx for idx, name in enumerate(self._lora_adaptations)}
-
-    def _register_lora(self):
-        self.apply(
-            partial(
-                LoRAParametrization.add_to_layer,
-                num_adaptations=len(self._lora_adaptations),
-                rank=self.config.lora_rank,
-                dropout_p=self.config.lora_dropout_p,
-                alpha=self.config.lora_alpha,
-            )
-        )
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -858,28 +475,8 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
         token_type_ids: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        adapter_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling | tuple:
-        r"""
-        adapter_mask (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Tensor indicating which LoRA adaptation to apply for each sample in the batch.
-
-            Each value in `adapter_mask` must be an integer corresponding to the index of a LoRA
-            adaptation defined in `config.lora_adaptations`. The mapping between task names and
-            adaptation indices is stored in `model._adaptation_map`.
-
-            If `None`, the base model weights are used without task-specific adaptation.
-
-            Example:
-
-            ```python
-            task = "retrieval.query"
-            task_id = model._adaptation_map[task]
-            adapter_mask = torch.full((batch_size,), task_id, dtype=torch.long)
-            outputs = model(**inputs, adapter_mask=adapter_mask)
-            ```
-        """
         if (input_ids is not None) and (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         elif input_ids is not None:
@@ -909,7 +506,6 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-            adapter_mask=adapter_mask,
         )
 
         position_embeddings = self.rotary_emb(embedding_output, position_ids)
@@ -924,13 +520,10 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
             embedding_output,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            adapter_mask=adapter_mask,
             **kwargs,
         )
         sequence_output = encoder_outputs.last_hidden_state
-        pooled_output = (
-            self.pooler(sequence_output, pool=True, adapter_mask=adapter_mask) if self.pooler is not None else None
-        )
+        pooled_output = self.pooler(sequence_output, pool=True) if self.pooler is not None else None
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
