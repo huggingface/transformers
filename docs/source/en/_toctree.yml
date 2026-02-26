@@ -287,6 +287,10 @@
     - local: community_integrations/unsloth
       title: Unsloth
     title: Fine-tuning
+  - sections:
+    - local: community_integrations/pruna
+      title: Pruna
+    title: Optimization
   title: Ecosystem integrations
 - isExpanded: false
   sections:
