@@ -800,22 +800,14 @@ class RfDetrModel(LwDetrModel):
             query_feat = self.query_feat.weight[: self.num_queries]
 
         # Prepare decoder inputs (by flattening)
-        source_flatten, mask_flatten, spatial_shapes_list = [], [], []
-        for source, mask in zip(sources, masks):
-            batch_size, num_channels, height, width = source.shape
-            spatial_shape = (height, width)
-            spatial_shapes_list.append(spatial_shape)
-            source = source.flatten(2).transpose(1, 2)
-            mask = mask.flatten(1)
-            source_flatten.append(source)
-            mask_flatten.append(mask)
         # source_flatten (batch_size, sum(H*W), d_model) : flattened multi-scale feature maps
         # mask_flatten (batch_size, sum(H*W)) : flattened mask
         # spatial_shapes (num_levels, 2) : spatial shapes of the feature maps
         # level_start_index (num_levels,) : start index of each level in source_flatten
         # valid_ratios (batch_size, num_levels, 2) : valid ratios of the feature maps
-        source_flatten = torch.cat(source_flatten, 1)
-        mask_flatten = torch.cat(mask_flatten, 1)
+        source_flatten = torch.cat([source.flatten(2).transpose(1, 2) for source in sources], dim=1)
+        mask_flatten = torch.cat([mask.flatten(1) for mask in masks], dim=1)
+        spatial_shapes_list = [source.shape[2:] for source in sources]
         spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
