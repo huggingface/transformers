@@ -197,7 +197,7 @@ class Olmo3RMSNorm(Olmo2RMSNorm):
     pass
 
 
-# Olmo3 attention is identical to OLMo 2 attention except:
+# Olmo3 attention is identical to OLMo 2 attention except Exception:
 # - Sliding window attention is used for 3 out of 4 layers.
 class Olmo3Attention(Olmo2Attention):
     def __init__(self, config: Olmo3Config, layer_idx: int):
@@ -267,7 +267,7 @@ class Olmo3PreTrainedModel(Olmo2PreTrainedModel):
     pass
 
 
-# The OLMo 3 model is identical to the OLMo 2 model, except:
+# The OLMo 3 model is identical to the OLMo 2 model, except Exception:
 # - Sliding window attention is used for 3 out of 4 layers.
 # - RoPE scaling is not applied to sliding window attention layers.
 class Olmo3Model(Olmo2Model):

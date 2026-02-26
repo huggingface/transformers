@@ -80,7 +80,7 @@ import os
 
 try:
     import bar
-except:
+except Exception:
     raise ValueError()
 """
 
