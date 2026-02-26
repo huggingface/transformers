@@ -61,21 +61,6 @@ class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size: int
 
 
-class Ernie45VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
-    """
-    patch_size (`int`, *optional*, defaults to 14):
-        The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*, defaults to 2):
-        The temporal patch size of the vision encoder.
-    merge_size (`int`, *optional*, defaults to 2):
-        The merge size of the vision encoder to llm encoder.
-    """
-
-    patch_size: int
-    temporal_patch_size: int
-    merge_size: int
-
-
 def smart_resize(
     height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
 ):
@@ -138,7 +123,7 @@ class Ernie4_5_VLMoeImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "image_grid_thw"]
-    valid_kwargs = Ernie45VLMoeImageProcessorKwargs
+    valid_kwargs = Ernie4_5_VLMoeImageProcessorKwargs
 
     def __init__(
         self,
