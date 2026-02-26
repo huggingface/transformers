@@ -236,6 +236,9 @@ IGNORE_NON_TESTED = (
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
         "HiggsAudioV2Model",  # Building part of bigger (tested) model. Tested implicitly through HiggsAudioV2ForConditionalGenerationIntegrationTest.
         "Ernie4_5_VLMoeTextModel",  # Building part of bigger (tested) model
+        "Ernie4_5_VL_MoeForConditionalGeneration",  # BC alias
+        "Ernie4_5_VL_MoeModel",  # BC alias
+        "Ernie4_5_VL_MoeTextModel",  # BC alias
         "PeAudioFrameLevelModel",
         "PeAudioVideoModel",
     ]
@@ -452,6 +455,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
     "Ernie4_5_VLMoeTextModel",  # Building part of a bigger model
     "PeAudioFrameLevelModel",
+    "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
+    "Ernie4_5_VL_MoeModel",  # BC Alias
+    "Ernie4_5_VL_MoeTextModel",  # BC Alias
 ]
 
 
@@ -1052,6 +1058,16 @@ UNDOCUMENTED_OBJECTS = [
     "VitPoseBackbone",  # Internal module
     "VitPoseBackboneConfig",  # Internal module
     "get_values",  # Internal object
+    "Ernie4_5_VL_MoeConfig",  # BC Alias
+    "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
+    "Ernie4_5_VL_MoeImageProcessor",  # BC Alias
+    "Ernie4_5_VL_MoeImageProcessorFast",  # BC Alias
+    "Ernie4_5_VL_MoeModel",  # BC Alias
+    "Ernie4_5_VL_MoeTextConfig",  # BC Alias
+    "Ernie4_5_VL_MoeTextModel",  # BC Alias
+    "Ernie4_5_VL_MoeVariableResolutionResamplerModel",  # BC Alias
+    "Ernie4_5_VL_MoeVisionConfig",  # BC Alias
+    "Ernie4_5_VL_MoeVisionTransformerPretrainedModel",  # BC Alias
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
