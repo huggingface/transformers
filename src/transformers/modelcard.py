@@ -322,6 +322,25 @@ class TrainingSummary:
         model_card += "\n## Intended uses & limitations\n\nMore information needed\n"
         model_card += "\n## Training and evaluation data\n\nMore information needed\n"
 
+        model_card += "\n## Bias, Risks, and Limitations\n\n"
+        model_card += "<!-- This section should document potential biases and limitations of the model. -->\n\n"
+        model_card += (
+            "Models trained on large text corpora can reflect societal biases present in the training data. "
+            "Consider evaluating the model for biases related to:\n\n"
+        )
+        model_card += "- **Demographic factors**: race, ethnicity, gender, age, religion, socioeconomic status\n"
+        model_card += (
+            "- **Species**: models trained on internet text may reproduce anthropocentric value hierarchies and "
+            "speciesist attitudes (the devaluation of non-human animals' interests). This is particularly relevant "
+            "for applications in food systems, agriculture, environmental science, and domains involving animal welfare\n"
+        )
+        model_card += "- **Cultural and linguistic bias**: underrepresentation of certain languages or cultural contexts\n"
+        model_card += "- **Domain-specific biases**: biases specific to your model's intended use case\n\n"
+        model_card += (
+            "For models deployed in sensitive domains, consider using bias evaluation benchmarks and documenting "
+            "mitigation strategies.\n"
+        )
+
         model_card += "\n## Training procedure\n"
         model_card += "\n### Training hyperparameters\n"
         if self.hyperparameters is not None:
