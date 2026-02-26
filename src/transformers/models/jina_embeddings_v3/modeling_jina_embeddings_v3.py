@@ -14,7 +14,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN, gelu
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
-from ...masking_utils import create_bidirectional_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
@@ -40,8 +40,6 @@ class JinaEmbeddingsV3Embeddings(nn.Module):
 
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.padding_idx = config.pad_token_id
-
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
@@ -269,17 +267,13 @@ class JinaEmbeddingsV3SelfAttention(nn.Module):
 
 
 class JinaEmbeddingsV3SelfOutput(nn.Module):
-    def __init__(self, config: JinaEmbeddingsV3Config):
+    def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        input_tensor: torch.Tensor,
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -310,7 +304,7 @@ class JinaEmbeddingsV3Attention(nn.Module):
 
 
 class JinaEmbeddingsV3Intermediate(nn.Module):
-    def __init__(self, config: JinaEmbeddingsV3Config):
+    def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -318,27 +312,20 @@ class JinaEmbeddingsV3Intermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
 class JinaEmbeddingsV3Output(nn.Module):
-    def __init__(self, config: JinaEmbeddingsV3Config):
+    def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        input_tensor: torch.Tensor,
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -402,21 +389,21 @@ class JinaEmbeddingsV3Encoder(nn.Module):
 
 
 class JinaEmbeddingsV3Pooler(nn.Module):
-    def __init__(self, config: JinaEmbeddingsV3Config):
+    def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def forward(self, hidden_states: torch.Tensor, pool: bool = True) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
-        first_token_tensor = hidden_states[:, 0, :] if pool else hidden_states
-
+        first_token_tensor = hidden_states[:, 0]
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
 
 
+@auto_docstring
 class JinaEmbeddingsV3PreTrainedModel(PreTrainedModel):
     config_class = JinaEmbeddingsV3Config
     base_model_prefix = "roberta"
@@ -425,7 +412,6 @@ class JinaEmbeddingsV3PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-
     _can_record_outputs = {
         "hidden_states": JinaEmbeddingsV3Layer,
         "attentions": JinaEmbeddingsV3Attention,
@@ -433,8 +419,11 @@ class JinaEmbeddingsV3PreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        """Initialize the weights"""
         super()._init_weights(module)
-        if isinstance(module, JinaEmbeddingsV3Embeddings):
+        if isinstance(module, JinaEmbeddingsV3LMHead):
+            init.zeros_(module.bias)
+        elif isinstance(module, JinaEmbeddingsV3Embeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
             init.zeros_(module.token_type_ids)
 
@@ -453,6 +442,7 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
 
         self.embeddings = JinaEmbeddingsV3Embeddings(config)
         self.encoder = JinaEmbeddingsV3Encoder(config)
+
         self.pooler = JinaEmbeddingsV3Pooler(config) if add_pooling_layer else None
         self.rotary_emb = JinaEmbeddingsV3RotaryEmbedding(config)
 
@@ -530,6 +520,40 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
             pooler_output=pooled_output,
         )
 
+    def _create_attention_masks(
+        self,
+        attention_mask,
+        encoder_attention_mask,
+        embedding_output,
+        encoder_hidden_states,
+        cache_position,
+        past_key_values,
+    ):
+        if self.config.is_decoder:
+            attention_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=attention_mask,
+            )
+
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
+
+        return attention_mask, encoder_attention_mask
+
 
 class JinaEmbeddingsV3LMHead(nn.Module):
     """JinaEmbeddingsV3 Head for masked language modeling."""
@@ -553,7 +577,6 @@ class JinaEmbeddingsV3LMHead(nn.Module):
         return x
 
 
-@auto_docstring
 class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
     _tied_weights_keys = {
         "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.parametrizations.weight.original",

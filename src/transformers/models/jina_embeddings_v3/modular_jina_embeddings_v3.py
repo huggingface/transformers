@@ -3,7 +3,6 @@ from collections.abc import Callable
 from functools import partial
 
 import torch
-import torch.nn.utils.parametrize as parametrize
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
@@ -24,14 +23,18 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
 from ..xlm_roberta.modeling_xlm_roberta import (
+    XLMRobertaEmbeddings,
     XLMRobertaForQuestionAnswering,
     XLMRobertaForSequenceClassification,
     XLMRobertaForTokenClassification,
+    XLMRobertaPreTrainedModel,
+    XLMRobertaForMaskedLM,
     XLMRobertaIntermediate,
     XLMRobertaLMHead,
     XLMRobertaOutput,
     XLMRobertaPooler,
     XLMRobertaSelfOutput,
+    XLMRobertaModel,
     eager_attention_forward,
 )
 
@@ -48,6 +51,15 @@ PR:
     - Test this base model.
  - 5 folders/adapter_model.safetensors + adapter_config.json
     - Test by loading each of them individually with model.set_adapter & see outputs?
+
+JinaEmbeddingsV3Model.from_pretrained("suraj/jina-embeddings-v3-test", trust_remote_code=True)
+Downloads `config.json, (base) model.safetensors`, modeling file from this custom repo / pr ref (with revision=) # roberta. ??
+converts/renames those (base) model.safetensors keys to proper modeling file based keys 
+    - based on the conversion_mapping.py. ??
+    - Or works without `roberta.` but others in conversion_mapping ?? because base_model_prefix = "roberta" ??
+
+Then, check model.state_dict().keys()
+
 """
 
 
@@ -236,8 +248,6 @@ class JinaEmbeddingsV3Embeddings(nn.Module):
 
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.padding_idx = config.pad_token_id
-
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
@@ -343,19 +353,7 @@ class JinaEmbeddingsV3SelfAttention(nn.Module):
 
 
 class JinaEmbeddingsV3SelfOutput(XLMRobertaSelfOutput):
-    def __init__(self, config: JinaEmbeddingsV3Config):
-        super().__init__(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        input_tensor: torch.Tensor,
-    ) -> torch.Tensor:
-
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
+    pass
 
 
 class JinaEmbeddingsV3Attention(nn.Module):
@@ -382,33 +380,11 @@ class JinaEmbeddingsV3Attention(nn.Module):
 
 
 class JinaEmbeddingsV3Intermediate(XLMRobertaIntermediate):
-    def __init__(self, config: JinaEmbeddingsV3Config):
-        super().__init__(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-    ) -> torch.Tensor:
-
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
+    pass
 
 
 class JinaEmbeddingsV3Output(XLMRobertaOutput):
-    def __init__(self, config: JinaEmbeddingsV3Config):
-        super().__init__(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        input_tensor: torch.Tensor,
-    ) -> torch.Tensor:
-
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
+    pass
 
 
 class JinaEmbeddingsV3Layer(GradientCheckpointingLayer):
@@ -468,68 +444,25 @@ class JinaEmbeddingsV3Encoder(nn.Module):
 
 
 class JinaEmbeddingsV3Pooler(XLMRobertaPooler):
-    def __init__(self, config: JinaEmbeddingsV3Config):
-        super().__init__(config)
-
-    def forward(
-        self, hidden_states: torch.Tensor, pool: bool = True
-    ) -> torch.FloatTensor:
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0, :] if pool else hidden_states
-
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
+    pass
 
 
-class JinaEmbeddingsV3PreTrainedModel(PreTrainedModel):
-    config_class = JinaEmbeddingsV3Config
-    base_model_prefix = "roberta"
-    supports_gradient_checkpointing = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
+class JinaEmbeddingsV3PreTrainedModel(XLMRobertaPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": JinaEmbeddingsV3Layer,
         "attentions": JinaEmbeddingsV3Attention,
     }
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, JinaEmbeddingsV3Embeddings):
-            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-            init.zeros_(module.token_type_ids)
-
 
 @auto_docstring
-class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
-    _no_split_modules = ["JinaEmbeddingsV3Embeddings", "JinaEmbeddingsV3Layer"]
-
+class JinaEmbeddingsV3Model(XLMRobertaModel):
     def __init__(self, config: JinaEmbeddingsV3Config, add_pooling_layer=True):
-        r"""
-        add_pooling_layer (bool, *optional*, defaults to `True`):
-            Whether to add a pooling layer
-        """
         super().__init__(config)
-        self.config = config
-
-        self.embeddings = JinaEmbeddingsV3Embeddings(config)
-        self.encoder = JinaEmbeddingsV3Encoder(config)
-        self.pooler = JinaEmbeddingsV3Pooler(config) if add_pooling_layer else None
+        del self.gradient_checkpointing
         self.rotary_emb = JinaEmbeddingsV3RotaryEmbedding(config)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
-
-    def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
 
     @merge_with_config_defaults
     @capture_outputs
@@ -603,7 +536,6 @@ class JinaEmbeddingsV3LMHead(XLMRobertaLMHead):
     pass
 
 
-@auto_docstring
 class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
     _tied_weights_keys = {
         "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.parametrizations.weight.original",

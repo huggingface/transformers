@@ -1,4 +1,4 @@
-<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
@@ -9,7 +9,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-*This model was released on 2024-09-16 and added to Hugging Face Transformers on 2026-02-24.*
+*This model was released on 2024-09-16 and added to Hugging Face Transformers on 2026-02-27.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
