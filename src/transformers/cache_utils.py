@@ -260,7 +260,7 @@ class StaticLayer(CacheLayerMixin):
     def __init__(self, max_cache_len: int):
         super().__init__()
         self.max_cache_len = max_cache_len
-        # Very important that it's a tensor here, to avoid recompiling when we update it
+        # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions
         self.cumulative_length = torch.tensor([0], dtype=int)
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
@@ -292,16 +292,15 @@ class StaticLayer(CacheLayerMixin):
             dtype=self.dtype,
             device=self.device,
         )
-        # We use this check to easily inherit the method in StaticSlidingWindowLayer without overriding to remove this line
-        if isinstance(self.cumulative_length, torch.Tensor):
-            self.cumulative_length = self.cumulative_length.to(self.device)
+        self.cumulative_length = self.cumulative_length.to(self.device)
         # Note: `mark_static_address` is used to tag the cache as a fixed data pointer, preventing compiled graph
-        # breaks when updating the cache. However, it is not supported when tracing the graph, so we skip it in this case.
-        # As prefill should never be compiled, this is not an issue and it will still be run (except when users compile
-        # prefill explicitly, but this should be avoided!)
+        # breaks or cudagraph skips due to inplace mutations when updating the cache. However, it is not supported when
+        # tracing the graph, so we skip it in this case. As prefill should never be compiled, this is not an issue and it
+        # will still be run (except when users compile prefill explicitly, but this should be avoided!)
         if not is_torchdynamo_compiling():
             torch._dynamo.mark_static_address(self.keys)
             torch._dynamo.mark_static_address(self.values)
+            torch._dynamo.mark_static_address(self.cumulative_length)
 
         self.is_initialized = True
 
@@ -325,6 +324,8 @@ class StaticLayer(CacheLayerMixin):
         # Create a tensor to slice the static kv at the correct indices
         kv_length = key_states.shape[-2]
         cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
+        # Note that has to be performed in-place, as we have a static address that we need to keep
+        self.cumulative_length.add_(kv_length)
 
         # Update the cache
         try:
@@ -334,11 +335,6 @@ class StaticLayer(CacheLayerMixin):
             # Fallback for devices like MPS where index_copy_ might not be supported.
             self.keys[:, :, cache_position] = key_states
             self.values[:, :, cache_position] = value_states
-
-        # Note: it is very important to update the cumulative length in-place AND after the cache update, as otherwise
-        # we cannot use cudagraphs with mode="reduce_overhead" (without the first, it complains about overwriting the tensor.
-        # without the second, it won't crash but will skip cudagraphs)
-        self.cumulative_length.add_(kv_length)
 
         return self.keys, self.values
 
@@ -375,8 +371,8 @@ class StaticSlidingWindowLayer(StaticLayer):
     def __init__(self, max_cache_len: int, sliding_window: int):
         effective_max_cache_len = min(sliding_window, max_cache_len)
         super().__init__(max_cache_len=effective_max_cache_len)
-        # Here it cannot be a tensor as otherwise we have data-dependent control flows - overwrite it
-        self.cumulative_length = 0
+        # Here, to avoid data-dependent control flows, we also need to use a python int to keep track of the cumulative length
+        self.cumulative_length_int = 0
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -395,11 +391,11 @@ class StaticSlidingWindowLayer(StaticLayer):
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
 
-        # Create a tensor to slice the static kv at the correct indices
         kv_length = key_states.shape[-2]
-        cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
-
-        is_full = self.cumulative_length >= self.max_cache_len
+        current_length = self.cumulative_length_int
+        is_full = current_length >= self.max_cache_len
+        # Update it now that we saved the value above
+        self.cumulative_length_int += kv_length
 
         if is_full:
             # In general, we should use a much simpler `cat` here as well, independently of the states size. However,
@@ -418,10 +414,6 @@ class StaticSlidingWindowLayer(StaticLayer):
                 self.keys.copy_(new_keys)
                 self.values.copy_(new_values)
 
-                # NOTE: it is very important that this update is happening AFTER we used the variable everywhere else - otherwise
-                # compiling with cuda graphs will crash (even if we try to save the previous value in another variable)
-                self.cumulative_length += kv_length
-
                 # Very important to return the `self` tensors here, as they have the static dynamo address
                 return self.keys, self.values
             # Already full but using more than 1 new token (e.g. prefill caching, chat continuation, etc...)
@@ -429,15 +421,18 @@ class StaticSlidingWindowLayer(StaticLayer):
                 full_key_states = torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2)
                 full_value_states = torch.cat((self.values[:, :, 1:, :], value_states), dim=-2)
         # Not yet full, but becoming full on this update
-        elif self.cumulative_length + key_states.shape[2] > self.max_cache_len:
+        elif current_length + kv_length > self.max_cache_len:
             # Fast prefill path, no need to cat() in this case, as the cache is currently empty
-            if self.cumulative_length == 0:
+            if current_length == 0:
                 full_key_states = key_states
                 full_value_states = value_states
             else:
-                full_key_states = torch.cat((self.keys[:, :, : self.cumulative_length, :], key_states), dim=-2)
-                full_value_states = torch.cat((self.values[:, :, : self.cumulative_length, :], value_states), dim=-2)
+                full_key_states = torch.cat((self.keys[:, :, :current_length, :], key_states), dim=-2)
+                full_value_states = torch.cat((self.values[:, :, :current_length, :], value_states), dim=-2)
         else:
+            # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
+            # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten
+            cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
             try:
                 self.keys.index_copy_(2, cache_position, key_states)
                 self.values.index_copy_(2, cache_position, value_states)
@@ -445,16 +440,12 @@ class StaticSlidingWindowLayer(StaticLayer):
                 self.keys[:, :, cache_position] = key_states
                 self.values[:, :, cache_position] = value_states
 
-            # NOTE: it is very important that this update is happening AFTER we used the variable everywhere else - otherwise
-            # compiling with cuda graphs will crash (even if we try to save the previous value in another variable)
-            self.cumulative_length += kv_length
+            # Update the tensor version of the length in-place (we don't need to update it if we are already outside
+            # of this branch, as we don't need the tensor anymore)
+            self.cumulative_length.add_(kv_length)
 
             # Very important to return the `self` tensors here, as they have the static dynamo address
             return self.keys, self.values
-
-        # NOTE: it is very important that this update is happening AFTER we used the variable everywhere else - otherwise
-        # compiling with cuda graphs will crash (even if we try to save the previous value in another variable)
-        self.cumulative_length += kv_length
 
         # We only cache the last `sliding_window` tokens
         self.keys.copy_(full_key_states[:, :, -self.max_cache_len :, :])
@@ -465,15 +456,15 @@ class StaticSlidingWindowLayer(StaticLayer):
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
         sliding_window = self.max_cache_len
-        is_full = self.cumulative_length >= self.max_cache_len
+        is_full = self.cumulative_length_int >= self.max_cache_len
 
-        kv_offset = max(self.cumulative_length - sliding_window + 1, 0)
+        kv_offset = max(self.cumulative_length_int - sliding_window + 1, 0)
         # The cache is already full
         if is_full:
             kv_length = sliding_window + query_length - 1
         # Not yet full, but becoming full on this update
-        elif self.cumulative_length + query_length > sliding_window:
-            kv_length = self.cumulative_length + query_length
+        elif self.cumulative_length_int + query_length > sliding_window:
+            kv_length = self.cumulative_length_int + query_length
         # Here the Cache is still smaller than the local size, but we return the local size as it's static
         else:
             kv_length = sliding_window
@@ -482,7 +473,11 @@ class StaticSlidingWindowLayer(StaticLayer):
 
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
-        return self.cumulative_length
+        return self.cumulative_length_int
+    
+    def reset(self):
+        super().reset()
+        self.cumulative_length_int = 0
 
 
 class QuantizedLayer(DynamicLayer):
