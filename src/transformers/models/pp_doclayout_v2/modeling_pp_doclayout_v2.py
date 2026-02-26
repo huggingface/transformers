@@ -997,6 +997,7 @@ class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
+@dataclass
 @auto_docstring(
     custom_intro="""
     TODO: fill me in
