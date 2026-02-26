@@ -334,14 +334,6 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
-        "timm_backbone": [
-            # For BC with backbone model after deprecating `TimmBackbone` model class
-            # TODO: the conversion mapping doesn't work well with literal dots (r'\.') in source
-            WeightRenaming(
-                source_patterns=r"\._backbone\.",
-                target_patterns=r".timm_model.",
-            ),
-        ],
         "legacy": [
             WeightRenaming(
                 source_patterns="LayerNorm.gamma",
