@@ -567,7 +567,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
     @slow
     def test_tdt_model_integration_timestamps(self):
         """
-        reproducer: tests/models/parakeet/reproducer_batch_tdt_timestamps.py
+        reproducer: https://gist.github.com/ebezzam/6382bdabfc64bb2541ca9f77deb7678d#file-reproducer_batch_tdt_timestamps-py
         """
         RESULTS_PATH = (
             Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_results_batch_tdt_timestamp.json"
