@@ -123,6 +123,7 @@ visualizer("Plants create energy through a process known as")
 ## Notes
 
 - The tokenizer is a byte-pair encoding model based on [SentencePiece](https://github.com/google/sentencepiece). During decoding, if the first token is the start of the word (for example, "Banana"), the tokenizer doesn't prepend the prefix space to the string.
+- Models trained on large text corpora can reflect societal biases. Llama models trained on internet text may reproduce biases related to demographic factors (race, gender, religion) and species (anthropocentric value hierarchies). For applications in food systems, agriculture, or environmental science, consult the model card for bias documentation and consider evaluation on relevant benchmarks.
 
 ## LlamaConfig
 
