@@ -60,8 +60,9 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
     text_config_class = LlamaConfig
     vision_config_class = CLIPVisionConfig
 
-    # LlavaNext-specific: number of patches per image (1 grid patch + 1 base patch)
-    num_patches_per_image = 2
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("num_patches_per_image", 2)
+        super().__init__(parent, **kwargs)
 
     # Template method overrides
 

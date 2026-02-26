@@ -50,25 +50,21 @@ class Qwen3VLVisionText2TextModelTester(VLMModelTester):
     vision_config_class = Qwen3VLVisionConfig
     conditional_generation_class = Qwen3VLForConditionalGeneration
 
-    # Qwen3 VL-specific configuration
-    image_token_id = 3
-    video_token_id = 4
-    vision_start_token_id = 5
-    vision_end_token_id = 6
-
     def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 3)
+        kwargs.setdefault("video_token_id", 4)
+        kwargs.setdefault("vision_start_token_id", 5)
+        kwargs.setdefault("vision_end_token_id", 6)
         kwargs.setdefault("image_size", 16)
         kwargs.setdefault("patch_size", 16)
         kwargs.setdefault("num_image_tokens", 32)
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
+        kwargs.setdefault("head_dim", 8)
         super().__init__(parent, **kwargs)
 
-        # Override head_dim (base class computes it, but Qwen3 VL needs specific value)
-        self.head_dim = 8
-
-        # Qwen3 VL-specific vision config attributes
+        # Qwen3 VL-specific vision config attributes (computed from instance state)
         self.depth = 2
         self.vision_hidden_act = "gelu_pytorch_tanh"
         self.out_hidden_size = self.hidden_size

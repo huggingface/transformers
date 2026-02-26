@@ -70,114 +70,67 @@ class VLMModelTester:
         }
         return mapping
 
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        image_token_id=3,
-        is_decoder=False,
-        scope=None,
-        expert_interval=1,
-        moe_layer_start_index=0,
-        moe_intermediate_size=12,
-        shared_expert_intermediate_size=36,
-        shared_expert_gate=True,
-        moe_num_shared_experts=2,
-        num_experts_per_tok=2,
-        num_experts=8,
-        mamba_n_groups=1,
-        mamba_n_heads=16,
-        mamba_d_state=16,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_chunk_size=16,
-        image_size=8,
-        patch_size=4,
-        num_channels=3,
-        projection_dim=32,
-        projector_hidden_act="gelu",
-        ignore_index=-100,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
-        num_image_tokens=32,
-        **kwargs,
-    ):
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.scope = scope
-        self.head_dim = self.hidden_size // self.num_attention_heads
-        self.is_decoder = is_decoder
-        self.expert_interval = expert_interval
-        self.moe_layer_start_index = moe_layer_start_index
-        self.moe_intermediate_size = moe_intermediate_size
-        self.shared_expert_intermediate_size = shared_expert_intermediate_size
-        self.shared_expert_gate = shared_expert_gate
-        self.moe_num_shared_experts = moe_num_shared_experts
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_experts = num_experts
-        self.mamba_n_groups = mamba_n_groups
-        self.mamba_n_heads = mamba_n_heads
-        self.mamba_d_state = mamba_d_state
-        self.mamba_d_conv = mamba_d_conv
-        self.mamba_expand = mamba_expand
-        self.mamba_chunk_size = mamba_chunk_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.projection_dim = projection_dim
-        self.projector_hidden_act = projector_hidden_act
-        self.ignore_index = ignore_index
-        self.image_token_id = image_token_id
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-        self._base_num_image_tokens = num_image_tokens
-        self._base_seq_length = seq_length
-        self.tie_word_embeddings = False
+
+        # Standard defaults
+        kwargs.setdefault("batch_size", 3)
+        kwargs.setdefault("seq_length", 7)
+        kwargs.setdefault("is_training", True)
+        kwargs.setdefault("use_input_mask", True)
+        kwargs.setdefault("use_token_type_ids", False)
+        kwargs.setdefault("use_labels", True)
+        kwargs.setdefault("vocab_size", 99)
+        kwargs.setdefault("hidden_size", 32)
+        kwargs.setdefault("num_hidden_layers", 2)
+        kwargs.setdefault("num_attention_heads", 2)
+        kwargs.setdefault("num_key_value_heads", 2)
+        kwargs.setdefault("intermediate_size", 37)
+        kwargs.setdefault("hidden_act", "gelu")
+        kwargs.setdefault("hidden_dropout_prob", 0.1)
+        kwargs.setdefault("attention_probs_dropout_prob", 0.1)
+        kwargs.setdefault("max_position_embeddings", 512)
+        kwargs.setdefault("type_vocab_size", 16)
+        kwargs.setdefault("type_sequence_label_size", 2)
+        kwargs.setdefault("initializer_range", 0.02)
+        kwargs.setdefault("num_labels", 3)
+        kwargs.setdefault("num_choices", 4)
+        kwargs.setdefault("pad_token_id", 0)
+        kwargs.setdefault("bos_token_id", 1)
+        kwargs.setdefault("eos_token_id", 2)
+        kwargs.setdefault("image_token_id", 3)
+        kwargs.setdefault("is_decoder", False)
+        kwargs.setdefault("scope", None)
+        kwargs.setdefault("expert_interval", 1)
+        kwargs.setdefault("moe_layer_start_index", 0)
+        kwargs.setdefault("moe_intermediate_size", 12)
+        kwargs.setdefault("shared_expert_intermediate_size", 36)
+        kwargs.setdefault("shared_expert_gate", True)
+        kwargs.setdefault("moe_num_shared_experts", 2)
+        kwargs.setdefault("num_experts_per_tok", 2)
+        kwargs.setdefault("num_experts", 8)
+        kwargs.setdefault("mamba_n_groups", 1)
+        kwargs.setdefault("mamba_n_heads", 16)
+        kwargs.setdefault("mamba_d_state", 16)
+        kwargs.setdefault("mamba_d_conv", 4)
+        kwargs.setdefault("mamba_expand", 2)
+        kwargs.setdefault("mamba_chunk_size", 16)
+        kwargs.setdefault("image_size", 8)
+        kwargs.setdefault("patch_size", 4)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("projection_dim", 32)
+        kwargs.setdefault("projector_hidden_act", "gelu")
+        kwargs.setdefault("ignore_index", -100)
+        kwargs.setdefault("vision_feature_select_strategy", "default")
+        kwargs.setdefault("vision_feature_layer", -1)
+        kwargs.setdefault("tie_word_embeddings", False)
+
+        # Computed default (overridable via kwargs.setdefault in derived classes)
+        kwargs.setdefault("head_dim", kwargs["hidden_size"] // kwargs["num_attention_heads"])
+
+        # Set all kwargs as instance attributes
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
         for required_attribute in [
             "base_model_class",
