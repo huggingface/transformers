@@ -62,6 +62,9 @@ class MusicFlamingoEncoderConfig(PretrainedConfig):
             Scale embeddings by dividing by sqrt(hidden_size).
         max_source_positions (`int`, *optional*, defaults to 1500):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+        rope_parameters (`dict`, *optional*):
+            Rotary embedding parameters for [`MusicFlamingoRotaryEmbedding`]. Supported keys are `"dim"` (defaults to
+            `256`) and `"max_time"` (defaults to `1200.0` and should match the processor `max_audio_len`).
 
     Example:
 
@@ -103,9 +106,13 @@ class MusicFlamingoEncoderConfig(PretrainedConfig):
         initializer_range=0.02,
         scale_embedding=False,
         max_source_positions=1500,
+        rope_parameters=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        # Backward compatibility with older serialized configs before `rope_parameters`.
+        legacy_rotary_dim = kwargs.pop("rotary_dim", None)
+        legacy_rotary_max_time = kwargs.pop("rotary_max_time", None)
 
         self.num_mel_bins = num_mel_bins
         self.hidden_size = hidden_size
@@ -121,6 +128,15 @@ class MusicFlamingoEncoderConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.scale_embedding = scale_embedding
         self.max_source_positions = max_source_positions
+
+        rope_parameters = {} if rope_parameters is None else dict(rope_parameters)
+        if legacy_rotary_dim is not None:
+            rope_parameters.setdefault("dim", legacy_rotary_dim)
+        if legacy_rotary_max_time is not None:
+            rope_parameters.setdefault("max_time", legacy_rotary_max_time)
+        rope_parameters.setdefault("dim", 256)
+        rope_parameters.setdefault("max_time", 1200.0)
+        self.rope_parameters = rope_parameters
 
 
 class MusicFlamingoConfig(PretrainedConfig):
@@ -143,12 +159,6 @@ class MusicFlamingoConfig(PretrainedConfig):
             The beginning-of-audio token index used to mark the start of audio spans.
         audio_eos_token_id (`int`, *optional*, defaults to 151671):
             The end-of-audio token index used to mark the end of audio spans.
-        rotary_dim (`int`, *optional*, defaults to 256):
-            Rotary embedding dimension used per axis in [`MusicFlamingoRotaryEmbedding`]. Since the rotary embedding is
-            applied on two axes (batch and time), the rotated hidden size is `2 * rotary_dim`, which must be less than
-            or equal to `audio_config.hidden_size`.
-        rotary_max_time (`float`, *optional*, defaults to 1200.0):
-            Maximum time in seconds used by the rotary cache. This should match the processor `max_audio_len`.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             Activation function used in the projector.
         projector_bias (`bool`, *optional*, defaults to `True`):
@@ -188,22 +198,28 @@ class MusicFlamingoConfig(PretrainedConfig):
         audio_token_id=151669,
         audio_bos_token_id=151670,
         audio_eos_token_id=151671,
-        rotary_dim=256,
-        rotary_max_time=1200.0,
         projector_hidden_act="gelu",
         projector_bias=True,
         **kwargs,
     ):
+        # Backward compatibility with older serialized top-level configs; these are now owned by `audio_config`.
+        legacy_rotary_dim = kwargs.pop("rotary_dim", None)
+        legacy_rotary_max_time = kwargs.pop("rotary_max_time", None)
+
         if isinstance(audio_config, dict):
             audio_config["model_type"] = audio_config.get("model_type", "musicflamingo_encoder")
-            audio_config.setdefault("rotary_dim", rotary_dim)
-            audio_config.setdefault("rotary_max_time", rotary_max_time)
         elif audio_config is None:
             audio_config = {
                 "model_type": "musicflamingo_encoder",
-                "rotary_dim": rotary_dim,
-                "rotary_max_time": rotary_max_time,
             }
+
+        if isinstance(audio_config, dict) and (legacy_rotary_dim is not None or legacy_rotary_max_time is not None):
+            rope_parameters = dict(audio_config.get("rope_parameters") or {})
+            if legacy_rotary_dim is not None:
+                rope_parameters.setdefault("dim", legacy_rotary_dim)
+            if legacy_rotary_max_time is not None:
+                rope_parameters.setdefault("max_time", legacy_rotary_max_time)
+            audio_config["rope_parameters"] = rope_parameters
         self.audio_token_id = audio_token_id
 
         if isinstance(audio_config, dict):
@@ -226,15 +242,8 @@ class MusicFlamingoConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-        if not hasattr(self.audio_config, "rotary_dim"):
-            self.audio_config.rotary_dim = rotary_dim
-        if not hasattr(self.audio_config, "rotary_max_time"):
-            self.audio_config.rotary_max_time = rotary_max_time
-
         self.audio_bos_token_id = audio_bos_token_id
         self.audio_eos_token_id = audio_eos_token_id
-        self.rotary_dim = self.audio_config.rotary_dim
-        self.rotary_max_time = self.audio_config.rotary_max_time
 
 
 __all__ = ["MusicFlamingoConfig", "MusicFlamingoEncoderConfig"]

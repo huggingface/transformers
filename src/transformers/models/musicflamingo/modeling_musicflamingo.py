@@ -51,8 +51,9 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         super().__init__()
 
         self.config = config
-        self.dim = getattr(config, "rotary_dim", 256)
-        self.max_time = getattr(config, "rotary_max_time", 1200.0)
+        rope_parameters = getattr(config, "rope_parameters", None) or {}
+        self.dim = rope_parameters.get("dim", getattr(config, "rotary_dim", 256))
+        self.max_time = rope_parameters.get("max_time", getattr(config, "rotary_max_time", 1200.0))
 
         inv_freq = self.compute_default_rote_parameters(config, device=device)
         self.inv_freq = nn.Parameter(inv_freq, requires_grad=False)
@@ -62,8 +63,9 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rote_parameters(config: MusicFlamingoConfig | None = None, device=None):
-        dim = getattr(config, "rotary_dim", 256)
-        max_time = getattr(config, "rotary_max_time", 1200.0)
+        rope_parameters = getattr(config, "rope_parameters", None) or {}
+        dim = rope_parameters.get("dim", getattr(config, "rotary_dim", 256))
+        max_time = rope_parameters.get("max_time", getattr(config, "rotary_max_time", 1200.0))
         theta = max_time / (2 * pi) if max_time is not None else 50000
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
         if device is not None:
