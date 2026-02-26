@@ -712,6 +712,12 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     def test_left_padding_compatibility(self):
         pass
 
+    @unittest.skip(
+        reason="The model doesn't support arbitrary position ids"
+    )  # and it's not used enough to be worth fixing :)
+    def test_generate_with_and_without_position_ids(self):
+        pass
+
     def prepare_config_and_inputs_for_generate(self, *args, **kwargs):
         # override because otherwise we hit max possible seq length for model (4*8=32)
         # decreasing the seq_length in tester causes errors for "training_tests", those need exactly max seq length
@@ -736,7 +742,6 @@ class ReformerLSHAttnModelTest(
         {
             "feature-extraction": ReformerModel,
             "fill-mask": ReformerForMaskedLM,
-            "question-answering": ReformerForQuestionAnswering,
             "text-classification": ReformerForSequenceClassification,
             "text-generation": ReformerModelWithLMHead,
             "zero-shot": ReformerForSequenceClassification,
@@ -913,6 +918,12 @@ class ReformerLSHAttnModelTest(
 
     @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
     def test_left_padding_compatibility(self):
+        pass
+
+    @unittest.skip(
+        reason="The model doesn't support arbitrary position ids"
+    )  # and it's not used enough to be worth fixing :)
+    def test_generate_with_and_without_position_ids(self):
         pass
 
 

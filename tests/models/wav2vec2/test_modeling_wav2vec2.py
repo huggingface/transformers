@@ -742,7 +742,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -754,7 +754,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
 

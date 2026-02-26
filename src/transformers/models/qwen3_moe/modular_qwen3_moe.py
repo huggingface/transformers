@@ -84,7 +84,7 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer):
 
 class Qwen3MoePreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3MoeTopKRouter, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(Qwen3MoeTopKRouter, index=0),
         "hidden_states": Qwen3MoeDecoderLayer,
         "attentions": Qwen3MoeAttention,
     }

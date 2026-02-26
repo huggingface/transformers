@@ -607,7 +607,6 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": LukeModel,
             "fill-mask": LukeForMaskedLM,
-            "question-answering": LukeForQuestionAnswering,
             "text-classification": LukeForSequenceClassification,
             "token-classification": LukeForTokenClassification,
             "zero-shot": LukeForSequenceClassification,

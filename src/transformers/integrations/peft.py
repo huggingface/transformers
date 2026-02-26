@@ -261,7 +261,7 @@ def _build_peft_weight_mapping(
                     source_patterns=new_source_patterns,
                     target_patterns=new_target_patterns,
                     distributed_operation=orig_conversion.distributed_operation,
-                    quantization_operation=orig_conversion.quantizatin_operations,
+                    quantization_operation=orig_conversion.quantization_operation,
                     operations=new_weight_conversions,
                 )
                 new_weight_conversions.append(new_conversion)
@@ -300,7 +300,7 @@ def _build_peft_weight_mapping(
                     source_patterns=new_source_patterns,
                     target_patterns=new_target_patterns,
                     distributed_operation=orig_conversion.distributed_operation,
-                    quantization_operation=orig_conversion.quantizatin_operations,
+                    quantization_operation=orig_conversion.quantization_operation,
                     operations=new_weight_conversions,
                 )
                 new_weight_conversions.append(new_conversion)

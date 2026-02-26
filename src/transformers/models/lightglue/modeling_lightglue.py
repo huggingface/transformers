@@ -19,7 +19,6 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Union
 
 import numpy as np
 import torch
@@ -162,8 +161,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -870,7 +868,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, "LightGlueKeypointMatchingOutput"]:
+    ) -> tuple | LightGlueKeypointMatchingOutput:
         loss = None
         if labels is not None:
             raise ValueError("LightGlue is not trainable, no labels should be provided.")

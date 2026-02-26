@@ -257,7 +257,7 @@ class XIELUActivation(nn.Module):
             self._xielu_cuda_obj = torch.classes.xielu.XIELU()
             msg = "Using experimental xIELU CUDA."
             try:
-                from torch._dynamo import allow_in_graph
+                from torch.compiler import allow_in_graph
 
                 self._xielu_cuda_fn = allow_in_graph(self._xielu_cuda)
                 msg += " Enabled torch._dynamo for xIELU CUDA."

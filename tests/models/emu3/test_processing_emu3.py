@@ -45,6 +45,10 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer.sep_token_id = 1
         return tokenizer
 
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.image_token = processor.image_token
+
     @staticmethod
     def prepare_processor_dict():
         return {
