@@ -22,7 +22,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging, torch_int
-from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple, check_model_inputs
+from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple
 from ..auto import CONFIG_MAPPING
 from ..convnext.modeling_convnext import ConvNextLayer
 from ..dinov2.configuration_dinov2 import Dinov2Config
@@ -883,13 +883,6 @@ class RfDetrModel(LwDetrModel):
             **kwargs,
         )
 
-        # init_reference_points (batch_size, num_queries, 4) : initial reference points
-        # last_hidden_state (batch_size, num_queries, d_model) : final object queries
-        # intermediate_hidden_states (batch_size, num_decoder_layers, num_queries, d_model) : intermediate object queries
-        # intermediate_reference_points (batch_size, num_decoder_layers, num_queries, 4) : intermediate reference points
-        # backbone_features list(batch_size, num_levels, d_model, H, W) : backbone features
-        # enc_outputs_class (batch_size, num_queries, d_model) : encoder outputs object queries
-        # enc_outputs_coord_logits (batch_size, num_queries, 4) : coordinate logits of encoder object queries
         return RfDetrModelOutput(
             init_reference_points=init_reference_points,
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -898,6 +891,9 @@ class RfDetrModel(LwDetrModel):
             backbone_features=sources,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
+            hidden_states=decoder_outputs.hidden_states,
+            attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
         )
 
 
@@ -950,7 +946,7 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
         enc_outputs_class_logits = torch.cat(pred_class, dim=1)
         return enc_outputs_class_logits
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1005,19 +1001,13 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
         Detected cat with confidence 0.789 at location [342.19, 24.3, 640.02, 372.25]
         Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
         ```"""
-        outputs = self.model(
-            pixel_values,
-            pixel_mask=pixel_mask,
-            **kwargs,
-        )
+        outputs = self.model(pixel_values, pixel_mask=pixel_mask, **kwargs)
 
         last_hidden_states = outputs.last_hidden_state
         intermediate_reference_points = outputs.intermediate_reference_points
-        enc_outputs_class = outputs.enc_outputs_class
-        enc_outputs_boxes_logits = outputs.enc_outputs_coord_logits
 
         # Get logits and boxes from first stage object queries
-        enc_outputs_class_logits = self.get_encoder_outputs_class_logits(enc_outputs_class)
+        enc_outputs_class_logits = self.get_encoder_outputs_class_logits(outputs.enc_outputs_class)
 
         # Get logits and boxes from second stage object queries
         logits = self.class_embed(last_hidden_states)
@@ -1042,7 +1032,7 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
                 outputs_class,
                 outputs_coord,
                 enc_outputs_class_logits,
-                enc_outputs_boxes_logits,
+                outputs.enc_outputs_coord_logits,
             )
 
         return RfDetrObjectDetectionOutput(
@@ -1056,8 +1046,11 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
             intermediate_reference_points=outputs.intermediate_reference_points,
             init_reference_points=outputs.init_reference_points,
             enc_outputs_class=enc_outputs_class_logits,
-            enc_outputs_coord_logits=enc_outputs_boxes_logits,
+            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
             backbone_features=outputs.backbone_features,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
 
@@ -1115,6 +1108,9 @@ class RfDetrInstanceSegmentationOutput(ModelOutput):
     intermediate_hidden_states: torch.FloatTensor | None = None
     intermediate_reference_points: torch.FloatTensor | None = None
     enc_outputs_mask_logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    cross_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class RfDetrSegmentationBlock(ConvNextLayer):
@@ -1211,7 +1207,6 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
 
         return list_mask_logits
 
-    @check_model_inputs
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1223,19 +1218,12 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
     ) -> dict[str, torch.Tensor]:
         image_size = pixel_values.shape[-2:]
 
-        outputs = self.rf_detr.model(
-            pixel_values,
-            pixel_mask=pixel_mask,
-            **kwargs,
-        )
+        outputs = self.rf_detr.model(pixel_values, pixel_mask=pixel_mask, **kwargs)
 
         spatial_features = outputs.backbone_features[-1]
         last_hidden_states = outputs.last_hidden_state
         intermediate_reference_points = outputs.intermediate_reference_points
         enc_outputs_class = outputs.enc_outputs_class
-        enc_outputs_boxes_logits = outputs.enc_outputs_coord_logits
-        query_features = outputs.intermediate_hidden_states
-        last_hidden_state = outputs.last_hidden_state
 
         # First stage segmentation proposals
         enc_outputs_class_logits = self.rf_detr.get_encoder_outputs_class_logits(enc_outputs_class)
@@ -1246,7 +1234,7 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         logits = self.rf_detr.class_embed(last_hidden_states)
         pred_boxes_delta = self.rf_detr.bbox_embed(last_hidden_states)
         pred_boxes = refine_bboxes(intermediate_reference_points[-1], pred_boxes_delta)
-        outputs_masks = self.segmentation_head(spatial_features, query_features, image_size)
+        outputs_masks = self.segmentation_head(spatial_features, outputs.intermediate_hidden_states, image_size)
 
         pred_masks = outputs_masks[-1]
 
@@ -1269,7 +1257,7 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
                 outputs_coord,
                 outputs_masks,
                 enc_outputs_class_logits,
-                enc_outputs_boxes_logits,
+                outputs.enc_outputs_coord_logits,
                 enc_outputs_masks,
             )
 
@@ -1280,11 +1268,14 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
             pred_boxes=pred_boxes,
             pred_masks=pred_masks,
             auxiliary_outputs=auxiliary_outputs,
-            last_hidden_state=last_hidden_state,
+            last_hidden_state=outputs.last_hidden_state,
             intermediate_hidden_states=outputs.intermediate_hidden_states,
             intermediate_reference_points=outputs.intermediate_reference_points,
             init_reference_points=outputs.init_reference_points,
             enc_outputs_mask_logits=enc_outputs_masks,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
 
