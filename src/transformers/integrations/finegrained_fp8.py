@@ -191,9 +191,7 @@ def w8a8_block_fp8_matmul(
         try:
             return torch.ops.transformers.w8a8_block_fp8_matmul_cutlass(A, B, As, Bs, output_dtype)
         except Exception as e:
-            global _cutlass_kernel
             logger.warning_once(f"CUTLASS kernel failed: {e}. Falling back to Triton.")
-            _cutlass_kernel = False  # mark unavailable to avoid future attempts
 
     # Fall back to Triton
     kernel = _get_triton_kernel()
