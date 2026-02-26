@@ -497,7 +497,7 @@ def convert_rf_detr_checkpoint(
         model, state_dict, load_config, tp_plan=None
     )
     print("Checkpoint loaded...")
-    if len(mismatch) > 0 or len(unexpected) > 0 or len(mismatch) > 0:
+    if len(missing) > 0 or len(unexpected) > 0 or len(mismatch) > 0:
         print("MISSING:", len(missing))
         print("\n".join(sorted(missing)))
         print("UNEXPECTED:", len(unexpected))
