@@ -514,6 +514,9 @@ class ParakeetTDTGenerateOutput(ModelOutput):
         token_timestamps (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Token-level timestamps in seconds indicating when each token was emitted. Only returned when
             `return_timestamps=True` is passed to `generate()`.
+        token_durations (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Token-level durations in frames indicating how many frames each token spans. Only returned when
+            `return_timestamps=True` is passed to `generate()`.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
@@ -524,6 +527,7 @@ class ParakeetTDTGenerateOutput(ModelOutput):
 
     sequences: torch.LongTensor
     token_timestamps: torch.FloatTensor | None = None
+    token_durations: torch.LongTensor | None = None
     attentions: tuple[tuple[torch.FloatTensor]] | None = None
     hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
 
@@ -677,6 +681,7 @@ class ParakeetTDTDecoder(nn.Module):
 
     def __init__(self, config: ParakeetTDTConfig):
         super().__init__()
+        self.config = config
         self.embedding = nn.Embedding(config.vocab_size + 1, config.decoder_hidden_size)
         self.lstm = nn.LSTM(
             input_size=config.decoder_hidden_size,
@@ -692,9 +697,21 @@ class ParakeetTDTDecoder(nn.Module):
         hidden_state: torch.Tensor | None = None,
         cell_state: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        input_ids = input_ids.to(self.decoder_projector.weight.device)
+        if hidden_state is None or cell_state is None:
+            hidden_state = torch.zeros(
+                self.config.num_decoder_layers,
+                input_ids.shape[0],
+                self.config.decoder_hidden_size,
+                device=self.decoder_projector.weight.device,
+                dtype=self.decoder_projector.weight.dtype,
+            )
+            cell_state = torch.zeros_like(hidden_state)
+        hidden_state = hidden_state.to(self.decoder_projector.weight.device)
+        cell_state = cell_state.to(self.decoder_projector.weight.device)
+
         embeddings = self.embedding(input_ids)
-        lstm_state = (hidden_state, cell_state) if hidden_state is not None else None
-        lstm_output, (hidden_state, cell_state) = self.lstm(embeddings, lstm_state)
+        lstm_output, (hidden_state, cell_state) = self.lstm(embeddings, (hidden_state, cell_state))
         decoder_output = self.decoder_projector(lstm_output)
         return decoder_output, hidden_state, cell_state
 
@@ -884,16 +901,8 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         else:
             valid_lengths = torch.full((batch_size,), sequence_length, dtype=torch.int, device=device)
 
-        # Initialize decoder LSTM state
-        hidden_state = torch.zeros(
-            self.config.num_decoder_layers,
-            batch_size,
-            self.config.decoder_hidden_size,
-            dtype=encoder_hidden_states.dtype,
-        )
-        cell_state = torch.zeros_like(hidden_state)
-
-        # Initialize with blank token
+        # Initialize decoder
+        hidden_state, cell_state = None, None
         prev_tokens = torch.full((batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=device)
         decoder_output, hidden_state, cell_state = self.decoder(prev_tokens, hidden_state, cell_state)
         decoder_output = decoder_output.to(device)
@@ -902,6 +911,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
         all_tokens = [[] for _ in range(batch_size)]
         token_frame_indices = [[] for _ in range(batch_size)] if return_timestamps else None
+        token_durations_list = [[] for _ in range(batch_size)] if return_timestamps else None
         time_indices = torch.zeros(batch_size, dtype=torch.long, device=device)
         active_mask = time_indices < valid_lengths
 
@@ -926,6 +936,8 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                         all_tokens[i].append(tokens[i].item())
                         if token_frame_indices is not None:
                             token_frame_indices[i].append(time_indices[i].item())
+                        if token_durations_list is not None:
+                            token_durations_list[i].append(durations[i].item())
 
                 if emit_mask.any():
                     new_prev_tokens = tokens.unsqueeze(1)
@@ -948,7 +960,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 if stay_mask.any():
                     symbols_added += 1
                     if symbols_added >= self.config.max_symbols_per_step:
-                        time_indices = time_indices + 1
+                        time_indices[active_mask & stay_mask] += 1
                         break
                     continue
 
@@ -970,20 +982,25 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 sequences[i, :seq_len] = torch.tensor(all_tokens[i], dtype=torch.long, device=device)
 
         token_timestamps = None
+        token_durations = None
         if return_timestamps:
-            seconds_per_frame = self.config.seconds_per_frame
             token_timestamps = torch.full((batch_size, max_len), 0.0, dtype=torch.float, device=device)
+            token_durations = torch.full((batch_size, max_len), 0, dtype=torch.long, device=device)
             for i in range(batch_size):
                 num_tokens = len(token_frame_indices[i])
                 if num_tokens > 0:
                     token_timestamps[i, :num_tokens] = (
-                        torch.tensor(token_frame_indices[i], dtype=torch.float, device=device) * seconds_per_frame
+                        torch.tensor(token_frame_indices[i], dtype=torch.float, device=device) / self.config.frame_rate
+                    )
+                    token_durations[i, :num_tokens] = torch.tensor(
+                        token_durations_list[i], dtype=torch.long, device=device
                     )
 
         if return_dict_in_generate:
             return ParakeetTDTGenerateOutput(
                 sequences=sequences,
                 token_timestamps=token_timestamps,
+                token_durations=token_durations,
                 attentions=outputs.attentions,
                 hidden_states=outputs.hidden_states,
             )

@@ -51,6 +51,10 @@ class ParakeetEncoderConfig(PreTrainedConfig):
             The number of channels in the subsampling convolution layers.
         num_mel_bins (`int`, *optional*, defaults to 80):
             Number of mel features.
+        hop_length (`int`, *optional*, defaults to 160):
+            Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         subsampling_conv_kernel_size (`int`, *optional*, defaults to 3):
             The kernel size of the subsampling convolution layers.
         subsampling_conv_stride (`int`, *optional*, defaults to 2):
@@ -106,6 +110,8 @@ class ParakeetEncoderConfig(PreTrainedConfig):
         subsampling_factor=8,
         subsampling_conv_channels=256,
         num_mel_bins=80,
+        hop_length=160,
+        sampling_rate=16000,
         subsampling_conv_kernel_size=3,
         subsampling_conv_stride=2,
         dropout=0.1,
@@ -134,6 +140,8 @@ class ParakeetEncoderConfig(PreTrainedConfig):
         self.subsampling_factor = subsampling_factor
         self.subsampling_conv_channels = subsampling_conv_channels
         self.num_mel_bins = num_mel_bins
+        self.hop_length = hop_length
+        self.sampling_rate = sampling_rate
 
         self.dropout = dropout
         self.dropout_positions = dropout_positions
@@ -144,9 +152,7 @@ class ParakeetEncoderConfig(PreTrainedConfig):
         self.scale_input = scale_input
         self.initializer_range = initializer_range
 
-        super().__init__(
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class ParakeetCTCConfig(PreTrainedConfig):
@@ -252,9 +258,6 @@ class ParakeetTDTConfig(PreTrainedConfig):
             The activation function in the joint network.
         max_symbols_per_step (`int`, *optional*, defaults to 10):
             Maximum number of symbols to emit per encoder time step during greedy decoding.
-        seconds_per_frame (`float`, *optional*, defaults to 0.08):
-            Duration in seconds of each encoder output frame. Used for computing token timestamps.
-            Computed as `hop_length * subsampling_factor / sampling_rate` (e.g. 160 * 8 / 16000 = 0.08).
         encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
             The config object or dictionary of the encoder.
         pad_token_id (`int`, *optional*, defaults to 8192):
@@ -286,7 +289,6 @@ class ParakeetTDTConfig(PreTrainedConfig):
         num_duration_bins=5,
         hidden_act="relu",
         max_symbols_per_step=10,
-        seconds_per_frame=0.08,
         encoder_config: dict | ParakeetEncoderConfig = None,
         pad_token_id=8192,
         **kwargs,
@@ -297,7 +299,6 @@ class ParakeetTDTConfig(PreTrainedConfig):
         self.num_duration_bins = num_duration_bins
         self.hidden_act = hidden_act
         self.max_symbols_per_step = max_symbols_per_step
-        self.seconds_per_frame = seconds_per_frame
 
         if isinstance(encoder_config, dict):
             self.encoder_config = ParakeetEncoderConfig(**encoder_config)
@@ -310,6 +311,10 @@ class ParakeetTDTConfig(PreTrainedConfig):
         self.pad_token_id = pad_token_id
 
         super().__init__(**kwargs)
+
+    @property
+    def frame_rate(self):
+        return self.encoder_config.sampling_rate / (self.encoder_config.hop_length * self.encoder_config.subsampling_factor)
 
     @classmethod
     def from_encoder_config(cls, encoder_config: ParakeetEncoderConfig, **kwargs):

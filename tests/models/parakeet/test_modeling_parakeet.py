@@ -529,12 +529,12 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
-        samples = self._load_datasamples(1)
+        samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
         model = ParakeetForTDT.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device)
         model.eval()
         model.to(torch_device)
 
-        inputs = self.processor(samples)
+        inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(torch_device, dtype=self.dtype)
         output = model.generate(**inputs, return_dict_in_generate=True)
         torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
@@ -552,14 +552,47 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
-        samples = self._load_datasamples(5)
+        samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
         model = ParakeetForTDT.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device)
         model.eval()
         model.to(torch_device)
 
-        inputs = self.processor(samples)
+        inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(torch_device, dtype=self.dtype)
         output = model.generate(**inputs, return_dict_in_generate=True)
         torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
         predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+
+    @slow
+    def test_tdt_model_integration_timestamps(self):
+        """
+        reproducer: tests/models/parakeet/reproducer_batch_tdt_timestamps.py
+        """
+        RESULTS_PATH = (
+            Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_results_batch_tdt_timestamp.json"
+        )
+        with open(RESULTS_PATH, "r") as f:
+            raw_data = json.load(f)
+        EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
+        EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
+        EXPECTED_TIMESTAMPS = torch.tensor(raw_data["token_timestamps"])
+        EXPECTED_DURATIONS = torch.tensor(raw_data["token_durations"])
+
+        # Dynamically determine number of samples from expected results
+        samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device)
+        model.eval()
+        model.to(torch_device)
+
+        inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        inputs.to(torch_device, dtype=self.dtype)
+        output = model.generate(**inputs, return_dict_in_generate=True, return_timestamps=True)
+        torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
+        predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
+        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+
+        # Check timestamps and durations
+        self.assertIsNotNone(output.token_timestamps, "token_timestamps should be returned when return_timestamps=True")
+        torch.testing.assert_close(output.token_timestamps.cpu(), EXPECTED_TIMESTAMPS)
+        torch.testing.assert_close(output.token_durations.cpu(), EXPECTED_DURATIONS)
