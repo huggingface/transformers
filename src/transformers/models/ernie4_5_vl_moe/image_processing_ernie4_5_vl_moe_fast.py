@@ -28,7 +28,7 @@ from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_ernie4_5_vl_moe import Ernie4_5_VL_MoeImageProcessorKwargs
+from .image_processing_ernie4_5_vl_moe import Ernie45VLMoeImageProcessorKwargs
 
 
 def smart_resize(
@@ -61,7 +61,7 @@ def smart_resize(
 
 
 @auto_docstring
-class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
+class Ernie4_5_VLMoeImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}
@@ -73,10 +73,10 @@ class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
     patch_size = 14
     temporal_patch_size = None  # Unused
     merge_size = 2
-    valid_kwargs = Ernie4_5_VL_MoeImageProcessorKwargs
+    valid_kwargs = Ernie45VLMoeImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Ernie4_5_VL_MoeImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Ernie45VLMoeImageProcessorKwargs]):
         super().__init__(**kwargs)
         if self.size is not None and (
             self.size.get("shortest_edge", None) is None or self.size.get("longest_edge", None) is None
@@ -223,9 +223,9 @@ class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[Ernie4_5_VL_MoeImageProcessorKwargs],
+        **kwargs: Unpack[Ernie45VLMoeImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
 
-__all__ = ["Ernie4_5_VL_MoeImageProcessorFast"]
+__all__ = ["Ernie4_5_VLMoeImageProcessorFast"]
