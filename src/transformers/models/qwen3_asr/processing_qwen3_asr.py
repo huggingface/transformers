@@ -10,9 +10,8 @@ import numpy as np
 
 from transformers.audio_utils import AudioInput
 from transformers.feature_extraction_utils import BatchFeature
-from transformers.processing_utils import ProcessingKwargs, ProcessorMixin
+from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.tokenization_utils_base import TextInput
-from transformers.utils import auto_docstring
 
 
 class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
@@ -40,7 +39,6 @@ def _get_feat_extract_output_lengths(input_lengths):
     return output_lengths
 
 
-@auto_docstring
 class Qwen3ASRProcessor(ProcessorMixin):
     r"""
     Constructs a Qwen3ASR processor.
@@ -60,27 +58,12 @@ class Qwen3ASRProcessor(ProcessorMixin):
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
-    def __init__(
-        self,
-        # image_processor=None,
-        # video_processor=None,
-        feature_extractor=None,
-        tokenizer=None,
-        chat_template=None,
-    ):
-        # super().__init__(feature_extractor,tokenizer,chat_template)
-
-        # del self.image_token
-        # del self.video_token
-        # del self.vision_bos_token
-        # del self.self.vision_eos_token
-
+    def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
         self.audio_token = self.tokenizer.audio_token
         self.audio_bos_token = self.tokenizer.audio_bos_token
         self.audio_eos_token = self.tokenizer.audio_eos_token
 
-    @auto_docstring
     def __call__(
         self,
         text: TextInput = None,
@@ -142,26 +125,37 @@ class Qwen3ASRProcessor(ProcessorMixin):
             tensor_type=kwargs.get("return_tensors"),
         )
 
-    def replace_multimodal_special_tokens(
+    @property
+    def model_input_names(self) -> list[str]:
+        tokenizer_input_names = self.tokenizer.model_input_names
+        feature_extractor_input_names = self.feature_extractor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["feature_attention_mask"]))
+
+    def apply_transcription_request(
         self,
-        text,
-        audio_lengths,
-    ):
-        processed_text = []
-        for sample in text:
-            positions = []
-            special_tokens = [re.escape(tok) for tok in [self.audio_token]]
-            pattern = "|".join(special_tokens)
-            positions = sorted([(match.start(), match.group()) for match in re.finditer(pattern, sample)])
-            positions.sort(key=lambda x: x[0])
+        audio: str | list[str] | AudioInput,
+        prompt: str | list[str] | None = None,
+        **kwargs: Unpack[Qwen3ASRProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Prepare inputs for automatic speech recognition without manually writing the default transcription prompt.
 
-            for _, special_token in positions:
-                if special_token == self.audio_token:
-                    sample = sample.replace(self.audio_token, "<|audio_placeholder|>" * next(audio_lengths), 1)
+        Args:
+            audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                Audio to transcribe. Strings are interpreted as local paths or URLs and will be loaded automatically by
+                the chat template loader; NumPy arrays and PyTorch tensors are forwarded directly.
+            prompt (`str` or `list[str]`, *optional*):
+                Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
+                each sample uses `"Transcribe the input speech."`.
+            **kwargs:
+                Additional keyword arguments forwarded to [`~Qwen3ASRProcessor.apply_chat_template`] (for example
+                `text_kwargs`, `audio_kwargs`, ...).
 
-            sample = sample.replace("<|audio_placeholder|>", self.audio_token)
-            processed_text.append(sample)
-        return processed_text
+        Returns:
+            [`BatchFeature`]: Processor outputs ready to be passed to [`Qwen3ASRForConditionalGeneration.generate`].
+
+        """
+        raise ValueError("Not needed.")
 
     def get_chunked_index(self, token_indices: np.ndarray, tokens_per_chunk: int) -> list[tuple[int, int]]:
         """
@@ -199,34 +193,26 @@ class Qwen3ASRProcessor(ProcessorMixin):
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
         return super().apply_chat_template(conversations, chat_template, **kwargs)
 
-    def post_process_multimodal_output(
-        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
+    def replace_multimodal_special_tokens(
+        self,
+        text,
+        audio_lengths,
     ):
-        """
-        Post-process the output of a multimodal model to return the requested modality output.
-        If the model cannot generated the requested modality, an error will be raised.
+        processed_text = []
+        for sample in text:
+            positions = []
+            special_tokens = [re.escape(tok) for tok in [self.audio_token]]
+            pattern = "|".join(special_tokens)
+            positions = sorted([(match.start(), match.group()) for match in re.finditer(pattern, sample)])
+            positions.sort(key=lambda x: x[0])
 
-        Args:
-            generated_outputs (`torch.Tensor` or `np.ndarray`):
-                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
-                or `(sequence_length,)`.
-            skip_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
-            generation_mode (`str`, *optional*):
-                Generation mode indicated which modality to output and can be one of `["text", "image", "audio"]`.
-            **kwargs:
-                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+            for _, special_token in positions:
+                if special_token == self.audio_token:
+                    sample = sample.replace(self.audio_token, "<|audio_placeholder|>" * next(audio_lengths), 1)
 
-        Returns:
-            `list[Inion[str, np.ndarray]]`: The decoded text or generated audio.
-        """
-        raise ValueError("Not needed.")
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["feature_attention_mask"]))
+            sample = sample.replace("<|audio_placeholder|>", self.audio_token)
+            processed_text.append(sample)
+        return processed_text
 
 
 __all__ = ["Qwen3ASRProcessor"]

@@ -52,17 +52,11 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerTextRMSNorm, Qwen3OmniMoeThinkerTextModel, 
     Qwen3OmniMoeThinkerForConditionalGeneration
 )
+from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     pass
 
-
-# TODO: 
-# the following class-level attributes come from Qwen3OmniMoeTextConfig and might need to be removed
-#    keys_to_ignore_at_inference = ["past_key_values"]
-#    default_theta
-#    base_model_tp_plan
-#    base_model_pp_plan
 class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRTextModel`]. It is used to instantiate a
@@ -378,7 +372,7 @@ class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
         },
     }
 
-class Qwen3ASRProcessor(Qwen3OmniMoeProcessor):
+class Qwen3ASRProcessor(AudioFlamingo3Processor):
     r"""
     Constructs a Qwen3ASR processor.
     [`Qwen3ASRProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`], and [`Qwen2TokenizerFast`]. See the
@@ -399,26 +393,21 @@ class Qwen3ASRProcessor(Qwen3OmniMoeProcessor):
 
     def __init__(
         self,
-        #image_processor=None,
-        #video_processor=None,
         feature_extractor=None, 
         tokenizer=None, 
         chat_template=None
     ):  
-        #super().__init__(feature_extractor,tokenizer,chat_template)
-        
-        #del self.image_token
-        #del self.video_token
-        #del self.vision_bos_token
-        #del self.self.vision_eos_token
-        
-        ProcessorMixin.__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(feature_extractor,tokenizer,chat_template)
+        del self.audio_token
+        del self.audio_token_id
+        del self.default_transcription_prompt
+        del self.max_audio_len
         self.audio_token = self.tokenizer.audio_token
         self.audio_bos_token = self.tokenizer.audio_bos_token
         self.audio_eos_token = self.tokenizer.audio_eos_token
 
-
-
+    def _get_audio_token_length(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
+        raise ValueError("Not needed.")
 
     def __call__(
         self,
@@ -481,12 +470,61 @@ class Qwen3ASRProcessor(Qwen3OmniMoeProcessor):
             tensor_type=kwargs.get("return_tensors"),
         )
 
+    def apply_transcription_request(
+        self,
+        audio: Union[str, list[str], AudioInput],
+        prompt: Optional[Union[str, list[str]]] = None,
+        **kwargs: Unpack[Qwen3ASRProcessorKwargs],
+    ) -> BatchFeature:
+        raise ValueError("Not needed.")
+
+    def batch_decode(self, *args, strip_prefix=False, **kwargs):
+        raise ValueError("Not needed.")
+
+    def _strip_assistant_prefix_and_quotes(self, text: str) -> str:
+        raise ValueError("Not needed.")
+
+    def get_chunked_index(self, token_indices: np.ndarray, tokens_per_chunk: int) -> list[tuple[int, int]]:
+        """
+        Splits token index list into chunks based on token value ranges.
+
+        Given a list of token indices, returns a list of (start, end) index tuples representing
+        slices of the list where the token values fall within successive ranges of `t_ntoken_per_chunk`.
+
+        For example, if `t_ntoken_per_chunk` is 1000, the function will create chunks such that:
+        - the first chunk contains token values < 1000,
+        - the second chunk contains values >= 1000 and < 2000, and so on.
+
+        Parameters:
+            token_indices (`np.ndarray`): A monotonically increasing list of token index values.
+            t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
+
+        Returns:
+            `list[tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
+                                and end (exclusive) indices of a chunk in `token_indices`.
+        """
+
+        def _iter():
+            i, start_idx = 0, 0  # skip bos token
+            current_chunk = 1
+            while i < len(token_indices):  # skip eos token
+                if token_indices[i] >= current_chunk * tokens_per_chunk:
+                    yield (start_idx, i)
+                    start_idx = i
+                    current_chunk += 1
+                i += 1
+            yield (start_idx, len(token_indices))
+
+        return list(_iter())
+
+    def apply_chat_template(self, conversations, chat_template=None, **kwargs):
+        return ProcessorMixin.apply_chat_template(conversations, chat_template, **kwargs)
+
     def replace_multimodal_special_tokens(
         self,
         text,
         audio_lengths,
     ):
-
         processed_text = []
         for sample in text:
             positions = []
@@ -502,14 +540,6 @@ class Qwen3ASRProcessor(Qwen3OmniMoeProcessor):
             sample = sample.replace("<|audio_placeholder|>", self.audio_token)
             processed_text.append(sample)
         return processed_text
-
-    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
-        raise ValueError("Not needed.")
-    
-    def post_process_multimodal_output(
-        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
-    ):
-        raise ValueError("Not needed.")
 
     @property
     def model_input_names(self):
