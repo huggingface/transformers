@@ -53,7 +53,7 @@ class Timesfm2P5Config(PreTrainedConfig):
             Number of key-value heads. Set equal to `num_attention_heads` for full (non-grouped) attention.
         num_hidden_layers (`int`, *optional*, defaults to 20):
             Number of Transformer layers.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the RMS normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for the attention scores.
