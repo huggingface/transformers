@@ -31,11 +31,8 @@ from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere.modeling_cohere import apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
-from ..superglue.image_processing_superglue import (
-    SuperGlueImageProcessor,
-    SuperGlueImageProcessorKwargs,
-)
-from ..superglue.image_processing_superglue_fast import SuperGlueImageProcessorFast
+from ..superglue.image_processing_pil_superglue import SuperGlueImageProcessorPil
+from ..superglue.image_processing_superglue import SuperGlueImageProcessor, SuperGlueImageProcessorKwargs
 from ..superpoint import SuperPointConfig
 
 
@@ -229,7 +226,7 @@ class LightGlueImageProcessor(SuperGlueImageProcessor):
         return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
 
 
-class LightGlueImageProcessorFast(SuperGlueImageProcessorFast):
+class LightGlueImageProcessorPil(SuperGlueImageProcessorPil):
     def post_process_keypoint_matching(
         self,
         outputs: "LightGlueKeypointMatchingOutput",
@@ -981,5 +978,5 @@ __all__ = [
     "LightGlueForKeypointMatching",
     "LightGlueConfig",
     "LightGlueImageProcessor",
-    "LightGlueImageProcessorFast",
+    "LightGlueImageProcessorPil",
 ]

@@ -14,7 +14,7 @@
 """Image processor class for MaskFormer."""
 
 import math
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import numpy as np
 
@@ -311,6 +311,7 @@ class MaskFormerImageProcessorPil(PilBackend):
                 images=segmentation_maps,
                 expected_ndims=2,
                 do_convert_rgb=False,
+                input_data_format=ChannelDimension.FIRST,
             )
         return self._preprocess(images, segmentation_maps, instance_id_to_semantic_id, **kwargs)
 
@@ -323,7 +324,7 @@ class MaskFormerImageProcessorPil(PilBackend):
         size: SizeDict | None,
         pad_size: SizeDict | None,
         size_divisor: int | None,
-        resample: Union["PILImageResampling", "tvF.InterpolationMode"] | None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool | None,
         rescale_factor: float | None,
         do_normalize: bool | None,

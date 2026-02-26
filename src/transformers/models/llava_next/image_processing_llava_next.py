@@ -106,11 +106,9 @@ class LlavaNextImageProcessor(TorchvisionBackend):
 
         return resized_image
 
-    def _pad_for_patching(
-        self, image: "torch.Tensor", target_resolution: tuple, input_data_format: ChannelDimension
-    ) -> "torch.Tensor":
+    def _pad_for_patching(self, image: "torch.Tensor", target_resolution: tuple) -> "torch.Tensor":
         """Pad an image to a target resolution while maintaining aspect ratio."""
-        new_resolution = get_patch_output_size(image, target_resolution, input_data_format)
+        new_resolution = get_patch_output_size(image, target_resolution, input_data_format=ChannelDimension.FIRST)
         padding = self._get_padding_size(new_resolution, target_resolution)
 
         padded_image = tvF.pad(image, padding=padding)
@@ -136,7 +134,7 @@ class LlavaNextImageProcessor(TorchvisionBackend):
         resized_image = self._resize_for_patching(
             image, best_resolution, resample=resample, input_data_format=ChannelDimension.FIRST
         )
-        padded_image = self._pad_for_patching(resized_image, best_resolution, input_data_format=ChannelDimension.FIRST)
+        padded_image = self._pad_for_patching(resized_image, best_resolution)
         patches = divide_to_patches(padded_image, patch_size=patch_size)
         # Resize original image using backend's resize method (handles resample conversion)
         # size is a tuple (height, width), convert to SizeDict
@@ -170,7 +168,7 @@ class LlavaNextImageProcessor(TorchvisionBackend):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

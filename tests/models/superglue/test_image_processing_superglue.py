@@ -478,7 +478,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_torch_accelerator
     @require_vision
     @pytest.mark.torch_compile_test
-    def test_can_compile_fast_image_processor(self):
+    def test_can_compile_torchvision_backend(self):
         """Override the generic test since SuperGlue requires image pairs."""
         if "torchvision" not in self.image_processing_classes:
             self.skipTest("Skipping compilation test as torchvision image processor is not defined")

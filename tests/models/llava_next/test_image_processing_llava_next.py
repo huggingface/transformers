@@ -16,7 +16,7 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension
+from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.models.llava_next.image_processing_llava_next import select_best_resolution
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -245,12 +245,12 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image_input = image_input.transpose(2, 0, 1)
             # Test odd-width
             image_shape = (400, 601)
-            encoded_images = image_processing._pad_for_patching(image_input, image_shape, ChannelDimension.FIRST)
+            encoded_images = image_processing._pad_for_patching(image_input, image_shape)
             self.assertEqual(encoded_images.shape[-2:], image_shape)
 
             # Test odd-height
             image_shape = (503, 400)
-            encoded_images = image_processing._pad_for_patching(image_input, image_shape, ChannelDimension.FIRST)
+            encoded_images = image_processing._pad_for_patching(image_input, image_shape)
             self.assertEqual(encoded_images.shape[-2:], image_shape)
 
     def test_call_without_padding(self):

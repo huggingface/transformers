@@ -171,12 +171,6 @@ class Qwen2VLImageProcessorPil(PilBackend):
         pixel_values = np.concatenate(all_patches, axis=0)
         image_grid_thw = np.array(all_grids, dtype=np.int64)
 
-        if return_tensors == "pt":
-            import torch
-
-            pixel_values = torch.from_numpy(pixel_values)
-            image_grid_thw = torch.from_numpy(image_grid_thw)
-
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
