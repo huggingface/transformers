@@ -158,13 +158,15 @@ class TableTransformerConfig(PreTrainedConfig):
     ):
         backbone_kwargs = kwargs.get("backbone_kwargs", {})
         timm_default_kwargs = {
-            "num_channels": backbone_kwargs.get("num_channels", num_channels),
-            "features_only": True,
-            "use_pretrained_backbone": False,
+            "model_args": {
+                "in_chans": backbone_kwargs.get("num_channels", num_channels),
+                "features_only": True,
+                "pretrained": False,
+            },
             "out_indices": backbone_kwargs.get("out_indices", [1, 2, 3, 4]),
         }
         if dilation:
-            timm_default_kwargs["output_stride"] = backbone_kwargs.get("output_stride", 16)
+            timm_default_kwargs["model_args"]["output_stride"] = backbone_kwargs.get("output_stride", 16)
 
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,

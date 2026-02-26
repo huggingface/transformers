@@ -18,14 +18,17 @@ import torch
 from torch import Tensor, nn
 
 from ... import initialization as init
-from ...modeling_outputs import ImageClassifierOutput, ModelOutput
+from ...backbone_utils import BackboneMixin
+from ...modeling_outputs import BackboneOutput, ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_timm_available, requires_backends
+from ...utils import auto_docstring, can_return_tuple, is_timm_available, logging, requires_backends
 from .configuration_timm_wrapper import TimmWrapperConfig
 
 
 if is_timm_available():
     import timm
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -91,6 +94,12 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
 
     def post_init(self):
         self.supports_gradient_checkpointing = self._timm_model_supports_gradient_checkpointing()
+
+        # Converts all `BatchNorm2d` and `SyncBatchNorm` or `BatchNormAct2d` and `SyncBatchNormAct2d` layers of
+        # provided module into `FrozenBatchNorm2d` or `FrozenBatchNormAct2d` respectively
+        if getattr(self.config, "freeze_batch_norm_2d", False):
+            self.freeze_batch_norm_2d()
+
         super().post_init()
 
     def load_state_dict(self, state_dict, *args, **kwargs):
@@ -142,12 +151,88 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, enable: bool = True, *args, **kwargs):
         self.timm_model.set_grad_checkpointing(enable)
 
+    def freeze_batch_norm_2d(self):
+        timm.utils.model.freeze_batch_norm_2d(self.timm_model)
+
+    def unfreeze_batch_norm_2d(self):
+        timm.utils.model.unfreeze_batch_norm_2d(self.timm_model)
+
     def get_input_embeddings(self):
         # TIMM backbones operate directly on images and do not expose token embeddings.
         return None
 
     def set_input_embeddings(self, value):
         raise NotImplementedError("TimmWrapper models do not own token embeddings and cannot set them.")
+
+
+class TimmWrapperBackboneModel(BackboneMixin, TimmWrapperPreTrainedModel):
+    """
+    Wrapper class for timm models to be used as backbones. This enables using the timm models interchangeably with the
+    other models in the library keeping the same API.
+    """
+
+    def __init__(self, config, **kwargs):
+        requires_backends(self, ["vision", "timm"])
+
+        extra_init_kwargs = config.model_args or {}
+        self.features_only = extra_init_kwargs.get("features_only", True)
+
+        # We just take the final layer by default. This matches the default for the transformers models.
+        out_indices = config.out_indices if getattr(config, "out_indices", None) is not None else (-1,)
+        timm_backbone = _create_timm_model_with_error_handling(config, out_indices=out_indices, **extra_init_kwargs)
+
+        # Needs to be called after creating timm model, because `super()` will try to infer
+        # `stage_names` from model architecture
+        super().__init__(config, timm_backbone=timm_backbone)
+        self.timm_model = timm_backbone
+
+        # These are used to control the output of the model when called. If output_hidden_states is True, then
+        # return_layers is modified to include all layers.
+        self._return_layers = {
+            layer["module"]: str(layer["index"]) for layer in self.timm_model.feature_info.get_dicts()
+        }
+        self._all_layers = {layer["module"]: str(i) for i, layer in enumerate(self.timm_model.feature_info.info)}
+
+        self.post_init()
+
+    @property
+    def _backbone(self):
+        logger.warning(
+            f"The `self._backbone` attribute is deprecated for {self.__class__.__name__}. Please use `self.timm_model` instead."
+        )
+        return self.timm_model
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        **kwargs,
+    ) -> BackboneOutput | tuple[Tensor, ...]:
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
+        if output_attentions:
+            raise ValueError("Cannot output attentions for timm backbones at the moment")
+
+        if output_hidden_states:
+            # We modify the return layers to include all the stages of the backbone
+            self.timm_model.return_layers = self._all_layers
+            hidden_states = self.timm_model(pixel_values)
+            self.timm_model.return_layers = self._return_layers
+            feature_maps = tuple(hidden_states[i] for i in self.out_indices)
+        else:
+            feature_maps = self.timm_model(pixel_values)
+            hidden_states = None
+
+        feature_maps = tuple(feature_maps)
+        hidden_states = tuple(hidden_states) if hidden_states is not None else None
+
+        return BackboneOutput(feature_maps=feature_maps, hidden_states=hidden_states, attentions=None)
 
 
 class TimmWrapperModel(TimmWrapperPreTrainedModel):
@@ -164,22 +249,18 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         self.timm_model = _create_timm_model_with_error_handling(config, num_classes=0, **extra_init_kwargs)
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         output_attentions: bool | None = None,
         output_hidden_states: bool | list[int] | None = None,
-        return_dict: bool | None = None,
         do_pooling: bool | None = None,
         use_cache: bool | None = None,
         **kwargs,
     ) -> TimmWrapperModelOutput | tuple[Tensor, ...]:
         r"""
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. Not compatible with timm wrapped models.
         do_pooling (`bool`, *optional*):
             Whether to do pooling for the last_hidden_state in `TimmWrapperModel` or not. If `None` is passed, the
             `do_pooling` value from the config is used.
@@ -215,7 +296,6 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -236,7 +316,11 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         pixel_values = pixel_values.to(self.device)
 
         if self.features_only:
-            last_hidden_state = self.timm_model.forward(pixel_values, **kwargs)
+            logger.warning(
+                f"Using a `features_only` mode in {self.__class__.__name__} is deprecated and will be removed in v5.20.0"
+                "Instead please use `TimmWrapperBackboneModel` to obtain feature maps."
+            )
+            last_hidden_state = self.timm_model.forward(pixel_values)
             hidden_states = last_hidden_state if output_hidden_states else None
             pooler_output = None
         else:
@@ -254,11 +338,6 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
                 pooler_output = self.timm_model.forward_head(last_hidden_state)
             else:
                 pooler_output = None
-
-        if not return_dict:
-            outputs = (last_hidden_state, pooler_output, hidden_states)
-            outputs = tuple(output for output in outputs if output is not None)
-            return outputs
 
         return TimmWrapperModelOutput(
             last_hidden_state=last_hidden_state,
@@ -290,6 +369,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         self.num_labels = config.num_labels
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -297,7 +377,6 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | list[int] | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> ImageClassifierOutput | tuple[Tensor, ...]:
         r"""
@@ -305,14 +384,6 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. Not compatible with timm wrapped models.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            **kwargs:
-            Additional keyword arguments passed along to the `timm` model forward.
 
         Examples:
         ```python
@@ -342,7 +413,6 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         >>> top5_probabilities, top5_class_indices = torch.topk(logits.softmax(dim=1) * 100, k=5)
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -375,11 +445,6 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         if labels is not None:
             loss = self.loss_function(labels, logits, self.config)
 
-        if not return_dict:
-            outputs = (loss, logits, hidden_states)
-            outputs = tuple(output for output in outputs if output is not None)
-            return outputs
-
         return ImageClassifierOutput(
             loss=loss,
             logits=logits,
@@ -387,4 +452,9 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         )
 
 
-__all__ = ["TimmWrapperPreTrainedModel", "TimmWrapperModel", "TimmWrapperForImageClassification"]
+__all__ = [
+    "TimmWrapperBackboneModel",
+    "TimmWrapperPreTrainedModel",
+    "TimmWrapperModel",
+    "TimmWrapperForImageClassification",
+]

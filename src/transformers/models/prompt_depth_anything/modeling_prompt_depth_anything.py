@@ -20,11 +20,11 @@
 import torch
 import torch.nn as nn
 
-from ...backbone_utils import load_backbone
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from ...utils.generic import torch_int
+from ..auto import AutoBackbone
 from .configuration_prompt_depth_anything import PromptDepthAnythingConfig
 
 
@@ -375,7 +375,7 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.backbone = load_backbone(config)
+        self.backbone = AutoBackbone.from_config(config=config.backbone_config)
         self.neck = PromptDepthAnythingNeck(config)
         self.head = PromptDepthAnythingDepthEstimationHead(config)
 

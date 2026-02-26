@@ -14,6 +14,7 @@
 """PyTorch MaskFormer model."""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from numbers import Number
 
@@ -23,11 +24,10 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import load_backbone
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
@@ -39,6 +39,9 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ..auto import AutoBackbone
 from ..detr import DetrConfig
 from .configuration_maskformer import MaskFormerConfig
 from .configuration_maskformer_swin import MaskFormerSwinConfig
@@ -387,206 +390,262 @@ def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 
     return loss / height_and_width
 
 
-# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrAttention
-class DetrAttention(nn.Module):
-    """
-    Multi-headed attention from 'Attention Is All You Need' paper.
+# Copied from transformers.models.detr.modeling_detr.DetrMLP
+class DetrMLP(nn.Module):
+    def __init__(self, config: DetrConfig, hidden_size: int, intermediate_size: int):
+        super().__init__()
+        self.fc1 = nn.Linear(hidden_size, intermediate_size)
+        self.fc2 = nn.Linear(intermediate_size, hidden_size)
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.dropout = config.dropout
 
-    Here, we add position embeddings to the queries and keys (as explained in the DETR paper).
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        return hidden_states
+
+
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+# Copied from transformers.models.detr.modeling_detr.DetrSelfAttention
+class DetrSelfAttention(nn.Module):
+    """
+    Multi-headed self-attention from 'Attention Is All You Need' paper.
+
+    In DETR, position embeddings are added to both queries and keys (but not values) in self-attention.
     """
 
     def __init__(
         self,
-        embed_dim: int,
-        num_heads: int,
+        config: DetrConfig,
+        hidden_size: int,
+        num_attention_heads: int,
         dropout: float = 0.0,
         bias: bool = True,
     ):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
-        if self.head_dim * num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {num_heads})."
-            )
+        self.config = config
+        self.head_dim = hidden_size // num_attention_heads
         self.scaling = self.head_dim**-0.5
+        self.attention_dropout = dropout
+        self.is_causal = False
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Tensor | None):
-        return tensor if object_queries is None else tensor + object_queries
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.o_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        object_queries: torch.Tensor | None = None,
-        key_value_states: torch.Tensor | None = None,
-        spatial_position_embeddings: torch.Tensor | None = None,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        """Input shape: Batch x Time x Channel"""
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-        batch_size, target_len, embed_dim = hidden_states.size()
+        position_embeddings: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Position embeddings are added to both queries and keys (but not values).
+        """
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # add position embeddings to the hidden states before projecting to queries and keys
-        if object_queries is not None:
-            hidden_states_original = hidden_states
-            hidden_states = self.with_pos_embed(hidden_states, object_queries)
+        query_key_input = hidden_states + position_embeddings if position_embeddings is not None else hidden_states
 
-        # add key-value position embeddings to the key value states
-        if spatial_position_embeddings is not None:
-            key_value_states_original = key_value_states
-            key_value_states = self.with_pos_embed(key_value_states, spatial_position_embeddings)
+        query_states = self.q_proj(query_key_input).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(query_key_input).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
-        # get key, value proj
-        if is_cross_attention:
-            # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, batch_size)
-            value_states = self._shape(self.v_proj(key_value_states_original), -1, batch_size)
-        else:
-            # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, batch_size)
-            value_states = self._shape(self.v_proj(hidden_states_original), -1, batch_size)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, target_len, batch_size).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        source_len = key_states.size(1)
-
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (batch_size * self.num_heads, target_len, source_len):
-            raise ValueError(
-                f"Attention weights should be of size {(batch_size * self.num_heads, target_len, source_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, target_len, source_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
-                    f" {attention_mask.size()}"
-                )
-            if attention_mask.dtype == torch.bool:
-                attention_mask = torch.zeros_like(attention_mask, dtype=attn_weights.dtype).masked_fill_(
-                    attention_mask, -torch.inf
-                )
-            attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
-            attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, target_len, source_len)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, target_len, source_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (batch_size * self.num_heads, target_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, target_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(batch_size, target_len, embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
-# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrDecoderLayer
+# Copied from transformers.models.detr.modeling_detr.DetrCrossAttention
+class DetrCrossAttention(nn.Module):
+    """
+    Multi-headed cross-attention from 'Attention Is All You Need' paper.
+
+    In DETR, queries get their own position embeddings, while keys get encoder position embeddings.
+    Values don't get any position embeddings.
+    """
+
+    def __init__(
+        self,
+        config: DetrConfig,
+        hidden_size: int,
+        num_attention_heads: int,
+        dropout: float = 0.0,
+        bias: bool = True,
+    ):
+        super().__init__()
+        self.config = config
+        self.head_dim = hidden_size // num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = dropout
+        self.is_causal = False
+
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.o_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        key_value_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: torch.Tensor | None = None,
+        encoder_position_embeddings: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Position embeddings logic:
+        - Queries get position_embeddings
+        - Keys get encoder_position_embeddings
+        - Values don't get any position embeddings
+        """
+        query_input_shape = hidden_states.shape[:-1]
+        query_hidden_shape = (*query_input_shape, -1, self.head_dim)
+
+        kv_input_shape = key_value_states.shape[:-1]
+        kv_hidden_shape = (*kv_input_shape, -1, self.head_dim)
+
+        query_input = hidden_states + position_embeddings if position_embeddings is not None else hidden_states
+        key_input = (
+            key_value_states + encoder_position_embeddings
+            if encoder_position_embeddings is not None
+            else key_value_states
+        )
+
+        query_states = self.q_proj(query_input).view(query_hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(key_input).view(kv_hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(key_value_states).view(kv_hidden_shape).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*query_input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+# Copied from transformers.models.detr.modeling_detr.DetrDecoderLayer
 class DetrDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DetrConfig):
         super().__init__()
-        self.embed_dim = config.d_model
+        self.hidden_size = config.d_model
 
-        self.self_attn = DetrAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
+        self.self_attn = DetrSelfAttention(
+            config=config,
+            hidden_size=self.hidden_size,
+            num_attention_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = DetrAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
+        self.self_attn_layer_norm = nn.LayerNorm(self.hidden_size)
+        self.encoder_attn = DetrCrossAttention(
+            config=config,
+            hidden_size=self.hidden_size,
+            num_attention_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.hidden_size)
+        self.mlp = DetrMLP(config, self.hidden_size, config.decoder_ffn_dim)
+        self.final_layer_norm = nn.LayerNorm(self.hidden_size)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        object_queries: torch.Tensor | None = None,
-        query_position_embeddings: torch.Tensor | None = None,
+        spatial_position_embeddings: torch.Tensor | None = None,
+        object_queries_position_embeddings: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, hidden_size)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
-            object_queries (`torch.FloatTensor`, *optional*):
-                object_queries that are added to the hidden states
-            in the cross-attention layer.
-            query_position_embeddings (`torch.FloatTensor`, *optional*):
-                position embeddings that are added to the queries and keys
-            in the self-attention layer.
+            spatial_position_embeddings (`torch.FloatTensor`, *optional*):
+                Spatial position embeddings (2D positional encodings from encoder) that are added to the keys only
+                in the cross-attention layer (not to values).
+            object_queries_position_embeddings (`torch.FloatTensor`, *optional*):
+                Position embeddings for the object query slots. In self-attention, these are added to both queries
+                and keys (not values). In cross-attention, these are added to queries only (not to keys or values).
             encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
+                cross attention input to the layer of shape `(batch, seq_len, hidden_size)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
         """
         residual = hidden_states
 
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            object_queries=query_position_embeddings,
+            position_embeddings=object_queries_position_embeddings,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
+            **kwargs,
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -594,17 +653,16 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
-        cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
 
-            hidden_states, cross_attn_weights = self.encoder_attn(
+            hidden_states, _ = self.encoder_attn(
                 hidden_states=hidden_states,
-                object_queries=query_position_embeddings,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                spatial_position_embeddings=object_queries,
-                output_attentions=output_attentions,
+                position_embeddings=object_queries_position_embeddings,
+                encoder_position_embeddings=spatial_position_embeddings,
+                **kwargs,
             )
 
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -613,66 +671,52 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
-
-        return outputs
+        return hidden_states
 
 
+# copied from transformers.models.detr.modeling_detr.DetrDecoder with DetrPreTrainedModel->PreTrainedModel
 class DetrDecoder(PreTrainedModel):
-    config: DetrConfig
-    base_model_prefix = "model"
-
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DetrDecoderLayer`].
-
-    The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
-
-    Some small tweaks for DETR:
-
-    - object_queries and query_position_embeddings are added to the forward pass.
-    - if self.config.auxiliary_loss is set to True, also returns a stack of activations from all decoding layers.
+    Transformer decoder that refines a set of object queries. It is composed of a stack of [`DetrDecoderLayer`] modules,
+    which apply self-attention to the queries and cross-attention to the encoder's outputs.
 
     Args:
-        config: DetrConfig
+        config (`DetrConfig`): Model configuration object.
     """
+
+    _can_record_outputs = {
+        "hidden_states": DetrDecoderLayer,
+        "attentions": DetrSelfAttention,
+        "cross_attentions": DetrCrossAttention,
+    }
 
     def __init__(self, config: DetrConfig):
         super().__init__(config)
-
         self.dropout = config.dropout
-        self.layerdrop = config.decoder_layerdrop
 
         self.layers = nn.ModuleList([DetrDecoderLayer(config) for _ in range(config.decoder_layers)])
         # in DETR, the decoder uses layernorm after the last decoder layer output
         self.layernorm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
-
+        # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds=None,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        object_queries=None,
-        query_position_embeddings=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        spatial_position_embeddings=None,
+        object_queries_position_embeddings=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> DetrDecoderOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -695,99 +739,59 @@ class DetrDecoder(PreTrainedModel):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Position embeddings that are added to the queries and keys in each cross-attention layer.
-            query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                , *optional*): Position embeddings that are added to the queries and keys in each self-attention layer.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            spatial_position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Spatial position embeddings (2D positional encodings from encoder) that are added to the keys in each cross-attention layer.
+            object_queries_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+                Position embeddings for the object query slots that are added to the queries and keys in each self-attention layer.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
 
-        encoder_attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=encoder_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-        )
+        if attention_mask is not None:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=hidden_states,
+                attention_mask=attention_mask,
+            )
+
+        # expand encoder attention mask (for cross-attention on encoder outputs)
+        if encoder_hidden_states is not None and encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=hidden_states,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
         # optional intermediate hidden states
         intermediate = () if self.config.auxiliary_loss else None
 
         # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-            if self.training:
-                dropout_probability = torch.rand([])
-                if dropout_probability < self.layerdrop:
-                    continue
-
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
-                None,  # attention_mask
-                object_queries,
-                query_position_embeddings,
+                attention_mask,
+                spatial_position_embeddings,
+                object_queries_position_embeddings,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions,
                 **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
 
             if self.config.auxiliary_loss:
                 hidden_states = self.layernorm(hidden_states)
                 intermediate += (hidden_states,)
 
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
-
         # finally, apply layernorm
         hidden_states = self.layernorm(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
 
         # stack intermediate decoder activations
         if self.config.auxiliary_loss:
             intermediate = torch.stack(intermediate)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, all_hidden_states, all_self_attns, all_cross_attentions, intermediate]
-                if v is not None
-            )
-        return DetrDecoderOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
-            intermediate_hidden_states=intermediate,
-        )
+        return DetrDecoderOutput(last_hidden_state=hidden_states, intermediate_hidden_states=intermediate)
 
 
 # refactored from original implementation
@@ -1352,7 +1356,7 @@ class MaskFormerPixelLevelModule(nn.Module):
             backbone_config = MaskFormerSwinConfig.from_dict(backbone_config.to_dict())
             backbone_config.out_features = ["stage1", "stage2", "stage3", "stage4"]
             config.backbone_config = backbone_config
-        self.encoder = load_backbone(config)
+        self.encoder = AutoBackbone.from_config(config=config.backbone_config)
 
         feature_channels = self.encoder.channels
         self.decoder = MaskFormerPixelDecoder(
@@ -1428,8 +1432,8 @@ class MaskFormerTransformerModule(nn.Module):
             attention_mask=None,
             encoder_hidden_states=image_features,
             encoder_attention_mask=None,
-            object_queries=object_queries,
-            query_position_embeddings=queries_embeddings,
+            spatial_position_embeddings=object_queries,
+            object_queries_position_embeddings=queries_embeddings,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

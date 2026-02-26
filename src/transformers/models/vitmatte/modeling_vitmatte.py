@@ -19,9 +19,9 @@ import torch
 from torch import nn
 
 from ... import initialization as init
-from ...backbone_utils import load_backbone
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
+from ..auto import AutoBackbone
 from .configuration_vitmatte import VitMatteConfig
 
 
@@ -107,7 +107,11 @@ class VitMatteConvStream(nn.Module):
         # to enable loading HF backbone models.
         in_channels = 4
         if config.backbone_config is not None:
-            in_channels = config.backbone_config.num_channels
+            in_channels = (
+                config.backbone_config.num_channels
+                if hasattr(config.backbone_config, "num_channels")
+                else config.backbone_config.model_args["in_chans"]
+            )
 
         out_channels = config.convstream_hidden_sizes
 
@@ -222,7 +226,7 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.backbone = load_backbone(config)
+        self.backbone = AutoBackbone.from_config(config=config.backbone_config)
         self.decoder = VitMatteDetailCaptureModule(config)
 
         # Initialize weights and apply final processing

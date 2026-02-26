@@ -297,7 +297,7 @@ def consolidate_backbone_kwargs_to_config(
         and backbone_config is None
         and not backbone_kwargs
     ):
-        backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **timm_default_kwargs)
+        backbone_config = CONFIG_MAPPING["timm_wrapper"](backbone, **timm_default_kwargs)
     elif backbone is not None and backbone_config is None:
         if repo_exists(backbone):
             config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
@@ -305,7 +305,14 @@ def consolidate_backbone_kwargs_to_config(
             config_dict.update(backbone_kwargs)
             backbone_config = config_class(**config_dict)
         else:
-            backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
+            # Move timm-args inside `model_args` to support loading from TimmBackboneConfig
+            if "model_args" not in backbone_kwargs:
+                backbone_kwargs["model_args"] = {
+                    "in_chans": backbone_kwargs.pop("num_channels", 3),
+                    "features_only": backbone_kwargs.pop("features_only", True),
+                    "output_stride": backbone_kwargs.pop("output_stride", None),
+                }
+            backbone_config = CONFIG_MAPPING["timm_wrapper"](backbone, **backbone_kwargs)
     elif backbone_config is None and default_config_type is not None:
         logger.info(
             f"`backbone_config` is `None`. Initializing the config with the default `{default_config_type}` vision config."
@@ -314,28 +321,15 @@ def consolidate_backbone_kwargs_to_config(
         backbone_config = CONFIG_MAPPING[default_config_type](**default_config_kwargs)
     elif isinstance(backbone_config, dict):
         backbone_model_type = backbone_config.get("model_type")
+        if backbone_model_type == "timm_backbone":
+            backbone_model_type = "timm_wrapper"
+            # Move timm-args inside `model_args`
+            backbone_config["model_args"] = {
+                "in_chans": backbone_config.pop("num_channels", 3),
+                "features_only": backbone_config.pop("features_only", True),
+                "output_stride": backbone_config.pop("output_stride", None),
+            }
         config_class = CONFIG_MAPPING[backbone_model_type]
         backbone_config = config_class.from_dict(backbone_config)
 
     return backbone_config, kwargs
-
-
-def load_backbone(config):
-    """
-    Loads the backbone model from a config object.
-
-    If the config is from the backbone model itself, then we return a backbone model with randomly initialized
-    weights.
-
-    If the config is from the parent model of the backbone model itself, then we load the pretrained backbone weights
-    if specified.
-    """
-    from transformers import AutoBackbone
-
-    backbone_config = getattr(config, "backbone_config", None)
-
-    if backbone_config is None:
-        backbone = AutoBackbone.from_config(config=config)
-    else:
-        backbone = AutoBackbone.from_config(config=backbone_config)
-    return backbone

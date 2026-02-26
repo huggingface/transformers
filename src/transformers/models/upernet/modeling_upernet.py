@@ -17,10 +17,10 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ...backbone_utils import load_backbone
 from ...modeling_outputs import SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
+from ..auto import AutoBackbone
 from .configuration_upernet import UperNetConfig
 
 
@@ -279,7 +279,7 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.backbone = load_backbone(config)
+        self.backbone = AutoBackbone.from_config(config=config.backbone_config)
 
         # Semantic segmentation head(s)
         self.decode_head = UperNetHead(config, in_channels=self.backbone.channels)

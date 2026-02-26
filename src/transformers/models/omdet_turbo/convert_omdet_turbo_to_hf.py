@@ -69,7 +69,7 @@ def create_rename_keys_vision(state_dict, config):
     for layer_name in state_dict:
         if layer_name.startswith("backbone") and not layer_name.startswith("backbone.norm"):
             if config.use_timm_backbone:
-                layer_name_replace = layer_name.replace("backbone", "vision_backbone.vision_backbone._backbone")
+                layer_name_replace = layer_name.replace("backbone", "vision_backbone.vision_backbone.timm_model")
                 layer_name_replace = layer_name_replace.replace(".layers.", ".layers_")
                 if "downsample" in layer_name:
                     # get layer number

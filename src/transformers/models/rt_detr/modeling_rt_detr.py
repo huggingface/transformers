@@ -28,7 +28,6 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
-from ...backbone_utils import load_backbone
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
@@ -38,6 +37,7 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoBackbone
 from .configuration_rt_detr import RTDetrConfig
 
 
@@ -400,7 +400,7 @@ class RTDetrConvEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config=config.backbone_config)
 
         if config.freeze_backbone_batch_norms:
             # replace batch norm by frozen batch norm

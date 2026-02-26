@@ -22,7 +22,6 @@ import torch.nn as nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import load_backbone
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -41,6 +40,7 @@ from ...utils import (
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoBackbone
 from .configuration_detr import DetrConfig
 
 
@@ -258,7 +258,7 @@ class DetrConvEncoder(nn.Module):
 
         self.config = config
 
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config=config.backbone_config)
         self.intermediate_channel_sizes = backbone.channels
 
         # replace batch norm by frozen batch norm
@@ -266,10 +266,10 @@ class DetrConvEncoder(nn.Module):
             replace_batch_norm(backbone)
 
         # We used to load with timm library directly instead of the AutoBackbone API
-        # so we need to unwrap the `backbone._backbone` module to load weights without mismatch
+        # so we need to unwrap the `backbone.timm_model` module to load weights without mismatch
         is_timm_model = False
-        if hasattr(backbone, "_backbone"):
-            backbone = backbone._backbone
+        if hasattr(backbone, "timm_model"):
+            backbone = backbone.timm_model
             is_timm_model = True
         self.model = backbone
 

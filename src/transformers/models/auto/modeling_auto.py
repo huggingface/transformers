@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING
 
 from ...utils import logging
 from .auto_factory import (
-    _BaseAutoBackboneClass,
     _BaseAutoModelClass,
     _LazyAutoMapping,
     auto_class_update,
@@ -427,7 +426,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("time_series_transformer", "TimeSeriesTransformerModel"),
         ("timesfm", "TimesFmModel"),
         ("timesformer", "TimesformerModel"),
-        ("timm_backbone", "TimmBackbone"),
         ("timm_wrapper", "TimmWrapperModel"),
         ("tvp", "TvpModel"),
         ("udop", "UdopModel"),
@@ -778,7 +776,6 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("swinv2", "Swinv2Model"),
         ("table-transformer", "TableTransformerModel"),
         ("timesformer", "TimesformerModel"),
-        ("timm_backbone", "TimmBackbone"),
         ("timm_wrapper", "TimmWrapperModel"),
         ("videomae", "VideoMAEModel"),
         ("vit", "ViTModel"),
@@ -1647,7 +1644,8 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinBackbone"),
         ("swinv2", "Swinv2Backbone"),
         ("textnet", "TextNetBackbone"),
-        ("timm_backbone", "TimmBackbone"),
+        ("timm_backbone", "TimmWrapperBackboneModel"),  # for BC
+        ("timm_wrapper", "TimmWrapperBackboneModel"),
         ("vitdet", "VitDetBackbone"),
         ("vitpose_backbone", "VitPoseBackbone"),
     ]
@@ -2161,7 +2159,7 @@ class AutoModelForTextToWaveform(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING
 
 
-class AutoBackbone(_BaseAutoBackboneClass):
+class AutoBackbone(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_BACKBONE_MAPPING
 
 

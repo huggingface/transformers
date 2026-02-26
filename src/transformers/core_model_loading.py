@@ -510,6 +510,8 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
     # Qwen2.5, Sam3, Ernie4.5 VL MoE!
     pattern = re.sub(r"\(\?.+\)", "", pattern)
+    # Remove the backslash for literal dots
+    pattern = pattern.replace(r"\.", ".")
     # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
     capturing_group_match = re.search(r"\(.+?\)", pattern)
     captured_group = None
@@ -1257,10 +1259,8 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     # In this case, the model was not created with `from_pretrained` -> let's check if it's in the hardcoded
     # mappings, and recreate the mapping from there if it is
     if weight_conversions is None:
-        from .conversion_mapping import get_model_conversion_mapping
-
         # Do not resave with the legacy renaming, if present
-        weight_conversions = get_model_conversion_mapping(model, add_legacy=False)
+        weight_conversions = model.get_weight_conversions_recursively(add_legacy=False)
         weight_conversions = weight_conversions if len(weight_conversions) > 0 else None
 
     # We did not find any operations to perform -> quick escape

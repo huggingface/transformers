@@ -30,7 +30,6 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
-from ...backbone_utils import load_backbone
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
@@ -46,6 +45,7 @@ from ...utils import (
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoBackbone
 from .configuration_pp_doclayout_v3 import PPDocLayoutV3Config
 
 
@@ -1322,7 +1322,7 @@ class PPDocLayoutV3ConvEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config=config.backbone_config)
 
         if config.freeze_backbone_batch_norms:
             # replace batch norm by frozen batch norm

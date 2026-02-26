@@ -23,7 +23,6 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
-from ...backbone_utils import load_backbone
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, get_max_height_width
 from ...image_transforms import center_to_corners_format, corners_to_center_format
@@ -52,6 +51,7 @@ from ...utils import (
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoBackbone
 from ..conditional_detr.modeling_conditional_detr import inverse_sigmoid
 from ..deformable_detr.modeling_deformable_detr import DeformableDetrMultiscaleDeformableAttention
 from ..detr.image_processing_detr_fast import DetrImageProcessorFast
@@ -689,7 +689,7 @@ class RTDetrConvEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config=config.backbone_config)
 
         if config.freeze_backbone_batch_norms:
             # replace batch norm by frozen batch norm

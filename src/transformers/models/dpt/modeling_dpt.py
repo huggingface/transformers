@@ -28,7 +28,6 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import load_backbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -36,6 +35,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoBackbone
 from .configuration_dpt import DPTConfig
 
 
@@ -102,7 +102,7 @@ class DPTViTHybridEmbeddings(nn.Module):
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
-        self.backbone = load_backbone(config)
+        self.backbone = AutoBackbone.from_config(config=config.backbone_config)
         feature_dim = self.backbone.channels[-1]
         if len(self.backbone.channels) != 3:
             raise ValueError(f"Expected backbone to have 3 output features, got {len(self.backbone.channels)}")
@@ -925,7 +925,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         self.backbone = None
         if config.is_hybrid is False and config.backbone_config is not None:
-            self.backbone = load_backbone(config)
+            self.backbone = AutoBackbone.from_config(config=config.backbone_config)
         else:
             self.dpt = DPTModel(config, add_pooling_layer=False)
 

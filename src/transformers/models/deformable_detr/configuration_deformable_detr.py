@@ -185,13 +185,15 @@ class DeformableDetrConfig(PreTrainedConfig):
     ):
         # Init timm backbone with hardcoded values for BC
         timm_default_kwargs = {
-            "num_channels": 3,
-            "features_only": True,
-            "use_pretrained_backbone": False,
+            "model_args": {
+                "in_chans": 3,
+                "features_only": True,
+                "pretrained": False,
+            },
             "out_indices": [2, 3, 4] if num_feature_levels > 1 else [4],
         }
         if dilation:
-            timm_default_kwargs["output_stride"] = 16
+            timm_default_kwargs["model_args"]["output_stride"] = 16
 
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,

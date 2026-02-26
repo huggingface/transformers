@@ -21,7 +21,6 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from ... import initialization as init
-from ...backbone_utils import load_backbone
 from ...image_transforms import center_to_corners_format
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
@@ -37,6 +36,7 @@ from ...utils import (
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..auto import AutoBackbone
 from ..detr.image_processing_detr_fast import DetrImageProcessorFast
 from ..detr.modeling_detr import (
     DetrConvEncoder,
@@ -292,7 +292,7 @@ class DeformableDetrConvEncoder(DetrConvEncoder):
 
         self.config = config
 
-        backbone = load_backbone(config)
+        backbone = AutoBackbone.from_config(config=config.backbone_config)
         self.intermediate_channel_sizes = backbone.channels
 
         # replace batch norm by frozen batch norm
@@ -300,10 +300,10 @@ class DeformableDetrConvEncoder(DetrConvEncoder):
             replace_batch_norm(backbone)
 
         # We used to load with timm library directly instead of the AutoBackbone API
-        # so we need to unwrap the `backbone._backbone` module to load weights without mismatch
+        # so we need to unwrap the `backbone.timm_model` module to load weights without mismatch
         is_timm_model = False
-        if hasattr(backbone, "_backbone"):
-            backbone = backbone._backbone
+        if hasattr(backbone, "timm_model"):
+            backbone = backbone.timm_model
             is_timm_model = True
         self.model = backbone
 

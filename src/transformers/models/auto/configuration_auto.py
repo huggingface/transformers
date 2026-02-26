@@ -445,7 +445,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("time_series_transformer", "TimeSeriesTransformerConfig"),
         ("timesfm", "TimesFmConfig"),
         ("timesformer", "TimesformerConfig"),
-        ("timm_backbone", "TimmBackboneConfig"),
+        ("timm_backbone", "TimmBackboneConfig"),  # for BC
         ("timm_wrapper", "TimmWrapperConfig"),
         ("trocr", "TrOCRConfig"),
         ("tvp", "TvpConfig"),

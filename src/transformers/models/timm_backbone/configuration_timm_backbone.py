@@ -14,15 +14,14 @@
 
 """Configuration for Backbone models"""
 
-from ...backbone_utils import BackboneConfigMixin
-from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
+from ..timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
+class TimmBackboneConfig(TimmWrapperConfig):
     r"""
     This is the configuration class to store the configuration for a timm backbone [`TimmBackbone`].
 
@@ -30,6 +29,8 @@ class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
+
+    Note that the config class is deprecated, use `TimmWrapperConfig` instead!
 
     Args:
         backbone (`str`, *optional*):
@@ -60,6 +61,12 @@ class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
     """
 
     model_type = "timm_backbone"
+    special_attribute_map = {
+        "backbone": "architecture",
+        "num_channels": ("model_args", "in_chans"),
+        "output_stride": ("model_args", "output_stride"),
+        "features_only": ("model_args", "features_only"),
+    }
 
     def __init__(
         self,
@@ -71,40 +78,38 @@ class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
         output_stride=None,
         **kwargs,
     ):
-        self.backbone = backbone
-        self.num_channels = num_channels
-        self.features_only = features_only
         self.out_indices = out_indices if out_indices is not None else [-1]
-        self.output_stride = output_stride
-        self.freeze_batch_norm_2d = freeze_batch_norm_2d
+        kwargs["architecture"] = backbone if backbone is not None else kwargs.get("architecture")
+        kwargs["do_pooling"] = False  # hardcode for backbone model
+        if kwargs.get("model_args") is None:
+            kwargs["model_args"] = {
+                "features_only": features_only,
+                "in_chans": num_channels,
+                "output_stride": output_stride,
+            }
+        logger.warning(
+            "TimmBackboneConfig is deprecate and will be removed in future versions. "
+            "Use a TimmWrapperConfig instead with TimmWrapperBackboneModel to extract features."
+        )
+        super().__init__(freeze_batch_norm_2d=freeze_batch_norm_2d, **kwargs)
 
-        super().__init__(**kwargs)
+    def __setattr__(self, key, value):
+        if (mapped_key := super().__getattribute__("special_attribute_map").get(key)) is not None:
+            if isinstance(mapped_key, (tuple, list)):
+                model_args = super().__getattribute__("__dict__").get(mapped_key[0])
+                model_args[mapped_key[1]] = value
+            else:
+                setattr(self, mapped_key[1], value)
+        else:
+            super().__setattr__(key, value)
 
-    @property
-    def out_indices(self):
-        return self._out_indices
-
-    @out_indices.setter
-    def out_indices(self, out_indices: tuple[int, ...] | list[int]):
-        """
-        Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
-        """
-        self._out_indices = list(out_indices) if out_indices is not None else out_indices
-        if getattr(self, "stage_names", None) is not None:
-            self.set_output_features_output_indices(out_features=None, out_indices=out_indices)
-
-    @property
-    def out_features(self):
-        return self._out_features
-
-    @out_features.setter
-    def out_features(self, out_features: list[str]):
-        """
-        Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
-        """
-        self._out_features = out_features
-        if getattr(self, "stage_names", None) is not None:
-            self.set_output_features_output_indices(out_features=out_features, out_indices=None)
+    def __getattribute__(self, key):
+        if (mapped_key := super().__getattribute__("special_attribute_map").get(key)) is not None:
+            if isinstance(mapped_key, (tuple, list)):
+                model_args = super().__getattribute__(mapped_key[0])
+                return model_args[mapped_key[1]]
+            return getattr(self, mapped_key[1])
+        return super().__getattribute__(key)
 
 
 __all__ = ["TimmBackboneConfig"]

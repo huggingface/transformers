@@ -42,7 +42,7 @@ class TimmBackboneModelTester:
         batch_size=3,
         image_size=32,
         num_channels=3,
-        is_training=True,
+        is_training=False,
     ):
         self.parent = parent
         self.out_indices = out_indices if out_indices is not None else [4]
@@ -91,7 +91,7 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         self.config_class = TimmBackboneConfig
         self.model_tester = TimmBackboneModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=self.config_class, has_text_modality=False, common_properties=["num_channels"]
+            self, config_class=self.config_class, has_text_modality=False, common_properties=["architecture"]
         )
 
     def test_config(self):

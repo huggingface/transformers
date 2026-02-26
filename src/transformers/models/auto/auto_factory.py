@@ -21,8 +21,6 @@ from collections import OrderedDict
 from collections.abc import Iterator
 from typing import Any, TypeVar
 
-from huggingface_hub import repo_exists
-
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import (
@@ -248,7 +246,37 @@ class _BaseAutoModelClass:
         return config
 
     @classmethod
+    def _load_timm_backbone_from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        requires_backends(cls, ["vision", "timm"])
+        from ...models.timm_wrapper import TimmWrapperConfig
+
+        if kwargs.get("output_loading_info", False):
+            raise ValueError("Cannot specify `output_loading_info=True` when loading from timm")
+
+        # Users can't pass `config` and `kwargs`, choose only one!
+        config = kwargs.pop("config", None)
+        if config is None:
+            config = TimmWrapperConfig(
+                architecture=pretrained_model_name_or_path,
+                do_pooling=False,
+                out_indices=kwargs.pop("out_indices", (-1,)),
+                model_args={
+                    "in_chans": kwargs.pop("num_channels", 3),
+                    "features_only": kwargs.pop("features_only", True),
+                },
+            )
+
+        # Always load a pretrained model when `from_pretrained` is called
+        kwargs.pop("use_pretrained_backbone", None)
+        return cls.from_config(config, pretrained=True, **kwargs)
+
+    @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike[str], *model_args, **kwargs):
+        # Early exit for `timm` models, they aren't hosted on the hub usually
+        use_timm_backbone = kwargs.pop("use_timm_backbone", None)
+        if use_timm_backbone:
+            return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.get("trust_remote_code")
         kwargs["_from_auto"] = True
@@ -397,45 +425,6 @@ class _BaseAutoModelClass:
                 "one of those so they match!"
             )
         cls._model_mapping.register(config_class, model_class, exist_ok=exist_ok)
-
-
-class _BaseAutoBackboneClass(_BaseAutoModelClass):
-    # Base class for auto backbone models.
-    _model_mapping = None
-
-    @classmethod
-    def _load_timm_backbone_from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        requires_backends(cls, ["vision", "timm"])
-        from ...models.timm_backbone import TimmBackboneConfig
-
-        config = kwargs.pop("config", TimmBackboneConfig())
-
-        if kwargs.get("out_features") is not None:
-            raise ValueError("Cannot specify `out_features` for timm backbones")
-
-        if kwargs.get("output_loading_info", False):
-            raise ValueError("Cannot specify `output_loading_info=True` when loading from timm")
-
-        num_channels = kwargs.pop("num_channels", config.num_channels)
-        features_only = kwargs.pop("features_only", config.features_only)
-        out_indices = kwargs.pop("out_indices", config.out_indices)
-        config = TimmBackboneConfig(
-            backbone=pretrained_model_name_or_path,
-            num_channels=num_channels,
-            features_only=features_only,
-            out_indices=out_indices,
-        )
-        # Always load a pretrained model when `from_pretrained` is called
-        kwargs.pop("use_pretrained_backbone", None)
-        return super().from_config(config, pretrained=True, **kwargs)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        kwargs.pop("use_timm_backbone", None)
-        if not repo_exists(pretrained_model_name_or_path):
-            return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 
 def insert_head_doc(docstring, head_doc: str = ""):
