@@ -464,6 +464,8 @@ def _write_html_report(
     path: str,
     all_mismatches: dict[str, set[str]],
     diff_groups: dict[str, list[str]],
+    models_checked: int = 0,
+    total_types: int = 0,
 ) -> None:
     import html
     from datetime import datetime, timezone
@@ -471,38 +473,76 @@ def _write_html_report(
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     total_models = sum(len(v) for v in all_mismatches.values())
 
-    # Build mismatches table rows
-    mismatch_rows = []
+    # Reverse maps for cross-linking
+    model_to_type = {mid: mtype for mtype, mids in all_mismatches.items() for mid in mids}
+    sorted_patterns = sorted(diff_groups.items(), key=lambda x: len(x[1]), reverse=True)
+    model_to_pattern: dict[str, int] = {}
+    for i, (_, mids) in enumerate(sorted_patterns, 1):
+        for mid in mids:
+            model_to_pattern[mid] = i
+
+    # --- Section 1: mismatches grouped by model type ---
+    def _hf_link(mid: str) -> str:
+        return f'<a href="https://huggingface.co/{html.escape(mid)}" target="_blank">{html.escape(mid)}</a>'
+
+    def _pattern_badge(mid: str) -> str:
+        pnum = model_to_pattern.get(mid)
+        if pnum is None:
+            return ""
+        return f'<a class="badge" href="#pattern-{pnum}">P#{pnum}</a>'
+
+    type_details_parts = []
     for model_type, model_ids in sorted(all_mismatches.items()):
-        for mid in sorted(model_ids):
-            mismatch_rows.append(
-                f"<tr><td>{html.escape(model_type)}</td>"
-                f'<td><a href="https://huggingface.co/{html.escape(mid)}" target="_blank">'
-                f"{html.escape(mid)}</a></td></tr>"
-            )
-
-    # Build diff pattern sections
-    pattern_sections = []
-    for i, (canonical, model_ids) in enumerate(diff_groups.items(), 1):
-        model_links = ", ".join(
-            f'<a href="https://huggingface.co/{html.escape(m)}" target="_blank">{html.escape(m)}</a>'
-            for m in model_ids
+        rows = "".join(
+            f"<tr><td>{_hf_link(mid)}</td><td>{_pattern_badge(mid)}</td></tr>"
+            for mid in sorted(model_ids)
         )
-        diff_html = "\n".join(_diff_line_to_html(l) for l in canonical.splitlines())
-        pattern_sections.append(f"""
-        <section class="pattern">
-          <h2>Pattern #{i} <span class="count">({len(model_ids)} model{"s" if len(model_ids) != 1 else ""})</span></h2>
-          <p class="affected"><strong>Affected:</strong> {model_links}</p>
-          <pre class="diff">{diff_html}</pre>
-        </section>""")
+        n = len(model_ids)
+        type_details_parts.append(
+            f'<details open>'
+            f'<summary><span class="mtype">{html.escape(model_type)}</span>'
+            f'<span class="mtype-count">·  {n} model{"s" if n != 1 else ""}</span></summary>'
+            f'<table><thead><tr><th>Model ID</th><th>Diff pattern</th></tr></thead>'
+            f'<tbody>{rows}</tbody></table>'
+            f'</details>'
+        )
 
-    patterns_html = "\n".join(pattern_sections) if pattern_sections else "<p>No diff patterns recorded.</p>"
-    mismatch_table = (
-        "<table><thead><tr><th>Model type</th><th>Model ID</th></tr></thead><tbody>"
-        + "\n".join(mismatch_rows)
-        + "</tbody></table>"
-        if mismatch_rows
-        else "<p>No mismatches found.</p>"
+    section1_html = "\n".join(type_details_parts) if type_details_parts else "<p>No mismatches found.</p>"
+
+    # --- Section 2: diff pattern cards with per-type sub-tables ---
+    pattern_sections = []
+    for i, (canonical, model_ids) in enumerate(sorted_patterns, 1):
+        # Group models by type
+        by_type: dict[str, list[str]] = {}
+        for mid in model_ids:
+            mtype = model_to_type.get(mid, "unknown")
+            by_type.setdefault(mtype, []).append(mid)
+
+        sub_rows = "".join(
+            f"<tr><td>{html.escape(mtype)}</td>"
+            f'<td>{"  ".join(_hf_link(m) for m in sorted(mids))}</td></tr>'
+            for mtype, mids in sorted(by_type.items())
+        )
+        sub_table = (
+            f'<table class="sub-table"><thead><tr><th>Model type</th><th>Models</th></tr></thead>'
+            f'<tbody>{sub_rows}</tbody></table>'
+        )
+
+        diff_html = "\n".join(_diff_line_to_html(l) for l in canonical.splitlines())
+        pattern_sections.append(
+            f'<section class="pattern" id="pattern-{i}">'
+            f'<h2>Pattern <span class="pnum">#{i}</span> '
+            f'<span class="count">({len(model_ids)} model{"s" if len(model_ids) != 1 else ""})</span></h2>'
+            f'<pre class="diff">{diff_html}</pre>'
+            f'<div class="affected-header">Affected models</div>'
+            f'{sub_table}'
+            f'</section>'
+        )
+
+    patterns_html = (
+        '<div class="pattern-grid">' + "\n".join(pattern_sections) + "</div>"
+        if pattern_sections
+        else "<p>No diff patterns recorded.</p>"
     )
 
     html_doc = f"""<!DOCTYPE html>
@@ -515,30 +555,70 @@ def _write_html_report(
     body {{ font-family: system-ui, sans-serif; margin: 0; padding: 2rem; background: #f8f9fa; color: #212529; }}
     h1 {{ font-size: 1.6rem; margin-bottom: 0.25rem; }}
     .meta {{ color: #6c757d; font-size: 0.875rem; margin-bottom: 2rem; }}
-    h2 {{ font-size: 1.2rem; margin: 0 0 0.5rem; }}
+    h2 {{ font-size: 1.2rem; margin: 0 0 0.75rem; }}
     .count {{ font-weight: normal; color: #6c757d; font-size: 0.9rem; }}
+    .pnum {{ color: #0d6efd; }}
+    /* summary bar */
+    .summary-bar {{ display: flex; gap: 1.5rem; margin-bottom: 2rem; flex-wrap: wrap; }}
+    .stat {{ background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.1);
+             padding: 1rem 1.5rem; min-width: 140px; }}
+    .stat .num {{ font-size: 2rem; font-weight: 700; color: #495057; line-height: 1; }}
+    .stat.bad .num {{ color: #dc3545; }}
+    .stat.good .num {{ color: #198754; }}
+    .stat .denom {{ font-size: 1rem; font-weight: 400; color: #adb5bd; }}
+    .stat .label {{ font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: .05em; margin-top: 0.25rem; }}
+    /* tables */
     table {{ border-collapse: collapse; width: 100%; background: #fff; border-radius: 6px; overflow: hidden;
-             box-shadow: 0 1px 3px rgba(0,0,0,.1); margin-bottom: 2rem; }}
-    th {{ background: #343a40; color: #fff; text-align: left; padding: 0.6rem 1rem; }}
-    td {{ padding: 0.5rem 1rem; border-bottom: 1px solid #dee2e6; }}
+             box-shadow: 0 1px 3px rgba(0,0,0,.1); margin-bottom: 0.5rem; }}
+    th {{ background: #343a40; color: #fff; text-align: left; padding: 0.5rem 1rem; font-size: 0.85rem; }}
+    td {{ padding: 0.45rem 1rem; border-bottom: 1px solid #dee2e6; font-size: 0.875rem; }}
     tr:last-child td {{ border-bottom: none; }}
     tr:hover td {{ background: #f1f3f5; }}
     a {{ color: #0d6efd; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
+    /* details / summary for model-type groups */
+    details {{ background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.1);
+               margin-bottom: 0.75rem; overflow: hidden; }}
+    details > summary {{
+      list-style: none; cursor: pointer; padding: 0.65rem 1rem;
+      background: #e9ecef; font-weight: 600; display: flex; align-items: center; gap: 0.75rem;
+      user-select: none;
+    }}
+    details > summary::-webkit-details-marker {{ display: none; }}
+    details > summary::before {{
+      content: "▶"; font-size: 0.7rem; color: #6c757d; transition: transform .15s;
+    }}
+    details[open] > summary::before {{ transform: rotate(90deg); }}
+    .mtype {{ font-family: monospace; font-size: 0.95rem; }}
+    .mtype-count {{ color: #6c757d; font-weight: normal; font-size: 0.85rem; }}
+    details table {{ border-radius: 0; box-shadow: none; margin: 0; }}
+    /* badge pills */
+    a.badge {{
+      display: inline-block; padding: 0.15em 0.55em; border-radius: 999px;
+      background: #0d6efd; color: #fff !important; font-size: 0.75rem; font-weight: 600;
+      text-decoration: none; white-space: nowrap;
+    }}
+    a.badge:hover {{ background: #0b5ed7; text-decoration: none; }}
+    /* pattern gallery grid */
+    .pattern-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+      gap: 1.25rem;
+      align-items: start;
+    }}
+    /* pattern cards */
     .pattern {{ background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.1);
-                padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }}
-    .affected {{ font-size: 0.9rem; margin: 0.25rem 0 0.75rem; color: #495057; }}
+                padding: 1.25rem 1.5rem; }}
     pre.diff {{ background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px;
-                overflow-x: auto; font-size: 0.82rem; line-height: 1.5; margin: 0;
+                overflow-x: auto; font-size: 0.82rem; line-height: 1.5; margin: 0 0 1rem;
                 white-space: pre; }}
     span.add  {{ color: #4ec9b0; }}
     span.del  {{ color: #f48771; }}
     span.hunk {{ color: #9cdcfe; }}
-    .summary-bar {{ display: flex; gap: 1.5rem; margin-bottom: 2rem; }}
-    .stat {{ background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.1);
-             padding: 1rem 1.5rem; min-width: 140px; }}
-    .stat .num {{ font-size: 2rem; font-weight: 700; color: {'#dc3545' if total_models else '#198754'}; }}
-    .stat .label {{ font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: .05em; }}
+    .affected-header {{ font-size: 0.8rem; font-weight: 600; text-transform: uppercase;
+                        letter-spacing: .06em; color: #6c757d; margin-bottom: 0.4rem; }}
+    table.sub-table th {{ background: #495057; }}
+    table.sub-table td:first-child {{ font-family: monospace; font-size: 0.85rem; white-space: nowrap; }}
     hr {{ border: none; border-top: 1px solid #dee2e6; margin: 2rem 0; }}
   </style>
 </head>
@@ -547,16 +627,29 @@ def _write_html_report(
   <p class="meta">Generated {now}</p>
 
   <div class="summary-bar">
-    <div class="stat"><div class="num">{total_models}</div><div class="label">Mismatched models</div></div>
-    <div class="stat"><div class="num">{len(diff_groups)}</div><div class="label">Unique diff patterns</div></div>
-    <div class="stat"><div class="num">{len(all_mismatches)}</div><div class="label">Model types affected</div></div>
+    <div class="stat">
+      <div class="num">{models_checked}</div>
+      <div class="label">Models checked</div>
+    </div>
+    <div class="stat {'bad' if total_models else 'good'}">
+      <div class="num">{total_models}<span class="denom"> / {models_checked}</span></div>
+      <div class="label">Mismatched models</div>
+    </div>
+    <div class="stat {'bad' if diff_groups else 'good'}">
+      <div class="num">{len(diff_groups)}</div>
+      <div class="label">Unique diff patterns</div>
+    </div>
+    <div class="stat {'bad' if all_mismatches else 'good'}">
+      <div class="num">{len(all_mismatches)}<span class="denom">{f" / {total_types}" if total_types else ""}</span></div>
+      <div class="label">Model types affected</div>
+    </div>
   </div>
 
-  <h2 style="margin-bottom:0.75rem">All mismatches</h2>
-  {mismatch_table}
+  <h2 style="margin-bottom:0.75rem">Mismatches by model type</h2>
+  {section1_html}
 
   <hr>
-  <h2 style="margin-bottom:1rem">Unique diff patterns</h2>
+  <h2 style="margin-bottom:1rem">Diff patterns</h2>
   {patterns_html}
 </body>
 </html>
@@ -655,6 +748,7 @@ def main():
     all_mismatches: dict[str, set[str]] = {}
     diff_groups: dict[str, list[str]] = {}
     diff_groups_lock = threading.Lock()
+    models_checked = 0
     spm_registry: dict = {}
     spm_lock = threading.Lock()
 
@@ -730,6 +824,8 @@ def main():
                         mismatch = None
                         canonical = None
 
+                    models_checked += 1
+
                     for line in output_lines:
                         console.print(line)
 
@@ -755,14 +851,21 @@ def main():
 
         if diff_groups:
             console.print(Rule("[bold]Unique diff patterns[/]"))
-            for i, (canonical, model_ids) in enumerate(diff_groups.items(), 1):
+            for i, (canonical, model_ids) in enumerate(sorted(diff_groups.items(), key=lambda x: len(x[1]), reverse=True), 1):
                 console.print(f"\n[bold yellow]Pattern #{i}[/] — {len(model_ids)} model(s): {', '.join(model_ids)}")
                 for line in _format_diff(canonical.splitlines()):
                     console.print(line)
 
         if args.report:
-            _write_html_report(args.report, all_mismatches, diff_groups)
-            console.print(f"\n[bold green]Report written →[/] [cyan]{args.report}[/]")
+            try:
+                _write_html_report(args.report, all_mismatches, diff_groups, models_checked, len(model_types))
+                total_m = sum(len(v) for v in all_mismatches.values())
+                console.print(
+                    f"\n[bold green]Report written →[/] [cyan]{args.report}[/] "
+                    f"({total_m} mismatch(es), {len(diff_groups)} unique pattern(s))"
+                )
+            except Exception as exc:
+                console.print(f"\n[bold red]Failed to write report:[/] {exc}")
 
 
 if __name__ == "__main__":
