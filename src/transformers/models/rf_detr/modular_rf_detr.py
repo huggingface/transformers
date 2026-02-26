@@ -852,11 +852,11 @@ class RfDetrModel(LwDetrModel):
             topk_coords_logits_undetach = torch.gather(
                 enc_outputs_coord,
                 1,
-                topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
+                topk_proposals.unsqueeze(-1).expand(-1, -1, 4),
             )
             topk_coords_logits = topk_coords_logits_undetach.detach()
             object_query_undetach = torch.gather(
-                object_query, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, self.config.d_model)
+                object_query, 1, topk_proposals.unsqueeze(-1).expand(-1, -1, self.config.d_model)
             )
 
             enc_outputs_coord_logits[:, group_id * topk : (group_id + 1) * topk] = topk_coords_logits
