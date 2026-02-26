@@ -144,7 +144,7 @@ class ModernBertDecoderIntegrationTest(unittest.TestCase):
         inputs = tokenizer("Paris is the capital of", return_tensors="pt")
         with torch.no_grad():
             output = model(**inputs)[0]
-        expected_shape = torch.Size((1, 6, model.config.vocab_size))
+        expected_shape = torch.Size((1, 7, model.config.vocab_size))
         self.assertEqual(output.shape, expected_shape)
 
         # compare the actual values for a slice.
@@ -160,7 +160,7 @@ class ModernBertDecoderIntegrationTest(unittest.TestCase):
         inputs = tokenizer("Paris is the capital of", return_tensors="pt")
         with torch.no_grad():
             output = model(**inputs)[0]
-        expected_shape = torch.Size((1, 6, model.config.hidden_size))
+        expected_shape = torch.Size((1, 7, model.config.hidden_size))
         self.assertEqual(output.shape, expected_shape)
 
         # compare the actual values for a slice.

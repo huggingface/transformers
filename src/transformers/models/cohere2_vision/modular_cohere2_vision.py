@@ -35,7 +35,6 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
 from .configuration_cohere2_vision import Cohere2VisionConfig
 
 
@@ -109,8 +108,6 @@ class Cohere2VisionModel(AyaVisionModel):
 
         return image_outputs
 
-    @check_model_inputs
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -165,8 +162,6 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
-    @check_model_inputs
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

@@ -541,7 +541,7 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="input_embeds are tested in individual model tests")
+    @unittest.skip(reason="inputs_embeds are tested in individual model tests")
     def test_inputs_embeds(self):
         pass
 

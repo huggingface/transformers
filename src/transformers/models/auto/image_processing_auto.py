@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...image_processing_utils import ImageProcessingMixin
-from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...utils import (
     CONFIG_NAME,
     IMAGE_PROCESSOR_NAME,
@@ -178,6 +177,8 @@ else:
             ("qwen2_5_omni", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("qwen2_5_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("qwen2_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
+            ("qwen3_5", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
+            ("qwen3_5_moe", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("qwen3_omni_moe", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("qwen3_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("regnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
@@ -243,6 +244,8 @@ IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR
 
 def get_image_processor_class_from_name(class_name: str):
     if class_name == "BaseImageProcessorFast":
+        from ...image_processing_utils_fast import BaseImageProcessorFast
+
         return BaseImageProcessorFast
 
     for module_name, extractors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
@@ -653,6 +656,8 @@ class AutoImageProcessor:
         """
         if slow_image_processor_class is None and fast_image_processor_class is None:
             raise ValueError("You need to specify either slow_image_processor_class or fast_image_processor_class")
+        from ...image_processing_utils_fast import BaseImageProcessorFast
+
         if slow_image_processor_class is not None and issubclass(slow_image_processor_class, BaseImageProcessorFast):
             raise ValueError("You passed a fast image processor in as the `slow_image_processor_class`.")
         if fast_image_processor_class is not None and not issubclass(

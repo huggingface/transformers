@@ -6,9 +6,10 @@
   - local: quicktour
     title: Quickstart
   title: Get started
-- isExpanded: false
+- isExpanded: true
   sections:
-  - sections:
+  - isExpanded: false
+    sections:
     - local: weightconverter
       title: Dynamic weight loading
     - local: models
@@ -28,9 +29,14 @@
     - local: auto_docstring
       title: Documenting a model
     title: Models
-  - sections:
+  - isExpanded: false
+    sections:
     - local: fast_tokenizers
       title: Tokenizers
+    - local: custom_tokenizers
+      title: Customizing tokenizers
+    - local: tokenizer_summary
+      title: Tokenization algorithms
     - local: image_processors
       title: Image processors
     - local: video_processors
@@ -41,15 +47,12 @@
       title: Feature extractors
     - local: processors
       title: Processors
-    - local: tokenizer_summary
-      title: Summary of the tokenizers
-    - local: pad_truncation
-      title: Padding and truncation
     title: Preprocessors
   title: Base classes
-- isExpanded: false
+- isExpanded: true
   sections:
-  - sections:
+  - isExpanded: false
+    sections:
     - local: pipeline_tutorial
       title: Pipeline
     - local: pipeline_gradio
@@ -59,7 +62,8 @@
     - local: add_new_pipeline
       title: Adding a new pipeline
     title: Pipeline API
-  - sections:
+  - isExpanded: false
+    sections:
     - local: llm_tutorial
       title: Text generation
     - local: generation_strategies
@@ -71,7 +75,8 @@
     - local: perplexity
       title: Perplexity of fixed-length models
     title: Generate API
-  - sections:
+  - isExpanded: false
+    sections:
     - local: optimization_overview
       title: Overview
     - local: attention_interface
@@ -101,7 +106,8 @@
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
     title: Optimization
-  - sections:
+  - isExpanded: false
+    sections:
     - local: conversations
       title: Chat basics
     - local: chat_templating
@@ -115,7 +121,8 @@
     - local: chat_templating_writing
       title: Writing a chat template
     title: Chat with models
-  - sections:
+  - isExpanded: false
+    sections:
     - local: serve-cli/serving
       title: Serve CLI
     - local: serve-cli/serving_optims
@@ -130,19 +137,30 @@
       title: tiny-agents
     title: Serving
   title: Inference
-- isExpanded: false
+- isExpanded: true
   sections:
-  - sections:
+  - isExpanded: false
+    sections:
     - local: trainer
-      title: Trainer
+      title: Trainer overview
     - local: training
       title: Fine-tuning
+    title: Get started
+  - isExpanded: false
+    sections:
+    - local: trainer_customize
+      title: Subclassing Trainer methods
+    - local: trainer_callbacks
+      title: Callbacks
+    - local: data_collators
+      title: Data collators
     - local: optimizers
       title: Optimizers
     - local: hpo_train
       title: Hyperparameter search
-    title: Trainer API
-  - sections:
+    title: Customization
+  - isExpanded: false
+    sections:
     - local: accelerator_selection
       title: Accelerator selection
     - local: accelerate
@@ -158,7 +176,8 @@
     - local: perf_train_gpu_many
       title: Parallelism methods
     title: Distributed training
-  - sections:
+  - isExpanded: false
+    sections:
     - local: perf_train_gpu_one
       title: GPU
     - local: perf_train_cpu
@@ -169,11 +188,11 @@
       title: Intel Gaudi
     - local: perf_hardware
       title: Build your own machine
+    - local: model_memory_anatomy
+      title: Model training anatomy
     title: Hardware
   - local: peft
     title: PEFT
-  - local: model_memory_anatomy
-    title: Model training anatomy
   title: Training
 - isExpanded: false
   sections:
@@ -201,6 +220,8 @@
     title: FBGEMM
   - local: quantization/finegrained_fp8
     title: Fine-grained FP8
+  - local: quantization/fouroversix
+    title: Four Over Six
   - local: quantization/fp_quant
     title: FP-Quant
   - local: gguf
@@ -225,6 +246,8 @@
     title: SpQR
   - local: quantization/vptq
     title: VPTQ
+  - local: quantization/sinq
+    title: SINQ
   - local: quantization/contribute
     title: Contribute
   title: Quantization
@@ -291,6 +314,8 @@
         title: Audio classification
       - local: tasks/asr
         title: Automatic speech recognition
+      - local: tasks/audio_text_to_text
+        title: Audio-text-to-text
       - local: tasks/text-to-speech
         title: Text to speech
       title: Audio
@@ -309,8 +334,6 @@
         title: Zero-shot image classification
       - local: tasks/monocular_depth_estimation
         title: Depth estimation
-      - local: tasks/image_to_image
-        title: Image-to-Image
       - local: tasks/image_feature_extraction
         title: Image Feature Extraction
       - local: tasks/mask_generation
@@ -555,6 +578,8 @@
         title: GLM-4.7-Flash
       - local: model_doc/glm_image
         title: GLM-Image
+      - local: model_doc/glm_moe_dsa
+        title: GlmMoeDsa
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -655,6 +680,8 @@
         title: ModernBert
       - local: model_doc/modernbert-decoder
         title: ModernBERTDecoder
+      - local: model_doc/modernvbert
+        title: ModernVBert
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -711,6 +738,10 @@
         title: Qwen2MoE
       - local: model_doc/qwen3
         title: Qwen3
+      - local: model_doc/qwen3_5
+        title: Qwen3.5
+      - local: model_doc/qwen3_5_moe
+        title: Qwen3.5 Moe
       - local: model_doc/qwen3_moe
         title: Qwen3MoE
       - local: model_doc/qwen3_next
@@ -957,6 +988,10 @@
         title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
+      - local: model_doc/higgs_audio_v2
+        title: Higgs Audio V2
+      - local: model_doc/higgs_audio_v2_tokenizer
+        title: Higgs Audio V2 Tokenizer
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/kyutai_speech_to_text
@@ -1073,6 +1108,8 @@
         title: Code World Model (CWM)
       - local: model_doc/cohere2_vision
         title: Cohere2Vision
+      - local: model_doc/colmodernvbert
+        title: ColModernVBert
       - local: model_doc/colpali
         title: ColPali
       - local: model_doc/colqwen2
@@ -1267,6 +1304,8 @@
         title: VisualBERT
       - local: model_doc/voxtral
         title: Voxtral
+      - local: model_doc/voxtral_realtime
+        title: VoxtralRealtime
       - local: model_doc/xclip
         title: X-CLIP
       title: Multimodal models

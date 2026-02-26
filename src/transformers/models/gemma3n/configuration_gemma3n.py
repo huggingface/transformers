@@ -642,8 +642,6 @@ class Gemma3nConfig(PreTrainedConfig):
         tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if isinstance(text_config, dict):
             text_config = Gemma3nTextConfig(**text_config)
         elif text_config is None:
@@ -676,6 +674,7 @@ class Gemma3nConfig(PreTrainedConfig):
         self.audio_token_id = audio_token_id
         self.initializer_range = initializer_range
         self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Gemma3nAudioConfig", "Gemma3nConfig", "Gemma3nTextConfig", "Gemma3nVisionConfig"]
