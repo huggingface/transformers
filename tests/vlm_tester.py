@@ -75,7 +75,6 @@ class VLMModelTester:
 
         # Standard defaults
         kwargs.setdefault("batch_size", 3)
-        kwargs.setdefault("seq_length", 7)
         kwargs.setdefault("is_training", True)
         kwargs.setdefault("use_input_mask", True)
         kwargs.setdefault("use_token_type_ids", False)
@@ -125,8 +124,10 @@ class VLMModelTester:
         kwargs.setdefault("vision_feature_layer", -1)
         kwargs.setdefault("tie_word_embeddings", False)
 
-        # Computed default (overridable via kwargs.setdefault in derived classes)
+        # Computed defaults (can still be overridden in derived classes)
         kwargs.setdefault("head_dim", kwargs["hidden_size"] // kwargs["num_attention_heads"])
+        kwargs.setdefault("num_image_tokens", (kwargs["image_size"] // kwargs["patch_size"]) ** 2)
+        kwargs.setdefault("seq_length", 7 + kwargs["num_image_tokens"])
 
         # Set all kwargs as instance attributes
         for key, value in kwargs.items():
@@ -145,14 +146,7 @@ class VLMModelTester:
                 )
 
     # Because VLMs have some different standards in how they handle image tokens, we need a few methods
-    # and properties that can be overridden if required:
-    @property
-    def num_image_tokens(self):
-        return self._base_num_image_tokens
-
-    @property
-    def seq_length(self):
-        return self._base_seq_length + self.num_image_tokens
+    # that can be overridden if required:
 
     def create_pixel_values(self):
         # Override to 5D for patch-based models

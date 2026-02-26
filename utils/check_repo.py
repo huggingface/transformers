@@ -682,6 +682,9 @@ def find_tested_models(test_file: str) -> set[str]:
     Returns:
         `Set[str]`: The set of models tested in that file.
     """
+    # TODO Matt: Some of the regexes here are ugly / hacky, and we can probably parse the content better.
+    #            Also we should be clear about exactly what rules we're enforcing and which classes
+    #            are actually mandatory.
     with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
 

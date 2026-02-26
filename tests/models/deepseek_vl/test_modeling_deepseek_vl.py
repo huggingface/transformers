@@ -41,10 +41,6 @@ class DeepseekVLVisionText2TextModelTester(VLMModelTester):
     vision_config_class = SiglipVisionConfig
     conditional_generation_class = DeepseekVLForConditionalGeneration
 
-    @property
-    def num_image_tokens(self):
-        return (self.image_size // self.patch_size) ** 2
-
     def get_vision_config(self):
         config = super().get_vision_config()
         config.vision_use_head = False

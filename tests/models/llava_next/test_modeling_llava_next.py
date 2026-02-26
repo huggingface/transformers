@@ -62,24 +62,15 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("num_patches_per_image", 2)
-        super().__init__(parent, **kwargs)
-
-    # Template method overrides
-
-    @property
-    def num_image_tokens(self):
-        """
-        Calculate num_image_tokens based on LlavaNext's pack_image_features logic:
-        - base_image_feature: (image_size/patch_size)^2 tokens
-        - grid patches: height * (width + 1) tokens (includes newline token)
-        """
-        # Use vocab_size - 1 for image_token_index to avoid conflicts with pad_token_id (0)
-        self.image_token_index = self.vocab_size - 1
-
-        tokens_per_patch = (self.image_size // self.patch_size) ** 2
-        height = width = self.image_size // self.patch_size
+        # Compute num_image_tokens from LlavaNext's pack_image_features logic
+        image_size = kwargs.get("image_size", 8)
+        patch_size = kwargs.get("patch_size", 4)
+        tokens_per_patch = (image_size // patch_size) ** 2
+        height = width = image_size // patch_size
         grid_tokens = height * (width + 1)
-        return tokens_per_patch + grid_tokens
+        kwargs.setdefault("num_image_tokens", tokens_per_patch + grid_tokens)
+        kwargs.setdefault("image_token_index", kwargs.get("vocab_size", 99) - 1)
+        super().__init__(parent, **kwargs)
 
     def create_pixel_values(self):
         """LlavaNext expects 5D pixel_values: (batch_size, num_patches, channels, height, width)"""

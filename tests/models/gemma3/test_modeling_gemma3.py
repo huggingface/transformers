@@ -267,18 +267,14 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("mm_tokens_per_image", 2)
+        tokens_per_side = int(kwargs["mm_tokens_per_image"] ** 0.5)
+        kwargs.setdefault("num_image_tokens", tokens_per_side * tokens_per_side)
         kwargs.setdefault("image_size", 20)
         kwargs.setdefault("patch_size", 5)
         kwargs.setdefault("num_key_value_heads", 1)
         kwargs.setdefault("image_token_index", 4)
         kwargs.setdefault("seq_length", 24)  # Need seq_length >= 10 for bidirectional attention test
         super().__init__(parent, **kwargs)
-
-    @property
-    def num_image_tokens(self):
-        # Gemma3 pools image tokens: int(sqrt(mm_tokens_per_image))^2
-        tokens_per_side = int(self.mm_tokens_per_image**0.5)
-        return tokens_per_side * tokens_per_side
 
     def create_attention_mask(self, input_ids):
         # Gemma3 uses padding mask for bidirectional attention on image tokens
