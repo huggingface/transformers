@@ -55,7 +55,7 @@ def _get_metal_kernel():
         try:
             from .hub_kernels import get_kernel
 
-            _metal_kernel = get_kernel("medmekk/quantization-mlx")
+            _metal_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels")
         except Exception as e:
             raise ImportError(
                 f"Failed to load the quantization-mlx kernel from the Hub: {e}. "

@@ -1915,21 +1915,10 @@ class MetalConfig(QuantizationConfigMixin):
     """
     Configuration class for Metal affine quantization targeting Apple Silicon (MPS) devices.
 
-    This quantization method uses the ``quantization-mlx`` Metal kernels from the Hugging Face Hub
+    This quantization method uses the ``mlx-quantization-metal-kernels`` Metal kernels from the Hugging Face Hub
     to perform affine quantization (scales + qbiases) with configurable bit-width and group size.
     The quantized weights are packed into ``uint32`` tensors and the forward pass uses fused
     dequantization + matmul Metal kernels.
-
-    Args:
-        bits (`int`, *optional*, defaults to `4`):
-            Number of bits per weight element. Supported values are 2, 4, and 8.
-        group_size (`int`, *optional*, defaults to `64`):
-            Number of elements sharing the same scale/bias pair.
-        modules_to_not_convert (`list[str]`, *optional*, defaults to `None`):
-            A list of module names that should not be quantized (e.g. ``["lm_head"]``).
-        dequantize (`bool`, *optional*, defaults to `False`):
-            If ``True``, the model weights are dequantized back to the original dtype on load
-            instead of using the quantized Metal kernels.
     """
 
     def __init__(
