@@ -22,6 +22,7 @@
 import math
 from collections.abc import Callable
 from math import pi
+from typing import Optional
 
 import torch
 from torch import Tensor, broadcast_tensors, nn
@@ -34,6 +35,7 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -45,43 +47,55 @@ logger = logging.get_logger(__name__)
 
 
 class MusicFlamingoRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: MusicFlamingoConfig, device=None):
+    def __init__(self, config: MusicFlamingoEncoderConfig, device=None):
         super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        rope_parameters = getattr(config, "rope_parameters", None) or {}
-        self.dim = rope_parameters.get("dim", getattr(config, "rotary_dim", 256))
-        self.max_time = rope_parameters.get("max_time", getattr(config, "rotary_max_time", 1200.0))
 
-        inv_freq = self.compute_default_rote_parameters(config, device=device)
-        self.inv_freq = nn.Parameter(inv_freq, requires_grad=False)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        cached_freqs = self._build_cached_freqs(inv_freq, device=device)
-        self.register_buffer("cached_freqs", cached_freqs, persistent=False)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        position_angles = self._compute_position_angles(self.inv_freq, device=device)
+        self.register_buffer("position_angles", position_angles, persistent=False)
 
     @staticmethod
-    def compute_default_rote_parameters(config: MusicFlamingoConfig | None = None, device=None):
-        rope_parameters = getattr(config, "rope_parameters", None) or {}
-        dim = rope_parameters.get("dim", getattr(config, "rotary_dim", 256))
-        max_time = rope_parameters.get("max_time", getattr(config, "rotary_max_time", 1200.0))
-        theta = max_time / (2 * pi) if max_time is not None else 50000
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
-        if device is not None:
-            inv_freq = inv_freq.to(device=device)
-        return inv_freq
+    def compute_default_rope_parameters(
+        config: MusicFlamingoConfig | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
-    def _build_cached_freqs(self, inv_freq, device=None, dtype=None):
-        if self.max_time is None:
-            return None
+        attention_factor = 1.0  # Unused in this type of RoPE
 
-        positions = torch.arange(
-            int(self.max_time), device=device, dtype=dtype if dtype is not None else inv_freq.dtype
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
-        positions = positions / self.max_time * (2 * pi)
-        cached_freqs = positions.unsqueeze(-1) * inv_freq
-        return torch.repeat_interleave(cached_freqs, 2, dim=-1)
+        return inv_freq, attention_factor
 
     @autocast("cuda", enabled=False)
     def forward(self, t: Tensor | tuple[int, ...], seq_len=None, offset=0):
@@ -102,19 +116,35 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
             all_freqs = broadcast_tensors(*all_freqs)
             return torch.cat(all_freqs, dim=-1)
 
-        if seq_len is not None and self.cached_freqs is not None and (offset + seq_len) <= self.cached_freqs.shape[0]:
-            return self.cached_freqs[offset : (offset + seq_len)].detach()
+        if (
+            seq_len is not None
+            and self.position_angles is not None
+            and (offset + seq_len) <= self.position_angles.shape[0]
+        ):
+            return self.position_angles[offset : (offset + seq_len)].detach()
 
         inv_freq = self.inv_freq
 
         # Scale time to keep t * freq <= 2pi
-        if self.max_time is not None:
-            t = t / self.max_time * (2 * pi)
+        if self.max_seq_len_cached is not None:
+            t = t / self.max_seq_len_cached * (2 * pi)
 
         freqs = t.type(inv_freq.dtype).unsqueeze(-1) * inv_freq
         freqs = torch.repeat_interleave(freqs, 2, dim=-1)
 
         return freqs
+
+    def _compute_position_angles(self, inv_freq, device=None, dtype=None):
+        if self.max_seq_len_cached is None:
+            return None
+
+        positions = torch.arange(
+            int(self.max_seq_len_cached), device=device, dtype=dtype if dtype is not None else inv_freq.dtype
+        )
+        positions = positions / self.max_seq_len_cached * (2 * pi)
+        position_angles = positions.unsqueeze(-1) * inv_freq
+        position_angles = torch.repeat_interleave(position_angles, 2, dim=-1)
+        return position_angles.to(dtype=inv_freq.dtype)
 
 
 @auto_docstring
@@ -386,7 +416,7 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
     input_modalities = "audio"
     _no_split_modules = ["MusicFlamingoEncoderLayer"]
 
-    def __init__(self, config: MusicFlamingoConfig):
+    def __init__(self, config: MusicFlamingoEncoderConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
@@ -419,9 +449,7 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
         super()._init_weights(module)
 
         if isinstance(module, MusicFlamingoRotaryEmbedding):
-            inv_freq = module.compute_default_rote_parameters(module.config)
-            module.inv_freq.data = inv_freq
-            module.cached_freqs = module._build_cached_freqs(
+            module.position_angles = module._compute_position_angles(
                 module.inv_freq, device=module.inv_freq.device, dtype=module.inv_freq.dtype
             )
 

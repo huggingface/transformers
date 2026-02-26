@@ -19,6 +19,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from math import pi
+
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -62,9 +64,16 @@ class MusicFlamingoEncoderConfig(PretrainedConfig):
             Scale embeddings by dividing by sqrt(hidden_size).
         max_source_positions (`int`, *optional*, defaults to 1500):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+        head_dim (`int`, *optional*, defaults to 256):
+            Rotary embedding dimension used per axis in [`MusicFlamingoRotaryEmbedding`]. Since the rotary embedding is
+            applied on two axes (batch and time), the rotated hidden size is `2 * head_dim`, which must be less than
+            or equal to `hidden_size`.
+        max_position_embeddings (`int`, *optional*, defaults to 1200):
+            Maximum cached positions used by the MusicFlamingo time rotary embedding. This should match the processor
+            `max_audio_len`.
         rope_parameters (`dict`, *optional*):
-            Rotary embedding parameters for [`MusicFlamingoRotaryEmbedding`]. Supported keys are `"dim"` (defaults to
-            `256`) and `"max_time"` (defaults to `1200.0` and should match the processor `max_audio_len`).
+            RoPE parameters for [`MusicFlamingoRotaryEmbedding`]. Supports the standard keys `"rope_type"` (defaults to
+            `"default"`) and `"rope_theta"`. By default, `"rope_theta"` is derived from `max_position_embeddings / (2 * pi)`.
 
     Example:
 
@@ -106,6 +115,8 @@ class MusicFlamingoEncoderConfig(PretrainedConfig):
         initializer_range=0.02,
         scale_embedding=False,
         max_source_positions=1500,
+        head_dim=256,
+        max_position_embeddings=1200,
         rope_parameters=None,
         **kwargs,
     ):
@@ -129,13 +140,26 @@ class MusicFlamingoEncoderConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding
         self.max_source_positions = max_source_positions
 
-        rope_parameters = {} if rope_parameters is None else dict(rope_parameters)
+        # Legacy names used before aligning with RoPE conventions.
         if legacy_rotary_dim is not None:
-            rope_parameters.setdefault("dim", legacy_rotary_dim)
+            head_dim = legacy_rotary_dim
         if legacy_rotary_max_time is not None:
-            rope_parameters.setdefault("max_time", legacy_rotary_max_time)
-        rope_parameters.setdefault("dim", 256)
-        rope_parameters.setdefault("max_time", 1200.0)
+            max_position_embeddings = legacy_rotary_max_time
+
+        rope_parameters = {} if rope_parameters is None else dict(rope_parameters)
+        if "dim" in rope_parameters:
+            head_dim = rope_parameters.pop("dim")
+        if "max_time" in rope_parameters:
+            max_position_embeddings = rope_parameters.pop("max_time")
+
+        self.head_dim = head_dim
+        self.max_position_embeddings = max_position_embeddings
+
+        rope_parameters.setdefault("rope_type", "default")
+        rope_parameters.setdefault(
+            "rope_theta",
+            self.max_position_embeddings / (2 * pi) if self.max_position_embeddings is not None else 50000,
+        )
         self.rope_parameters = rope_parameters
 
 
@@ -211,11 +235,16 @@ class MusicFlamingoConfig(PretrainedConfig):
             }
 
         if isinstance(audio_config, dict) and (legacy_rotary_dim is not None or legacy_rotary_max_time is not None):
-            rope_parameters = dict(audio_config.get("rope_parameters") or {})
             if legacy_rotary_dim is not None:
-                rope_parameters.setdefault("dim", legacy_rotary_dim)
+                audio_config.setdefault("head_dim", legacy_rotary_dim)
             if legacy_rotary_max_time is not None:
-                rope_parameters.setdefault("max_time", legacy_rotary_max_time)
+                audio_config.setdefault("max_position_embeddings", legacy_rotary_max_time)
+
+            rope_parameters = dict(audio_config.get("rope_parameters") or {})
+            max_position_embeddings = audio_config.get("max_position_embeddings", legacy_rotary_max_time)
+            if max_position_embeddings is not None:
+                rope_parameters.setdefault("rope_theta", max_position_embeddings / (2 * pi))
+            rope_parameters.setdefault("rope_type", "default")
             audio_config["rope_parameters"] = rope_parameters
         self.audio_token_id = audio_token_id
 

@@ -197,11 +197,13 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
         "multi_modal_projector.layers.0.bias": "multi_modal_projector.linear_1.bias",
         "multi_modal_projector.layers.2.weight": "multi_modal_projector.linear_2.weight",
         "multi_modal_projector.layers.2.bias": "multi_modal_projector.linear_2.bias",
-        "audio_tower.sound_tower.pos_emb.freqs": "audio_tower.pos_emb.inv_freq",
     }
     for old_key, new_key in projector_key_mapping.items():
         if old_key in state:
             state[new_key] = state.pop(old_key)
+
+    # Llama-style rotary caches `inv_freq` as a non-persistent buffer, so we do not load/save it in the checkpoint.
+    state.pop("audio_tower.sound_tower.pos_emb.freqs", None)
 
     # Load weights into the instantiated model so we can push via `push_to_hub` later.
     load_res = model.load_state_dict(state, strict=True)

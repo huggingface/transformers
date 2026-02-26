@@ -38,6 +38,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor, AudioFlamingo3ProcessorKwargs
 from ..auto import AutoConfig
+from ..llama.modeling_llama import LlamaRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -82,9 +83,16 @@ class MusicFlamingoEncoderConfig(AudioFlamingo3EncoderConfig):
             Scale embeddings by dividing by sqrt(hidden_size).
         max_source_positions (`int`, *optional*, defaults to 1500):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+        head_dim (`int`, *optional*, defaults to 256):
+            Rotary embedding dimension used per axis in [`MusicFlamingoRotaryEmbedding`]. Since the rotary embedding is
+            applied on two axes (batch and time), the rotated hidden size is `2 * head_dim`, which must be less than
+            or equal to `hidden_size`.
+        max_position_embeddings (`int`, *optional*, defaults to 1200):
+            Maximum cached positions used by the MusicFlamingo time rotary embedding. This should match the processor
+            `max_audio_len`.
         rope_parameters (`dict`, *optional*):
-            Rotary embedding parameters for [`MusicFlamingoRotaryEmbedding`]. Supported keys are `"dim"` (defaults to
-            `256`) and `"max_time"` (defaults to `1200.0` and should match the processor `max_audio_len`).
+            RoPE parameters for [`MusicFlamingoRotaryEmbedding`]. Supports the standard keys `"rope_type"` (defaults to
+            `"default"`) and `"rope_theta"`. By default, `"rope_theta"` is derived from `max_position_embeddings / (2 * pi)`.
 
     Example:
 
@@ -118,6 +126,8 @@ class MusicFlamingoEncoderConfig(AudioFlamingo3EncoderConfig):
         initializer_range=0.02,
         scale_embedding=False,
         max_source_positions=1500,
+        head_dim=256,
+        max_position_embeddings=1200,
         rope_parameters=None,
         **kwargs,
     ):
@@ -142,13 +152,26 @@ class MusicFlamingoEncoderConfig(AudioFlamingo3EncoderConfig):
             **kwargs,
         )
 
-        rope_parameters = {} if rope_parameters is None else dict(rope_parameters)
+        # Legacy names used before aligning with RoPE conventions.
         if legacy_rotary_dim is not None:
-            rope_parameters.setdefault("dim", legacy_rotary_dim)
+            head_dim = legacy_rotary_dim
         if legacy_rotary_max_time is not None:
-            rope_parameters.setdefault("max_time", legacy_rotary_max_time)
-        rope_parameters.setdefault("dim", 256)
-        rope_parameters.setdefault("max_time", 1200.0)
+            max_position_embeddings = legacy_rotary_max_time
+
+        rope_parameters = {} if rope_parameters is None else dict(rope_parameters)
+        if "dim" in rope_parameters:
+            head_dim = rope_parameters.pop("dim")
+        if "max_time" in rope_parameters:
+            max_position_embeddings = rope_parameters.pop("max_time")
+
+        self.head_dim = head_dim
+        self.max_position_embeddings = max_position_embeddings
+
+        rope_parameters.setdefault("rope_type", "default")
+        rope_parameters.setdefault(
+            "rope_theta",
+            self.max_position_embeddings / (2 * pi) if self.max_position_embeddings is not None else 50000,
+        )
         self.rope_parameters = rope_parameters
 
 
@@ -199,6 +222,7 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
     ```"""
 
     model_type = "musicflamingo"
+
     def __init__(
         self,
         audio_config=None,
@@ -222,11 +246,16 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
             }
 
         if isinstance(audio_config, dict) and (legacy_rotary_dim is not None or legacy_rotary_max_time is not None):
-            rope_parameters = dict(audio_config.get("rope_parameters") or {})
             if legacy_rotary_dim is not None:
-                rope_parameters.setdefault("dim", legacy_rotary_dim)
+                audio_config.setdefault("head_dim", legacy_rotary_dim)
             if legacy_rotary_max_time is not None:
-                rope_parameters.setdefault("max_time", legacy_rotary_max_time)
+                audio_config.setdefault("max_position_embeddings", legacy_rotary_max_time)
+
+            rope_parameters = dict(audio_config.get("rope_parameters") or {})
+            max_position_embeddings = audio_config.get("max_position_embeddings", legacy_rotary_max_time)
+            if max_position_embeddings is not None:
+                rope_parameters.setdefault("rope_theta", max_position_embeddings / (2 * pi))
+            rope_parameters.setdefault("rope_type", "default")
             audio_config["rope_parameters"] = rope_parameters
 
         super().__init__(
@@ -411,44 +440,23 @@ def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
     return torch.cat((t_left, t, t_right), dim=-1).to(ori_dtype)
 
 
-class MusicFlamingoRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor
+class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
+    def __init__(self, config: MusicFlamingoEncoderConfig, device=None):
+        super().__init__(config, device=device)
+        position_angles = self._compute_position_angles(self.inv_freq, device=device)
+        self.register_buffer("position_angles", position_angles, persistent=False)
 
-    def __init__(self, config: MusicFlamingoConfig, device=None):
-        super().__init__()
-
-        self.config = config
-        rope_parameters = getattr(config, "rope_parameters", None) or {}
-        self.dim = rope_parameters.get("dim", getattr(config, "rotary_dim", 256))
-        self.max_time = rope_parameters.get("max_time", getattr(config, "rotary_max_time", 1200.0))
-
-        inv_freq = self.compute_default_rote_parameters(config, device=device)
-        self.inv_freq = nn.Parameter(inv_freq, requires_grad=False)
-
-        cached_freqs = self._build_cached_freqs(inv_freq, device=device)
-        self.register_buffer("cached_freqs", cached_freqs, persistent=False)
-
-    @staticmethod
-    def compute_default_rote_parameters(config: MusicFlamingoConfig | None = None, device=None):
-        rope_parameters = getattr(config, "rope_parameters", None) or {}
-        dim = rope_parameters.get("dim", getattr(config, "rotary_dim", 256))
-        max_time = rope_parameters.get("max_time", getattr(config, "rotary_max_time", 1200.0))
-        theta = max_time / (2 * pi) if max_time is not None else 50000
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
-        if device is not None:
-            inv_freq = inv_freq.to(device=device)
-        return inv_freq
-
-    def _build_cached_freqs(self, inv_freq, device=None, dtype=None):
-        if self.max_time is None:
+    def _compute_position_angles(self, inv_freq, device=None, dtype=None):
+        if self.max_seq_len_cached is None:
             return None
 
         positions = torch.arange(
-            int(self.max_time), device=device, dtype=dtype if dtype is not None else inv_freq.dtype
+            int(self.max_seq_len_cached), device=device, dtype=dtype if dtype is not None else inv_freq.dtype
         )
-        positions = positions / self.max_time * (2 * pi)
-        cached_freqs = positions.unsqueeze(-1) * inv_freq
-        return torch.repeat_interleave(cached_freqs, 2, dim=-1)
+        positions = positions / self.max_seq_len_cached * (2 * pi)
+        position_angles = positions.unsqueeze(-1) * inv_freq
+        position_angles = torch.repeat_interleave(position_angles, 2, dim=-1)
+        return position_angles.to(dtype=inv_freq.dtype)
 
     @autocast("cuda", enabled=False)
     def forward(self, t: Tensor | tuple[int, ...], seq_len=None, offset=0):
@@ -469,14 +477,18 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
             all_freqs = broadcast_tensors(*all_freqs)
             return torch.cat(all_freqs, dim=-1)
 
-        if seq_len is not None and self.cached_freqs is not None and (offset + seq_len) <= self.cached_freqs.shape[0]:
-            return self.cached_freqs[offset : (offset + seq_len)].detach()
+        if (
+            seq_len is not None
+            and self.position_angles is not None
+            and (offset + seq_len) <= self.position_angles.shape[0]
+        ):
+            return self.position_angles[offset : (offset + seq_len)].detach()
 
         inv_freq = self.inv_freq
 
         # Scale time to keep t * freq <= 2pi
-        if self.max_time is not None:
-            t = t / self.max_time * (2 * pi)
+        if self.max_seq_len_cached is not None:
+            t = t / self.max_seq_len_cached * (2 * pi)
 
         freqs = t.type(inv_freq.dtype).unsqueeze(-1) * inv_freq
         freqs = torch.repeat_interleave(freqs, 2, dim=-1)
@@ -498,7 +510,7 @@ class MusicFlamingoEncoder(AudioFlamingo3Encoder):
     MusicFlamingo encoder: Whisper encoder with rotary embeddings for time information.
     """
 
-    def __init__(self, config: MusicFlamingoConfig):
+    def __init__(self, config: MusicFlamingoEncoderConfig):
         super().__init__(config)
         self.pos_emb = MusicFlamingoRotaryEmbedding(config)
 
@@ -507,9 +519,7 @@ class MusicFlamingoEncoder(AudioFlamingo3Encoder):
         super()._init_weights(module)
 
         if isinstance(module, MusicFlamingoRotaryEmbedding):
-            inv_freq = module.compute_default_rote_parameters(module.config)
-            module.inv_freq.data = inv_freq
-            module.cached_freqs = module._build_cached_freqs(
+            module.position_angles = module._compute_position_angles(
                 module.inv_freq, device=module.inv_freq.device, dtype=module.inv_freq.dtype
             )
 
