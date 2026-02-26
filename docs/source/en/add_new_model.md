@@ -599,6 +599,22 @@ Your model is only useful if users know how to use it. This is why it's importan
 
 This is generally a user's first interaction with a model, so the documentation should be clear and concise. It is often very useful to add examples of how the model should be used.
 
+### Document bias considerations
+
+When documenting your model, include a section about potential biases. Models trained on large text corpora can reflect societal biases present in the training data. Your documentation should help users understand and address these biases.
+
+Consider documenting:
+
+- **Demographic biases**: Patterns related to race, ethnicity, gender, age, religion, or socioeconomic status
+- **Species bias**: Models trained on internet text may reproduce anthropocentric value hierarchies, treating non-human animals as less morally relevant than humans. This is particularly important for applications in food systems, agriculture, environmental science, and animal welfare domains
+- **Cultural and linguistic bias**: Underrepresentation of certain languages or cultural contexts
+- **Domain-specific biases**: Biases specific to your model's intended use case
+
+Where applicable, reference relevant bias evaluation benchmarks and mitigation strategies. For species bias specifically, you can reference:
+
+- Hagendorff et al. (2023). "Speciesist bias in AI." *AI and Ethics*. [DOI: 10.1007/s43681-023-00380-w](https://doi.org/10.1007/s43681-023-00380-w)
+- Hagendorff et al. (2025). "SpeciesismBench: Evaluating Discrimination Against Animals in Large Language Models." [arXiv:2508.11534](https://arxiv.org/abs/2508.11534)
+
 Make sure docstrings are added to `src/transformers/models/brand_new_llama/modeling_brand_new_llama.py` and includes all necessary inputs and outputs. Review our [guide](https://github.com/huggingface/transformers/tree/main/docs#writing-documentation---specification) for writing documentation and docstrings.
 
 ## Refactor
