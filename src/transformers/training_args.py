@@ -601,13 +601,19 @@ class TrainingArguments:
             except if the model used is one of the `XxxForQuestionAnswering` in which case it will also include the
             `["start_positions", "end_positions"]` keys.
             You should only specify `label_names` if you're using custom label names or if your model's `forward` consumes multiple label tensors (e.g., extractive QA).
-        group_by_length (`bool`, *optional*, defaults to `False`):
-            Whether or not to group together samples of roughly the same length in the training dataset (to minimize
-            padding applied and be more efficient). Only useful if applying dynamic padding.
+        train_sampling_strategy (`str`, *optional*, defaults to `"random"`):
+            The sampler to use for the training dataloader. Possible values are:
+
+                - `"random"`: Uses `RandomSampler` (default).
+                - `"sequential"`: Uses `SequentialSampler`.
+                - `"group_by_length"`: Uses `LengthGroupedSampler` to group samples of roughly the same length
+                  together (to minimize padding and be more efficient).
+
+            Note: When using an `IterableDataset`, this argument is ignored.
         length_column_name (`str`, *optional*, defaults to `"length"`):
             Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
-            than computing them on train startup. Ignored unless `group_by_length` is `True` and the dataset is an
-            instance of `Dataset`.
+            than computing them on train startup. Ignored unless `train_sampling_strategy` is `"group_by_length"` and the dataset
+            is an instance of `Dataset`.
 
         > DDP (DistributedDataParallel)
 
@@ -890,7 +896,7 @@ class TrainingArguments:
     gradient_checkpointing: bool = field(
         default=False,
         metadata={
-            "help": "Enable gradient checkpointing to trade compute for memory. Reduces memory at the cost of ~20% slower training."
+            "help": "Enable gradient checkpointing to trade compute for memory. Reduces memory at the cost of ~20%% slower training."
         },
     )
     gradient_checkpointing_kwargs: dict[str, Any] | str | None = field(
@@ -919,7 +925,7 @@ class TrainingArguments:
     use_liger_kernel: bool = field(
         default=False,
         metadata={
-            "help": "Enable Liger Kernel optimizations. Increases throughput by ~20% and reduces memory by ~60%."
+            "help": "Enable Liger Kernel optimizations. Increases throughput by ~20%% and reduces memory by ~60%%."
         },
     )
     liger_kernel_config: dict[str, bool] | None = field(
@@ -945,7 +951,7 @@ class TrainingArguments:
     torch_empty_cache_steps: int | None = field(
         default=None,
         metadata={
-            "help": "Number of steps to wait before calling `torch.<device>.empty_cache()`. Helps avoid CUDA OOM at a cost of ~10% slower performance. If None, cache will not be emptied."
+            "help": "Number of steps to wait before calling `torch.<device>.empty_cache()`. Helps avoid CUDA OOM at a cost of ~10%% slower performance. If None, cache will not be emptied."
         },
     )
     auto_find_batch_size: bool = field(
@@ -1300,15 +1306,18 @@ class TrainingArguments:
     label_names: list[str] | None = field(
         default=None, metadata={"help": "The list of keys in your dictionary of inputs that correspond to the labels."}
     )
-    group_by_length: bool = field(
-        default=False,
+    train_sampling_strategy: str = field(
+        default="random",
         metadata={
-            "help": "Whether or not to group samples of roughly the same length together when batching. Only useful if applying dynamic padding."
+            "help": "Sampler for training: 'random' (default), 'sequential', or 'group_by_length'.",
+            "choices": ["random", "sequential", "group_by_length"],
         },
     )
     length_column_name: str = field(
         default="length",
-        metadata={"help": "Column name for precomputed lengths. Ignored unless `group_by_length` is True."},
+        metadata={
+            "help": "Column name for precomputed lengths. Ignored unless `train_sampling_strategy` is 'group_by_length'."
+        },
     )
 
     # --- DDP ---
@@ -1433,12 +1442,6 @@ class TrainingArguments:
             "help": "When using torch.distributed.launch (Deprecated), it will pass `local_rank` in the script, so we need this for the parser. To get the local rank, prefer using the property `local_process_index`"
         },
     )
-    place_model_on_device: bool | None = field(
-        default=None,
-        metadata={
-            "help": "Whether to automatically place the model on the device. When `None` (default), the Trainer decides."
-        },
-    )
 
     def __post_init__(self):
         # ── 1. Defaults & Normalization ──
@@ -1512,7 +1515,11 @@ class TrainingArguments:
         if self.greater_is_better is None and self.metric_for_best_model is not None:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
 
-        if self.report_to == "none" or self.report_to == ["none"]:
+        if self.report_to == "all" or self.report_to == ["all"]:
+            from .integrations import get_available_reporting_integrations
+
+            self.report_to = get_available_reporting_integrations()
+        elif self.report_to == "none" or self.report_to == ["none"]:
             self.report_to = []
         elif not isinstance(self.report_to, list):
             self.report_to = [self.report_to]
@@ -1973,6 +1980,13 @@ class TrainingArguments:
         log_level_main_node = logging.get_verbosity() if log_level == -1 else log_level
         log_level_replica_node = logging.get_verbosity() if log_level_replica == -1 else log_level_replica
         return log_level_main_node if self.should_log else log_level_replica_node
+
+    @property
+    def place_model_on_device(self) -> bool | None:
+        """
+        Can be subclassed and overridden for some specific integrations.
+        """
+        return None
 
     @property
     def _no_sync_in_gradient_accumulation(self):

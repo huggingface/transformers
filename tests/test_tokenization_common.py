@@ -25,7 +25,7 @@ import unittest
 from collections import OrderedDict
 from itertools import takewhile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any
 
 from parameterized import parameterized
 
@@ -134,9 +134,9 @@ def filter_roberta_detectors(_, pretrained_name: str):
 
 def merge_model_tokenizer_mappings(
     model_mapping: dict["PretrainedConfig", "PreTrainedModel"],
-    tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "TokenizersBackend"]],
+    tokenizer_mapping: dict["PretrainedConfig", "TokenizersBackend"],
 ) -> dict[
-    Union["PreTrainedTokenizer", "TokenizersBackend"],
+    "TokenizersBackend",
     tuple["PretrainedConfig", "PreTrainedModel"],
 ]:
     configurations = list(model_mapping.keys())
@@ -145,15 +145,12 @@ def merge_model_tokenizer_mappings(
     for configuration in configurations:
         if configuration in model_mapping and configuration in tokenizer_mapping:
             model = model_mapping[configuration]
-            tokenizer = tokenizer_mapping[configuration][0]
-            tokenizer_fast = tokenizer_mapping[configuration][1]
+            tokenizer = tokenizer_mapping[configuration]
 
             if tokenizer is not None:
-                if configuration.__name__.startswith(tokenizer.__name__.replace("Tokenizer", "")):
+                name = tokenizer.__name__.replace("TokenizerFast", "").replace("Tokenizer", "")
+                if configuration.__name__.startswith(name):
                     model_tokenizer_mapping.update({tokenizer: (configuration, model)})
-            if tokenizer_fast is not None:
-                if configuration.__name__.startswith(tokenizer_fast.__name__.replace("TokenizerFast", "")):
-                    model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
 
     return model_tokenizer_mapping
 

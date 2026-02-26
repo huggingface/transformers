@@ -433,12 +433,12 @@ class HubertEncoder(nn.Module):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
+        hidden_states = hidden_states + position_embeddings.to(hidden_states.device)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -578,7 +578,7 @@ class HubertEncoderStableLayerNorm(nn.Module):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 
@@ -630,6 +630,7 @@ class HubertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "hubert"
     main_input_name = "input_values"
     input_modalities = "audio"
+    _no_split_modules = ["HubertEncoderLayer", "ParametrizedConv1d"]
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True

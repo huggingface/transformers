@@ -496,7 +496,7 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -643,6 +643,7 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
+        next_sequence_length: int | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
@@ -650,7 +651,7 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
-            input_ids, past_key_values, attention_mask, inputs_embeds, cache_position, **kwargs
+            input_ids, next_sequence_length, past_key_values, attention_mask, inputs_embeds, cache_position, **kwargs
         )
 
         is_first_generation_step = model_inputs["cache_position"][0] == 0
@@ -666,15 +667,15 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
 class CsmBackboneModelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.vocab_size), config.hidden_size)
+        self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.codebook_size), config.hidden_size)
         self.register_buffer(
-            "audio_tokens_offsets", torch.arange(config.num_codebooks) * config.vocab_size, persistent=False
+            "audio_tokens_offsets", torch.arange(config.num_codebooks) * config.codebook_size, persistent=False
         )
 
     def forward(self, input_ids):
-        input_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
-        input_embeds = input_embeds.sum(dim=2)
-        return input_embeds
+        inputs_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
+        inputs_embeds = inputs_embeds.sum(dim=2)
+        return inputs_embeds
 
 
 @auto_docstring
@@ -740,7 +741,7 @@ class CsmBackboneModel(CsmPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -917,6 +918,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
+        next_sequence_length: int | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
@@ -925,6 +927,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
     ):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids=input_ids,
+            next_sequence_length=next_sequence_length,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,

@@ -706,7 +706,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": None,
@@ -813,7 +813,7 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
@@ -827,7 +827,7 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
         if not isinstance(cross_attn_mask_mapping := encoder_attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": encoder_hidden_states,
+                "inputs_embeds": encoder_hidden_states,
                 "attention_mask": encoder_attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": None,

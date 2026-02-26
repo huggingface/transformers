@@ -763,7 +763,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
 
                 audio_attention_mask = create_bidirectional_mask(
                     config=self.audio_tower.config,
-                    input_embeds=dummy_embeds,
+                    inputs_embeds=dummy_embeds,
                     attention_mask=audio_attention_mask_2d,
                 )
 

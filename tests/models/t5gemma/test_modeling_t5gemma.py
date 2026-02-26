@@ -584,10 +584,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     pipeline_model_mapping = (
         {
             "feature-extraction": T5GemmaModel,
-            "summarization": T5GemmaForConditionalGeneration,
             "text-classification": T5GemmaForSequenceClassification,
-            "text2text-generation": T5GemmaForConditionalGeneration,
-            "translation": T5GemmaForConditionalGeneration,
             "zero-shot": T5GemmaForSequenceClassification,
         }
         if is_torch_available()

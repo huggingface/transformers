@@ -94,8 +94,8 @@ VIDEO_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, VIDEO_PROCESSOR
 
 
 def video_processor_class_from_name(class_name: str):
-    for module_name, extractors in VIDEO_PROCESSOR_MAPPING_NAMES.items():
-        if class_name in extractors:
+    for module_name, extractor in VIDEO_PROCESSOR_MAPPING_NAMES.items():
+        if class_name == extractor:
             module_name = model_type_to_module_name(module_name)
 
             module = importlib.import_module(f".{module_name}", "transformers.models")
@@ -383,13 +383,14 @@ class AutoVideoProcessor:
         # Last try: we use the VIDEO_PROCESSOR_MAPPING.
         elif type(config) in VIDEO_PROCESSOR_MAPPING:
             video_processor_class = VIDEO_PROCESSOR_MAPPING[type(config)]
-
             if video_processor_class is not None:
                 return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-            else:
-                raise ValueError(
-                    "This video processor cannot be instantiated. Please make sure you have `torchvision` installed."
-                )
+
+        # Raise a more informative error message if torchvision isn't found, otherwise just fallback to default
+        if not is_torchvision_available():
+            raise ValueError(
+                f"{pretrained_model_name_or_path} requires `torchvision` to be installed. Please install `torchvision` and try again."
+            )
 
         raise ValueError(
             f"Unrecognized video processor in {pretrained_model_name_or_path}. Should have a "
