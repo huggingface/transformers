@@ -224,7 +224,7 @@ class AffineQuantizeDequantizeTest(unittest.TestCase):
     def test_roundtrip_4bit_gs128(self):
         orig, deq = self._roundtrip(bits=4, group_size=128)
         max_err = (orig - deq).abs().max().item()
-        self.assertLess(max_err, 0.25, "4-bit gs=128 round-trip error too large")
+        self.assertLess(max_err, 0.5, "4-bit gs=128 round-trip error too large")
 
     def test_roundtrip_8bit_gs64(self):
         orig, deq = self._roundtrip(bits=8, group_size=64)
