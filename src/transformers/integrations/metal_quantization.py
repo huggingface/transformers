@@ -293,13 +293,13 @@ class MetalDequantize(ConversionOps):
         bits = self.hf_quantizer.quantization_config.bits
         group_size = self.hf_quantizer.quantization_config.group_size
 
-        quantized = input_dict["weight$"][0]
-        scales = input_dict["scales"][0]
-        qbiases = input_dict["qbiases"][0]
-
         if len(input_dict) < 2:
             # case where we only got weights, need to check for "weight$"
             return {full_layer_name: input_dict["weight$"]}
+
+        quantized = input_dict["weight$"][0]
+        scales = input_dict["scales"][0]
+        qbiases = input_dict["qbiases"][0]
 
         w_deq = _affine_dequantize_tensor(quantized, scales, qbiases, group_size, bits)
         return {full_layer_name: w_deq.to(scales.dtype)}
