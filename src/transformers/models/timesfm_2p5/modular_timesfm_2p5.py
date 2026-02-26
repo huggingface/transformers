@@ -22,6 +22,7 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -35,7 +36,6 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ...modeling_rope_utils import RopeParameters
 from ..timesfm.configuration_timesfm import TimesFmConfig
 from ..timesfm.modeling_timesfm import (
     TimesFmModelForPrediction,
@@ -587,40 +587,11 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
 
         self.post_init()
 
-    def _preprocess(
-        self, inputs: Sequence[torch.Tensor], context_len: int | None = None
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Pad/truncate input time series to `context_len` and build a padding mask.
-
-        Returns:
-            Tuple of (padded_inputs, padding_mask) both of shape `(batch, context_len + horizon_len)`.
-        """
-        if context_len is None:
-            context_len = self.context_len
-
-        input_ts, input_padding = [], []
-
-        for ts in inputs:
-            input_len = ts.shape[0]
-            padding = torch.zeros(input_len + self.horizon_len, dtype=ts.dtype, device=ts.device)
-            if input_len < context_len:
-                num_front_pad = context_len - input_len
-                ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
-                padding = torch.cat([torch.ones(num_front_pad, dtype=ts.dtype, device=padding.device), padding], dim=0)
-            elif input_len > context_len:
-                ts = ts[-context_len:]
-                padding = padding[-(context_len + self.horizon_len) :]
-
-            input_ts.append(ts)
-            input_padding.append(padding)
-
-        return torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0)
-
     def _decode_and_project(
         self,
         normalized_ts: torch.Tensor,
         input_padding: torch.Tensor,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Run the decoder and project to point/quantile outputs.
 

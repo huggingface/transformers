@@ -888,7 +888,7 @@ class Timesfm2P5ModelForPrediction(Timesfm2P5PreTrainedModel):
         self,
         normalized_ts: torch.Tensor,
         input_padding: torch.Tensor,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Run the decoder and project to point/quantile outputs.
 
