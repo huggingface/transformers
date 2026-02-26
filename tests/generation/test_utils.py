@@ -4904,21 +4904,6 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
 
 
 def _get_generate_outputs_mismatch_message(output_1, output_2, atol=1e-5, rtol=1e-5) -> str:
-    """
-    Compares a pair of generate outputs and returns a description of the mismatch, if any. Two `generate` call outputs
-    are considered similar in the following situations:
-    1. The sequences are the same
-    2. The sequences are different, but the scores up to (and including) the first mismatch are nearly identical
-
-    Args:
-        output_1 (`GenerateOutput`): The first `generate` call output.
-        output_2 (`GenerateOutput`): The second `generate` call output.
-        atol (`float`, *optional*, defaults to 1e-5): The absolute tolerance for the scores.
-        rtol (`float`, *optional*, defaults to 1e-5): The relative tolerance for the scores.
-
-    Returns:
-        An empty string if the outputs are similar, or a descriptive failure message if they are not.
-    """
     # scores doesn't include data regarding decoder input tokens
     decoder_input_length = output_1.sequences.shape[1] - len(output_1.scores)
     output_matches = output_1.sequences == output_2.sequences
@@ -4960,15 +4945,6 @@ def has_similar_generate_outputs(output_1, output_2, atol=1e-5, rtol=1e-5) -> bo
     considered similar in the following situations:
     1. The sequences are the same
     2. The sequences are different, but the scores up to (and including) the first mismatch are nearly identical
-
-    Args:
-        output_1 (`GenerateOutput`): The first `generate` call output.
-        output_2 (`GenerateOutput`): The second `generate` call output.
-        atol (`float`, *optional*, defaults to 1e-5): The absolute tolerance for the scores.
-        rtol (`float`, *optional*, defaults to 1e-5): The relative tolerance for the scores.
-
-    Returns:
-        A boolean indicating whether the two generate outputs are similar.
     """
     return not _get_generate_outputs_mismatch_message(output_1, output_2, atol=atol, rtol=rtol)
 
@@ -4976,18 +4952,8 @@ def has_similar_generate_outputs(output_1, output_2, atol=1e-5, rtol=1e-5) -> bo
 def assert_similar_generate_outputs(output_1, output_2, atol=1e-5, rtol=1e-5):
     """
     Asserts that a pair of generate outputs are similar, with a descriptive error message on failure.
-    Two `generate` call outputs are considered similar in the following situations:
-    1. The sequences are the same
-    2. The sequences are different, but the scores up to (and including) the first mismatch are nearly identical
 
-    Args:
-        output_1 (`GenerateOutput`): The first `generate` call output.
-        output_2 (`GenerateOutput`): The second `generate` call output.
-        atol (`float`, *optional*, defaults to 1e-5): The absolute tolerance for the scores.
-        rtol (`float`, *optional*, defaults to 1e-5): The relative tolerance for the scores.
-
-    Raises:
-        AssertionError: If the outputs are not similar, with details about the mismatch.
+    Similar to `has_similar_generate_outputs`, but raises an assertion error on failure.
     """
     mismatch_message = _get_generate_outputs_mismatch_message(output_1, output_2, atol=atol, rtol=rtol)
     if mismatch_message:
