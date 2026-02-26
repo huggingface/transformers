@@ -1936,7 +1936,7 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VLMoeForConditionalGenera
     def __init__(self, *args, **kwargs):
         logger.warning_once(
             "`Ernie4_5_VL_MoeForConditionalGeneration` is deprecated; "
-            "please use `Ernie4_5_VLMoeForConditionalGeneration instead`.",
+            "please use `Ernie4_5_VLMoeForConditionalGeneration` instead.",
         )
         super().__init__(*args, **kwargs)
 
