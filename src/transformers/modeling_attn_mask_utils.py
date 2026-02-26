@@ -71,7 +71,7 @@ class AttentionMaskConverter:
     sliding_window: int
 
     def __init__(self, is_causal: bool, sliding_window: int | None = None):
-        logger.warning_once(DEPRECATION_MESSAGE, FutureWarning)
+        logger.warning_once(DEPRECATION_MESSAGE)
 
         self.is_causal = is_causal
         self.sliding_window = sliding_window
@@ -172,7 +172,7 @@ class AttentionMaskConverter:
         """
         Make causal mask used for bi-directional self-attention.
         """
-        logger.warning_once(DEPRECATION_MESSAGE, FutureWarning)
+        logger.warning_once(DEPRECATION_MESSAGE)
 
         bsz, tgt_len = input_ids_shape
         mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
@@ -202,7 +202,7 @@ class AttentionMaskConverter:
         """
         Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
         """
-        logger.warning_once(DEPRECATION_MESSAGE, FutureWarning)
+        logger.warning_once(DEPRECATION_MESSAGE)
 
         bsz, src_len = mask.size()
         tgt_len = tgt_len if tgt_len is not None else src_len
@@ -254,7 +254,7 @@ class AttentionMaskConverter:
            [0, 1, 1]]]]
         ```
         """
-        logger.warning_once(DEPRECATION_MESSAGE, FutureWarning)
+        logger.warning_once(DEPRECATION_MESSAGE)
 
         # fmt: on
         if expanded_mask.dtype == torch.bool:
@@ -281,7 +281,7 @@ class AttentionMaskConverter:
         allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is
         passed).
         """
-        logger.warning_once(DEPRECATION_MESSAGE, FutureWarning)
+        logger.warning_once(DEPRECATION_MESSAGE)
 
         _, query_length = inputs_embeds.shape[0], inputs_embeds.shape[1]
         key_value_length = query_length + past_key_values_length
@@ -464,7 +464,7 @@ def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, 
         tgt_len (`int`):
             The target length or query length the created mask shall have.
     """
-    logger.warning_once(DEPRECATION_MESSAGE, FutureWarning)
+    logger.warning_once(DEPRECATION_MESSAGE)
 
     _, key_value_length = mask.shape
     tgt_len = tgt_len if tgt_len is not None else key_value_length
