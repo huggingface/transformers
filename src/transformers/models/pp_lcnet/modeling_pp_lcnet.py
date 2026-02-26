@@ -193,6 +193,46 @@ class PPLCNetSEModule(nn.Module):
         return hidden_state
 
 
+def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
+    """
+    Ensure that all layers have a channel count that is divisible by `divisor`.
+    """
+    if min_value is None:
+        min_value = divisor
+    new_value = max(min_value, int(value + divisor / 2) // divisor * divisor)
+    # Make sure that round down does not go down by more than 10%.
+    if new_value < 0.9 * value:
+        new_value += divisor
+    return int(new_value)
+
+
+class PPLCNetBlock(nn.Module):
+    def __init__(self, config, block_index):
+        super().__init__()
+        self.config = config
+
+        self.layers = nn.ModuleList()
+        for kernel_size, in_channels, out_channels, stride, squeeze_excitation in config.backbone_config[block_index]:
+            scaled_in_channels = make_divisible(in_channels * config.scale, config.divisor)
+            scaled_out_channels = make_divisible(out_channels * config.scale, config.divisor)
+
+            depthwise_block = PPLCNetDepthwiseSeparable(
+                in_channels=scaled_in_channels,
+                out_channels=scaled_out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                reduction=config.reduction,
+                use_squeeze_excitation=squeeze_excitation,
+                hidden_act=config.hidden_act,
+            )
+            self.layers.append(depthwise_block)
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+
 @dataclass
 class PPLCNetModelOutput(ModelOutput):
     """
@@ -226,19 +266,6 @@ class PPLCNetPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, PPLCNetConvBNLayer):
             nn.init.kaiming_normal_(module.convolution.weight)
-
-
-def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
-    """
-    Ensure that all layers have a channel count that is divisible by `divisor`.
-    """
-    if min_value is None:
-        min_value = divisor
-    new_value = max(min_value, int(value + divisor / 2) // divisor * divisor)
-    # Make sure that round down does not go down by more than 10%.
-    if new_value < 0.9 * value:
-        new_value += divisor
-    return int(new_value)
 
 
 @auto_docstring(custom_intro="The PPLCNet model.")
@@ -276,29 +303,10 @@ class PPLCNetModel(PPLCNetPreTrainedModel):
             hidden_act=config.hidden_act,
         )
 
-        def _build_block(block_name):
-            return nn.Sequential(
-                *[
-                    PPLCNetDepthwiseSeparable(
-                        in_channels=make_divisible(in_channels * config.scale, config.divisor),
-                        out_channels=make_divisible(out_channels * config.scale, config.divisor),
-                        kernel_size=kernel_size,
-                        stride=stride,
-                        reduction=config.reduction,
-                        use_squeeze_excitation=squeeze_excitation,
-                        hidden_act=config.hidden_act,
-                    )
-                    for i, (kernel_size, in_channels, out_channels, stride, squeeze_excitation) in enumerate(
-                        config.backbone_config[block_name]
-                    )
-                ]
-            )
-
-        self.blocks2 = _build_block("blocks2")
-        self.blocks3 = _build_block("blocks3")
-        self.blocks4 = _build_block("blocks4")
-        self.blocks5 = _build_block("blocks5")
-        self.blocks6 = _build_block("blocks6")
+        self.blocks = nn.ModuleList([])
+        for block_index in config.backbone_config.keys():
+            block = PPLCNetBlock(config, block_index)
+            self.blocks.append(block)
 
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         if config.use_last_convolution:
@@ -347,21 +355,12 @@ class PPLCNetModel(PPLCNetPreTrainedModel):
         if output_hidden_states:
             hidden_states = hidden_states + (hidden_state,)
         hidden_state = self.convolution(hidden_state)
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        hidden_state = self.blocks2(hidden_state)
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        hidden_state = self.blocks3(hidden_state)
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        hidden_state = self.blocks4(hidden_state)
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        hidden_state = self.blocks5(hidden_state)
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        hidden_state = self.blocks6(hidden_state)
+
+        for block in self.blocks:
+            if output_hidden_states:
+                hidden_states = hidden_states + (hidden_state,)
+            hidden_state = block(hidden_state)
+
         if output_hidden_states:
             hidden_states = hidden_states + (hidden_state,)
         last_hidden_state = hidden_states
