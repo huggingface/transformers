@@ -63,7 +63,7 @@ class MetalHfQuantizer(HfQuantizer):
         if device_map is None:
             logger.warning_once(
                 "You have loaded a Metal quantized model on CPU and have an MPS device available. "
-                "Set device_map='mps' to use the Metal kernels."
+                "We will use the MPS device to load the model."
             )
         elif isinstance(device_map, dict):
             if not self.pre_quantized and ("cpu" in device_map.values() or "disk" in device_map.values()):

@@ -249,7 +249,7 @@ class MetalQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def convert(self, input_dict: dict, model=None, **kwargs) -> dict:
+    def convert(self, input_dict: dict, model=None, missing_keys=None, **kwargs) -> dict:
         target_key, value = next(iter(input_dict.items()))
         value = value[0] if isinstance(value, list) else value
 
@@ -267,6 +267,9 @@ class MetalQuantize(ConversionOps):
             module = model.get_submodule(base)
             if hasattr(module, "weight"):
                 del module.weight
+
+        if missing_keys is not None:
+            missing_keys.discard(target_key)
 
         orig_dtype = value.dtype
         return {

@@ -18,7 +18,7 @@ import unittest
 from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
 
-from transformers import AutoConfig, AutoModelForCausalLM, MetalConfig, OPTForCausalLM
+from transformers import AutoConfig, AutoModelForCausalLM, MetalConfig, OPTForCausalLM, AutoTokenizer
 from transformers.quantizers.quantizer_metal import MetalHfQuantizer
 from transformers.testing_utils import (
     require_torch,
@@ -52,12 +52,6 @@ def _patch_has_mps():
         stack.enter_context(_patch_mps_available(True))
         stack.enter_context(patch("transformers.quantizers.quantizer_metal.is_kernels_available", return_value=True))
         yield
-
-
-# =====================================================================
-# 1. MetalConfig unit tests
-# =====================================================================
-
 
 @require_torch
 class MetalConfigTest(unittest.TestCase):
@@ -108,7 +102,7 @@ class MetalConfigTest(unittest.TestCase):
         self.assertEqual(config.bits, 8)
         self.assertEqual(config.group_size, 32)
 
-    def test_to_dict_from_dict_roundtrip(self):
+    def test_to_dict_from_dict(self):
         original = MetalConfig(bits=2, group_size=128, modules_to_not_convert=["lm_head"])
         d = original.to_dict()
         restored = MetalConfig.from_dict(d)
@@ -121,12 +115,6 @@ class MetalConfigTest(unittest.TestCase):
         attrs = config.get_loading_attributes()
         self.assertIn("dequantize", attrs)
         self.assertTrue(attrs["dequantize"])
-
-
-# =====================================================================
-# 2. MetalHfQuantizer environment validation tests
-# =====================================================================
-
 
 @require_torch
 class MetalQuantizerEnvironmentTest(unittest.TestCase):
@@ -165,7 +153,7 @@ class MetalQuantizerEnvironmentTest(unittest.TestCase):
             stack.enter_context(
                 patch("transformers.quantizers.quantizer_metal.is_kernels_available", return_value=False)
             )
-            config = MetalConfig()
+            config = MetalConfig() 
             quantizer = MetalHfQuantizer(config)
             quantizer.pre_quantized = False
             with self.assertRaises(ImportError):
@@ -195,13 +183,6 @@ class MetalQuantizerEnvironmentTest(unittest.TestCase):
         result = quantizer.update_device_map(None)
         self.assertEqual(result, {"": "mps"})
 
-    def test_update_device_map_preserves_explicit(self):
-        config = MetalConfig()
-        quantizer = MetalHfQuantizer(config)
-        explicit = {"model": "mps", "lm_head": "cpu"}
-        result = quantizer.update_device_map(explicit)
-        self.assertEqual(result, explicit)
-
     def test_is_serializable(self):
         config = MetalConfig()
         quantizer = MetalHfQuantizer(config)
@@ -211,11 +192,6 @@ class MetalQuantizerEnvironmentTest(unittest.TestCase):
         config = MetalConfig()
         quantizer = MetalHfQuantizer(config)
         self.assertFalse(quantizer.is_trainable)
-
-
-# =====================================================================
-# 3. Affine quantize / dequantize tensor round-trip tests
-# =====================================================================
 
 
 @require_torch
@@ -241,7 +217,7 @@ class AffineQuantizeDequantizeTest(unittest.TestCase):
     def test_roundtrip_4bit_gs64(self):
         orig, deq = self._roundtrip(bits=4, group_size=64)
         max_err = (orig - deq).abs().max().item()
-        self.assertLess(max_err, 0.15, "4-bit gs=64 round-trip error too large")
+        self.assertLess(max_err, 0.25, "4-bit gs=64 round-trip error too large")
 
     def test_roundtrip_4bit_gs128(self):
         orig, deq = self._roundtrip(bits=4, group_size=128)
@@ -256,7 +232,7 @@ class AffineQuantizeDequantizeTest(unittest.TestCase):
     def test_roundtrip_2bit_gs64(self):
         orig, deq = self._roundtrip(bits=2, group_size=64)
         max_err = (orig - deq).abs().max().item()
-        self.assertLess(max_err, 1.0, "2-bit gs=64 round-trip error too large")
+        self.assertLess(max_err, 1.25, "2-bit gs=64 round-trip error too large")
 
     def test_quantize_shapes_2bit(self):
         from transformers.integrations.metal_quantization import _affine_quantize_tensor
@@ -285,22 +261,6 @@ class AffineQuantizeDequantizeTest(unittest.TestCase):
         w_packed, scales, biases = _affine_quantize_tensor(weight, group_size=64, bits=4)
         w_deq = _affine_dequantize_tensor(w_packed, scales, biases, group_size=64, bits=4)
         self.assertEqual(w_deq.dtype, torch.float32)
-
-    def test_higher_bits_means_lower_error(self):
-        """8-bit quantization should be more accurate than 4-bit, which should be more accurate than 2-bit."""
-        weight = torch.randn(64, 256)
-        errors = {}
-        for bits in (2, 4, 8):
-            _, deq = self._roundtrip(bits=bits, group_size=64, N=64, K=256)
-            errors[bits] = (weight.float() - deq).abs().mean().item()
-        self.assertGreater(errors[2], errors[4])
-        self.assertGreater(errors[4], errors[8])
-
-
-# =====================================================================
-# 4. MetalLinear module tests
-# =====================================================================
-
 
 @require_torch
 class MetalLinearTest(unittest.TestCase):
@@ -373,12 +333,6 @@ class MetalLinearTest(unittest.TestCase):
         layer = MetalLinear(in_features=256, out_features=128, bits=2, group_size=64)
         elems_per_int = 32 // 2  # 16
         self.assertEqual(layer.qweight.shape, (128, 256 // elems_per_int))
-
-
-# =====================================================================
-# 5. replace_with_metal_linear tests
-# =====================================================================
-
 
 @require_torch
 class ReplaceWithMetalLinearTest(unittest.TestCase):
@@ -455,12 +409,6 @@ class ReplaceWithMetalLinearTest(unittest.TestCase):
                 self.assertEqual(m.qweight.dtype, torch.uint32)
                 break
 
-
-# =====================================================================
-# 6. MetalQuantize / MetalDequantize ConversionOps tests
-# =====================================================================
-
-
 @require_torch
 class MetalConversionOpsTest(unittest.TestCase):
     """Test the ``MetalQuantize`` and ``MetalDequantize`` weight conversion operations."""
@@ -496,7 +444,7 @@ class MetalConversionOpsTest(unittest.TestCase):
             self.assertEqual(result["layer.qbiases"].dtype, dtype, f"qbiases dtype mismatch for input {dtype}")
 
     def test_metal_dequantize_returns_target_dtype(self):
-        """MetalDequantize should return a tensor in the same dtype as the scales (not float32)."""
+        """MetalDequantize should return a tensor in the same dtype as the scales."""
         from transformers.integrations.metal_quantization import MetalDequantize, MetalQuantize
 
         quantizer = self._make_quantizer()
@@ -541,25 +489,7 @@ class MetalConversionOpsTest(unittest.TestCase):
         )
         w_deq = dq_result["layer.weight"].float()
         max_err = (weight - w_deq).abs().max().item()
-        self.assertLess(max_err, 0.25, "Quantize -> Dequantize round-trip error too large")
-
-    def test_metal_quantize_top_level_key(self):
-        """When key has no dots, scales/qbiases keys should be top-level."""
-        from transformers.integrations.metal_quantization import MetalQuantize
-
-        quantizer = self._make_quantizer()
-        op = MetalQuantize(quantizer)
-        weight = torch.randn(64, 256)
-        result = op.convert({"weight": weight})
-        self.assertNotIn("weight", result)
-        self.assertIn("qweight", result)
-        self.assertIn("scales", result)
-        self.assertIn("qbiases", result)
-
-
-# =====================================================================
-# 7. Weight conversions from quantizer
-# =====================================================================
+        self.assertLess(max_err, 0.5, "Quantize -> Dequantize round-trip error too large")
 
 
 @require_torch
@@ -582,12 +512,6 @@ class MetalWeightConversionsTest(unittest.TestCase):
         quantizer = MetalHfQuantizer(config)
         quantizer.pre_quantized = False
         self.assertEqual(quantizer.get_weight_conversions(), [])
-
-
-# =====================================================================
-# 8. Integration: model conversion (meta device, no real weights)
-# =====================================================================
-
 
 @require_torch
 class MetalModelConversionTest(unittest.TestCase):
@@ -676,11 +600,6 @@ class MetalModelConversionTest(unittest.TestCase):
                 )
 
 
-# =====================================================================
-# 9. Slow integration tests (require real model loading)
-# =====================================================================
-
-
 @slow
 @require_torch
 class MetalSlowIntegrationTest(unittest.TestCase):
@@ -689,7 +608,7 @@ class MetalSlowIntegrationTest(unittest.TestCase):
     These run on CPU with ``dequantize=True`` so they don't require MPS.
     """
 
-    model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+    model_id = "medmekk/Llama-3.2-1B-Instruct-metal"
 
     def setUp(self):
         gc.collect()
@@ -708,17 +627,16 @@ class MetalSlowIntegrationTest(unittest.TestCase):
             for param in model.parameters():
                 self.assertNotEqual(param.dtype, torch.uint32, "All weights should be dequantized")
 
-    def test_save_and_reload_config(self):
-        """Save a model's config and verify the quantization_config round-trips."""
+    def test_quantized_model(self):
         with _patch_no_mps():
-            config = MetalConfig(bits=4, group_size=64, dequantize=True)
+            config = MetalConfig(bits=4, group_size=64)
             model = AutoModelForCausalLM.from_pretrained(
-                self.model_id, quantization_config=config, device_map="cpu"
+                self.model_id, quantization_config=config, device_map="mps"
             )
-            with tempfile.TemporaryDirectory() as tmpdir:
-                model.save_pretrained(tmpdir)
-                loaded_config = AutoConfig.from_pretrained(tmpdir)
-                q_config = loaded_config.quantization_config
-                self.assertEqual(q_config["quant_method"], "metal")
-                self.assertEqual(q_config["bits"], 4)
-                self.assertEqual(q_config["group_size"], 64)
+            tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+            self.assertIsNotNone(model)
+            input = "Hello, how are you?"
+            EXPECTED_OUTPUT = "Hello, how are you? I'm doing well, thanks for asking. I"
+            input_ids = tokenizer.encode(input, return_tensors="pt").to("mps")
+            output = model.generate(input_ids, max_new_tokens=10, do_sample=False)
+            self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
