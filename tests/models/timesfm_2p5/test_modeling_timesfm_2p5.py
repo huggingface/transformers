@@ -129,17 +129,6 @@ class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Model does not have head mask")
-    def test_headmasking(self):
-        pass
-
-    # the main input name is `inputs`
-    def test_model_main_input_name(self):
-        model_signature = inspect.signature(getattr(Timesfm2P5ModelForPrediction, "forward"))
-        # The main input is the name of the argument after `self`
-        observed_main_input_name = list(model_signature.parameters.keys())[1]
-        self.assertEqual(Timesfm2P5ModelForPrediction.main_input_name, observed_main_input_name)
-
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(
         self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
