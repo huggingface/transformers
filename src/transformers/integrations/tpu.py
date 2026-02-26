@@ -151,7 +151,9 @@ def wrap_model_xla_fsdp(model, args, is_fsdp_xla_v2_enabled):
 
     # Patch `xm.optimizer_step` should not reduce gradients in this case,
     # as FSDP does not need gradient reduction over sharded parameters.
-    def patched_optimizer_step(optimizer, barrier=False, optimizer_args={}):
+    def patched_optimizer_step(optimizer, barrier=False, optimizer_args=None):
+        if optimizer_args is None:
+            optimizer_args = {}
         loss = optimizer.step(**optimizer_args)
         if barrier:
             xm.mark_step()

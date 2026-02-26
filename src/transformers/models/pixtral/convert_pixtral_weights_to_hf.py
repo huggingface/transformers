@@ -236,7 +236,8 @@ def main():
     image_processor = PixtralImageProcessor()
     processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
     if args.chat_template_file:
-        processor.chat_template = open(args.chat_template_file).read()
+        with open(args.chat_template_file) as f:
+            processor.chat_template = f.read()
     processor.save_pretrained(args.output_dir)
 
 

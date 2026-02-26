@@ -1109,9 +1109,8 @@ class ProcessorMixin(PushToHubMixin):
         # json file contains only references to the model path and repo id
         if resolved_audio_tokenizer_file is not None or "audio_tokenizer" in processor_dict:
             if resolved_audio_tokenizer_file is not None:
-                reader = open(resolved_audio_tokenizer_file, "r", encoding="utf-8")
-                audio_tokenizer_dict = reader.read()
-                audio_tokenizer_dict = json.loads(audio_tokenizer_dict)
+                with open(resolved_audio_tokenizer_file, "r", encoding="utf-8") as reader:
+                    audio_tokenizer_dict = json.loads(reader.read())
             else:
                 audio_tokenizer_dict = processor_dict["audio_tokenizer"]
 
