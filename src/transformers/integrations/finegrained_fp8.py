@@ -244,7 +244,9 @@ class FP8Linear(nn.Linear):
             scale_inv = self.weight_scale_inv.contiguous()
 
         if self.activation_scheme == "dynamic":
-            qinput, scale = torch.ops.transformers.fp8_act_quant(input, self.block_size[1])
+            kernel = _get_triton_kernel()
+            qinput, scale = kernel.fp8_act_quant(input, self.block_size[1])
+            # TODO: can be merged easily into the matmul kernel to save memory bandwidth when using the triton kernel
         elif self.activation_scheme == "static":
             scale = self.activation_scale.to(torch.float32)
             qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
