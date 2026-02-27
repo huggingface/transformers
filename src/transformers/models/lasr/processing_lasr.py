@@ -88,9 +88,7 @@ class LasrProcessor(ProcessorMixin):
         if text is None:
             return inputs
         else:
-            labels = encodings["input_ids"]
-            labels[labels == self.tokenizer.pad_token_id] = -100
-            inputs["labels"] = labels
+            inputs["labels"] = encodings["input_ids"]
             return inputs
 
     @property
