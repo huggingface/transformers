@@ -22,7 +22,7 @@ import os
 # ---------------------------------------------------------------------------
 # Path constants
 # ---------------------------------------------------------------------------
-DISTRIBUTED_DIR = os.path.join(os.path.dirname(__file__), "distributed")
+DISTRIBUTED_DIR = os.path.dirname(__file__)
 CONFIGS_DIR = os.path.join(DISTRIBUTED_DIR, "accelerate_configs")
 SCRIPTS_DIR = os.path.join(DISTRIBUTED_DIR, "scripts")
 

@@ -19,6 +19,7 @@ FSDP-specific distributed trainer tests.
 import itertools
 import json
 import os
+import textwrap
 import unittest
 from functools import partial
 from pathlib import Path
@@ -39,6 +40,7 @@ from transformers.testing_utils import (
     run_first,
     slow,
     torch_device,
+    torchrun,
 )
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import FSDPOption, get_last_checkpoint, set_seed
@@ -61,6 +63,7 @@ FSDP_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp.yaml")
 FSDP2_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp2.yaml")
 FSDP2_CP_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp2_cp.yaml")
 TRAIN_SCRIPT = os.path.join(SCRIPTS_DIR, "train.py")
+FSDP_GENERATE_SCRIPT = os.path.join(SCRIPTS_DIR, "fsdp_generate.py")
 
 FSDP_CONFIGS = {
     "fsdp1": FSDP_CONFIG_FILE,
@@ -482,6 +485,25 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
         execute_subprocess_async(cmd, env=self.get_env())
 
     # -------------------------------------------------------------------
+    # FSDP generation tests (moved from tests/generation/test_fsdp.py)
+    # -------------------------------------------------------------------
+    def test_fsdp_generate(self):
+        cmd = self.get_accelerate_cmd(
+            FSDP_GENERATE_SCRIPT,
+            config_file=FSDP_CONFIG_FILE,
+            extra_args=["--fsdp"],
+        )
+        execute_subprocess_async(cmd, env=self.get_env())
+
+    def test_fsdp2_generate(self):
+        cmd = self.get_accelerate_cmd(
+            FSDP_GENERATE_SCRIPT,
+            config_file=FSDP2_CONFIG_FILE,
+            extra_args=["--fsdp2"],
+        )
+        execute_subprocess_async(cmd, env=self.get_env())
+
+    # -------------------------------------------------------------------
     # Helpers
     # -------------------------------------------------------------------
     def _run_and_get_logs(self, cmd, output_dir):
@@ -513,3 +535,46 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
         else:
             args += ["--save_strategy", "no"]
         return args
+
+
+# ---------------------------------------------------------------------------
+# FSDP generic task model sharding (moved from tests/generation/test_fsdp.py)
+# ---------------------------------------------------------------------------
+
+
+@require_torch_multi_accelerator
+class TestFSDPGenericTaskModel(TestCasePlus):
+    nproc_per_node = 2
+
+    def test_generic_task_model_can_be_sharded(self):
+        script_to_run = textwrap.dedent(
+            """
+            import torch
+            from torch.distributed.fsdp import fully_shard
+            from transformers import AutoModelForTokenClassification
+
+            current_accelerator = torch.accelerator.current_accelerator(check_available=True)
+            accelerator_type = "cpu" if current_accelerator is None else current_accelerator.type
+            torch_accelerator_module = getattr(torch, accelerator_type, torch.cuda)
+
+            backend = "gloo"
+            if accelerator_type == "cuda":
+                backend = "nccl"
+            elif accelerator_type == "xpu":
+                backend = "xccl"
+
+            torch.distributed.init_process_group(
+                backend=backend, init_method="env://"
+            )
+            rank = torch.distributed.get_rank()
+            if torch_accelerator_module.is_available():
+                torch_accelerator_module.set_device(rank)
+
+            # Make sure it works
+            model = AutoModelForTokenClassification.from_pretrained("Qwen/Qwen2-0.5B")
+            module = fully_shard(model)
+
+            torch.distributed.destroy_process_group()
+            """
+        )
+        torchrun(script_to_run, self.nproc_per_node, env=self.get_env())
