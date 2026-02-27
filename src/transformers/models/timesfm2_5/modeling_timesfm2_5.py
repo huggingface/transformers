@@ -617,7 +617,7 @@ class TimesFm2_5Model(TimesFm2_5PreTrainedModel):
         tokenizer_inputs = torch.cat(
             [normed_inputs, patched_masks_bool.to(dtype=normed_inputs.dtype)],
             dim=-1,
-        )
+        ).to(dtype=self.dtype)
         input_embeddings = self.input_ff_layer(tokenizer_inputs)
 
         patch_padding = patched_masks_bool[..., -1]
@@ -841,11 +841,14 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
 
         loss = None
         if future_values is not None:
-            mse_loss = F.mse_loss(mean_predictions, future_values)
-            quantile_indices = [i for i in range(full_predictions.shape[-1]) if i != decode_index]
+            target_len = future_values.shape[1]
+            mean_preds = mean_predictions[:, :target_len]
+            full_preds = full_predictions[:, :target_len]
+            mse_loss = F.mse_loss(mean_preds, future_values)
+            quantile_indices = [i for i in range(full_preds.shape[-1]) if i != decode_index]
             if quantile_indices:
-                index_tensor = torch.tensor(quantile_indices, device=full_predictions.device, dtype=torch.long)
-                quantile_tensor = torch.index_select(full_predictions, dim=-1, index=index_tensor)
+                index_tensor = torch.tensor(quantile_indices, device=full_preds.device, dtype=torch.long)
+                quantile_tensor = torch.index_select(full_preds, dim=-1, index=index_tensor)
                 quantile_loss = self._quantile_loss(quantile_tensor, future_values)
                 loss = mse_loss + quantile_loss
             else:

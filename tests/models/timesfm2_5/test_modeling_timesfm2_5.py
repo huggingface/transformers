@@ -272,6 +272,41 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
         if self.has_attentions and outputs.attentions is not None:
             self.assertIsNotNone(attentions.grad)
 
+    def test_loss_computation(self):
+        """Test that loss is computed for both matching and shorter-than-horizon future_values."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = TimesFm2_5ModelForPrediction(config)
+        model.to(torch_device)
+        model.train()
+
+        past_values = inputs_dict["past_values"]
+
+        for horizon in (config.horizon_length, config.horizon_length // 2):
+            future_values = torch.randn(past_values.shape[0], horizon, device=torch_device)
+            outputs = model(past_values=past_values, future_values=future_values)
+            self.assertIsNotNone(outputs.loss)
+            self.assertEqual(outputs.loss.shape, ())
+            self.assertTrue(torch.isfinite(outputs.loss))
+            # Predictions should always be full horizon_length regardless of future_values length
+            self.assertEqual(outputs.mean_predictions.shape[1], config.horizon_length)
+
+    def test_loss_backward(self):
+        """Test that loss supports backpropagation."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = TimesFm2_5ModelForPrediction(config)
+        model.to(torch_device)
+        model.train()
+
+        past_values = inputs_dict["past_values"]
+        future_values = torch.randn(past_values.shape[0], config.horizon_length, device=torch_device)
+
+        outputs = model(past_values=past_values, future_values=future_values)
+        outputs.loss.backward()
+
+        # Check that gradients were computed for at least some parameters
+        has_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters() if p.requires_grad)
+        self.assertTrue(has_grad, "No gradients were computed during backpropagation")
+
 
 @require_torch
 @slow
