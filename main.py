@@ -42,19 +42,11 @@ def main() -> None:
     inputs.input_ids = inputs.input_ids.to(model.device)
     inputs.attention_mask = inputs.attention_mask.to(model.device)
 
-    # Build multimodal prefill embeddings so generation cache positions match the full multimodal prompt length.
-    inputs_embeds, _, attention_mask = model._embed(
-        inputs.input_ids,
-        getattr(inputs, "media", None),
-        getattr(inputs, "media_config", None),
-        None,
-        inputs.attention_mask,
-    )
-
     output_ids = model.generate(
         input_ids=inputs.input_ids,
-        inputs_embeds=inputs_embeds,
-        attention_mask=attention_mask,
+        attention_mask=inputs.attention_mask,
+        media=getattr(inputs, "media", None),
+        media_config=getattr(inputs, "media_config", None),
         max_new_tokens=1024,
         do_sample=False,
     )

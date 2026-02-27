@@ -39,6 +39,7 @@ from transformers.models.qwen2_audio.configuration_qwen2_audio import Qwen2Audio
 from transformers.models.qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoder
 from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import SiglipVisionModel
+from transformers.utils import ModelOutput
 
 from .configuration_omnivinci import IGNORE_INDEX, OmniVinciConfig
 from .media_encoder import BasicImageEncoder, BasicSoundEncoder, TSPVideoEncoder
@@ -997,7 +998,10 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
         use_cache=True,
         **kwargs,
     ):
-        is_first_step = past_key_values is None or (cache_position is not None and cache_position[0] == 0)
+        is_first_iteration = bool(kwargs.get("is_first_iteration", False))
+        is_first_step = is_first_iteration or past_key_values is None or (
+            cache_position is not None and cache_position[0] == 0
+        )
 
         # Build multimodal embeddings before delegating, so token/media alignment is preserved.
         if is_first_step and inputs_embeds is None and media is not None:
@@ -1021,7 +1025,47 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
                 model_inputs["inputs_embeds"] = inputs_embeds
                 model_inputs["attention_mask"] = attention_mask
                 model_inputs["input_ids"] = None
+                seq_len = attention_mask.shape[-1]
+                cache_pos = model_inputs.get("cache_position")
+                if cache_pos is None or cache_pos.shape[0] != seq_len:
+                    model_inputs["cache_position"] = torch.arange(seq_len, device=inputs_embeds.device)
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids.masked_fill_(attention_mask == 0, 0)
+                model_inputs["position_ids"] = position_ids
 
         model_inputs["media"] = None
         model_inputs["media_config"] = None
         return model_inputs
+
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict[str, Any],
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict[str, Any]:
+        attention_mask = model_kwargs.get("attention_mask")
+        logits = getattr(outputs, "logits", None)
+        if (
+            model_kwargs.get("media") is not None
+            and attention_mask is not None
+            and logits is not None
+            and attention_mask.shape[-1] != logits.shape[-2]
+        ):
+            batch_size = attention_mask.shape[0]
+            seq_len = logits.shape[-2]
+            model_kwargs["attention_mask"] = attention_mask.new_ones((batch_size, seq_len))
+            model_kwargs["cache_position"] = torch.arange(seq_len, device=attention_mask.device)
+            if model_kwargs.get("position_ids") is not None:
+                position_ids = model_kwargs["attention_mask"].long().cumsum(-1) - 1
+                position_ids.masked_fill_(model_kwargs["attention_mask"] == 0, 0)
+                model_kwargs["position_ids"] = position_ids
+            model_kwargs["media"] = None
+            model_kwargs["media_config"] = None
+
+        return super()._update_model_kwargs_for_generation(
+            outputs,
+            model_kwargs,
+            is_encoder_decoder=is_encoder_decoder,
+            num_new_tokens=num_new_tokens,
+        )
