@@ -1828,15 +1828,19 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
         Detected cat with confidence 0.789 at location [342.19, 24.3, 640.02, 372.25]
         Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
         ```"""
+        # We start by processing the visual input through the base RF-DETR model to obtain
+        # the transformer's last hidden state and the final sequence of reference points.
         outputs = self.model(pixel_values, pixel_mask=pixel_mask, **kwargs)
 
         last_hidden_states = outputs.last_hidden_state
         intermediate_reference_points = outputs.intermediate_reference_points
 
-        # Get logits and boxes from first stage object queries
+        # In the first stage, we generate classification logits derived directly from the
+        # encoder's proposed object query embeddings.
         enc_outputs_class_logits = self.predict_encoder_class_logits(outputs.enc_outputs_class)
 
-        # Get logits and boxes from second stage object queries
+        # For the second stage, we predict the final classification labels and refined bounding
+        # boxes using the decoder's last hidden state and the most recent reference points.
         logits, pred_boxes = self.predict_class_and_boxes(last_hidden_states, intermediate_reference_points[-1])
 
         loss, loss_dict, auxiliary_outputs = None, None, None
@@ -2074,6 +2078,8 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
     ) -> dict[str, torch.Tensor]:
         image_size = pixel_values.shape[-2:]
 
+        # We start by processing the visual input through the base RF-DETR model to obtain
+        # multi-scale spatial features, query embeddings, and their transformation history.
         outputs = self.rf_detr.model(pixel_values, pixel_mask=pixel_mask, **kwargs)
 
         spatial_features = outputs.backbone_features[-1]
@@ -2081,14 +2087,19 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         intermediate_reference_points = outputs.intermediate_reference_points
         enc_outputs_class = outputs.enc_outputs_class
 
-        # First stage segmentation proposals
+        # In the first stage, we generate classification logits and initial segmentation masks
+        # derived directly from the encoder's proposed object query embeddings.
         enc_outputs_class_logits = self.rf_detr.predict_encoder_class_logits(enc_outputs_class)
         enc_outputs_masks = self.segmentation_head(spatial_features, enc_outputs_class, image_size, skip_blocks=True)
 
-        # Second stage segmentation proposals
+        # For the second stage, we predict the final classification labels and refined bounding
+        # boxes using the decoder's last hidden state.
         logits, pred_boxes = self.rf_detr.predict_class_and_boxes(
             last_hidden_states, intermediate_reference_points[-1]
         )
+
+        # We then pass the high-resolution spatial features and query hidden states through the
+        # segmentation head to produce the final, detailed instance masks.
         outputs_masks = self.segmentation_head(spatial_features, outputs.intermediate_hidden_states, image_size)
         pred_masks = outputs_masks[-1]
 
