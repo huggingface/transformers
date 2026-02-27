@@ -436,9 +436,6 @@ class Trainer:
                 "https://huggingface.co/docs/transformers/model_doc/auto"
             )
 
-        if self.args.use_liger_kernel:
-            apply_liger_kernel(model, self.args.liger_kernel_config)
-
         validate_quantization_for_training(model)
 
         # ---- 4. Distributed strategy ------------------------------------------------
@@ -1388,7 +1385,7 @@ class Trainer:
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
 
-        if self.model_init is not None and self.args.use_liger_kernel:
+        if self.args.use_liger_kernel:
             apply_liger_kernel(self.model, self.args.liger_kernel_config)
 
         if DebugOption.UNDERFLOW_OVERFLOW in args.debug:
