@@ -862,6 +862,9 @@ def main():
                     progress.advance(outer_task)
 
                 # Phase B: drain model-check futures
+                # mismatch lines are deferred so we can annotate them with pattern numbers later
+                deferred_mismatch_lines: list[tuple[str | None, list[str]]] = []  # (canonical, lines)
+
                 for future in as_completed(check_futures):
                     model_id, model_type = check_futures[future]
                     try:
@@ -874,18 +877,33 @@ def main():
 
                     models_checked += 1
 
-                    for line in output_lines:
-                        console.print(line)
-
-                    if mismatch is not None:
+                    if mismatch is None:
+                        # Non-mismatch output (verbose skips/errors) prints immediately
+                        for line in output_lines:
+                            console.print(line)
+                    else:
                         key = converter or model_type
                         all_mismatches.setdefault(key, set()).add(mismatch)
                         if canonical:
                             with diff_groups_lock:
                                 diff_groups.setdefault(canonical, []).append(mismatch)
                                 diff_group_converters.setdefault(canonical, set()).add(key)
+                        deferred_mismatch_lines.append((canonical, output_lines))
 
     finally:
+        # Build canonical → pattern number map now that all diffs are collected
+        sorted_canonicals = sorted(diff_groups.items(), key=lambda x: len(x[1]), reverse=True)
+        canonical_to_pattern_num: dict[str, int] = {c: i for i, (c, _) in enumerate(sorted_canonicals, 1)}
+        total_patterns = len(sorted_canonicals)
+
+        # Flush deferred mismatch lines, annotating each with its pattern number
+        for canonical, lines in deferred_mismatch_lines:
+            pnum = canonical_to_pattern_num.get(canonical) if canonical else None
+            for line in lines:
+                if pnum is not None and "[bold red]MISMATCH[/]" in line:
+                    line = f"{line}  [dim](Pattern #{pnum}/{total_patterns})[/]"
+                console.print(line)
+
         print_diffs(spm_registry)
 
         console.print()
@@ -904,9 +922,10 @@ def main():
         if diff_groups:
             console.print(Rule("[bold]Unique diff patterns[/]"))
             console.print(f"  [bold red]--- AutoTokenizer[/]   [bold green]+++ TokenizersBackend[/]")
-            for i, (canonical, model_ids) in enumerate(sorted(diff_groups.items(), key=lambda x: len(x[1]), reverse=True), 1):
+            for i, (canonical, model_ids) in enumerate(sorted_canonicals, 1):
                 converters_str = ", ".join(sorted(diff_group_converters.get(canonical, set())))
-                console.print(f"\n[bold yellow]Pattern #{i}[/] — {len(model_ids)} model(s)  [yellow]converter(s): {converters_str}[/]")
+                models_str = ", ".join(f"[cyan]{m}[/]" for m in sorted(model_ids))
+                console.print(f"\n[bold yellow]Pattern #{i}[/] — {len(model_ids)} model(s)  [yellow]{converters_str}[/]  {models_str}")
                 console.print(f"  [bold red]--- AutoTokenizer[/]   [bold green]+++ TokenizersBackend[/]")
                 for line in _format_diff(canonical.splitlines()):
                     console.print(line)
