@@ -510,7 +510,7 @@ class MimiIntegrationTest(unittest.TestCase):
 
     def test_integration_longform(self):
         """
-        Test Mimi on a longer audio (~45s) that exceeds the sliding window context (250 frames = 20s).
+        Test Mimi on a longer audio (~45s) that exceeds the sliding window context (250 frames = 10s).
         reproducer: https://gist.github.com/eustlb/34f79f34d423ccf8983c2c6c8dab2bcc
         """
 
