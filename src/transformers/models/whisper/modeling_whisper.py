@@ -564,6 +564,8 @@ class WhisperEncoder(WhisperPreTrainedModel):
         config: WhisperConfig
     """
 
+    input_modalities = ("audio",)
+
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
         self.dropout = config.dropout
@@ -697,6 +699,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
     """
 
     main_input_name = "input_ids"
+    input_modalities = ("text",)
 
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
@@ -835,7 +838,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

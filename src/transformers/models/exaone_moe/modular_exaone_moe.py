@@ -23,7 +23,7 @@ from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, is_grouped_mm_available
+from ...utils import TransformersKwargs
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3MoE,
     DeepseekV3NaiveMoe,
@@ -285,9 +285,7 @@ class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
         "attentions": ExaoneMoeAttention,
         "router_logits": ExaoneMoeSparseMoEBlock,
     }
-    _can_compile_fullgraph = (
-        is_grouped_mm_available()
-    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
+
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 

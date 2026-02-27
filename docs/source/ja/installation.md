@@ -22,11 +22,9 @@ rendered properly in your Markdown viewer.
 
 使用しているDeep Learningライブラリに対して、🤗 Transformersをインストールしてキャッシュを設定、そしてオプションでオフラインで実行できるように 🤗 Transformersを設定します。
 
-🤗 TransformersはPython 3.6+, PyTorch 1.1.0+, TensorFlow 2.0+, Flaxで動作確認しています。 使用しているDeep Learningライブラリに合わせて、以下のインストール方法に従ってください:
+🤗 TransformersはPython 3.10+とPyTorch 2.4+で動作確認しています。 使用しているDeep Learningライブラリに合わせて、以下のインストール方法に従ってください:
 
 * [PyTorch](https://pytorch.org/get-started/locally/)のインストール手順。
-* [TensorFlow 2.0](https://www.tensorflow.org/install/pip)のインストール手順。
-* [Flax](https://flax.readthedocs.io/en/latest/)のインストール手順。
 
 ## pipでのインストール
 
@@ -59,18 +57,6 @@ CPU対応のみ必要な場合、🤗 TransformersとDeep Learningライブラ�
 
 ```bash
 pip install transformers[torch]
-```
-
-🤗 TransformersとTensorFlow 2.0:
-
-```bash
-pip install transformers[tf-cpu]
-```
-
-🤗 TransformersとFlax:
-
-```bash
-pip install transformers[flax]
 ```
 
 最後に、以下のコマンドを実行することで🤗 Transformersが正しくインストールされているかを確認します。学習済みモデルがダウンロードされます:
@@ -116,7 +102,7 @@ cd transformers
 pip install -e .
 ```
 
-上記のコマンドは、レポジトリをクローンしたフォルダとPythonのライブラリをパスをリンクします。Pythonは通常のライブラリパスに加えて、あなたがクローンしたフォルダの中も見るようになります。例えば、Pythonパッケージが通常、`~/anaconda3/envs/main/lib/python3.7/site-packages/`にインストールされている場合、Pythonはクローンしたフォルダも検索するようになります: `~/transformers/`.
+上記のコマンドは、レポジトリをクローンしたフォルダとPythonのライブラリをパスをリンクします。Pythonは通常のライブラリパスに加えて、あなたがクローンしたフォルダの中も見るようになります。例えば、Pythonパッケージが通常、`~/anaconda3/envs/main/lib/python3.10/site-packages/`にインストールされている場合、Pythonはクローンしたフォルダも検索するようになります: `~/transformers/`.
 
 <Tip warning={true}>
 

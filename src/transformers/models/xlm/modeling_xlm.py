@@ -959,6 +959,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
         # They are calculated on the fly on XLMModel.forward()
         kwargs.pop("token_type_ids", None)
         kwargs.pop("attention_mask", None)
+        kwargs.pop("position_ids", None)
 
         # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():

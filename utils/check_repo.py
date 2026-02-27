@@ -127,6 +127,9 @@ PRIVATE_MODELS = [
     "MetaClip2VisionTransformer",
     "MLCDVisionTransformer",
     # end of should have beens
+    "VoxtralRealtimeTextModel",
+    "VoxtralRealtimeTextForCausalLM",
+    "VoxtralRealtimeTextPreTrainedModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -231,7 +234,11 @@ IGNORE_NON_TESTED = (
         "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
-        "Ernie4_5_VL_MoeTextModel",  # Building part of bigger (tested) model
+        "HiggsAudioV2Model",  # Building part of bigger (tested) model. Tested implicitly through HiggsAudioV2ForConditionalGenerationIntegrationTest.
+        "Ernie4_5_VLMoeTextModel",  # Building part of bigger (tested) model
+        "Ernie4_5_VL_MoeForConditionalGeneration",  # BC alias
+        "Ernie4_5_VL_MoeModel",  # BC alias
+        "Ernie4_5_VL_MoeTextModel",  # BC alias
         "PeAudioFrameLevelModel",
         "PeAudioVideoModel",
     ]
@@ -437,6 +444,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CsmForConditionalGeneration",  # Building part of a bigger model
     "BltPatcher",  # Building part of a bigger model, tested implicitly through BltForCausalLM
     "Florence2VisionBackbone",  # Building part of a bigger model
+    "HiggsAudioV2Model",  # Building part of a bigger model
     "Qwen3OmniMoeCode2Wav",  # Building part of a bigger model
     "Qwen3OmniMoeCode2WavTransformerModel",  # Building part of a bigger model
     "Qwen3OmniMoeTalkerCodePredictorModel",  # Building part of a bigger model
@@ -445,8 +453,11 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
-    "Ernie4_5_VL_MoeTextModel",  # Building part of a bigger model
+    "Ernie4_5_VLMoeTextModel",  # Building part of a bigger model
     "PeAudioFrameLevelModel",
+    "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
+    "Ernie4_5_VL_MoeModel",  # BC Alias
+    "Ernie4_5_VL_MoeTextModel",  # BC Alias
 ]
 
 
@@ -1047,6 +1058,16 @@ UNDOCUMENTED_OBJECTS = [
     "VitPoseBackbone",  # Internal module
     "VitPoseBackboneConfig",  # Internal module
     "get_values",  # Internal object
+    "Ernie4_5_VL_MoeConfig",  # BC Alias
+    "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
+    "Ernie4_5_VL_MoeImageProcessor",  # BC Alias
+    "Ernie4_5_VL_MoeImageProcessorFast",  # BC Alias
+    "Ernie4_5_VL_MoeModel",  # BC Alias
+    "Ernie4_5_VL_MoeTextConfig",  # BC Alias
+    "Ernie4_5_VL_MoeTextModel",  # BC Alias
+    "Ernie4_5_VL_MoeVariableResolutionResamplerModel",  # BC Alias
+    "Ernie4_5_VL_MoeVisionConfig",  # BC Alias
+    "Ernie4_5_VL_MoeVisionTransformerPretrainedModel",  # BC Alias
 ]
 
 # This list should be empty. Objects in it should get their own doc page.

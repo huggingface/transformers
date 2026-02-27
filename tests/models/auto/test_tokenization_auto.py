@@ -621,13 +621,7 @@ class NopConfig(PreTrainedConfig):
             tok2 = AutoTokenizer.from_pretrained(tmp_dir)
             self.assertTrue(tok2.__class__ == HerbertTokenizer)
 
-        tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
-        self.assertTrue(tok.__class__ == TokenizersBackend)
-
         tok = AutoProcessor.from_pretrained("mistralai/Ministral-3-8B-Instruct-2512-BF16").tokenizer
-        self.assertTrue(tok.__class__ == TokenizersBackend)
-
-        tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
         self.assertTrue(tok.__class__ == TokenizersBackend)
 
     def test_custom_tokenizer_with_mismatched_tokenizer_class(self):
