@@ -51,7 +51,11 @@ distributed:
 # ... other parameters
 ```
 
-Training can be launched via `torchrun`. For example, this config can be launched using `torchrun --nproc-per-node=4 examples/llm_finetune/finetune.py -c /path/to/yaml`.
+Launch training with `torchrun` using the command below.
+
+```bash
+torchrun -–nproc-per-node=4 examples/llm_finetune/finetune.py -c /path/to/yaml
+```
 
 ## Transformers integration
 
