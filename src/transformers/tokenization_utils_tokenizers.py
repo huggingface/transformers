@@ -35,9 +35,9 @@ from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, Wo
 
 from transformers.utils.hub import cached_file
 
+from .convert_slow_tokenizer import SpmConverter
 from .integrations.ggml import convert_gguf_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
-from .convert_slow_tokenizer import SpmConverter
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
     BatchEncoding,
@@ -117,9 +117,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # we extract vocab / merges from the tokenizer file to pass them to __init__
-            tokenizer_from_file = TokenizerFast.from_file(fast_tokenizer_file)
-            local_kwargs["tokenizer_object"] = tokenizer_from_file
-            processor = tokenizer_from_file.post_processor
+            processor = TokenizerFast.from_file(fast_tokenizer_file).post_processor
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
             vocab = tokenizer_json.get("model", {}).get("vocab", None)
