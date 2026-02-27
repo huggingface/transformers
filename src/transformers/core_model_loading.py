@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import math
 import os
-import sys
 import re
+import sys
 import traceback
 from abc import abstractmethod
 from collections import defaultdict
