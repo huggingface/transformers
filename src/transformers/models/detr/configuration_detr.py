@@ -15,7 +15,7 @@
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging, auto_docstring
+from ...utils import auto_docstring, logging
 from ..auto import AutoConfig
 
 

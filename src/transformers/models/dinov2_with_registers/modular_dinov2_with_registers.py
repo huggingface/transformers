@@ -30,7 +30,7 @@ from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging, torch_int, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 
 
 logger = logging.get_logger(__name__)

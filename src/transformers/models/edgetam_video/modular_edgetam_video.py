@@ -61,9 +61,11 @@ from ..sam2_video.modeling_sam2_video import (
 class EdgeTamVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
     pass
 
+
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamVideoMaskDecoderConfig(Sam2VideoMaskDecoderConfig):
     pass
+
 
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamVideoConfig(Sam2VideoConfig):

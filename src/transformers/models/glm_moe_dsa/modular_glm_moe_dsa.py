@@ -26,7 +26,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...models.llama.modeling_llama import rotate_half
 from ...processing_utils import Unpack
-from ...utils import logging, auto_docstring
+from ...utils import auto_docstring, logging
 from ...utils.generic import is_flash_attention_requested
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeForCausalLM,

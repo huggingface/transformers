@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging, auto_docstring
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 

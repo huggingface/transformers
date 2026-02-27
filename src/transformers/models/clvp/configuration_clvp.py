@@ -16,10 +16,11 @@
 import os
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging, auto_docstring
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
+
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
 class ClvpEncoderConfig(PreTrainedConfig):

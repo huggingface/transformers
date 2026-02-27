@@ -15,7 +15,7 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging, auto_docstring
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -27,7 +27,7 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
     intermediate_multiple_size (`int`, *optional*, defaults to 4):
         Dimension of the "intermediate" layer in the Transformer encoder is calculated by hidden_size *
         intermediate_multiple_size.
-    
+
     Example:
 
     ```python

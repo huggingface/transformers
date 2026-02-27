@@ -17,9 +17,10 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ...utils import auto_docstring
+
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...utils import auto_docstring
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,

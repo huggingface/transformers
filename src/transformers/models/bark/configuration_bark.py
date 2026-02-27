@@ -14,11 +14,12 @@
 """BARK model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import add_start_docstrings, logging, auto_docstring
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
+
 
 @auto_docstring(checkpoint="suno/bark")
 class BarkSubModelConfig(PreTrainedConfig):
@@ -76,6 +77,7 @@ class BarkSemanticConfig(BarkSubModelConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "semantic"
     base_config_key = "semantic_config"
 
@@ -97,6 +99,7 @@ class BarkCoarseConfig(BarkSubModelConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "coarse_acoustics"
     base_config_key = "coarse_acoustics_config"
 
@@ -118,6 +121,7 @@ class BarkFineConfig(BarkSubModelConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "fine_acoustics"
     base_config_key = "fine_acoustics_config"
 
@@ -131,7 +135,7 @@ class BarkFineConfig(BarkSubModelConfig):
 
 @auto_docstring(checkpoint="suno/bark")
 class BarkConfig(PreTrainedConfig):
-    r"""    
+    r"""
     semantic_config ([`BarkSemanticConfig`], *optional*):
         Configuration of the underlying semantic sub-model.
     coarse_acoustics_config ([`BarkCoarseConfig`], *optional*):

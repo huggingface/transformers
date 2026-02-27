@@ -55,6 +55,7 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
 
 logger = logging.get_logger(__name__)
 
+
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
 class Glm4vMoeTextConfig(Glm4MoeConfig):
     r"""

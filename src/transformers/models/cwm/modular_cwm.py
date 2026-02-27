@@ -20,7 +20,7 @@ from ...configuration_utils import layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,

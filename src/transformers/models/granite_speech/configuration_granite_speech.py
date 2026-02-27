@@ -14,8 +14,8 @@
 """Config class for Granite Speech."""
 
 from ...configuration_utils import PreTrainedConfig
-from ..auto import CONFIG_MAPPING, AutoConfig
 from ...utils import auto_docstring
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")

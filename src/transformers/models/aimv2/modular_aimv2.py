@@ -30,7 +30,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    auto_docstring,
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -99,6 +98,7 @@ class Aimv2VisionConfig(SiglipVisionConfig):
         self.is_native = is_native
 
         del self.layer_norm_eps
+
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 class Aimv2TextConfig(SiglipTextConfig):

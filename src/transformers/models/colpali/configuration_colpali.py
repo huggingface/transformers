@@ -17,8 +17,8 @@ import logging
 from copy import deepcopy
 
 from ...configuration_utils import PreTrainedConfig
-from ..auto import CONFIG_MAPPING, AutoConfig
 from ...utils import auto_docstring
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.getLogger(__name__)

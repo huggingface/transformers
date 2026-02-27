@@ -14,11 +14,12 @@
 """AyaVision model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging, auto_docstring
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
+
 
 @auto_docstring(checkpoint="CohereForAI/aya-vision-8b")
 class AyaVisionConfig(PreTrainedConfig):

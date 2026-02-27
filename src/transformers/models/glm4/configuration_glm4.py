@@ -18,6 +18,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
+
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 class Glm4Config(PreTrainedConfig):
     r"""

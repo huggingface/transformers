@@ -45,6 +45,7 @@ from ..eomt.modeling_eomt import (
     EomtPreTrainedModel,
 )
 
+
 @auto_docstring(checkpoint="tue-mps/coco_panoptic_eomt_large_640_dinov3")
 class EomtDinov3Config(EomtConfig):
     r"""

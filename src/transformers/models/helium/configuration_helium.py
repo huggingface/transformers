@@ -18,6 +18,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
+
 @auto_docstring(checkpoint="kyutai/helium-2b")
 class HeliumConfig(PreTrainedConfig):
     r"""

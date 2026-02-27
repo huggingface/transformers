@@ -17,6 +17,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
+
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-0.3B-PT")
 class Ernie4_5Config(PreTrainedConfig):
     r"""

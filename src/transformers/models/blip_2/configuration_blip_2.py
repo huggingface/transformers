@@ -15,11 +15,12 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-from ...utils import logging, auto_docstring
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
+
 
 @auto_docstring(checkpoint="Salesforce/blip2-opt-2.7b")
 class Blip2VisionConfig(PreTrainedConfig):

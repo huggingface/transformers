@@ -13,9 +13,9 @@
 # limitations under the License.
 """BEiT model configuration"""
 
-from ...utils import auto_docstring
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/beit-base-patch16-224-pt22k")

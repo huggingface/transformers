@@ -15,9 +15,9 @@
 
 import torch.nn as nn
 
-from ...utils import auto_docstring
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
@@ -31,6 +31,7 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeRotaryEmbedding,
     Glm4MoeTopkRouter,
 )
+
 
 @auto_docstring(checkpoint="THUDM/GLM-4-100B-A10B")
 class Glm4MoeLiteConfig(PreTrainedConfig):

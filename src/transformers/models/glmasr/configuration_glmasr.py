@@ -13,8 +13,9 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ..auto import CONFIG_MAPPING, AutoConfig
 from ...utils import auto_docstring
+from ..auto import CONFIG_MAPPING, AutoConfig
+
 
 @auto_docstring(checkpoint="zai-org/GLM-ASR-Nano-2512")
 class GlmAsrEncoderConfig(PreTrainedConfig):

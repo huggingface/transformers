@@ -18,7 +18,7 @@ import math
 import numpy as np
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging, auto_docstring
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)

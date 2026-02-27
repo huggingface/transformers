@@ -14,40 +14,41 @@
 """CPMAnt model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging, auto_docstring
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
+
 @auto_docstring(checkpoint="openbmb/cpm-ant-10b")
 class CpmAntConfig(PreTrainedConfig):
     r"""
-   position_bias_num_buckets (`int`, *optional*, defaults to 512):
-        The number of position_bias buckets.
-    position_bias_max_distance (`int`, *optional*, defaults to 2048):
-        The maximum sequence length that this model might ever be used with. Typically set this to something large
-        just in case (e.g., 512 or 1024 or 2048).
-    prompt_types (`int`, *optional*, defaults to 32):
-        The type of prompt.
-    prompt_length (`int`, *optional*, defaults to 32):
-        The length of prompt.
-    segment_types (`int`, *optional*, defaults to 32):
-        The type of segment.
+    position_bias_num_buckets (`int`, *optional*, defaults to 512):
+         The number of position_bias buckets.
+     position_bias_max_distance (`int`, *optional*, defaults to 2048):
+         The maximum sequence length that this model might ever be used with. Typically set this to something large
+         just in case (e.g., 512 or 1024 or 2048).
+     prompt_types (`int`, *optional*, defaults to 32):
+         The type of prompt.
+     prompt_length (`int`, *optional*, defaults to 32):
+         The length of prompt.
+     segment_types (`int`, *optional*, defaults to 32):
+         The type of segment.
 
-    Example:
+     Example:
 
-    ```python
-    >>> from transformers import CpmAntModel, CpmAntConfig
+     ```python
+     >>> from transformers import CpmAntModel, CpmAntConfig
 
-    >>> # Initializing a CPMAnt cpm-ant-10b style configuration
-    >>> configuration = CpmAntConfig()
+     >>> # Initializing a CPMAnt cpm-ant-10b style configuration
+     >>> configuration = CpmAntConfig()
 
-    >>> # Initializing a model from the cpm-ant-10b style configuration
-    >>> model = CpmAntModel(configuration)
+     >>> # Initializing a model from the cpm-ant-10b style configuration
+     >>> model = CpmAntModel(configuration)
 
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+     >>> # Accessing the model configuration
+     >>> configuration = model.config
+     ```"""
 
     model_type = "cpmant"
 

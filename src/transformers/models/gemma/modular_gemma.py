@@ -25,7 +25,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,

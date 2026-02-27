@@ -13,8 +13,9 @@
 # limitations under the License.
 """BertGeneration model configuration"""
 
-from ...utils import auto_docstring
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
+
 
 @auto_docstring(checkpoint="google/bert_for_seq_generation_L-24_bbc_encoder")
 class BertGenerationConfig(PreTrainedConfig):

@@ -121,38 +121,38 @@ class EdgeTamMaskDecoderConfig(Sam2MaskDecoderConfig):
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamConfig(Sam2Config):
     r"""
-   prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):
-        Dictionary of configuration options used to initialize [`EdgeTamPromptEncoderConfig`].
-    mask_decoder_config (Union[`dict`, `EdgeTamMaskDecoderConfig`], *optional*):
-        Dictionary of configuration options used to initialize [`EdgeTamMaskDecoderConfig`].
+    prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):
+         Dictionary of configuration options used to initialize [`EdgeTamPromptEncoderConfig`].
+     mask_decoder_config (Union[`dict`, `EdgeTamMaskDecoderConfig`], *optional*):
+         Dictionary of configuration options used to initialize [`EdgeTamMaskDecoderConfig`].
 
-    Example:
+     Example:
 
-    ```python
-    >>> from transformers import (
-    ...     EdgeTamVisionConfig,
-    ...     EdgeTamPromptEncoderConfig,
-    ...     EdgeTamMaskDecoderConfig,
-    ...     EdgeTamModel,
-    ... )
+     ```python
+     >>> from transformers import (
+     ...     EdgeTamVisionConfig,
+     ...     EdgeTamPromptEncoderConfig,
+     ...     EdgeTamMaskDecoderConfig,
+     ...     EdgeTamModel,
+     ... )
 
-    >>> # Initializing a EdgeTamConfig with `"facebook/edgetam.1_hiera_tiny"` style configuration
-    >>> configuration = EdgeTamConfig()
+     >>> # Initializing a EdgeTamConfig with `"facebook/edgetam.1_hiera_tiny"` style configuration
+     >>> configuration = EdgeTamConfig()
 
-    >>> # Initializing a EdgeTamModel (with random weights) from the `"facebook/edgetam.1_hiera_tiny"` style configuration
-    >>> model = EdgeTamModel(configuration)
+     >>> # Initializing a EdgeTamModel (with random weights) from the `"facebook/edgetam.1_hiera_tiny"` style configuration
+     >>> model = EdgeTamModel(configuration)
 
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
+     >>> # Accessing the model configuration
+     >>> configuration = model.config
 
-    >>> # We can also initialize a EdgeTamConfig from a EdgeTamVisionConfig, EdgeTamPromptEncoderConfig, and EdgeTamMaskDecoderConfig
-    >>> # Initializing EDGETAM vision encoder, memory attention, and memory encoder configurations
-    >>> vision_config = EdgeTamVisionConfig()
-    >>> prompt_encoder_config = EdgeTamPromptEncoderConfig()
-    >>> mask_decoder_config = EdgeTamMaskDecoderConfig()
+     >>> # We can also initialize a EdgeTamConfig from a EdgeTamVisionConfig, EdgeTamPromptEncoderConfig, and EdgeTamMaskDecoderConfig
+     >>> # Initializing EDGETAM vision encoder, memory attention, and memory encoder configurations
+     >>> vision_config = EdgeTamVisionConfig()
+     >>> prompt_encoder_config = EdgeTamPromptEncoderConfig()
+     >>> mask_decoder_config = EdgeTamMaskDecoderConfig()
 
-    >>> config = EdgeTamConfig(vision_config, prompt_encoder_config, mask_decoder_config)
-    ```
+     >>> config = EdgeTamConfig(vision_config, prompt_encoder_config, mask_decoder_config)
+     ```
     """
 
     pass

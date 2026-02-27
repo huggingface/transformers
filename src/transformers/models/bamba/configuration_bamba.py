@@ -15,17 +15,19 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging, auto_docstring
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
+
 
 @auto_docstring(
     custom_intro="""
     The BambaModel is a hybrid [mamba2](https://github.com/state-spaces/mamba) architecture with SwiGLU.
     The checkpoints are  jointly trained by IBM, Princeton, and UIUC.
     """,
-    checkpoint="ibm-fms/Bamba-9.8b-2.2T-hf")
+    checkpoint="ibm-fms/Bamba-9.8b-2.2T-hf",
+)
 class BambaConfig(PreTrainedConfig):
     model_type = "bamba"
     keys_to_ignore_at_inference = ["past_key_values"]

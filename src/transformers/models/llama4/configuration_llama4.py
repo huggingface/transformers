@@ -16,64 +16,26 @@
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="meta-llama/Llama-4-Scout-17B-16E")
 class Llama4VisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Llama4VisionModel`]. It is used to instantiate a
-    Llama4 vision model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Llama4 109B.
-
-    e.g. [meta-llama/Llama-4-Scout-17B-16E](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        num_hidden_layers (`int`, *optional*, defaults to 34):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input image.
-        intermediate_size (`int`, *optional*, defaults to 5632):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        vision_output_dim (`int`, *optional*, defaults to 7680):
-            Dimensionality of the vision model output. Includes output of transformer
-            encoder with intermediate layers and global transformer encoder.
-        image_size (`int`, *optional*, defaults to 448):
-            The size (resolution) of each image *tile*.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            Controls which vision tokens are kept from the backbone. `"default"` drops the CLS token and `"full"` keeps all tokens.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        pixel_shuffle_ratio (`float`, *optional*, defaults to 0.5):
-            Pixel-shuffle ratio for downsampling patch tokens. Smaller values produce fewer tokens (more downsampling).
-        projector_input_dim (`int`, *optional*, defaults to 4096):
-            Width of the vision adapter MLP before pixel shuffle. Larger value increases capacity and compute.
-        projector_output_dim (`int`, *optional*, defaults to 4096):
-            Output width of the vision adapter. Larger value yields higher-dimensional image features.
-        multi_modal_projector_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the multi-modal projector layers.
-        projector_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout rate inside the vision adapter MLP. Higher value adds more regularization.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout rate on vision attention probabilities. Higher value adds more regularization.
-        rope_parameters (`RopeParameters`, *optional*):
-            RoPE Parameters
+    vision_output_dim (`int`, *optional*, defaults to 7680):
+        Dimensionality of the vision model output. Includes output of transformer
+        encoder with intermediate layers and global transformer encoder.
+    pixel_shuffle_ratio (`float`, *optional*, defaults to 0.5):
+        Pixel-shuffle ratio for downsampling patch tokens. Smaller values produce fewer tokens (more downsampling).
+    projector_input_dim (`int`, *optional*, defaults to 4096):
+        Width of the vision adapter MLP before pixel shuffle. Larger value increases capacity and compute.
+    projector_output_dim (`int`, *optional*, defaults to 4096):
+        Output width of the vision adapter. Larger value yields higher-dimensional image features.
+    projector_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout rate inside the vision adapter MLP. Higher value adds more regularization.
     """
 
     base_model_tp_plan = {

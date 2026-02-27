@@ -18,6 +18,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
+
 @auto_docstring(checkpoint="Emu3-community/Emu3-Chat-hf")
 class Emu3VQVAEConfig(PreTrainedConfig):
     r"""

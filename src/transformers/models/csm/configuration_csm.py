@@ -15,7 +15,7 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging, auto_docstring
+from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
 
 
@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="sesame/csm-1b")
 class CsmDepthDecoderConfig(PreTrainedConfig):
-    r""" 
+    r"""
     ```python
     >>> from transformers import CsmDepthDecoder, CsmDepthDecoderConfig
 
@@ -104,24 +104,24 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="sesame/csm-1b")
 class CsmConfig(PreTrainedConfig):
     r"""
-   tie_codebooks_embeddings (`bool`, *optional*, defaults to `True`):
-        Whether to tie the codebook tokens embeddings of the backbone model to the codebook tokens embeddings of the depth decoder.
-    depth_decoder_config (`CsmDepthDecoderConfig`, *optional*):
-        Configuration for the depth decoder.
+    tie_codebooks_embeddings (`bool`, *optional*, defaults to `True`):
+         Whether to tie the codebook tokens embeddings of the backbone model to the codebook tokens embeddings of the depth decoder.
+     depth_decoder_config (`CsmDepthDecoderConfig`, *optional*):
+         Configuration for the depth decoder.
 
 
-    ```python
-    >>> from transformers import CsmForConditionalGeneration, CsmConfig
+     ```python
+     >>> from transformers import CsmForConditionalGeneration, CsmConfig
 
-    >>> # Initializing a CsmConfig
-    >>> configuration = CsmConfig()
+     >>> # Initializing a CsmConfig
+     >>> configuration = CsmConfig()
 
-    >>> # Initializing a model
-    >>> model = CsmForConditionalGeneration(configuration)
+     >>> # Initializing a model
+     >>> model = CsmForConditionalGeneration(configuration)
 
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+     >>> # Accessing the model configuration
+     >>> configuration = model.config
+     ```"""
 
     model_type = "csm"
     base_config_key = "csm_config"

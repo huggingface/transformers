@@ -17,12 +17,16 @@ from typing import Any
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging, auto_docstring
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
-@auto_docstring(custom_intro="This config is used to instantiate attention layers.", checkpoint="transformers-community/dbrx-instruct")
+
+@auto_docstring(
+    custom_intro="This config is used to instantiate attention layers.",
+    checkpoint="transformers-community/dbrx-instruct",
+)
 class DbrxAttentionConfig(PreTrainedConfig):
     r"""
     attn_pdrop (`float`, *optional*, defaults to 0.0):
@@ -48,8 +52,10 @@ class DbrxAttentionConfig(PreTrainedConfig):
         self.kv_n_heads = kv_n_heads
 
 
-@auto_docstring(custom_intro="This config is used to instantiate feedforward layers.", checkpoint="transformers-community/dbrx-instruct")
-
+@auto_docstring(
+    custom_intro="This config is used to instantiate feedforward layers.",
+    checkpoint="transformers-community/dbrx-instruct",
+)
 class DbrxFFNConfig(PreTrainedConfig):
     r"""
     ffn_act_fn (`dict`, *optional*, defaults to `None`): A dict specifying activation function for the FFN.
@@ -59,13 +65,13 @@ class DbrxFFNConfig(PreTrainedConfig):
         The hidden size of the feedforward network.
     moe_num_experts (`int`, *optional*, defaults to 4):
         The number of experts in the mixture of experts layer.
-    moe_top_k (`int`, *optional*, defaults to 1):   
+    moe_top_k (`int`, *optional*, defaults to 1):
         The number of experts to use in the mixture of experts layer.
     moe_jitter_eps (`float`, *optional*, defaults to `None`):
         If not `None`, the jitter epsilon for the mixture of experts layer.
     moe_loss_weight (`float`, *optional*, defaults to 0.01):
         The loss weight for the mixture of experts layer.
-    moe_normalize_expert_weights (`float`, *optional*, defaults to 1.0):    
+    moe_normalize_expert_weights (`float`, *optional*, defaults to 1.0):
         The normalization factor for the expert weights.
     """
 

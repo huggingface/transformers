@@ -528,12 +528,14 @@ class ConfigArgs:
     """,
     }
 
-    hidden_size = {"description": """
+    hidden_size = {
+        "description": """
     Dimension of the hidden representations.
     """,
     }
 
-    intermediate_size = {"description": """
+    intermediate_size = {
+        "description": """
     Dimension of the MLP representations.
     """,
     }
@@ -544,7 +546,8 @@ class ConfigArgs:
     """
     }
 
-    num_hidden_layers = {"description": """
+    num_hidden_layers = {
+        "description": """
     Number of hidden layers in the Transformer decoder.
     """,
     }
@@ -566,7 +569,8 @@ class ConfigArgs:
     `num_attention_heads`.
     """,
     }
-    hidden_act = {"description": """
+    hidden_act = {
+        "description": """
     The non-linear activation function (function or string) in the decoder.
     """,
     }
@@ -2544,7 +2548,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         name = name[0] if name else None
         formatting_kwargs = {"model_name": model_name_title}
         if name == "Config":
-            formatting_kwargs.update( {"model_base_class": model_base_class, "model_checkpoint": checkpoint})
+            formatting_kwargs.update({"model_base_class": model_base_class, "model_checkpoint": checkpoint})
         if custom_intro is not None:
             pre_block = equalize_indent(custom_intro, indent_level)
             if not pre_block.endswith("\n"):

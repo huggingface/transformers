@@ -13,8 +13,8 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ..auto import CONFIG_MAPPING, AutoConfig
 from ...utils import auto_docstring
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="CohereLabs/command-a-vision-07-2025")

@@ -15,17 +15,19 @@
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging, auto_docstring
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
+
 
 @auto_docstring(
     custom_intro="""
     AFMoE is an Adaptive Feedforward MoE (Mixture of Experts) model with token-choice routing, shared experts, and a
     hybrid attention mechanism combining sliding window and full attention patterns.
     """,
-    checkpoint="arcee-ai/Trinity-Mini")
+    checkpoint="arcee-ai/Trinity-Mini",
+)
 class AfmoeConfig(PreTrainedConfig):
     r"""
     Example:

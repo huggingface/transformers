@@ -15,8 +15,8 @@
 
 import numpy as np
 
-from ...utils import auto_docstring
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ...video_utils import VideoMetadata
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
