@@ -182,9 +182,6 @@ class RfDetrConfig(PreTrainedConfig):
         backbone_config (`PretrainedConfig` or `dict`, *optional*):
             The configuration of the backbone model. If not provided, will default to `RfDetrDinov2Config`
             with a small ViT architecture optimized for detection tasks.
-        projector_scale_factors (`list[float]`, *optional*, defaults to `[]`):
-            Scale factors for the feature pyramid network. Each scale factor determines the resolution of features
-            at different levels. Supported values are 0.5, 1.0, and 2.0.
         hidden_expansion (`float`, *optional*, defaults to 0.5):
             Expansion factor for hidden dimensions in the projector layers.
         c2f_num_blocks (`int`, *optional*, defaults to 3):
