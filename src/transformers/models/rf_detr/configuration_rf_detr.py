@@ -280,7 +280,6 @@ class RfDetrConfig(PreTrainedConfig):
         # backbone
         backbone_config=None,
         # projector
-        projector_scale_factors: list[float] = [],
         hidden_expansion=0.5,
         c2f_num_blocks=3,
         activation_function="silu",
@@ -359,12 +358,6 @@ class RfDetrConfig(PreTrainedConfig):
         self.backbone_config = backbone_config
 
         # projector
-        self.projector_scale_factors = projector_scale_factors
-        for scale in projector_scale_factors:
-            if scale not in [0.5, 1.0, 2.0]:
-                raise ValueError(f"Unsupported scale factor: {scale}")
-        self.projector_in_channels = [d_model] * len(projector_scale_factors)
-        self.projector_out_channels = d_model
         self.activation_function = activation_function
         self.hidden_expansion = hidden_expansion
         self.c2f_num_blocks = c2f_num_blocks
@@ -373,7 +366,6 @@ class RfDetrConfig(PreTrainedConfig):
         self.dropout = dropout
         self.num_queries = num_queries
         self.decoder_ffn_dim = decoder_ffn_dim
-        self.num_feature_levels = len(self.projector_scale_factors)
         self.decoder_n_points = decoder_n_points
         self.decoder_layers = decoder_layers
         self.decoder_activation_function = decoder_activation_function

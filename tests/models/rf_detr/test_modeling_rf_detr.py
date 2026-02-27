@@ -89,8 +89,6 @@ class RfDetrModelTester:
         batch_norm_eps=1e-5,
         # backbone
         backbone_config=None,
-        # projector
-        projector_scale_factors=[0.5, 2.0],
         # decoder
         d_model=32,
         decoder_ffn_dim=32,
@@ -117,7 +115,6 @@ class RfDetrModelTester:
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
         self.backbone_config = backbone_config
-        self.projector_scale_factors = projector_scale_factors
         self.d_model = d_model
         self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_layers = decoder_layers
@@ -174,7 +171,6 @@ class RfDetrModelTester:
         return RfDetrConfig(
             backbone_config=backbone_config,
             d_model=self.d_model,
-            projector_scale_factors=self.projector_scale_factors,
             decoder_ffn_dim=self.decoder_ffn_dim,
             decoder_layers=self.decoder_layers,
             decoder_self_attention_heads=self.decoder_self_attention_heads,
@@ -334,7 +330,7 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 self.model_tester.batch_size,
                 self.model_tester.num_queries,
                 self.model_tester.decoder_cross_attention_heads,
-                config.num_feature_levels,
+                1,
                 config.decoder_n_points,
             ]
             cross_attentions = outputs.cross_attentions
