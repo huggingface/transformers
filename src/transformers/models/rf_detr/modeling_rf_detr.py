@@ -1348,6 +1348,21 @@ def refine_bboxes(reference_points, deltas):
     """
 )
 class RfDetrModel(RfDetrPreTrainedModel):
+    _checkpoint_conversion_mapping = {
+        # backbone RfDetrConvEncoder
+        "backbone.0.encoder.encoder": "backbone.backbone",
+        "backbone.0.projector": "backbone.projector",
+        # RfDetrDecoder
+        "transformer.decoder": "decoder",
+        # RfDetrForObjectDetection
+        "transformer.enc_out_bbox_embed": "enc_out_bbox_embed",
+        # Regex mappings for variable length strings
+        r"transformer.enc_output.(\d+)": r"enc_output.\1",
+        r"transformer.enc_output_norm.(\d+)": r"enc_output_norm.\1",
+        r"transformer.enc_out_class_embed.(\d+)": r"enc_out_class_embed.\1",
+        r"refpoint_embed.weight$": r"reference_point_embed.weight",
+    }
+
     def __init__(self, config: RfDetrConfig):
         super().__init__(config)
 
@@ -1710,6 +1725,20 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
     _tied_weights_keys = None
+    _checkpoint_conversion_mapping = {
+        # backbone RfDetrConvEncoder
+        "backbone.0.encoder.encoder": "model.backbone.backbone",
+        "backbone.0.projector": "model.backbone.projector",
+        # RfDetrDecoder
+        "transformer.decoder": "model.decoder",
+        # RfDetrForObjectDetection
+        "transformer.enc_out_bbox_embed": "model.enc_out_bbox_embed",
+        # Regex mappings for variable length strings
+        r"transformer.enc_output.(\d+)": r"model.enc_output.\1",
+        r"transformer.enc_output_norm.(\d+)": r"model.enc_output_norm.\1",
+        r"transformer.enc_out_class_embed.(\d+)": r"model.enc_out_class_embed.\1",
+        r"refpoint_embed.weight$": r"model.reference_point_embed.weight",
+    }
 
     def __init__(self, config: RfDetrConfig):
         super().__init__(config)
@@ -1964,6 +1993,36 @@ class RfDetrSegmentationMLPBlock(nn.Module):
 
 
 class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
+    _checkpoint_conversion_mapping = {
+        # rf_detr (RfDetrForObjectDetection)
+        # backbone RfDetrConvEncoder
+        "backbone.0.encoder.encoder": "rf_detr.model.backbone.backbone",
+        "backbone.0.projector": "rf_detr.model.backbone.projector",
+        # RfDetrDecoder
+        "transformer.decoder": "rf_detr.model.decoder",
+        # RfDetrForObjectDetection
+        "transformer.enc_out_bbox_embed": "rf_detr.model.enc_out_bbox_embed",
+        # Regex mappings for variable length strings
+        r"transformer.enc_output.(\d+)": r"rf_detr.model.enc_output.\1",
+        r"transformer.enc_output_norm.(\d+)": r"rf_detr.model.enc_output_norm.\1",
+        r"transformer.enc_out_class_embed.(\d+)": r"rf_detr.model.enc_out_class_embed.\1",
+        r"refpoint_embed.weight$": r"rf_detr.model.reference_point_embed.weight",
+        # Regex mappings for variable length strings
+        r"^bbox_embed.layers": "rf_detr.bbox_embed.layers",
+        r"^class_embed.(weight|bias)": r"rf_detr.class_embed.\1",
+        r"^query_feat.(weight|bias)": r"rf_detr.model.query_feat.\1",
+        # segmentation head (specific rules first)
+        r"segmentation_head.query_features_block.layers.0": "query_features_block.in_linear",
+        r"segmentation_head.query_features_block.layers.2": "query_features_block.out_linear",
+        r"segmentation_head.blocks.(\d+).norm": r"blocks.\1.layernorm",
+        # Generic prefix rules later
+        r"segmentation_head.spatial_features_proj": "spatial_features_proj",
+        r"^segmentation_head.query_features_block": "query_features_block",
+        r"^segmentation_head.query_features_proj": "query_features_proj",
+        r"segmentation_head.bias": "segmentation_bias",
+        r"segmentation_head.blocks.(\d+)": r"blocks.\1",
+    }
+
     def __init__(self, config: RfDetrConfig):
         super().__init__(config)
 
@@ -1977,7 +2036,7 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         self.query_features_block = RfDetrSegmentationMLPBlock(config)
         self.query_features_proj = nn.Linear(config.d_model, config.d_model)
 
-        self.bias = nn.Parameter(torch.zeros(1), requires_grad=True)
+        self.segmentation_bias = nn.Parameter(torch.zeros(1), requires_grad=True)
 
         self.post_init()
 
@@ -1989,7 +2048,7 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         query_features = self.query_features_proj(query_features)
         mask_logits = torch.matmul(query_features, spatial_features.flatten(2))
         mask_logits = mask_logits.view(batch_size, num_queries, height, width)
-        mask_logits = mask_logits + self.bias
+        mask_logits = mask_logits + self.segmentation_bias
         return mask_logits
 
     def segmentation_head(

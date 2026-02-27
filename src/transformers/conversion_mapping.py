@@ -333,6 +333,46 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=r"timm_model.\1",
             )
         ],
+        "rf_detr": [
+            # RfDetrConvEncoder
+            ## RfDetrC2FLayer
+            WeightRenaming(r"projector.stages.0.0.cv1.conv", r"projector.projector_layer.conv1.conv"),
+            WeightRenaming(r"projector.stages.0.0.cv1.bn", r"projector.projector_layer.conv1.norm"),
+            WeightRenaming(r"projector.stages.0.0.cv2.conv", r"projector.projector_layer.conv2.conv"),
+            WeightRenaming(r"projector.stages.0.0.cv2.bn", r"projector.projector_layer.conv2.norm"),
+            WeightRenaming(r"projector.stages.0.1", r"projector.layer_norm"),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv1.conv", r"projector.projector_layer.bottlenecks.\1.conv1.conv"
+            ),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv1.bn", r"projector.projector_layer.bottlenecks.\1.conv1.norm"
+            ),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv2.conv", r"projector.projector_layer.bottlenecks.\1.conv2.conv"
+            ),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv2.bn", r"projector.projector_layer.bottlenecks.\1.conv2.norm"
+            ),
+            # RfDetrDecoder renames
+            WeightRenaming(r"decoder.layers.(\d+).norm1", r"decoder.layers.\1.self_attn_layer_norm"),
+            WeightRenaming(r"decoder.layers.(\d+).norm2", r"decoder.layers.\1.cross_attn_layer_norm"),
+            WeightRenaming(r"decoder.layers.(\d+).linear1", r"decoder.layers.\1.mlp.fc1"),
+            WeightRenaming(r"decoder.layers.(\d+).linear2", r"decoder.layers.\1.mlp.fc2"),
+            WeightRenaming(r"decoder.layers.(\d+).norm3", r"decoder.layers.\1.layer_norm"),
+            WeightRenaming("decoder.norm", r"decoder.layernorm"),
+            # RfDetrAttention
+            WeightRenaming(r"self_attn.out_proj", r"self_attn.o_proj"),
+            WeightConverter(
+                source_patterns=r"self_attn.in_proj_bias",
+                target_patterns=[r"self_attn.q_proj.bias", r"self_attn.k_proj.bias", r"self_attn.v_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"self_attn.in_proj_weight",
+                target_patterns=[r"self_attn.q_proj.weight", r"self_attn.k_proj.weight", r"self_attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
         "legacy": [
             WeightRenaming(
                 source_patterns="LayerNorm.gamma",
