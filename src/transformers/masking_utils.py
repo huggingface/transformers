@@ -786,6 +786,9 @@ def _preprocess_mask_arguments(
         layer_idx (`int`, optional):
             If `past_key_values` is not None, this is the layer index of the cache from which to get the key-value
             length and offset. Indeed, for hybrid caches, different layers may return different lengths.
+        encoder_hidden_states (`torch.Tensor`, optional):
+            The input embeddings of shape (batch_size, kv_length, hidden_dim). If provided, it is used instead of
+            `inputs_embeds` to infer the kv length.
 
     Returns:
         early_exit (`bool`):
