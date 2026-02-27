@@ -23,13 +23,6 @@ from transformers import (
     RfDetrForInstanceSegmentation,
     RfDetrForObjectDetection,
 )
-from transformers.core_model_loading import (
-    Chunk,
-    WeightConverter,
-    WeightRenaming,
-    convert_and_load_state_dict_in_model,
-)
-from transformers.modeling_utils import LoadStateDictConfig
 
 
 # Mapping of model names to their checkpoint files
@@ -294,118 +287,6 @@ def get_model_config(model_name: str):
     return config
 
 
-def get_weight_mapping(
-    is_segmentation: bool,
-) -> list[WeightConverter | WeightRenaming]:
-    if is_segmentation:
-        weight_mapping = [
-            # backbone RfDetrConvEncoder
-            WeightRenaming("backbone.0.encoder.encoder", "rf_detr.model.backbone.backbone"),
-            WeightRenaming("backbone.0.projector", "rf_detr.model.backbone.projector"),
-            # RfDetrDecoder
-            WeightRenaming("transformer.decoder", "rf_detr.model.decoder"),
-            # RfDetrForObjectDetection
-            WeightRenaming(r"transformer.enc_out_bbox_embed", r"rf_detr.model.enc_out_bbox_embed"),
-            WeightRenaming(r"transformer.enc_output.(\d+)", r"rf_detr.model.enc_output.\1"),
-            WeightRenaming(r"transformer.enc_output_norm.(\d+)", r"rf_detr.model.enc_output_norm.\1"),
-            WeightRenaming(r"transformer.enc_out_class_embed.(\d+)", r"rf_detr.model.enc_out_class_embed.\1"),
-            WeightRenaming(r"refpoint_embed.weight", r"rf_detr.model.reference_point_embed.weight"),
-        ]
-    else:
-        weight_mapping = [
-            # backbone RfDetrConvEncoder
-            WeightRenaming("backbone.0.encoder.encoder", "backbone.backbone"),
-            WeightRenaming("backbone.0.projector", "backbone.projector"),
-            # RfDetrDecoder
-            WeightRenaming("transformer.decoder", "decoder"),
-            # RfDetrForObjectDetection
-            WeightRenaming("transformer.enc_out_bbox_embed", "enc_out_bbox_embed"),
-            WeightRenaming(r"transformer.enc_output.(\d+)", r"enc_output.\1"),
-            WeightRenaming(r"transformer.enc_output_norm.(\d+)", r"enc_output_norm.\1"),
-            WeightRenaming(r"transformer.enc_out_class_embed.(\d+)", r"enc_out_class_embed.\1"),
-            WeightRenaming(r"refpoint_embed.weight", r"reference_point_embed.weight"),
-        ]
-
-    weight_mapping.extend(
-        [
-            # RfDetrConvEncoder
-            ## RfDetrMultiScaleProjector
-            WeightRenaming(r"projector.stages_sampling.(\d+)", r"projector.scale_layers.\1.sampling_layers"),
-            WeightRenaming(
-                r"projector.stages_sampling.(\d+).(\d+).(\d+)",
-                r"projector.scale_layers.\1.sampling_layers.\2.layers.\3",
-            ),
-            WeightRenaming(
-                r"projector.stages_sampling.(\d+).(\d+).(\d+).conv.weight",
-                r"projector.scale_layers.\1.sampling_layers.\2.layers.\3.conv.weight",
-            ),
-            WeightRenaming(
-                r"projector.stages_sampling.(\d+).(\d+).(\d+).bn",
-                r"projector.scale_layers.\1.sampling_layers.\2.layers.\3.norm",
-            ),
-            WeightRenaming(r"projector.stages.(\d+).0", r"projector.scale_layers.\1.projector_layer"),
-            WeightRenaming(r"projector.stages.(\d+).1", r"projector.scale_layers.\1.layer_norm"),
-            ## RfDetrSamplingLayer
-            WeightRenaming(r"sampling_layers.(\d+)", r"sampling_layers.\1.layers"),
-            WeightRenaming(r"layers.(\d+).bn", r"layers.\1.norm"),
-            ### RfDetrC2FLayer
-            WeightRenaming(r"projector_layer.cv1.conv", r"projector_layer.conv1.conv"),
-            WeightRenaming(r"projector_layer.cv1.bn", r"projector_layer.conv1.norm"),
-            WeightRenaming(r"projector_layer.cv2.conv", r"projector_layer.conv2.conv"),
-            WeightRenaming(r"projector_layer.cv2.bn", r"projector_layer.conv2.norm"),
-            WeightRenaming(r"projector_layer.m.(\d+)", r"projector_layer.bottlenecks.\1"),
-            #### RfDetrRepVggBlock
-            WeightRenaming(r"bottlenecks.(\d+).cv1.conv", r"bottlenecks.\1.conv1.conv"),
-            WeightRenaming(r"bottlenecks.(\d+).cv1.bn", r"bottlenecks.\1.conv1.norm"),
-            WeightRenaming(r"bottlenecks.(\d+).cv2.conv", r"bottlenecks.\1.conv2.conv"),
-            WeightRenaming(r"bottlenecks.(\d+).cv2.bn", r"bottlenecks.\1.conv2.norm"),
-            # RfDetrDecoder
-            ## RfDetrDecoderLayer
-            WeightRenaming(r"decoder.layers.(\d+).norm1", r"decoder.layers.\1.self_attn_layer_norm"),
-            WeightRenaming(r"decoder.layers.(\d+).norm2", r"decoder.layers.\1.cross_attn_layer_norm"),
-            WeightRenaming(r"decoder.layers.(\d+).linear1", r"decoder.layers.\1.mlp.fc1"),
-            WeightRenaming(r"decoder.layers.(\d+).linear2", r"decoder.layers.\1.mlp.fc2"),
-            WeightRenaming(r"decoder.layers.(\d+).norm3", r"decoder.layers.\1.layer_norm"),
-            WeightRenaming("decoder.norm", r"decoder.layernorm"),
-            ### RfDetrAttention
-            WeightRenaming(r"self_attn.out_proj", r"self_attn.o_proj"),
-            WeightConverter(
-                r"self_attn.in_proj_bias",
-                [r"self_attn.q_proj.bias", r"self_attn.k_proj.bias", r"self_attn.v_proj.bias"],
-                operations=[Chunk(dim=0)],
-            ),
-            WeightConverter(
-                r"self_attn.in_proj_weight",
-                [r"self_attn.q_proj.weight", r"self_attn.k_proj.weight", r"self_attn.v_proj.weight"],
-                operations=[Chunk(dim=0)],
-            ),
-        ]
-    )
-
-    if is_segmentation:
-        weight_mapping.extend(
-            [
-                # RfDetrForObjectDetection
-                WeightRenaming(r"bbox_embed.layers", "rf_detr.bbox_embed.layers"),
-                WeightRenaming(r"class_embed.(weight|bias)", r"rf_detr.class_embed.\1"),
-                WeightRenaming(r"query_feat.(weight|bias)", r"rf_detr.model.query_feat.\1"),
-                # Segmentation head
-                WeightRenaming(r"segmentation_head.blocks", r"blocks"),
-                WeightRenaming("segmentation_head.spatial_features_proj", "spatial_features_proj"),
-                WeightRenaming("segmentation_head.query_features_block", "query_features_block"),
-                WeightRenaming("segmentation_head.query_features_proj", "query_features_proj"),
-                WeightRenaming("segmentation_head.bias", "bias"),
-                ## RfDetrSegmentationMLPBlock
-                WeightRenaming("query_features_block.layers.0", "query_features_block.in_linear"),
-                WeightRenaming("query_features_block.layers.2", "query_features_block.out_linear"),
-                ## list[RfDetrSegmentationBlock]
-                WeightRenaming(r"blocks.(\d+)", r"blocks.\1"),
-                WeightRenaming(r"blocks.(\d+).norm", r"blocks.\1.layernorm"),
-            ]
-        )
-    return weight_mapping
-
-
 @torch.no_grad()
 def convert_rf_detr_checkpoint(
     model_name: str,
@@ -439,12 +320,7 @@ def convert_rf_detr_checkpoint(
     # Create model and load weights
     print("Creating model and loading weights...")
     is_segmentation = "seg" in model_name
-    if is_segmentation:
-        model = RfDetrForInstanceSegmentation(rf_detr_config)
-    else:
-        model = RfDetrForObjectDetection(rf_detr_config)
-
-    weight_mapping = get_weight_mapping(is_segmentation)
+    model_class = RfDetrForInstanceSegmentation if is_segmentation else RfDetrForObjectDetection
 
     # Handle different checkpoint formats
     if "state_dict" in checkpoint:
@@ -454,18 +330,21 @@ def convert_rf_detr_checkpoint(
     else:
         state_dict = checkpoint
 
-    load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
-    missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-        model, state_dict, load_config, tp_plan=None
+    model, loading_info = model_class.from_pretrained(
+        None, config=rf_detr_config, state_dict=state_dict, output_loading_info=True
     )
     print("Checkpoint loaded...")
-    if len(missing) > 0 or len(unexpected) > 0 or len(mismatch) > 0:
-        print("MISSING:", len(missing))
-        print("\n".join(sorted(missing)))
-        print("UNEXPECTED:", len(unexpected))
-        print("\n".join(sorted(unexpected)))
-        print("MISMATCH:", len(mismatch))
-        print(mismatch)
+    if (
+        len(loading_info["missing_keys"]) > 0
+        or len(loading_info["unexpected_keys"]) > 0
+        or len(loading_info["mismatched_keys"]) > 0
+    ):
+        print("MISSING:", len(loading_info["missing_keys"]))
+        print("\n".join(sorted(loading_info["missing_keys"])))
+        print("UNEXPECTED:", len(loading_info["unexpected_keys"]))
+        print("\n".join(sorted(loading_info["unexpected_keys"])))
+        print("MISMATCH:", len(loading_info["mismatched_keys"]))
+        print(loading_info["mismatched_keys"])
 
     image_processor = DetrImageProcessor(size=IMAGE_PROCESSORS[model_name], do_resize=True, use_fast=True)
 
