@@ -304,4 +304,4 @@ class TimesFm2_5ModelIntegrationTests(unittest.TestCase):
             ],
             device=torch_device)
         # fmt: on
-        self.assertTrue(torch.allclose(mean_predictions[0, :64], expected_slice, atol=TOLERANCE))
+        self.assertTrue(torch.allclose(mean_predictions[0, :64], expected_slice))
