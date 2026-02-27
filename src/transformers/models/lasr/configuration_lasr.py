@@ -150,6 +150,8 @@ class LasrEncoderConfig(PreTrainedConfig):
         self.subsampling_conv_stride = subsampling_conv_stride
         self.subsampling_conv_channels = subsampling_conv_channels
         self.num_mel_bins = num_mel_bins
+        self.hop_length = hop_length
+        self.sampling_rate = sampling_rate
 
         self.dropout = dropout
         self.dropout_positions = dropout_positions
@@ -159,9 +161,7 @@ class LasrEncoderConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
 
-        super().__init__(
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class LasrCTCConfig(PreTrainedConfig):

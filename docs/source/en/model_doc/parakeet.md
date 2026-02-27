@@ -228,6 +228,29 @@ outputs = model(**inputs)
 outputs.loss.backward()
 ```
 
+### TDT Training
+
+The TDT model uses RNNT loss (requires `torchaudio`). Pass `text` to the processor to prepare labels — padding is automatically handled with `-100`.
+
+```python
+from transformers import AutoModelForTDT, AutoProcessor
+from datasets import load_dataset, Audio
+
+processor = AutoProcessor.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
+model = AutoModelForTDT.from_pretrained("nvidia/parakeet-tdt-0.6b-v3", dtype="auto", device_map="auto")
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+speech_samples = [el['array'] for el in ds["audio"][:5]]
+text_samples = [el for el in ds["text"][:5]]
+
+inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs.to(model.device, dtype=model.dtype)
+
+outputs = model(**inputs)
+outputs.loss.backward()
+```
+
 ## ParakeetTokenizer
 
 [[autodoc]] ParakeetTokenizer

@@ -82,7 +82,9 @@ class ParakeetProcessor(ProcessorMixin):
         if text is None:
             return inputs
         else:
-            inputs["labels"] = encodings["input_ids"]
+            labels = encodings["input_ids"]
+            labels[labels == self.tokenizer.pad_token_id] = -100
+            inputs["labels"] = labels
             return inputs
 
     @property

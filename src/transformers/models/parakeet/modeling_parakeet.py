@@ -680,11 +680,11 @@ class ParakeetTDTGenerateOutput(ModelOutput):
             Token-level durations in frames indicating how many frames each token spans. Only returned when
             `return_timestamps=True` is passed to `generate()`.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+            Tuple of tuples (one element for each layer of the encoder) of `torch.FloatTensor` of shape
+            `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions from the encoder.
         hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
+            Tuple of tuples (one element for each layer of the encoder) of `torch.FloatTensor` of shape
+            `(batch_size, sequence_length, hidden_size)`. Hidden states from the encoder.
     """
 
     sequences: torch.LongTensor
@@ -967,9 +967,11 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             )
             encoder_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
 
-            # Compute target lengths (non-pad tokens)
-            labels_mask = labels != self.config.pad_token_id
+            labels_mask = labels != -100
             target_lengths = labels_mask.sum(-1)
+
+            labels = labels.clone()
+            labels[labels == -100] = self.config.pad_token_id
 
             # Prepare decoder input: prepend blank token to labels
             blank_tokens = torch.full(
@@ -980,11 +982,14 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             # Run decoder on full label sequence: (batch, U+1, decoder_hidden_size)
             decoder_output, _, _ = self.decoder(decoder_input)
 
+            max_encoder_length = encoder_lengths.max().item()
+            encoder_hidden_states_trimmed = encoder_hidden_states[:, :max_encoder_length]
+
             # Compute joint output for all (T, U+1) pairs via broadcasting
             # encoder: (batch, T, 1, encoder_hidden) -> projected to (batch, T, 1, decoder_hidden_size)
             # decoder: (batch, 1, U+1, decoder_hidden_size)
             token_logits, _ = self.joint(
-                encoder_hidden_states.unsqueeze(2),
+                encoder_hidden_states_trimmed.unsqueeze(2),
                 decoder_output.unsqueeze(1),
             )
             # token_logits: (batch, T, U+1, vocab_size+1)
@@ -1074,61 +1079,97 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         all_tokens = [[] for _ in range(batch_size)]
         token_frame_indices = [[] for _ in range(batch_size)] if return_timestamps else None
         token_durations_list = [[] for _ in range(batch_size)] if return_timestamps else None
+        batch_indices = torch.arange(batch_size, device=device)
         time_indices = torch.zeros(batch_size, dtype=torch.long, device=device)
+        time_indices_current_labels = torch.zeros(batch_size, dtype=torch.long, device=device)
         active_mask = time_indices < valid_lengths
+
+        max_symbols = self.config.max_symbols_per_step
+        symbols_per_step = torch.zeros(batch_size, dtype=torch.long, device=device)
+        last_label_time = torch.full((batch_size,), -1, dtype=torch.long, device=device)
 
         while active_mask.any():
             safe_time_indices = torch.clamp(time_indices, max=sequence_length - 1)
-            encoder_frames = encoder_hidden_states[
-                torch.arange(batch_size, device=device), safe_time_indices
-            ].unsqueeze(1)
+            encoder_frames = encoder_hidden_states[batch_indices, safe_time_indices].unsqueeze(1)
 
-            symbols_added = 0
-            while symbols_added < self.config.max_symbols_per_step:
+            token_logits, duration_logits = self.joint(encoder_frames, decoder_output)
+            token_logits = token_logits.squeeze(1).to(device)
+            duration_logits = duration_logits.squeeze(1).to(device)
+
+            tokens = token_logits.argmax(dim=-1)
+            durations = duration_logits.argmax(dim=-1)
+            blank_mask = active_mask & (tokens == self.config.pad_token_id)
+
+            # Force blank duration >= 1 to guarantee forward progress
+            durations = durations.masked_fill(blank_mask & (durations == 0), 1)
+
+            # Save pre-advance position for timestamp recording
+            time_indices_current_labels.copy_(time_indices)
+
+            # Advance time for all active elements
+            time_indices = time_indices + durations * active_mask
+            safe_time_indices = torch.clamp(time_indices, max=sequence_length - 1)
+            active_mask = time_indices < valid_lengths
+            advance_mask = active_mask & blank_mask
+
+            # Inner loop: skip past consecutive blanks to find non-blank
+            while advance_mask.any():
+                # Update timestamp tracking to current position
+                time_indices_current_labels = torch.where(advance_mask, time_indices, time_indices_current_labels)
+                encoder_frames = encoder_hidden_states[batch_indices, safe_time_indices].unsqueeze(1)
+
                 token_logits, duration_logits = self.joint(encoder_frames, decoder_output)
                 token_logits = token_logits.squeeze(1).to(device)
                 duration_logits = duration_logits.squeeze(1).to(device)
 
-                tokens = token_logits.argmax(dim=-1)
-                durations = duration_logits.argmax(dim=-1)
-                emit_mask = active_mask & ~(tokens == self.config.pad_token_id)
+                more_tokens = token_logits.argmax(dim=-1)
+                more_durations = duration_logits.argmax(dim=-1)
 
-                for i in range(batch_size):
-                    if emit_mask[i]:
-                        all_tokens[i].append(tokens[i].item())
-                        if token_frame_indices is not None:
-                            token_frame_indices[i].append(time_indices[i].item())
-                        if token_durations_list is not None:
-                            token_durations_list[i].append(durations[i].item())
+                tokens = torch.where(advance_mask, more_tokens, tokens)
+                durations = torch.where(advance_mask, more_durations, durations)
 
-                if emit_mask.any():
-                    new_prev_tokens = tokens.unsqueeze(1)
-                    new_decoder_output, new_hidden_state, new_cell_state = self.decoder(
-                        new_prev_tokens, hidden_state, cell_state
-                    )
-                    new_decoder_output = new_decoder_output.to(device)
-                    new_hidden_state = new_hidden_state.to(device)
-                    new_cell_state = new_cell_state.to(device)
+                blank_mask = tokens == self.config.pad_token_id
+                durations = durations.masked_fill(blank_mask & (durations == 0), 1)
 
-                    emit_mask_expanded = emit_mask.view(batch_size, 1, 1)
-                    decoder_output = torch.where(emit_mask_expanded, new_decoder_output, decoder_output)
+                time_indices = torch.where(advance_mask, time_indices + durations, time_indices)
+                safe_time_indices = torch.clamp(time_indices, max=sequence_length - 1)
+                active_mask = time_indices < valid_lengths
+                advance_mask = active_mask & blank_mask
 
-                    emit_mask_state = emit_mask.view(1, batch_size, 1)
-                    hidden_state = torch.where(emit_mask_state, new_hidden_state, hidden_state)
-                    cell_state = torch.where(emit_mask_state, new_cell_state, cell_state)
+            # Record results for non-blank tokens found
+            emit_mask = active_mask & (tokens != self.config.pad_token_id)
+            for i in range(batch_size):
+                if emit_mask[i]:
+                    all_tokens[i].append(tokens[i].item())
+                    if token_frame_indices is not None:
+                        token_frame_indices[i].append(time_indices_current_labels[i].item())
+                    if token_durations_list is not None:
+                        token_durations_list[i].append(durations[i].item())
 
-                # If duration is 0, stay on same frame (emit more tokens)
-                stay_mask = active_mask & (durations == 0)
-                if stay_mask.any():
-                    symbols_added += 1
-                    if symbols_added >= self.config.max_symbols_per_step:
-                        time_indices[active_mask & stay_mask] += 1
-                        break
-                    continue
+            if emit_mask.any():
+                new_prev_tokens = tokens.unsqueeze(1)
+                new_decoder_output, new_hidden_state, new_cell_state = self.decoder(
+                    new_prev_tokens, hidden_state, cell_state
+                )
+                new_decoder_output = new_decoder_output.to(device)
+                new_hidden_state = new_hidden_state.to(device)
+                new_cell_state = new_cell_state.to(device)
 
-                # Duration > 0: advance time
-                time_indices = time_indices + torch.where(active_mask, durations, torch.zeros_like(durations))
-                break
+                emit_mask_expanded = emit_mask.view(batch_size, 1, 1)
+                decoder_output = torch.where(emit_mask_expanded, new_decoder_output, decoder_output)
+
+                emit_mask_state = emit_mask.view(1, batch_size, 1)
+                hidden_state = torch.where(emit_mask_state, new_hidden_state, hidden_state)
+                cell_state = torch.where(emit_mask_state, new_cell_state, cell_state)
+
+            # Track symbols emitted per time step; force advance when max_symbols reached
+            time_changed = time_indices_current_labels != last_label_time
+            symbols_per_step = torch.where(time_changed, torch.zeros_like(symbols_per_step), symbols_per_step)
+            symbols_per_step = torch.where(emit_mask, symbols_per_step + 1, symbols_per_step)
+            last_label_time = torch.where(emit_mask, time_indices_current_labels, last_label_time)
+            force_advance = active_mask & (symbols_per_step >= max_symbols)
+            time_indices = time_indices + force_advance.long()
+            symbols_per_step = symbols_per_step.masked_fill(force_advance, 0)
 
             active_mask = time_indices < valid_lengths
 

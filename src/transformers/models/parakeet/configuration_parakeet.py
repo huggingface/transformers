@@ -314,7 +314,9 @@ class ParakeetTDTConfig(PreTrainedConfig):
 
     @property
     def frame_rate(self):
-        return self.encoder_config.sampling_rate / (self.encoder_config.hop_length * self.encoder_config.subsampling_factor)
+        return self.encoder_config.sampling_rate / (
+            self.encoder_config.hop_length * self.encoder_config.subsampling_factor
+        )
 
     @classmethod
     def from_encoder_config(cls, encoder_config: ParakeetEncoderConfig, **kwargs):

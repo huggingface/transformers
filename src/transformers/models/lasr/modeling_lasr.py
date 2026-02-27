@@ -36,6 +36,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoModel
 from .configuration_lasr import LasrCTCConfig, LasrEncoderConfig
 
 
@@ -591,7 +592,7 @@ class LasrForCTC(LasrPreTrainedModel):
 
     def __init__(self, config: LasrCTCConfig):
         super().__init__(config)
-        self.encoder = LasrEncoder(config.encoder_config)
+        self.encoder = AutoModel.from_config(config.encoder_config)
         # Conv rather than linear to be consistent with NeMO decoding layer
         self.ctc_head = nn.Conv1d(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
 

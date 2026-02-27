@@ -492,11 +492,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
     _dataset = None
 
     @classmethod
-    def setUp(cls):
-        # cls.checkpoint_name = "nvidia/parakeet-tdt-0.6b-v3"
-        # cls.dtype = torch.bfloat16
-        # cls.processor = AutoProcessor.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
-
+    def setUpClass(cls):
         cls.checkpoint_name = "bezzam/parakeet-tdt-0.6b-v3-hf"
         cls.dtype = torch.bfloat16
         cls.processor = AutoProcessor.from_pretrained("bezzam/parakeet-tdt-0.6b-v3-hf")
@@ -593,6 +589,8 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
         # Check timestamps and durations
-        self.assertIsNotNone(output.token_timestamps, "token_timestamps should be returned when return_timestamps=True")
+        self.assertIsNotNone(
+            output.token_timestamps, "token_timestamps should be returned when return_timestamps=True"
+        )
         torch.testing.assert_close(output.token_timestamps.cpu(), EXPECTED_TIMESTAMPS)
         torch.testing.assert_close(output.token_durations.cpu(), EXPECTED_DURATIONS)
