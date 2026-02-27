@@ -235,7 +235,6 @@ class JinaEmbeddingsV3SelfAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         batch_size, seq_len = hidden_states.shape[:-1]
-        out_shape = (batch_size, self.num_attention_heads, seq_len, self.attention_head_size)
         hidden_shape = (batch_size, seq_len, 3, self.num_attention_heads, self.attention_head_size)
 
         qkv = self.Wqkv(hidden_states).view(hidden_shape)
