@@ -331,9 +331,19 @@ class LayoutLMv3Tokenizer(TokenizersBackend):
             for words_example, boxes_example in zip(words, boxes):
                 if len(words_example) != len(boxes_example):
                     raise ValueError("You must provide as many words as there are bounding boxes")
+                for box in boxes_example:
+                    if len(box) != 4:
+                        raise ValueError(
+                            f"Each bounding box should contain 4 values (x0, y0, x1, y1), but got {len(box)} values: {box}"
+                        )
         else:
             if len(words) != len(boxes):
                 raise ValueError("You must provide as many words as there are bounding boxes")
+            for box in boxes:
+                if len(box) != 4:
+                    raise ValueError(
+                        f"Each bounding box should contain 4 values (x0, y0, x1, y1), but got {len(box)} values: {box}"
+                    )
 
         if is_batched:
             if text_pair is not None and len(text) != len(text_pair):
