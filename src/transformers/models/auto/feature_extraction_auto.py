@@ -47,6 +47,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("gemma3n", "Gemma3nAudioFeatureExtractor"),
         ("glmasr", "WhisperFeatureExtractor"),
         ("granite_speech", "GraniteSpeechFeatureExtractor"),
+        ("higgs_audio_v2_tokenizer", "DacFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
         ("lasr_ctc", "LasrFeatureExtractor"),

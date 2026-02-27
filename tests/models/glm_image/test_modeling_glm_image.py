@@ -29,7 +29,9 @@ from transformers import (
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -579,6 +581,7 @@ class GlmImageIntegrationTest(unittest.TestCase):
             f"Expected first 30 tokens:\n{expected_tokens.tolist()}\nGot:\n{generated_tokens[:30].tolist()}",
         )
 
+    @require_deterministic_for_xpu
     def test_image_to_image_generation(self):
         """Test image-to-image generation produces valid image tokens."""
         model = self.get_model()
@@ -597,44 +600,18 @@ class GlmImageIntegrationTest(unittest.TestCase):
         self.assertTrue(all(t.item() < model.config.text_config.vision_vocab_size for t in generated_tokens))
 
         # Check actual token values (first 30 tokens) to catch implementation errors
-        expected_tokens = torch.tensor(
-            [
-                9223,
-                11045,
-                7240,
-                14581,
-                4759,
-                11667,
-                1275,
-                10094,
-                1275,
-                9223,
-                9223,
-                1275,
-                9223,
-                9223,
-                9223,
-                10543,
-                2007,
-                4759,
-                10543,
-                1153,
-                1153,
-                1153,
-                10094,
-                16304,
-                9223,
-                11045,
-                11045,
-                14581,
-                4759,
-                10094,
-            ],
-            device=torch_device,
+        # fmt: off
+        expected_tokens = Expectations(
+            {
+                ("cuda", None): [9223, 11045, 5705, 14581, 4759, 11667, 1275, 10094, 572, 10543, 9223, 1275, 9223, 10543, 12265, 10543, 2007, 8200, 10543, 1153, 1153, 1153, 10094, 16304, 9223, 11045, 3114, 14581, 4759, 10094],
+                ("xpu", 3): [9223, 11045, 11045, 14581, 4759, 11667, 10543, 10094, 572, 10543, 9223, 1275, 9223, 9223, 4759, 10543, 2007, 4759, 10543, 1153, 1153, 1153, 8932, 9223, 10094, 11045, 5705, 14581, 4759, 10094],
+            }
         )
+        # fmt: on
+        expected = torch.tensor(expected_tokens.get_expectation(), device=torch_device)
         self.assertTrue(
-            torch.equal(generated_tokens[:30], expected_tokens),
-            f"Expected first 30 tokens:\n{expected_tokens.tolist()}\nGot:\n{generated_tokens[:30].tolist()}",
+            torch.equal(generated_tokens[:30], expected),
+            f"Expected first 30 tokens:\n{expected.tolist()}\nGot:\n{generated_tokens[:30].tolist()}",
         )
 
     @run_first

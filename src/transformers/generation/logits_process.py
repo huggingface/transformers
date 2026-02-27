@@ -2701,8 +2701,8 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         if self.debug_mode:
             scores = torch.ones_like(scores)
 
-        # Currently indices is just a arange to compute watermarking on the dense logits.
-        all_indices = torch.stack([torch.arange(vocab_size, device=self.device) for _ in range(batch_size)])
+        # Build continuation indices once and broadcast across batch instead of creating one arange per row.
+        all_indices = torch.arange(vocab_size, device=self.device).unsqueeze(0).expand(batch_size, -1)
 
         if self.state is None:
             # Initialize watermarking state if it does not exist.

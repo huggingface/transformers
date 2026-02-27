@@ -30,7 +30,6 @@ from transformers import (
     AutoTokenizer,
     DistilBertForSequenceClassification,
     MaskGenerationPipeline,
-    T5ForConditionalGeneration,
     TextClassificationPipeline,
     TextGenerationPipeline,
     pipeline,
@@ -213,31 +212,6 @@ class CommonPipelineTest(unittest.TestCase):
             pipe = pipeline("text-generation", tmp_dir, trust_remote_code=True)
 
             self.assertIsInstance(pipe, TextGenerationPipeline)  # Assert successful load
-
-    @require_torch
-    def test_pipeline_with_task_parameters_no_side_effects(self):
-        """
-        Regression test: certain pipeline flags, like `task`, modified the model configuration, causing unexpected
-        side-effects
-        """
-        # This checkpoint has task-specific parameters that will modify the behavior of the pipeline
-        model = T5ForConditionalGeneration.from_pretrained("t5-small")
-        self.assertTrue(model.config.num_beams == 1)
-
-        # The task-specific parameters used to cause side-effects on `model.config` -- not anymore
-        pipe = pipeline(model=model, tokenizer=AutoTokenizer.from_pretrained("t5-small"), task="translation_en_to_de")
-        self.assertTrue(model.config.num_beams == 1)
-        self.assertTrue(model.generation_config.num_beams == 1)
-
-        # Under the hood: we now store a generation config in the pipeline. This generation config stores the
-        # task-specific parameters.
-        self.assertTrue(pipe.generation_config.num_beams == 4)
-
-        # We can confirm that the task-specific parameters have an effect. (In this case, the default is `num_beams=1`,
-        # which would crash when `num_return_sequences=4` is passed.)
-        pipe("Hugging Face doesn't sell hugs.", num_return_sequences=4)
-        with self.assertRaises(ValueError):
-            pipe("Hugging Face doesn't sell hugs.", num_return_sequences=4, num_beams=1)
 
 
 @is_pipeline_test
@@ -640,24 +614,11 @@ class PipelineUtilsTest(unittest.TestCase):
         auto_model_cls = relevant_auto_classes[0]
 
         # retrieve correct model ids
-        if task == "translation":
-            # special case for translation pipeline which has multiple languages
-            model_ids = []
-            revisions = []
-            tasks = []
-            for translation_pair in task_dict["default"]:
-                model_id, revision = task_dict["default"][translation_pair]["model"]
+        model_id, revision = task_dict["default"]["model"]
 
-                model_ids.append(model_id)
-                revisions.append(revision)
-                tasks.append(task + f"_{'_to_'.join(translation_pair)}")
-        else:
-            # normal case - non-translation pipeline
-            model_id, revision = task_dict["default"]["model"]
-
-            model_ids = [model_id]
-            revisions = [revision]
-            tasks = [task]
+        model_ids = [model_id]
+        revisions = [revision]
+        tasks = [task]
 
         # check for equality
         for model_id, revision, task in zip(model_ids, revisions, tasks):
