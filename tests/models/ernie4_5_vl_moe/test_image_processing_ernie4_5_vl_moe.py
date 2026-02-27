@@ -33,13 +33,13 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import Ernie4_5_VL_MoeImageProcessor
+    from transformers import Ernie4_5_VLMoeImageProcessor
 
     if is_torchvision_available():
-        from transformers import Ernie4_5_VL_MoeImageProcessorFast
+        from transformers import Ernie4_5_VLMoeImageProcessorFast
 
 
-class Ernie4_5_VL_MoeImageProcessorTester:
+class Ernie4_5_VLMoeImageProcessorTester:
     def __init__(
         self,
         parent,
@@ -97,13 +97,13 @@ class Ernie4_5_VL_MoeImageProcessorTester:
 
 @require_torch
 @require_vision
-class Ernie4_5_VL_MoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = Ernie4_5_VL_MoeImageProcessor if is_vision_available() else None
-    fast_image_processing_class = Ernie4_5_VL_MoeImageProcessorFast if is_torchvision_available() else None
+class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = Ernie4_5_VLMoeImageProcessor if is_vision_available() else None
+    fast_image_processing_class = Ernie4_5_VLMoeImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = Ernie4_5_VL_MoeImageProcessorTester(self)
+        self.image_processor_tester = Ernie4_5_VLMoeImageProcessorTester(self)
 
     @property
     def image_processor_dict(self):
