@@ -21,7 +21,6 @@ import numpy as np
 import timesfm
 import torch
 from huggingface_hub import snapshot_download
-
 from transformers import TimesFm2_5Config, TimesFm2_5ModelForPrediction
 
 
@@ -100,10 +99,8 @@ def write_model(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytorch
         decode_index=5,
         use_bias=False,
         activation="swish",
-        query_pre_attn_scalar=256.0,
         quantiles=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         max_position_embeddings=16384,
-        rope_theta=10000.0,
     )
     timesfm_config.save_pretrained(tmp_model_path)
     timesfm_model = TimesFm2_5ModelForPrediction(timesfm_config)
