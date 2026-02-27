@@ -108,20 +108,19 @@ class FourOverSixHfQuantizer(HfQuantizer):
         """
         Return weight conversions for loading pre-quantized checkpoints of
         other pre-quantized models (not fouroversix models). After first use,
-        the pre_quantized_model_config_type attribute is deleted to ensure
+        the pre_quantized_model_config_type attribute is set to None to ensure
         subsequent calls (e.g., during save_pretrained) return an empty list
         since, by then, the model will be saved with our framework's format
         so weight conversions are no longer needed.
         """
         from fouroversix import WeightConversions
 
-        if hasattr(self.quantization_config, "pre_quantized_model_config_type"):
-            model_config_type = self.quantization_config.pre_quantized_model_config_type
-            if model_config_type is not None:
-                weight_conversions = WeightConversions.get_weight_conversions(
-                    model_config_type,
-                )
-                delattr(self.quantization_config, "pre_quantized_model_config_type")
-                return weight_conversions
+        model_config_type = self.quantization_config.pre_quantized_model_config_type
+        if model_config_type is not None:
+            weight_conversions = WeightConversions.get_weight_conversions(
+                model_config_type,
+            )
+            self.quantization_config.pre_quantized_model_config_type = None
+            return weight_conversions
 
         return []
