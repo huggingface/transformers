@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-*This model was released on 2025-07-10 and added to Hugging Face Transformers on 2025-11-17.*
+*This model was released on 2025-07-10 and added to Hugging Face Transformers on 2025-11-12.*
 
 # Audio Flamingo 3
 
@@ -401,3 +401,4 @@ are forwarded, so you can tweak padding or tensor formats just like when calling
 
 [[autodoc]] AudioFlamingo3ForConditionalGeneration
     - forward
+    - get_audio_features

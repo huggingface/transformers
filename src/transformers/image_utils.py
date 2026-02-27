@@ -86,12 +86,7 @@ class AnnotationFormat(ExplicitEnum):
     COCO_PANOPTIC = "coco_panoptic"
 
 
-class AnnotionFormat(ExplicitEnum):
-    COCO_DETECTION = AnnotationFormat.COCO_DETECTION.value
-    COCO_PANOPTIC = AnnotationFormat.COCO_PANOPTIC.value
-
-
-AnnotationType = dict[str, Union[int, str, list[dict]]]
+AnnotationType = dict[str, int | str | list[dict]]
 
 
 def is_pil_image(img):
@@ -944,12 +939,12 @@ class SizeDict:
     Hashable dictionary to store image size information.
     """
 
-    height: Optional[int] = None
-    width: Optional[int] = None
-    longest_edge: Optional[int] = None
-    shortest_edge: Optional[int] = None
-    max_height: Optional[int] = None
-    max_width: Optional[int] = None
+    height: int | None = None
+    width: int | None = None
+    longest_edge: int | None = None
+    shortest_edge: int | None = None
+    max_height: int | None = None
+    max_width: int | None = None
 
     def __getitem__(self, key):
         if hasattr(self, key):

@@ -49,7 +49,7 @@ class GraniteSpeechProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
         audio: Union["torch.Tensor", list["torch.Tensor"]] = None,
         device: str = "cpu",
         **kwargs,
@@ -94,7 +94,7 @@ class GraniteSpeechProcessor(ProcessorMixin):
         text_inputs = self.tokenizer(prompt_strings, **kwargs)
         return BatchFeature(data={**text_inputs, **audio_inputs})
 
-    def _get_validated_text(self, text: Union[str, list]) -> list[str]:
+    def _get_validated_text(self, text: str | list) -> list[str]:
         if isinstance(text, str):
             return [text]
         elif isinstance(text, list) and isinstance(text[0], str):

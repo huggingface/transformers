@@ -169,7 +169,7 @@ class SentencePieceExtractor:
         if model_type is None:
             from tokenizers.models import BPE, Unigram
 
-            model_type = Unigram if self.proto.trainer_spec.model_type == 2 else BPE
+            model_type = Unigram if self.proto.trainer_spec.model_type == 1 else BPE
         vocab = [(piece.piece, piece.score) for piece in self.proto.pieces]
 
         if model_type.__name__ != "BPE":
@@ -1892,9 +1892,10 @@ class TikTokenConverter:
         )
         tokenizer.decoder = decoders.ByteLevel()
 
-        tokenizer.add_special_tokens(
-            [AddedToken(token, normalized=False, special=True) for token in self.extra_special_tokens]
-        )
+        if self.extra_special_tokens is not None:
+            tokenizer.add_special_tokens(
+                [AddedToken(token, normalized=False, special=True) for token in self.extra_special_tokens]
+            )
 
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
@@ -1942,6 +1943,7 @@ class MistralConverter:
             vocab[token.content] = idx
         bpe_ranks = [base64.b64decode(k["token_bytes"]) for k in bpe_ranks]
         rank_set = set(bpe_ranks)
+        token_to_rank = {token: rank for rank, token in enumerate(bpe_ranks)}
         for rank, token in enumerate(tqdm(bpe_ranks, desc="Converting tekken.json to tokenizer.json")):
             vocab[token_bytes_to_string(token)] = rank
             if len(token) == 1:
@@ -1951,7 +1953,7 @@ class MistralConverter:
                 piece_l, piece_r = token[:index], token[index:]
                 if piece_l in rank_set and piece_r in rank_set and (piece_l + piece_r) in rank_set:
                     local.append((piece_l, piece_r, rank))
-            local = sorted(local, key=lambda x: (bpe_ranks.index(x[0]), bpe_ranks.index(x[1])), reverse=False)
+            local = sorted(local, key=lambda x: (token_to_rank[x[0]], token_to_rank[x[1]]), reverse=False)
             merges.extend(local)
         merges = sorted(merges, key=lambda val: val[2], reverse=False)
         merges = [(token_bytes_to_string(val[0]), token_bytes_to_string(val[1])) for val in merges]

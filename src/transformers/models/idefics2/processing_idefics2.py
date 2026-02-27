@@ -17,7 +17,7 @@ Processor class for IDEFICS2.
 
 import re
 from itertools import accumulate
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
@@ -58,7 +58,7 @@ class Idefics2ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Idefics2Processor(ProcessorMixin):
     def __init__(
-        self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: Optional[str] = None, **kwargs
+        self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: str | None = None, **kwargs
     ):
         r"""
         image_seq_len (`int`, *optional*, defaults to 64):
@@ -98,7 +98,7 @@ class Idefics2Processor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         **kwargs: Unpack[Idefics2ProcessorKwargs],
     ) -> BatchFeature:

@@ -119,7 +119,7 @@ def _lazy_imports(implementation: str | None, attention_wrapper: Callable | None
             if flash_attn_func is None:
                 logger.warning(
                     f"The loaded flash attention implementation at `{implementation}` only supports varlen, i.e. "
-                    "it can only be used with continous batching and does not support the full functionality for "
+                    "it can only be used with continuous batching and does not support the full functionality for "
                     "the base transformers generation methods."
                 )
 
@@ -369,7 +369,7 @@ def prepare_fa_kwargs_from_position_ids(position_ids):
     """
     tensor_kwargs = {"dtype": torch.int32, "device": position_ids.device}
 
-    position_ids = position_ids.view(-1)
+    position_ids = position_ids.reshape(-1)
     indices_q = (position_ids == 0).nonzero().view(-1)
 
     cu_seq_lens_q = torch.cat(
@@ -545,8 +545,7 @@ def _process_flash_attention_kwargs(
         # The flash attention API sets inclusive boundaries, i.e. (4, 0) would take 4 tokens to the left
         # and the current token for a total size of 5. However, we usually define our window sizes by
         # their total window size (when causal). Encoder models as of now seldom use SWA and when they
-        # do, they have a custom workaround (e.g. ModernBERT) which would align with this symmetric logic, i.e.
-        # for a total of `2*sliding_window + 1`.
+        # do, they must align with this symmetric logic, i.e. for a total of `2*sliding_window + 1`.
         flash_kwargs["window_size"] = (sliding_window - 1, sliding_window - 1)
 
     if supports_mapping["deterministic"]:

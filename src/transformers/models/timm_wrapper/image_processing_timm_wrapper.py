@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import os
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 
@@ -52,7 +52,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         pretrained_cfg: dict[str, Any],
-        architecture: Optional[str] = None,
+        architecture: str | None = None,
         **kwargs,
     ):
         requires_backends(self, "timm")
@@ -83,7 +83,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
 
     @classmethod
     def get_image_processor_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         Get the image processor dict for the model.
@@ -96,7 +96,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        return_tensors: Optional[Union[str, TensorType]] = "pt",
+        return_tensors: str | TensorType | None = "pt",
     ) -> BatchFeature:
         """
         Preprocess an image or batch of images.

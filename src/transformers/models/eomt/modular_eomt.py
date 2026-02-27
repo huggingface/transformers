@@ -32,7 +32,8 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..dinov2.modeling_dinov2 import (
     Dinov2Embeddings,
     Dinov2Layer,
@@ -159,6 +160,23 @@ class EomtConfig(ViTConfig):
         num_register_tokens=4,
         **kwargs,
     ):
+        self.mlp_ratio = mlp_ratio
+        self.attention_dropout = attention_dropout
+        self.layerscale_value = layerscale_value
+        self.drop_path_rate = drop_path_rate
+        self.num_upscale_blocks = num_upscale_blocks
+        self.use_swiglu_ffn = use_swiglu_ffn
+        self.num_blocks = num_blocks
+        self.no_object_weight = no_object_weight
+        self.class_weight = class_weight
+        self.mask_weight = mask_weight
+        self.dice_weight = dice_weight
+        self.train_num_points = train_num_points
+        self.oversample_ratio = oversample_ratio
+        self.importance_sample_ratio = importance_sample_ratio
+        self.num_queries = num_queries
+        self.num_register_tokens = num_register_tokens
+
         super().__init__(
             hidden_size=hidden_size,
             num_hidden_layers=num_hidden_layers,
@@ -179,23 +197,6 @@ class EomtConfig(ViTConfig):
         del self.pooler_output_size
         del self.encoder_stride
         del self.attention_probs_dropout_prob
-
-        self.mlp_ratio = mlp_ratio
-        self.attention_dropout = attention_dropout
-        self.layerscale_value = layerscale_value
-        self.drop_path_rate = drop_path_rate
-        self.num_upscale_blocks = num_upscale_blocks
-        self.use_swiglu_ffn = use_swiglu_ffn
-        self.num_blocks = num_blocks
-        self.no_object_weight = no_object_weight
-        self.class_weight = class_weight
-        self.mask_weight = mask_weight
-        self.dice_weight = dice_weight
-        self.train_num_points = train_num_points
-        self.oversample_ratio = oversample_ratio
-        self.importance_sample_ratio = importance_sample_ratio
-        self.num_queries = num_queries
-        self.num_register_tokens = num_register_tokens
 
 
 @dataclass
@@ -499,7 +500,8 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
 
         return attn_mask
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

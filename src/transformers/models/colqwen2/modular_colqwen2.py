@@ -64,13 +64,10 @@ class ColQwen2Processor(ColPaliProcessor):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
 
-        if visual_prompt_prefix is None:
-            visual_prompt_prefix = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"
-        self.visual_prompt_prefix = visual_prompt_prefix
-
-        if query_prefix is None:
-            query_prefix = "Query: "
-        self.query_prefix = query_prefix
+        self.visual_prompt_prefix = visual_prompt_prefix or (
+            "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"
+        )
+        self.query_prefix = query_prefix or "Query: "
 
     def __call__(
         self,
@@ -292,11 +289,10 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         # Handle the custom "pixel_values" input obtained with `ColQwen2Processor` through unpadding
         if pixel_values is not None and image_grid_thw is not None:
             # NOTE: image_grid_thw: (batch_size, 3) where image_grid_thw[i] = (num_patches_h, num_patches_w, temporal_patch_size)
-            offsets = image_grid_thw[:, 1] * image_grid_thw[:, 2]  # (num_patches_h, num_patches_w)
-            pixel_values = torch.cat(
-                [pixel_sequence[:offset] for pixel_sequence, offset in zip(pixel_values, offsets)],
-                dim=0,
-            )  # (num_patches_h * num_patches_w, pixel_values)
+            offsets = image_grid_thw[:, 1] * image_grid_thw[:, 2]  # (batch_size,)
+            arange = torch.arange(pixel_values.shape[1], device=offsets.device)  # (max_len,)
+            mask = arange.unsqueeze(0) < offsets.unsqueeze(1)  # (batch_size, max_len)
+            pixel_values = pixel_values[mask]  # (total_valid_patches, channels, height, width)
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
@@ -305,19 +301,14 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        position_ids, rope_deltas = self.vlm.model.get_rope_index(
-            input_ids=input_ids,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=None,
-            attention_mask=attention_mask,
-        )
-
         # Custom data preparation to fix an issue with the gradient flow when training with multiple GPUs.
         if inputs_embeds is None:
             inputs_embeds = self.vlm.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_embeds = self.vlm.model.visual(pixel_values, grid_thw=image_grid_thw)
+                image_embeds = self.vlm.model.visual(
+                    pixel_values, grid_thw=image_grid_thw, return_dict=True
+                ).pooler_output
                 image_mask = (
                     (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
                 )

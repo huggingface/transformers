@@ -15,8 +15,6 @@
 Processor class for Qwen2Audio.
 """
 
-from typing import Union
-
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
@@ -64,8 +62,8 @@ class Qwen2AudioProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio: Union[np.ndarray, list[np.ndarray]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        audio: np.ndarray | list[np.ndarray] = None,
         **kwargs: Unpack[Qwen2AudioProcessorKwargs],
     ) -> BatchFeature:
         if text is None:

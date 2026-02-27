@@ -111,7 +111,7 @@ Transformersは、テキスト、コンピュータビジョン、音声、動�
 
 ## インストール
 
-TransformersはPython 3.9以上、[PyTorch](https://pytorch.org/get-started/locally/) 2.1以上で動作します。
+TransformersはPython 3.10以上、[PyTorch](https://pytorch.org/get-started/locally/) 2.4以上で動作します。
 
 [venv](https://docs.python.org/3/library/venv.html)または、高速なRustベースのPythonパッケージおよびプロジェクトマネージャーである[uv](https://docs.astral.sh/uv/)を使用して、仮想環境を作成し、有効化してください。
 

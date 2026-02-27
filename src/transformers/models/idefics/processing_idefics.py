@@ -15,7 +15,6 @@
 Processor class for IDEFICS.
 """
 
-from typing import Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
@@ -48,8 +47,8 @@ class IdeficsTextKwargs(TextKwargs, total=False):
         particularly important for chat-based models.
     """
 
-    add_eos_token: Optional[bool]
-    add_end_of_utterance_token: Optional[bool]
+    add_eos_token: bool | None
+    add_end_of_utterance_token: bool | None
 
 
 class IdeficsProcessorKwargs(ProcessingKwargs, total=False):
@@ -172,15 +171,13 @@ class IdeficsProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]] = None,
-        text: Union[
-            TextInput,
-            PreTokenizedInput,
-            list[TextInput],
-            list[PreTokenizedInput],
-            list[list[TextInput]],
-            list[list[PreTokenizedInput]],
-        ] = None,
+        images: ImageInput | list[ImageInput] | str | list[str] | list[list[str]] = None,
+        text: TextInput
+        | PreTokenizedInput
+        | list[TextInput]
+        | list[PreTokenizedInput]
+        | list[list[TextInput]]
+        | list[list[PreTokenizedInput]] = None,
         **kwargs: Unpack[IdeficsProcessorKwargs],
     ) -> BatchFeature:
         r"""

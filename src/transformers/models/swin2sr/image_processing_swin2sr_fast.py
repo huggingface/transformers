@@ -13,10 +13,8 @@
 # limitations under the License.
 """Fast Image processor class for Swin2SR."""
 
-from typing import Optional, Union
-
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature, ChannelDimension, get_image_size
 from ...image_processing_utils_fast import (
@@ -70,7 +68,7 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
         pad_height = (height // size_divisor + 1) * size_divisor - height
         pad_width = (width // size_divisor + 1) * size_divisor - width
 
-        return F.pad(
+        return tvF.pad(
             images,
             (0, 0, pad_width, pad_height),
             padding_mode="symmetric",
@@ -83,8 +81,8 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
         rescale_factor: float,
         do_pad: bool,
         size_divisor: int,
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)

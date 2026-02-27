@@ -521,7 +521,7 @@ class RagModel(RagPreTrainedModel):
                 retriever_outputs = self.retriever(
                     input_ids,
                     question_encoder_last_hidden_state.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                    prefix=self.generator.config.prefix,
+                    prefix=getattr(self.generator.config, "prefix", None),
                     n_docs=n_docs,
                     return_tensors="pt",
                 )
@@ -953,7 +953,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             context_input_ids = self.retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=self.generator.config.prefix,
+                prefix=getattr(self.generator.config, "prefix", None),
                 n_docs=n_docs,
                 return_tensors="pt",
             )["context_input_ids"]
@@ -1505,7 +1505,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             out = self.retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=self.generator.config.prefix,
+                prefix=getattr(self.generator.config, "prefix", None),
                 n_docs=n_docs,
                 return_tensors="pt",
             )
@@ -1566,6 +1566,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         model_kwargs["encoder_outputs"] = encoder_outputs
         model_kwargs["attention_mask"] = context_attention_mask
         model_kwargs["n_docs"] = n_docs
+        model_kwargs["use_cache"] = generation_config.use_cache
 
         prepared_logits_processor = self._get_logits_processor(
             generation_config=generation_config,
@@ -1587,9 +1588,6 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             batch_size=input_ids.shape[0],
             max_cache_length=generation_config.max_length - 1,
         )
-
-        # Prefill pass
-        generation_mode_kwargs["prefill_outputs"] = self._prefill(input_ids, generation_config, model_kwargs)
 
         return decoding_method(
             self,

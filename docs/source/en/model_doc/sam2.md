@@ -351,3 +351,4 @@ SAM2 can use masks from previous predictions as input to refine segmentation:
 
 [[autodoc]] Sam2Model
     - forward
+    - get_image_features

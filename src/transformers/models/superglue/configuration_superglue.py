@@ -51,6 +51,9 @@ class SuperGlueConfig(PreTrainedConfig):
             The matching threshold.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
 
     Examples:
         ```python
@@ -80,6 +83,7 @@ class SuperGlueConfig(PreTrainedConfig):
         sinkhorn_iterations: int = 100,
         matching_threshold: float = 0.0,
         initializer_range: float = 0.02,
+        is_decoder=False,
         **kwargs,
     ):
         self.gnn_layers_types = gnn_layers_types if gnn_layers_types is not None else ["self", "cross"] * 9

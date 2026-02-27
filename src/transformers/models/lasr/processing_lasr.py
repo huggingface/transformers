@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
-
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -54,8 +52,8 @@ class LasrProcessor(ProcessorMixin):
     def __call__(
         self,
         audio: AudioInput,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput], None] = None,
-        sampling_rate: Optional[int] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        sampling_rate: int | None = None,
         **kwargs: Unpack[LasrProcessorKwargs],
     ):
         r"""

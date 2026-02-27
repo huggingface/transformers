@@ -108,8 +108,8 @@ class GPT2ModelTester(CausalLMModelTester):
     def prepare_config_and_inputs_for_common(self):
         # Overwritten: we want `token_type_ids` as part of the common inputs
         config_and_inputs = self.prepare_config_and_inputs(extra_inputs=True)
-        config, input_ids, _, token_type_ids, _, _, _, _ = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids}
+        config, input_ids, attention_mask, token_type_ids, _, _, _, _ = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "token_type_ids": token_type_ids}
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -160,7 +160,6 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "feature-extraction": GPT2Model,
-            "question-answering": GPT2ForQuestionAnswering,
             "text-classification": GPT2ForSequenceClassification,
             "text-generation": GPT2LMHeadModel,
             "token-classification": GPT2ForTokenClassification,
@@ -185,6 +184,7 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
                     device=torch_device,
                 )
                 inputs_dict["input_ids"] = inputs_dict["labels"]
+                inputs_dict["attention_mask"] = torch.tril(torch.ones_like(inputs_dict["input_ids"]).to(torch_device))
                 inputs_dict["token_type_ids"] = inputs_dict["labels"]
                 inputs_dict["mc_token_ids"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.num_choices),
@@ -268,18 +268,18 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         super().test_training_gradient_checkpointing()
         self.all_model_classes = self.original_all_model_classes
 
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        # overwritten: GPT2DoubleHeadsModel fails this test, non-standard class
-        self.original_all_model_classes = self.all_model_classes
-        self.all_model_classes = (cls for cls in self.all_model_classes if cls.__name__ != "GPT2DoubleHeadsModel")
-        super().test_training_gradient_checkpointing_use_reentrant()
-        self.all_model_classes = self.original_all_model_classes
-
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         # overwritten: GPT2DoubleHeadsModel fails this test, non-standard class
         self.original_all_model_classes = self.all_model_classes
         self.all_model_classes = (cls for cls in self.all_model_classes if cls.__name__ != "GPT2DoubleHeadsModel")
         super().test_training_gradient_checkpointing_use_reentrant_false()
+        self.all_model_classes = self.original_all_model_classes
+
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        # overwritten: GPT2DoubleHeadsModel fails this test, non-standard class
+        self.original_all_model_classes = self.all_model_classes
+        self.all_model_classes = (cls for cls in self.all_model_classes if cls.__name__ != "GPT2DoubleHeadsModel")
+        super().test_training_gradient_checkpointing_use_reentrant_true()
         self.all_model_classes = self.original_all_model_classes
 
 
@@ -367,48 +367,6 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
 
-    # TODO joao, manuel: remove this in v4.62.0
-    @slow
-    def test_contrastive_search_gpt2(self):
-        article = (
-            "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
-            "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
-        )
-
-        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2-large")
-        gpt2_model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2-large").to(torch_device)
-        input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        outputs = gpt2_model.generate(
-            input_ids,
-            penalty_alpha=0.6,
-            top_k=4,
-            max_length=256,
-            trust_remote_code=True,
-            custom_generate="transformers-community/contrastive-search",
-        )
-
-        generated_text = gpt2_tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-        self.assertListEqual(
-            generated_text,
-            [
-                "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
-                "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, "
-                "United Kingdom\n\nGoogle has a lot of data on its users and uses it to improve its products, such as "
-                "Google Now, which helps users find the information they're looking for on the web. But the company "
-                "is not the only one to collect data on its users. Facebook, for example, has its own facial "
-                "recognition technology, as well as a database of millions of photos that it uses to personalize its "
-                "News Feed.\n\nFacebook's use of data is a hot topic in the tech industry, with privacy advocates "
-                "concerned about the company's ability to keep users' information private. In a blog post last "
-                'year, Facebook CEO Mark Zuckerberg said his company would "do our best to be transparent about our '
-                'data use and how we use it."\n\n"We have made it clear that we do not sell or share your data with '
-                'third parties," Zuckerberg wrote. "If you have questions or concerns, please reach out to us at '
-                'privacy@facebook.com."\n\nGoogle declined to comment on the privacy implications of its use of data, '
-                "but said in a statement to The Associated Press that"
-            ],
-        )
-
     @require_flash_attn
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
@@ -461,6 +419,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         tokenizer.padding_side = "left"
+        max_length = 20
 
         # Define PAD Token = EOS Token = 50256
         tokenizer.pad_token = tokenizer.eos_token
@@ -485,24 +444,22 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         outputs = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
-            max_length=20,
+            max_length=max_length,
         )
 
         outputs_tt = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
             token_type_ids=token_type_ids,
-            max_length=20,
+            max_length=max_length,
         )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded, max_length=20)
+        output_non_padded = model.generate(input_ids=inputs_non_padded, max_length=max_length)
 
         num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(
-            input_ids=inputs_padded, max_length=model.generation_config.max_length - num_paddings
-        )
+        output_padded = model.generate(input_ids=inputs_padded, max_length=max_length - num_paddings)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
@@ -524,6 +481,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         tokenizer.padding_side = "left"
+        max_length = 20
 
         # This tokenizer has no pad token, so we have to set it in some way
         # Define PAD Token = EOS Token = 50256
@@ -549,24 +507,22 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         outputs = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
-            max_length=20,
+            max_length=max_length,
         )
 
         outputs_tt = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
             token_type_ids=token_type_ids,
-            max_length=20,
+            max_length=max_length,
         )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded, max_length=20)
+        output_non_padded = model.generate(input_ids=inputs_non_padded, max_length=max_length)
 
         num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(
-            input_ids=inputs_padded, max_length=model.generation_config.max_length - num_paddings
-        )
+        output_padded = model.generate(input_ids=inputs_padded, max_length=max_length - num_paddings)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)

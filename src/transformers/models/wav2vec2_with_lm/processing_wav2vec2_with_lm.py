@@ -16,12 +16,12 @@ Speech processor class for Wav2Vec2
 """
 
 import os
-import warnings
 from collections.abc import Iterable
 from contextlib import nullcontext
 from dataclasses import dataclass
-from multiprocessing import Pool, get_context, get_start_method
-from typing import TYPE_CHECKING, Optional, Union
+from multiprocessing import get_context, get_start_method
+from multiprocessing.pool import Pool
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from ...tokenization_python import PreTrainedTokenizerBase
 
 
-ListOfDict = list[dict[str, Union[int, str]]]
+ListOfDict = list[dict[str, int | str]]
 
 
 @dataclass
@@ -59,10 +59,10 @@ class Wav2Vec2DecoderWithLMOutput(ModelOutput):
             can be used to compute time stamps for each word.
     """
 
-    text: Union[list[list[str]], list[str], str]
-    logit_score: Union[list[list[float]], list[float], float] = None
-    lm_score: Union[list[list[float]], list[float], float] = None
-    word_offsets: Union[list[list[ListOfDict]], list[ListOfDict], ListOfDict] = None
+    text: list[list[str]] | list[str] | str
+    logit_score: list[list[float]] | list[float] | float = None
+    lm_score: list[list[float]] | list[float] | float = None
+    word_offsets: list[list[ListOfDict]] | list[ListOfDict] | ListOfDict = None
 
 
 @auto_docstring
@@ -207,11 +207,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
     @auto_docstring
     def __call__(self, *args, **kwargs):
-        if "raw_speech" in kwargs:
-            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
-            audio = kwargs.pop("raw_speech")
-        else:
-            audio = kwargs.pop("audio", None)
+        audio = kwargs.pop("audio", None)
         sampling_rate = kwargs.pop("sampling_rate", None)
         text = kwargs.pop("text", None)
         if len(args) > 0:
@@ -264,17 +260,17 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
     def batch_decode(
         self,
         logits: np.ndarray,
-        pool: Optional[Pool] = None,
-        num_processes: Optional[int] = None,
-        beam_width: Optional[int] = None,
-        beam_prune_logp: Optional[float] = None,
-        token_min_logp: Optional[float] = None,
-        hotwords: Optional[Iterable[str]] = None,
-        hotword_weight: Optional[float] = None,
-        alpha: Optional[float] = None,
-        beta: Optional[float] = None,
-        unk_score_offset: Optional[float] = None,
-        lm_score_boundary: Optional[bool] = None,
+        pool: Pool | None = None,
+        num_processes: int | None = None,
+        beam_width: int | None = None,
+        beam_prune_logp: float | None = None,
+        token_min_logp: float | None = None,
+        hotwords: Iterable[str] | None = None,
+        hotword_weight: float | None = None,
+        alpha: float | None = None,
+        beta: float | None = None,
+        unk_score_offset: float | None = None,
+        lm_score_boundary: bool | None = None,
         output_word_offsets: bool = False,
         n_best: int = 1,
     ):
@@ -449,15 +445,15 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
     def decode(
         self,
         logits: np.ndarray,
-        beam_width: Optional[int] = None,
-        beam_prune_logp: Optional[float] = None,
-        token_min_logp: Optional[float] = None,
-        hotwords: Optional[Iterable[str]] = None,
-        hotword_weight: Optional[float] = None,
-        alpha: Optional[float] = None,
-        beta: Optional[float] = None,
-        unk_score_offset: Optional[float] = None,
-        lm_score_boundary: Optional[bool] = None,
+        beam_width: int | None = None,
+        beam_prune_logp: float | None = None,
+        token_min_logp: float | None = None,
+        hotwords: Iterable[str] | None = None,
+        hotword_weight: float | None = None,
+        alpha: float | None = None,
+        beta: float | None = None,
+        unk_score_offset: float | None = None,
+        lm_score_boundary: bool | None = None,
         output_word_offsets: bool = False,
         n_best: int = 1,
     ):

@@ -20,7 +20,7 @@ Use from the root of the repo with:
 python utils/check_docstrings.py
 ```
 
-for a check that will error in case of inconsistencies (used by `make repo-consistency`).
+for a check that will error in case of inconsistencies (used by `make check-repo`).
 
 To auto-fix issues run:
 
@@ -28,7 +28,7 @@ To auto-fix issues run:
 python utils/check_docstrings.py --fix_and_overwrite
 ```
 
-which is used by `make fix-copies` (note that this fills what it cans, you might have to manually fill information
+which is used by `make fix-repo` (note that this fills what it cans, you might have to manually fill information
 like argument descriptions).
 """
 
@@ -48,6 +48,7 @@ from typing import Any
 from check_repo import ignore_undocumented
 from git import Repo
 
+from transformers import logging
 from transformers.utils import direct_transformers_import
 from transformers.utils.auto_docstring import (
     ImageProcessorArgs,
@@ -58,6 +59,9 @@ from transformers.utils.auto_docstring import (
     parse_docstring,
     set_min_indent,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -100,6 +104,7 @@ ALWAYS_OVERRIDE = ["labels"]
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
 OBJECTS_TO_IGNORE = {
+    "GlmMoeDsaConfig",
     "GlmAsrProcessor",
     "AudioFlamingo3Processor",
     "ApertusConfig",
@@ -285,8 +290,6 @@ OBJECTS_TO_IGNORE = {
     "ImageSegmentationPipeline",
     "ImageTextToTextPipeline",
     "AnyToAnyPipeline",
-    "ImageToImagePipeline",
-    "ImageToTextPipeline",
     "InformerConfig",
     "JukeboxPriorConfig",
     "JukeboxTokenizer",
@@ -394,7 +397,6 @@ OBJECTS_TO_IGNORE = {
     "ProphetNetConfig",
     "QDQBertConfig",
     "QDQBertModel",
-    "QuestionAnsweringPipeline",
     "RagConfig",
     "RagModel",
     "RagRetriever",
@@ -438,7 +440,6 @@ OBJECTS_TO_IGNORE = {
     "SplinterConfig",
     "SplinterTokenizerFast",
     "SqueezeBertTokenizerFast",
-    "SummarizationPipeline",
     "Swin2SRImageProcessor",
     "Swinv2Model",
     "SwitchTransformersConfig",
@@ -450,7 +451,6 @@ OBJECTS_TO_IGNORE = {
     "TapasConfig",
     "TapasModel",
     "TapasTokenizer",
-    "Text2TextGenerationPipeline",
     "TextClassificationPipeline",
     "TextGenerationPipeline",
     "TimeSeriesTransformerConfig",
@@ -460,7 +460,6 @@ OBJECTS_TO_IGNORE = {
     "TrainerState",
     "TrainingArguments",
     "TrajectoryTransformerConfig",
-    "TranslationPipeline",
     "TvltImageProcessor",
     "UMT5Config",
     "UperNetConfig",
@@ -477,7 +476,6 @@ OBJECTS_TO_IGNORE = {
     "VisionTextDualEncoderModel",
     "VisualBertConfig",
     "VisualBertModel",
-    "VisualQuestionAnsweringPipeline",
     "VitMatteForImageMatting",
     "VitsTokenizer",
     "VivitModel",
@@ -519,6 +517,12 @@ OBJECTS_TO_IGNORE = {
     "Llama4TextConfig",
     "BltConfig",
     "BltPatcherConfig",
+    "HiggsAudioV2Config",
+    "HiggsAudioV2TokenizerConfig",
+    "MoonshineStreamingConfig",
+    "MoonshineStreamingEncoderConfig",
+    "VoxtralRealtimeFeatureExtractor",
+    "VoxtralRealtimeEncoderConfig",
 }
 # In addition to the objects above, we also ignore objects with certain prefixes. If you add an item to the list
 # below, make sure to add a comment explaining why.
@@ -1012,8 +1016,6 @@ def find_matching_model_files(check_all: bool = False):
         # intersect with module_diff_files
         matching_files = sorted([file for file in matching_files if file in module_diff_files])
 
-    print("    Checking auto_docstrings in the following files:" + "\n    - " + "\n    - ".join(matching_files))
-
     return matching_files
 
 
@@ -1428,8 +1430,8 @@ def _find_typed_dict_classes(source: str) -> list[dict]:
     standard_args = set()
     try:
         standard_args.update(get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs]).keys())
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Could not get standard args from source: {e}")
 
     # Collect all TypedDict class names first (for excluding nested TypedDicts)
     typed_dict_names = set()
@@ -1554,8 +1556,8 @@ def _process_typed_dict_docstrings(
         if td["docstring"]:
             try:
                 documented_fields, remaining_docstring = parse_docstring(td["docstring"])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Could not parse docstring for {td.get('name', 'unknown')}: {e}")
 
         # Find missing, fill, and redundant fields
         missing_fields = []
@@ -1616,8 +1618,8 @@ def _process_typed_dict_docstrings(
             if td["docstring"]:
                 try:
                     documented_fields, remaining_docstring = parse_docstring(td["docstring"])
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Could not parse docstring for {td.get('name', 'unknown')}: {e}")
 
             # Determine which fields to remove (redundant with source)
             fields_to_remove = set()
@@ -1890,7 +1892,7 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
             has_errors = True
             if not overwrite:
                 print(
-                    "Some docstrings are missing. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to generate the docstring templates where needed."
+                    "Some docstrings are missing. Run `make fix-repo` or `python utils/check_docstrings.py --fix_and_overwrite` to generate the docstring templates where needed."
                 )
             print(f"[ERROR] Missing docstring for the following arguments in {candidate_file}:")
             for warning in missing_docstring_args_warnings:
@@ -1899,7 +1901,7 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
             has_errors = True
             if not overwrite:
                 print(
-                    "Some docstrings are redundant with the ones in `auto_docstring.py` and will be removed. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
+                    "Some docstrings are redundant with the ones in `auto_docstring.py` and will be removed. Run `make fix-repo` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
                 )
             print(f"[ERROR] Redundant docstring for the following arguments in {candidate_file}:")
             for warning in docstring_args_ro_remove_warnings:
@@ -1942,7 +1944,6 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
         # quick escape route: if there are no module files in the diff, skip this check
         if len(module_diff_files) == 0:
             return
-        print("    Checking docstrings in the following files:" + "\n    - " + "\n    - ".join(module_diff_files))
 
     failures = []
     hard_failures = []
@@ -2000,7 +2001,7 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
         error_message += "\n" + "\n".join([f"- {name}" for name in hard_failures])
     if len(failures) > 0:
         error_message += (
-            "The following objects docstrings do not match their signature. Run `make fix-copies` to fix this. "
+            "The following objects docstrings do not match their signature. Run `make fix-repo` to fix this. "
             "In some cases, this error may be raised incorrectly by the docstring checker. If you think this is the "
             "case, you can manually check the docstrings and then add the object name to `OBJECTS_TO_IGNORE` in "
             "`utils/check_docstrings.py`."

@@ -16,7 +16,7 @@
 import importlib
 import os
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 # Build the list of all video processors
 from ...configuration_utils import PreTrainedConfig
@@ -48,11 +48,11 @@ logger = logging.get_logger(__name__)
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
-    VIDEO_PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[Optional[str], Optional[str]]] = OrderedDict()
+    VIDEO_PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[str | None, str | None]] = OrderedDict()
 else:
     VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
-            ("ernie4_5_vl_moe", "Ernie4_5_VL_MoeVideoProcessor"),
+            ("ernie4_5_vl_moe", "Ernie4_5_VLMoeVideoProcessor"),
             ("glm46v", "Glm46VVideoProcessor"),
             ("glm4v", "Glm4vVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
@@ -66,6 +66,8 @@ else:
             ("qwen2_5_omni", "Qwen2VLVideoProcessor"),
             ("qwen2_5_vl", "Qwen2VLVideoProcessor"),
             ("qwen2_vl", "Qwen2VLVideoProcessor"),
+            ("qwen3_5", "Qwen3VLVideoProcessor"),
+            ("qwen3_5_moe", "Qwen3VLVideoProcessor"),
             ("qwen3_omni_moe", "Qwen2VLVideoProcessor"),
             ("qwen3_vl", "Qwen3VLVideoProcessor"),
             ("qwen3_vl_moe", "Qwen3VLVideoProcessor"),
@@ -92,8 +94,8 @@ VIDEO_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, VIDEO_PROCESSOR
 
 
 def video_processor_class_from_name(class_name: str):
-    for module_name, extractors in VIDEO_PROCESSOR_MAPPING_NAMES.items():
-        if class_name in extractors:
+    for module_name, extractor in VIDEO_PROCESSOR_MAPPING_NAMES.items():
+        if class_name == extractor:
             module_name = model_type_to_module_name(module_name)
 
             module = importlib.import_module(f".{module_name}", "transformers.models")
@@ -116,12 +118,12 @@ def video_processor_class_from_name(class_name: str):
 
 
 def get_video_processor_config(
-    pretrained_model_name_or_path: Union[str, os.PathLike],
-    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    pretrained_model_name_or_path: str | os.PathLike,
+    cache_dir: str | os.PathLike | None = None,
     force_download: bool = False,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
+    revision: str | None = None,
     local_files_only: bool = False,
     **kwargs,
 ):
@@ -381,13 +383,14 @@ class AutoVideoProcessor:
         # Last try: we use the VIDEO_PROCESSOR_MAPPING.
         elif type(config) in VIDEO_PROCESSOR_MAPPING:
             video_processor_class = VIDEO_PROCESSOR_MAPPING[type(config)]
-
             if video_processor_class is not None:
                 return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-            else:
-                raise ValueError(
-                    "This video processor cannot be instantiated. Please make sure you have `torchvision` installed."
-                )
+
+        # Raise a more informative error message if torchvision isn't found, otherwise just fallback to default
+        if not is_torchvision_available():
+            raise ValueError(
+                f"{pretrained_model_name_or_path} requires `torchvision` to be installed. Please install `torchvision` and try again."
+            )
 
         raise ValueError(
             f"Unrecognized video processor in {pretrained_model_name_or_path}. Should have a "

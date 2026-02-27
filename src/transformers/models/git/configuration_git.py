@@ -203,13 +203,11 @@ class GitConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.num_image_with_embedding = num_image_with_embedding
 
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["GitConfig", "GitVisionConfig"]

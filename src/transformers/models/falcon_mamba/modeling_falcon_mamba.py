@@ -34,9 +34,20 @@ from ...integrations import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
+from ...utils.import_utils import (
+    is_mambapy_available,
+    is_torch_greater_or_equal,
+    is_torchdynamo_compiling,
+    is_tracing,
+    resolve_internal_import,
+)
 from .configuration_falcon_mamba import FalconMambaConfig
 
+
+if is_torch_greater_or_equal("2.9.0"):
+    from torch._higher_order_ops.associative_scan import associative_scan
+else:
+    associative_scan = None
 
 if is_mambapy_available():
     from mambapy.pscan import pscan
@@ -200,6 +211,7 @@ class FalconMambaMixer(nn.Module):
         self.act = ACT2FN[config.hidden_act]
 
         self.use_falcon_mambapy = config.use_falcon_mambapy
+        self.use_associative_scan = config.use_associative_scan
 
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
@@ -220,22 +232,16 @@ class FalconMambaMixer(nn.Module):
 
         global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
         causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update, causal_conv1d_fn = (
-            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-            if causal_conv1d is not None
-            else (None, None)
-        )
+        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+
         global falcon_mamba_ssm, selective_state_update, selective_scan_fn, falcon_mamba_inner_fn
         falcon_mamba_ssm = lazy_load_kernel("falcon_mamba-ssm")
-        selective_state_update, selective_scan_fn, falcon_mamba_inner_fn = (
-            (
-                falcon_mamba_ssm.selective_state_update,
-                falcon_mamba_ssm.selective_scan_fn,
-                falcon_mamba_ssm.falcon_mamba_inner_fn,
-            )
-            if falcon_mamba_ssm is not None
-            else (None, None, None)
+        selective_state_update = resolve_internal_import(
+            falcon_mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
         )
+        selective_scan_fn = getattr(falcon_mamba_ssm, "selective_scan_fn", None)
+        falcon_mamba_inner_fn = getattr(falcon_mamba_ssm, "falcon_mamba_inner_fn", None)
 
         self.warn_slow_implementation()
 
@@ -344,7 +350,7 @@ class FalconMambaMixer(nn.Module):
 
             # In case the model has been quantized, we need a hack to properly call the `nn.Linear` module
             # at the price of a small overhead.
-            if hasattr(self.config, "quantization_config"):
+            if hasattr(self.config, "_is_quantized"):
                 discrete_time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
             else:
                 discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
@@ -468,16 +474,39 @@ class FalconMambaMixer(nn.Module):
             scan_output = scan_output + hidden_states * self.D[None, :, None]
             scan_output = scan_output * self.act(gate)
         else:
-            scan_outputs = []
-            for i in range(seq_len):
-                ssm_state = (
-                    discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]
-                )  # [batch, intermediate_size, ssm_state]
-                scan_output = torch.matmul(
-                    ssm_state.to(dtype), C[:, i, :].unsqueeze(-1)
-                )  # [batch, intermediate_size, 1]
-                scan_outputs.append(scan_output[:, :, 0])
-            scan_output = torch.stack(scan_outputs, dim=-1)  # [batch, intermediate_size, seq_len]
+            # Use associative_scan for parallel computation when available
+            if (
+                self.use_associative_scan
+                and associative_scan is not None
+                and is_tracing(hidden_states)
+                and cache_params is None
+            ):
+
+                def combine_fn(left, right):
+                    a_left, b_left = left
+                    a_right, b_right = right
+                    return (a_left * a_right, a_right * b_left + b_right)
+
+                combine_mode = "pointwise" if discrete_A.device.type in ("cuda", "xpu") else "generic"
+                _, all_h = associative_scan(combine_fn, (discrete_A, deltaB_u), dim=2, combine_mode=combine_mode)
+                # all_h: [B, D, S, N] -> output: [B, D, S]
+                scan_output = (
+                    torch.matmul(all_h.permute(0, 2, 1, 3).to(dtype), C.unsqueeze(-1)).squeeze(-1).permute(0, 2, 1)
+                )
+                ssm_state = all_h[:, :, -1, :]
+            else:
+                # Sequential loop for decoding or when associative_scan unavailable
+                scan_outputs = []
+                for i in range(seq_len):
+                    ssm_state = (
+                        discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]
+                    )  # [batch, intermediate_size, ssm_state]
+                    scan_output = torch.matmul(
+                        ssm_state.to(dtype), C[:, i, :].unsqueeze(-1)
+                    )  # [batch, intermediate_size, 1]
+                    scan_outputs.append(scan_output[:, :, 0])
+                scan_output = torch.stack(scan_outputs, dim=-1)  # [batch, intermediate_size, seq_len]
+
             scan_output = scan_output + (hidden_states * self.D[None, :, None])
             scan_output = scan_output * self.act(gate)
 
@@ -816,41 +845,33 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         is_first_iteration: bool | None = False,
         **kwargs,
     ):
-        # Overwritten -- uses `cache_params` as opposed to `past_key_values`
-        model_inputs = {"input_ids": input_ids.contiguous()}
+        # Overwritten -- has custom cache class `FalconMambaCache`
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            cache_params=cache_params,
+            cache_position=cache_position,
+            attention_mask=attention_mask,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+
         if use_cache and cache_params is None:
             # we initialize the `cache_position` to full size of `conv_states` at prefill stage
             # considering padding will be applied when input length is shorter, and truncation
             # will be applied when it is longer, so it will be equivalent to always have it match
             # the length of `cache_params.conv_states`, which is `config.conv_kernel`
-            cache_position = torch.arange(0, self.backbone.config.conv_kernel, device=input_ids.device)
+            model_inputs["cache_position"] = torch.arange(0, self.backbone.config.conv_kernel, device=input_ids.device)
             if inputs_embeds is not None:
-                model_inputs = {"inputs_embeds": inputs_embeds}
                 max_batch_size = inputs_embeds.size(0)
             else:
                 max_batch_size = input_ids.size(0)
-            cache_params = FalconMambaCache(self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype)
-
-        if use_cache and cache_position[0] > 0:
-            model_inputs["input_ids"] = input_ids[:, -1].unsqueeze(-1).contiguous()
-            attention_mask = None
-
-        if not use_cache and inputs_embeds is not None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-
-        model_inputs.update(
-            {
-                "cache_params": cache_params,
-                "use_cache": use_cache,
-                "cache_position": cache_position,
-                "attention_mask": attention_mask,
-            }
-        )
-
-        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
-        for key, value in kwargs.items():
-            if key not in model_inputs:
-                model_inputs[key] = value
+            model_inputs["cache_params"] = FalconMambaCache(
+                self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype
+            )
+        elif use_cache and cache_position[0] > 0:
+            model_inputs["attention_mask"] = None
 
         return model_inputs
 

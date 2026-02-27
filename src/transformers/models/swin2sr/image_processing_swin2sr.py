@@ -13,8 +13,6 @@
 # limitations under the License.
 """Image processor class for Swin2SR."""
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
@@ -59,7 +57,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_pad: bool = True,
         size_divisor: int = 8,
         **kwargs,
@@ -76,8 +74,8 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: int,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Pad an image to make the height and width divisible by `size`.
@@ -117,13 +115,13 @@ class Swin2SRImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_pad: Optional[bool] = None,
-        size_divisor: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_pad: bool | None = None,
+        size_divisor: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: str | ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Preprocess an image or batch of images.

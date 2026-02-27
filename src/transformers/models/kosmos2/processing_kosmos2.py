@@ -16,7 +16,6 @@
 import copy
 import math
 import re
-from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -26,14 +25,15 @@ from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import auto_docstring
 
 
-BboxInput = Union[
-    list[tuple[int, int]],
-    list[tuple[float, float, float, float]],
-    list[list[tuple[int, int]]],
-    list[list[tuple[float, float, float]]],
-]
+BboxInput = (
+    list[tuple[int, int]]
+    | list[tuple[float, float, float, float]]
+    | list[list[tuple[int, int]]]
+    | list[list[tuple[float, float, float]]]
+)
 
-NestedList = list[Union[Optional[int], "NestedList"]]
+
+NestedList = list[tuple | None | list[tuple | None | list[tuple | None | list[tuple | None]]]]
 
 
 class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
@@ -48,9 +48,9 @@ class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
         information. If unset, will default to `self.tokenizer.unk_token_id + 1`.
     """
 
-    bboxes: Optional[NestedList]  # NOTE: hub validators can't accept `Sequence`
+    bboxes: NestedList | None  # NOTE: hub validators can't accept `Sequence`
     num_image_tokens: int
-    first_image_token_id: Optional[int]
+    first_image_token_id: int | None
 
 
 class Kosmos2TextKwargs(TextKwargs, total=False):
@@ -137,8 +137,8 @@ class Kosmos2Processor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, list[TextInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | list[TextInput] = None,
         **kwargs: Unpack[Kosmos2ProcessorKwargs],
     ) -> BatchFeature:
         if images is None and text is None:
@@ -322,11 +322,11 @@ class Kosmos2Processor(ProcessorMixin):
 
     def preprocess_examples(
         self,
-        texts: Union[TextInput, list[TextInput]],
-        images: Optional[ImageInput] = None,
+        texts: TextInput | list[TextInput],
+        images: ImageInput | None = None,
         bboxes: BboxInput = None,
-        num_image_tokens: Optional[int] = 64,
-    ) -> Union[str, list[str]]:
+        num_image_tokens: int | None = 64,
+    ) -> str | list[str]:
         """Add image and bounding box information to `texts` as image and patch index tokens.
 
         Args:
@@ -417,7 +417,7 @@ class Kosmos2Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return tokenizer_input_names + image_processor_input_names + ["image_embeds_position_mask"]
 
-    def _insert_patch_index_tokens(self, text: str, bboxes: Union[list[tuple[int]], list[tuple[float]]]) -> str:
+    def _insert_patch_index_tokens(self, text: str, bboxes: list[tuple[int]] | list[tuple[float]]) -> str:
         if bboxes is None or len(bboxes) == 0:
             return text
 
@@ -463,7 +463,7 @@ class Kosmos2Processor(ProcessorMixin):
         return text
 
     def _convert_bbox_to_patch_index_tokens(
-        self, bbox: Union[tuple[int, int], tuple[float, float, float, float]]
+        self, bbox: tuple[int, int] | tuple[float, float, float, float]
     ) -> tuple[str, str]:
         # already computed patch indices
         if len(bbox) == 2:

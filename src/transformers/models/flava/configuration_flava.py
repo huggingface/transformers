@@ -431,9 +431,8 @@ class FlavaConfig(PreTrainedConfig):
             Whether to skip running unmasked multimodal encoder whose outputs are not used by FLAVA losses.
         return_loss (`bool`, *optional*, defaults to `True`):
             Whether to return loss or not
-
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -483,6 +482,7 @@ class FlavaConfig(PreTrainedConfig):
         global_backprop_contrastive: bool = True,
         skip_unmasked_multimodal_encoder: bool = True,
         return_loss: bool = True,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         # If `_config_dict` exist, we use them for the backward compatibility.
@@ -663,6 +663,7 @@ class FlavaConfig(PreTrainedConfig):
         self.global_backprop_contrastive = global_backprop_contrastive
         self.skip_unmasked_multimodal_encoder = skip_unmasked_multimodal_encoder
         self.return_loss = return_loss
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

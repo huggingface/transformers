@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import Union
 
 import numpy as np
 
@@ -77,7 +76,7 @@ class Qwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
     max_frames: int
     use_audio_in_video: bool
     seconds_per_chunk: float
-    position_id_per_seconds: Union[int, float]
+    position_id_per_seconds: int | float
 
 
 class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):

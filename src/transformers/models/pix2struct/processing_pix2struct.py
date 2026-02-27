@@ -15,8 +15,6 @@
 Processor class for Pix2Struct.
 """
 
-from typing import Union
-
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
@@ -55,9 +53,9 @@ class Pix2StructProcessor(ProcessorMixin):
     def __call__(
         self,
         images=None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Pix2StructProcessorKwargs],
-    ) -> Union[BatchEncoding, BatchFeature]:
+    ) -> BatchEncoding | BatchFeature:
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 

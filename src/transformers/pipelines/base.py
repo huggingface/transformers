@@ -33,7 +33,6 @@ from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..generation import GenerationConfig
 from ..image_processing_utils import BaseImageProcessor
-from ..modelcard import ModelCard
 from ..models.auto import AutoConfig, AutoTokenizer
 from ..processing_utils import ProcessorMixin
 from ..tokenization_python import PreTrainedTokenizer
@@ -282,8 +281,7 @@ def get_default_model_and_revision(targeted_task: dict, task_options: Any | None
            Dictionary representing the given task, that should contain default models
 
         task_options (`Any`, None)
-           Any further value required by the task to get fully specified, for instance (SRC, TGT) languages for
-           translation task.
+           Any further value required by the task to get fully specified.
 
     Returns
 
@@ -299,9 +297,7 @@ def get_default_model_and_revision(targeted_task: dict, task_options: Any | None
     elif "model" in defaults:
         default_models = targeted_task["default"]["model"]
     else:
-        # XXX This error message needs to be updated to be more generic if more tasks are going to become
-        # parametrized
-        raise ValueError('The task defaults can\'t be correctly selected. You probably meant "translation_xx_to_yy"')
+        raise ValueError("The task defaults can't be correctly selected.")
 
     return default_models
 
@@ -678,8 +674,6 @@ def build_pipeline_init_args(
             [`ProcessorMixin`]. Processor is a composite object that might contain `tokenizer`, `feature_extractor`, and
             `image_processor`."""
     docstring += r"""
-        modelcard (`str` or [`ModelCard`], *optional*):
-            Model card attributed to the model for this pipeline.
         task (`str`, defaults to `""`):
             A task-identifier for the pipeline.
         num_workers (`int`, *optional*, defaults to 8):
@@ -716,17 +710,13 @@ PIPELINE_INIT_ARGS = build_pipeline_init_args(
 SUPPORTED_PEFT_TASKS = {
     "document-question-answering": ["PeftModelForQuestionAnswering"],
     "feature-extraction": ["PeftModelForFeatureExtraction", "PeftModel"],
-    "question-answering": ["PeftModelForQuestionAnswering"],
     "summarization": ["PeftModelForSeq2SeqLM"],
     "table-question-answering": ["PeftModelForQuestionAnswering"],
-    "text2text-generation": ["PeftModelForSeq2SeqLM"],
     "text-classification": ["PeftModelForSequenceClassification"],
     "sentiment-analysis": ["PeftModelForSequenceClassification"],
     "text-generation": ["PeftModelForCausalLM"],
     "token-classification": ["PeftModelForTokenClassification"],
     "ner": ["PeftModelForTokenClassification"],
-    "translation": ["PeftModelForSeq2SeqLM"],
-    "translation_xx_to_yy": ["PeftModelForSeq2SeqLM"],
     "zero-shot-classification": ["PeftModelForSequenceClassification"],
 }
 
@@ -783,7 +773,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         feature_extractor: PreTrainedFeatureExtractor | None = None,
         image_processor: BaseImageProcessor | None = None,
         processor: ProcessorMixin | None = None,
-        modelcard: ModelCard | None = None,
         task: str = "",
         device: int | torch.device | None = None,
         binary_output: bool = False,
@@ -798,7 +787,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self.feature_extractor = feature_extractor
         self.image_processor = image_processor
         self.processor = processor
-        self.modelcard = modelcard
 
         # `accelerate` device map
         hf_device_map = getattr(self.model, "hf_device_map", None)
@@ -906,7 +894,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             # Update the generation config with task specific params if they exist.
             # NOTE: 1. `prefix` is pipeline-specific and doesn't exist in the generation config.
             #       2. `task_specific_params` is a legacy feature and should be removed in a future version.
-            task_specific_params = self.model.config.task_specific_params
+            task_specific_params = getattr(self.model.config, "task_specific_params", None)
             if task_specific_params is not None and task in task_specific_params:
                 this_task_params = task_specific_params.get(task)
                 if "prefix" in this_task_params:
@@ -1350,17 +1338,7 @@ class PipelineRegistry:
             targeted_task = self.supported_tasks[task]
             return task, targeted_task, None
 
-        if task.startswith("translation"):
-            tokens = task.split("_")
-            if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
-                targeted_task = self.supported_tasks["translation"]
-                task = "translation"
-                return task, targeted_task, (tokens[1], tokens[3])
-            raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
-
-        raise KeyError(
-            f"Unknown task {task}, available tasks are {self.get_supported_tasks() + ['translation_XX_to_YY']}"
-        )
+        raise KeyError(f"Unknown task {task}, available tasks are {self.get_supported_tasks()}")
 
     def register_pipeline(
         self,

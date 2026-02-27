@@ -132,7 +132,7 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 
 ```
 
-### Notes
+## Notes
 
 - Use Qwen2.5-VL for video inputs by setting `"type": "video"` as shown below.
 
@@ -257,8 +257,12 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen2_5_VLModel
     - forward
+    - get_video_features
+    - get_image_features
 
 ## Qwen2_5_VLForConditionalGeneration
 
 [[autodoc]] Qwen2_5_VLForConditionalGeneration
     - forward
+    - get_video_features
+    - get_image_features

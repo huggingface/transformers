@@ -18,7 +18,7 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -51,8 +51,8 @@ from .image_processing_eomt import (
 # Adapted from transformers.models.maskformer.image_processing_maskformer_fast.convert_segmentation_map_to_binary_masks_fast
 def convert_segmentation_map_to_binary_masks_fast(
     segmentation_map: "torch.Tensor",
-    instance_id_to_semantic_id: Optional[dict[int, int]] = None,
-    ignore_index: Optional[int] = None,
+    instance_id_to_semantic_id: dict[int, int] | None = None,
+    ignore_index: int | None = None,
 ):
     if ignore_index is not None:
         segmentation_map = torch.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
@@ -162,8 +162,8 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[list[torch.Tensor]] = None,
-        instance_id_to_semantic_id: Optional[dict[int, int]] = None,
+        segmentation_maps: list[torch.Tensor] | None = None,
+        instance_id_to_semantic_id: dict[int, int] | None = None,
         **kwargs: Unpack[EomtImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -177,11 +177,11 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput],
-        instance_id_to_semantic_id: Optional[dict[int, int]],
+        segmentation_maps: ImageInput | None,
+        instance_id_to_semantic_id: dict[int, int] | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[EomtImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -208,7 +208,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": F.InterpolationMode.NEAREST_EXACT,
+                    "interpolation": tvF.InterpolationMode.NEAREST_EXACT,
                 }
             )
 
@@ -247,16 +247,16 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         do_split_image: bool,
         do_pad: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ):
         """Preprocesses the input images and masks if provided."""
@@ -393,7 +393,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         self,
         outputs,
         target_sizes: list[tuple[int, int]],
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
     ) -> np.ndarray:
         """Post-processes model outputs into final semantic segmentation prediction."""
 
@@ -440,8 +440,8 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         threshold: float = 0.8,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        stuff_classes: Optional[list[int]] = None,
-        size: Optional[dict[str, int]] = None,
+        stuff_classes: list[int] | None = None,
+        size: dict[str, int] | None = None,
     ):
         """Post-processes model outputs into final panoptic segmentation prediction."""
 
@@ -496,7 +496,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         outputs,
         target_sizes: list[tuple[int, int]],
         threshold: float = 0.8,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
     ):
         """Post-processes model outputs into Instance Segmentation Predictions."""
 

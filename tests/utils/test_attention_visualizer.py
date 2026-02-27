@@ -17,7 +17,7 @@ import io
 import re
 import unittest
 
-from transformers.testing_utils import require_read_token, require_torch
+from transformers.testing_utils import require_torch
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 
 
@@ -36,7 +36,6 @@ def _normalize(s: str) -> str:
 class AttentionMaskVisualizerTester(unittest.TestCase):
     """Test suite for AttentionMaskVisualizer"""
 
-    @require_read_token
     def test_paligemma_multimodal_visualization(self):
         """Test AttentionMaskVisualizer with PaliGemma multimodal model"""
         model_name = "hf-internal-testing/namespace_google_repo_name_paligemma-3b-pt-224"
@@ -84,7 +83,6 @@ class AttentionMaskVisualizerTester(unittest.TestCase):
 
         self.assertEqual(_normalize(output), _normalize(expected_output))
 
-    @require_read_token
     def test_llama_text_only_visualization(self):
         """Test AttentionMaskVisualizer with Llama text-only model"""
         model_name = "hf-internal-testing/namespace_meta-llama_repo_name_Llama-2-7b-hf"

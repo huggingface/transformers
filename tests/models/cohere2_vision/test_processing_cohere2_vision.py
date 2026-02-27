@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import Cohere2VisionProcessor
-from transformers.testing_utils import require_read_token, require_vision
+from transformers.testing_utils import require_vision
 from transformers.utils import is_torch_available, is_torchvision_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
@@ -28,7 +28,6 @@ if is_torchvision_available():
     pass
 
 
-@require_read_token
 @require_vision
 @unittest.skip("Model not released yet!")
 class Cohere2VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):

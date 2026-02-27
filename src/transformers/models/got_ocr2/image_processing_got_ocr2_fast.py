@@ -13,10 +13,10 @@
 # limitations under the License.
 """Fast Image processor class for Got-OCR-2."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -61,8 +61,8 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         min_patches: int,
         max_patches: int,
         use_thumbnail: bool = True,
-        patch_size: Optional[Union[tuple, int, dict]] = None,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        patch_size: tuple | int | dict | None = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
     ):
         """
         Crop the images to patches and return a list of cropped images.
@@ -133,16 +133,16 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         crop_to_patches: bool,
         min_patches: int,
         max_patches: int,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         if crop_to_patches:

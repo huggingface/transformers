@@ -98,6 +98,8 @@ class Speech2TextConfig(PreTrainedConfig):
             features.
         input_channels (`int`, *optional*, defaults to 1):
             An integer specifying number of input channels of the input feature vector.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -149,6 +151,7 @@ class Speech2TextConfig(PreTrainedConfig):
         conv_channels=1024,
         input_feat_per_channel=80,
         input_channels=1,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -185,14 +188,12 @@ class Speech2TextConfig(PreTrainedConfig):
                 f"`config.num_conv_layers = {self.num_conv_layers}`."
             )
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["Speech2TextConfig"]

@@ -250,6 +250,14 @@ class EdgeTamConfig(PreTrainedConfig):
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
+    <Tip>
+
+    EdgeTAM checkpoints with `model_type="edgetam_video"` are compatible with `EdgeTamModel` since the video variant
+    weights are a superset of the image-only model weights. You may see a warning about model type mismatch when
+    loading such checkpoints, which can be safely ignored in this case.
+
+    </Tip>
+
     Args:
         vision_config (Union[`dict`, `EdgeTamVisionConfig`], *optional*):
             Dictionary of configuration options used to initialize [`EdgeTamVisionConfig`].
@@ -271,7 +279,7 @@ class EdgeTamConfig(PreTrainedConfig):
     ... )
 
     >>> # Initializing a EdgeTamConfig with `"facebook/edgetam.1_hiera_tiny"` style configuration
-    >>> configuration = EdgeTamconfig()
+    >>> configuration = EdgeTamConfig()
 
     >>> # Initializing a EdgeTamModel (with random weights) from the `"facebook/edgetam.1_hiera_tiny"` style configuration
     >>> model = EdgeTamModel(configuration)
@@ -280,14 +288,14 @@ class EdgeTamConfig(PreTrainedConfig):
     >>> configuration = model.config
 
     >>> # We can also initialize a EdgeTamConfig from a EdgeTamVisionConfig, EdgeTamPromptEncoderConfig, and EdgeTamMaskDecoderConfig
-
     >>> # Initializing EDGETAM vision encoder, memory attention, and memory encoder configurations
     >>> vision_config = EdgeTamVisionConfig()
     >>> prompt_encoder_config = EdgeTamPromptEncoderConfig()
     >>> mask_decoder_config = EdgeTamMaskDecoderConfig()
 
     >>> config = EdgeTamConfig(vision_config, prompt_encoder_config, mask_decoder_config)
-    ```"""
+    ```
+    """
 
     model_type = "edgetam"
     sub_configs = {

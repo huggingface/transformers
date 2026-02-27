@@ -223,3 +223,4 @@ model = VideoLlavaForConditionalGeneration.from_pretrained(
 
 [[autodoc]] VideoLlavaForConditionalGeneration
     - forward
+    - get_image_features

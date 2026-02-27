@@ -68,6 +68,8 @@ class JetMoeConfig(PreTrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
@@ -115,6 +117,7 @@ class JetMoeConfig(PreTrainedConfig):
         use_cache: bool | None = True,
         bos_token_id: int | None = 1,
         eos_token_id: int | None = 2,
+        pad_token_id: int | None = None,
         tie_word_embeddings: bool | None = True,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         rms_norm_eps: int | None = 1e-6,
@@ -143,12 +146,11 @@ class JetMoeConfig(PreTrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
         self.rms_norm_eps = rms_norm_eps
         self.rope_parameters = rope_parameters
-
-        super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["JetMoeConfig"]

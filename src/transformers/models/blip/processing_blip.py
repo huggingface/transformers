@@ -15,8 +15,6 @@
 Processor class for Blip.
 """
 
-from typing import Optional, Union
-
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
@@ -48,8 +46,8 @@ class BlipProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: str | list[str] | TextInput | PreTokenizedInput | None = None,
         **kwargs: Unpack[BlipProcessorKwargs],
     ) -> BatchEncoding:
         if images is None and text is None:

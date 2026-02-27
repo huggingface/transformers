@@ -101,6 +101,9 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
     model_type = "csm_depth_decoder_model"
     base_config_key = "depth_decoder_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "codebook_size": "vocab_size",
+    }
     default_theta = 500000.0
 
     def __init__(
@@ -131,6 +134,9 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
         if kwargs.pop("tie_word_embeddings", False):
             raise ValueError("`tie_word_embeddings=True` is not supported for CsmDepthDecoderConfig")
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.num_codebooks = num_codebooks
         self.vocab_size = vocab_size
         self.backbone_hidden_size = backbone_hidden_size
@@ -154,14 +160,7 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.rope_parameters = rope_parameters
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=False,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class CsmConfig(PreTrainedConfig):
@@ -262,6 +261,9 @@ class CsmConfig(PreTrainedConfig):
         "codec_config": AutoConfig,
         "depth_decoder_config": CsmDepthDecoderConfig,
     }
+    attribute_map = {
+        "codebook_size": "vocab_size",
+    }
 
     def __init__(
         self,
@@ -344,13 +346,11 @@ class CsmConfig(PreTrainedConfig):
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=False,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = False
+        super().__init__(**kwargs)
 
 
 __all__ = [

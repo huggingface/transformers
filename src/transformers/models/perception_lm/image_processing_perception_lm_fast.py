@@ -14,7 +14,6 @@
 
 import math
 from functools import reduce
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -53,7 +52,7 @@ class PerceptionLMImageProcessorKwargs(ImagesKwargs, total=False):
         Maximum number of tiles an image can be split into based on its aspect ratio.
     """
 
-    vision_input_type: Optional[str]
+    vision_input_type: str | None
     tile_size: int
     max_num_tiles: int
 
@@ -244,7 +243,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         tile_size: int,
         max_num_tiles: int,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         height, width = get_image_size(image, channel_dim=input_data_format)
         if max_num_tiles > 1:
@@ -262,15 +261,15 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
-        do_rescale: Optional[bool],
-        rescale_factor: Optional[Union[int, float]],
-        do_normalize: Optional[bool],
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        do_rescale: bool | None,
+        rescale_factor: int | float | None,
+        do_normalize: bool | None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         vision_input_type: str,
         tile_size: int,
         max_num_tiles: int,
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         disable_grouping: bool,
         **kwargs: Unpack[PerceptionLMImageProcessorKwargs],
     ) -> BatchFeature:

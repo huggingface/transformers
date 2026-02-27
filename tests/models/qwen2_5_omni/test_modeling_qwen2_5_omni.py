@@ -268,6 +268,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
     # )
     # FIXME @raushan Omni tests take ages because the model is big. Try to make it even smaller
     pipeline_model_mapping = {}
+    skip_test_audio_features_output_shape = True  # Qwen2_5Omni merges batch_size and audio_output_lengths in index 0
     _is_composite = True
     model_split_percents = [0.5, 0.9]
 
@@ -723,7 +724,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is a glass shattering. The dog in the picture is a Labrador Retriever.",
                 ],
                 ("rocm", (9, 4)): [
-                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is a glass shattering. The dog in the picture is a Labrador Retriever.",
+                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
                 ],
             }
