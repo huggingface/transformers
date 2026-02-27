@@ -236,7 +236,6 @@ class RfDetrHungarianMatcher(nn.Module):
         # Compute mask cost
         num_points = out_masks.shape[-2] * out_masks.shape[-1] // self.mask_point_sample_ratio
         tgt_masks = target_masks.to(out_masks.dtype)
-        torch.manual_seed(0)  # TODO REMOVE
         point_coords = torch.rand(1, num_points, 2, device=out_masks.device)
         pred_masks_logits = point_sample(
             out_masks.unsqueeze(1), point_coords.repeat(out_masks.shape[0], 1, 1), align_corners=False
