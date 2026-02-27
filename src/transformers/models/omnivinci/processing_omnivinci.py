@@ -391,25 +391,20 @@ def _load_audio_hf_with_info(audio_input, config) -> tuple[np.ndarray, dict[str,
         audio_start_sample_id, audio_end_sample_id = _resolve_window(ori_n_samples)
         ori_audio_duration = ori_n_samples / sampling_rate
         speech_data = speech_data[audio_start_sample_id:audio_end_sample_id]
-    else:
-        try:
-            speech_data = load_audio(audio_input, sampling_rate=sampling_rate).astype(np.float32, copy=False)
-            ori_n_samples = int(speech_data.shape[0])
-            audio_start_sample_id, audio_end_sample_id = _resolve_window(ori_n_samples)
-            ori_audio_duration = ori_n_samples / sampling_rate
-            speech_data = speech_data[audio_start_sample_id:audio_end_sample_id]
-        except Exception:
-            if not isinstance(audio_input, str) or not audio_input.lower().endswith(".mp4"):
-                raise
-            from decord import AudioReader, cpu
+    elif isinstance(audio_input, str) and audio_input.lower().endswith(".mp4"):
+        from decord import AudioReader, cpu
 
-            audio_reader = AudioReader(audio_input, ctx=cpu(0), sample_rate=sampling_rate, mono=True)
-            ori_n_samples = int(audio_reader.shape[1])
-            audio_start_sample_id, audio_end_sample_id = _resolve_window(ori_n_samples)
-            ori_audio_duration = ori_n_samples / sampling_rate
-            speech_data = audio_reader[audio_start_sample_id:audio_end_sample_id].asnumpy()[0].astype(
-                np.float32, copy=False
-            )
+        audio_reader = AudioReader(audio_input, ctx=cpu(0), sample_rate=sampling_rate, mono=True)
+        ori_n_samples = int(audio_reader.shape[1])
+        audio_start_sample_id, audio_end_sample_id = _resolve_window(ori_n_samples)
+        ori_audio_duration = ori_n_samples / sampling_rate
+        speech_data = audio_reader[audio_start_sample_id:audio_end_sample_id].asnumpy()[0].astype(np.float32, copy=False)
+    else:
+        speech_data = load_audio(audio_input, sampling_rate=sampling_rate).astype(np.float32, copy=False)
+        ori_n_samples = int(speech_data.shape[0])
+        audio_start_sample_id, audio_end_sample_id = _resolve_window(ori_n_samples)
+        ori_audio_duration = ori_n_samples / sampling_rate
+        speech_data = speech_data[audio_start_sample_id:audio_end_sample_id]
 
     audio_n_samples = int(np.ceil(speech_data.shape[0] / (sampling_rate * 30)) * (sampling_rate * 30))
     speech_data = whisper.pad_or_trim(speech_data, length=audio_n_samples)
@@ -477,7 +472,8 @@ def _extract_video_hf(
     metadata_total_frames = getattr(metadata, "total_num_frames", None) if metadata is not None else None
     frame_count = int(frame_indices[-1] + 1) if frame_indices else int(metadata_total_frames or len(output_frames))
     video_duration = float(frame_count / fps if fps > 0 else len(output_frames))
-    output_frame_times = [i / fps for i in frame_indices]
+    # Keep np.float64 timestamps for parity with legacy timing dtype used by the original OmniVinci path.
+    output_frame_times = list(np.asarray(frame_indices, dtype=np.float64) / np.float64(fps if fps > 0 else 1.0))
 
     video_path = video_input if isinstance(video_input, str) else None
 
