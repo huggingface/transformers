@@ -391,6 +391,8 @@ class TimesFm2_5Model(TimesFm2_5PreTrainedModel):
             loc = loc[..., None, None]
             scale = scale[..., None, None]
 
+        loc = loc.to(hidden_states.device)
+        scale = scale.to(hidden_states.device)
         safe_scale = torch.where(scale < self.tolerance, torch.ones_like(scale), scale)
 
         if reverse:
@@ -599,6 +601,9 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
             batch_size, num_patches, self.config.output_quantile_len, num_quantiles
         )[:, -1, :, :]
 
+        # Ensure both outputs are on the same device for model parallelism
+        quantile_spreads = quantile_spreads.to(point_forecast.device)
+
         return point_forecast, quantile_spreads, model_outputs
 
     @can_return_tuple
@@ -692,7 +697,7 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
             zero = torch.zeros(1, device=mean_predictions.device, dtype=mean_predictions.dtype)
             clamped_mean = torch.maximum(mean_predictions, zero)
             clamped_full = torch.maximum(full_predictions, zero)
-            should_clamp = input_min >= 0
+            should_clamp = (input_min >= 0).to(mean_predictions.device)
             mean_predictions = torch.where(should_clamp, clamped_mean, mean_predictions)
             full_predictions = torch.where(should_clamp, clamped_full, full_predictions)
 
