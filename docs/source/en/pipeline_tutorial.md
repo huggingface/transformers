@@ -112,6 +112,20 @@ pipeline(
 ```
 
 </hfoption>
+<hfoption id="document question answering">
+
+```py
+from transformers import pipeline
+
+pipeline = pipeline(task="document-question-answering", model="impira/layoutlm-document-qa")
+pipeline(
+    image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
+    question="What is the invoice number?",
+)
+[{'score': 0.425, 'answer': 'us-001', 'start': 16, 'end': 16}]
+```
+
+</hfoption>
 </hfoptions>
 
 ## Parameters
