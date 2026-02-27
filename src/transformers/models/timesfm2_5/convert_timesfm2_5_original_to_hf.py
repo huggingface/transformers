@@ -21,6 +21,7 @@ import numpy as np
 import timesfm
 import torch
 from huggingface_hub import snapshot_download
+
 from transformers import TimesFm2_5Config, TimesFm2_5ModelForPrediction
 
 

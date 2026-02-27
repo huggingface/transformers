@@ -77,18 +77,18 @@ class TimesFm2_5OutputForPrediction(BaseModelOutput):
 
 
 class TimesFm2_5MLP(nn.Module):
-    """TimesFM 2.5 MLP with two linear layers and configurable activation."""
-
     def __init__(self, config: TimesFm2_5Config):
         super().__init__()
-        self.ff0 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
-        self.ff1 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
-        self.activation = ACT2FN[config.activation]
+        self.config = config
+        self.activation_fn = ACT2FN[config.activation]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.ff0(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        return self.ff1(hidden_states)
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 class TimesFm2_5ResidualBlock(nn.Module):
@@ -271,7 +271,7 @@ def eager_attention_forward(
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class TimesFm2_5Attention(nn.Module):
-    """TimesFM 2.5 attention with QK normalization and learnable per-dimension query scaling."""
+    """TimesFM 2.5 attention with learnable per-dimension query scaling."""
 
     def __init__(self, config: TimesFm2_5Config, layer_idx: int):
         super().__init__()
@@ -295,9 +295,8 @@ class TimesFm2_5Attention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-
-        self.q_norm = TimesFm2_5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = TimesFm2_5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = TimesFm2_5RMSNorm(self.head_dim, config.rms_norm_eps)
+        self.k_norm = TimesFm2_5RMSNorm(self.head_dim, config.rms_norm_eps)
 
     def forward(
         self,

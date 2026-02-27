@@ -28,8 +28,9 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..apertus.modeling_apertus import ApertusAttention
+from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import (
-    LlamaAttention,
     LlamaDecoderLayer,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
@@ -217,19 +218,10 @@ class TimesFm2_5OutputForPrediction(TimesFmOutputForPrediction):
     pass
 
 
-class TimesFm2_5MLP(nn.Module):
-    """TimesFM 2.5 MLP with two linear layers and configurable activation."""
-
+class TimesFm2_5MLP(CLIPMLP):
     def __init__(self, config: TimesFm2_5Config):
         super().__init__()
-        self.ff0 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
-        self.ff1 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
-        self.activation = ACT2FN[config.activation]
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.ff0(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        return self.ff1(hidden_states)
+        self.activation_fn = ACT2FN[config.activation]
 
 
 class TimesFm2_5ResidualBlock(TimesFmResidualBlock):
@@ -252,14 +244,11 @@ class TimesFm2_5RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class TimesFm2_5Attention(LlamaAttention):
-    """TimesFM 2.5 attention with QK normalization and learnable per-dimension query scaling."""
+class TimesFm2_5Attention(ApertusAttention):
+    """TimesFM 2.5 attention with learnable per-dimension query scaling."""
 
     def __init__(self, config: TimesFm2_5Config, layer_idx: int):
         super().__init__(config, layer_idx)
-
-        self.q_norm = TimesFm2_5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = TimesFm2_5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
 
     def forward(
