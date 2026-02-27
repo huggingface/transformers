@@ -162,19 +162,19 @@ class MoonshineStreamingModelTest(ModelTesterMixin, PipelineTesterMixin, unittes
     def test_init_weights_can_init_buffers(self):
         self.skipTest("MoonshineStreaming uses special buffer initialization that conflicts with this test")
 
-    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    @unittest.skip(reason="MoonshineStreaming test model is too small to be split across GPU and CPU")
     def test_cpu_offload(self):
         pass
 
-    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    @unittest.skip(reason="MoonshineStreaming test model is too small to be split across GPU and CPU")
     def test_disk_offload_bin(self):
         pass
 
-    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    @unittest.skip(reason="MoonshineStreaming test model is too small to be split across GPU and CPU")
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    @unittest.skip(reason="MoonshineStreaming test model is too small to be split across GPU and CPU")
     def test_model_parallelism(self):
         pass
 
