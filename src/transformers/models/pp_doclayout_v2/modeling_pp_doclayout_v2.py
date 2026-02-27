@@ -856,7 +856,9 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    TODO: Fill me in
+    PP-DocLayoutV2 ReadingOrder Model. This model consists of an encoder and a GlobalPointer head.
+    It takes layout features as input and outputs logits representing the relative ordering relationships
+    between elements, which are used to determine the final reading sequence.
     """
 )
 class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
@@ -880,12 +882,21 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
     @auto_docstring
     def forward(self, boxes, labels=None, mask=None, **kwargs: Unpack[TransformersKwargs]):
         r"""
-        boxes (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            TODO: give me a description
-        labels (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            TODO: give me a description
-        mask (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            TODO: give me a description
+        boxes (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`):
+            Bounding box coordinates of the detected layout elements **in [0, 1000] scale**.
+            Format is `[x_min, y_min, x_max, y_max]`.
+            The tensor usually contains sorted valid boxes followed by zero-padding.
+
+        labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            The **remapped** class indices for each layout element.
+            These are not necessarily the raw detection class IDs, but indices mapped via
+            `config.class_order` (e.g., mapping text/title/figure to specific reading-order category IDs).
+
+        mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Boolean or Binary mask indicating valid detected elements after threshold filtering.
+            - True: Valid layout element.
+            - False: Padding/Empty element.
+            Used to determine the sequence length (`num_pred`) for the pointer mechanism.
         """
         device = mask.device
         batch_size, seq_len = mask.shape
@@ -1000,7 +1011,7 @@ class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
 @dataclass
 @auto_docstring(
     custom_intro="""
-    TODO: fill me in
+    Base class for outputs of the PP-DocLayoutV2 encoder-decoder model.
     """
 )
 class PPDocLayoutV2ModelOutput(ModelOutput):
@@ -2012,7 +2023,7 @@ def get_contrastive_denoising_training_group(
 
 @auto_docstring(
     custom_intro="""
-    TODO: fill me in
+    PP-DocLayoutV2 Model (consisting of a backbone and encoder-decoder) outputting raw hidden states without any head on top.
     """
 )
 class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
@@ -2327,7 +2338,8 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    TODO: fill me in
+    PP-DocLayoutV2 Model (consisting of a backbone and encoder-decoder) outputting bounding boxes, logits and order_logits to be further
+    decoded into scores, classes and their reading order.
     """
 )
 class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
