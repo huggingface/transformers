@@ -132,10 +132,6 @@ class MusicFlamingoEncoderConfig(AudioFlamingo3EncoderConfig):
         rope_parameters=None,
         **kwargs,
     ):
-        # Backward compatibility with older serialized configs before `rope_parameters`.
-        legacy_rotary_dim = kwargs.pop("rotary_dim", None)
-        legacy_rotary_max_time = kwargs.pop("rotary_max_time", None)
-
         super().__init__(
             num_mel_bins=num_mel_bins,
             num_hidden_layers=num_hidden_layers,
@@ -153,17 +149,7 @@ class MusicFlamingoEncoderConfig(AudioFlamingo3EncoderConfig):
             **kwargs,
         )
 
-        # Legacy names used before aligning with RoPE conventions.
-        if legacy_rotary_dim is not None:
-            head_dim = legacy_rotary_dim
-        if legacy_rotary_max_time is not None:
-            max_position_embeddings = legacy_rotary_max_time
-
         rope_parameters = {} if rope_parameters is None else dict(rope_parameters)
-        if "dim" in rope_parameters:
-            head_dim = rope_parameters.pop("dim")
-        if "max_time" in rope_parameters:
-            max_position_embeddings = rope_parameters.pop("max_time")
 
         self.head_dim = head_dim
         self.max_position_embeddings = max_position_embeddings
@@ -235,29 +221,12 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
         projector_bias=True,
         **kwargs,
     ):
-        # Backward compatibility with older serialized top-level configs; these are now owned by `audio_config`.
-        legacy_rotary_dim = kwargs.pop("rotary_dim", None)
-        legacy_rotary_max_time = kwargs.pop("rotary_max_time", None)
-
         if isinstance(audio_config, dict):
             audio_config["model_type"] = audio_config.get("model_type", "musicflamingo_encoder")
         elif audio_config is None:
             audio_config = {
                 "model_type": "musicflamingo_encoder",
             }
-
-        if isinstance(audio_config, dict) and (legacy_rotary_dim is not None or legacy_rotary_max_time is not None):
-            if legacy_rotary_dim is not None:
-                audio_config.setdefault("head_dim", legacy_rotary_dim)
-            if legacy_rotary_max_time is not None:
-                audio_config.setdefault("max_position_embeddings", legacy_rotary_max_time)
-
-            rope_parameters = dict(audio_config.get("rope_parameters") or {})
-            max_position_embeddings = audio_config.get("max_position_embeddings", legacy_rotary_max_time)
-            if max_position_embeddings is not None:
-                rope_parameters.setdefault("rope_theta", max_position_embeddings / (2 * pi))
-            rope_parameters.setdefault("rope_type", "default")
-            audio_config["rope_parameters"] = rope_parameters
 
         super().__init__(
             audio_config=audio_config,
@@ -400,13 +369,13 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask", "audio_times"]))
 
     def apply_transcription_request(self, *args, **kwargs):
-        raise NotImplementedError("Not needed for MusicFlamingo")
+        raise NotImplementedError("This method is not supported for MusicFlamingo.")
 
     def batch_decode(self, *args, **kwargs):
-        raise NotImplementedError("Not needed for MusicFlamingo")
+        raise NotImplementedError("This method is not supported for MusicFlamingo.")
 
     def _strip_assistant_prefix_and_quotes(self, *args, **kwargs):
-        raise NotImplementedError("Not needed for MusicFlamingo")
+        raise NotImplementedError("This method is not supported for MusicFlamingo.")
 
 
 def rotate_half(x):
@@ -725,7 +694,7 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         return outputs
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
-        # Overwritten -- we should not pass input_features when we are in cached decoding stage
+        # Do not pass audio inputs during cached decoding.
 
         input_features = kwargs.pop("input_features", None)
         input_features_mask = kwargs.pop("input_features_mask", None)
@@ -735,7 +704,7 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
         if cache_position is not None and cache_position[0] == 0:
-            # input_features should only be passed when we are not in cached decoding stage
+            # Pass audio inputs only at the first decoding step.
             if input_features is not None:
                 model_inputs["input_features"] = input_features
             if input_features_mask is not None:
