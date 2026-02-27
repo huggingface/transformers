@@ -245,14 +245,9 @@ class Glm4vImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of image patches per image.
         """
-        if images_kwargs is not None:
-            patch_size = images_kwargs.get("patch_size", self.patch_size)
-            merge_size = images_kwargs.get("merge_size", self.merge_size)
-            size = images_kwargs.get("size", {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000})
-        else:
-            patch_size = self.patch_size
-            merge_size = self.merge_size
-            size = self.size
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
+        size = images_kwargs.get("size", self.size)
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
@@ -260,8 +255,8 @@ class Glm4vImageProcessor(TorchvisionBackend):
             height=height,
             width=width,
             factor=factor,
-            min_pixels=size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge,
-            max_pixels=size["longest_edge"] if isinstance(size, dict) else size.longest_edge,
+            min_pixels=size["shortest_edge"],
+            max_pixels=size["longest_edge"],
             temporal_factor=self.temporal_patch_size,
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size

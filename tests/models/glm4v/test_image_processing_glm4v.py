@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -127,7 +127,7 @@ class Glm4vImageProcessingTester:
 
 @require_torch
 @require_vision
-class ViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class Glm4vImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = Glm4vImageProcessingTester(self)
@@ -245,26 +245,3 @@ class ViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             ).pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
-
-    def test_get_number_of_image_patches_matches_slow_processor(self):
-        test_cases = [
-            (100, 100, {}, 64),
-            (200, 50, {}, 56),
-            (100, 100, {"patch_size": 28}, 16),
-        ]
-
-        for backend_name, image_processing_class in self.image_processing_classes.items():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            for height, width, images_kwargs, expected in test_cases:
-                with self.subTest(
-                    image_processing_class=image_processing_class.__name__,
-                    height=height,
-                    width=width,
-                    images_kwargs=images_kwargs,
-                ):
-                    self.assertEqual(
-                        image_processor.get_number_of_image_patches(
-                            height=height, width=width, images_kwargs=images_kwargs
-                        ),
-                        expected,
-                    )

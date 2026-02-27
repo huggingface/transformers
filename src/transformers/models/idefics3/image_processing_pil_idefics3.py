@@ -303,14 +303,25 @@ class Idefics3ImageProcessorPil(PilBackend):
         encoder_dict.pop("return_row_col_info", None)
         return encoder_dict
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
-        """Utility that returns number of image patches for a given image size."""
-        images_kwargs = images_kwargs or {}
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of patches per image.
+        """
         do_image_splitting = images_kwargs.get("do_image_splitting", self.do_image_splitting)
         max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
         size = images_kwargs.get("size", self.size)
 
-        num_patches = num_rows = num_cols = 1
+        num_patches = num_rows = num_cols = 0
         if do_image_splitting:
             height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=size["longest_edge"])
             height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=MAX_IMAGE_SIZE)
