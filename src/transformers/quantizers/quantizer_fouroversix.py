@@ -119,10 +119,9 @@ class FourOverSixHfQuantizer(HfQuantizer):
         # pre-quantized model so it is not guaranteed to exist.
         if hasattr(self.quantization_config, "pre_quantized_model_config_type"):
             model_config_type = self.quantization_config.pre_quantized_model_config_type
-            if model_config_type is not None:
-                weight_conversions = WeightConversions.get_weight_conversions(
-                    model_config_type,
-                )
-                return weight_conversions
+            weight_conversions = WeightConversions.get_weight_conversions(
+                model_config_type,
+            )
+            return weight_conversions
 
         return []
