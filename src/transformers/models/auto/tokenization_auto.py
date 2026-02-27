@@ -264,8 +264,9 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("qwen2_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
-        ("qwen3_5", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
-        ("qwen3_5_moe", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
+        # Qwen3.5 Hub tokenizer_config uses "Qwen2Tokenizer"; use same so save_pretrained round-trips correctly (see #44297)
+        ("qwen3_5", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_5_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_next", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_omni_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
@@ -385,6 +386,10 @@ def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
     # Bloom tokenizer classes were removed but should map to the fast backend for BC
     if class_name in {"BloomTokenizer", "BloomTokenizerFast"}:
         return TokenizersBackend
+
+    # Qwen3.5 Hub uses Qwen2Tokenizer; alias so configs with "Qwen3_5Tokenizer" still load (see #44297)
+    if class_name == "Qwen3_5Tokenizer":
+        return tokenizer_class_from_name("Qwen2Tokenizer")
 
     if class_name in REGISTERED_FAST_ALIASES:
         return REGISTERED_FAST_ALIASES[class_name]
