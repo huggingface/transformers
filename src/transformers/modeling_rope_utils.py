@@ -646,7 +646,7 @@ class RotaryEmbeddingConfigMixin:
         if partial_rotary_factor is not None:
             self.rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
             ignore_keys_at_rope_validation = (
-                set() if ignore_keys_at_rope_validation is None else ignore_keys_at_rope_validation
+                set() if ignore_keys_at_rope_validation is None else set(ignore_keys_at_rope_validation)
             )
             ignore_keys_at_rope_validation = ignore_keys_at_rope_validation | {"partial_rotary_factor"}
 

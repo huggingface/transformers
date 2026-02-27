@@ -61,12 +61,17 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "olmoe": "qwen2_moe",
     "exaone_moe": "qwen2_moe",
     "rt_detr_v2": "rt_detr",
+    "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
 }
 
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "olmo_hybrid": [
+            WeightRenaming("attention_layer_norm", "input_layernorm"),
+            WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
+        ],
         "qwen3_5_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
         ],
@@ -392,7 +397,9 @@ VLMS = [
     "sam3_tracker",
     "sam3_tracker_video",
     "paddleocrvl",
-    "ernie4_5_vl_moe",
+    # NOTE: Slightly different from `model_type` (to follow naming conventions in vllm/sglang)
+    "ernie4_5_vlmoe",
+    "ernie4_5_vl_moe",  # BC alias
     "detr",
 ]
 
