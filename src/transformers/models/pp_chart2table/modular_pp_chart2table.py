@@ -1,6 +1,6 @@
 import collections
 from dataclasses import dataclass
-from typing import Optional, Union, List
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -48,85 +48,49 @@ from transformers.utils import (
 
 
 class PPChart2TableVisionConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`PPChart2TableVisionModel`]. It is used to instantiate a
-    PP-Chart2Table vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the PP-Chart2Table
-    architecture developed by the PaddlePaddle team for chart-to-table parsing tasks.
+    """
+    Configuration class for the vision backbone of PP-Chart2Table model.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    This configuration class defines all the hyperparameters for the vision component
+    of the PP-Chart2Table model, which is responsible for processing chart images
+    and extracting visual features for table structure recognition and content extraction.
+    PaddlePaddle/PP-Chart2Table_safetensors [PaddlePaddle/PP-Chart2Table_safetensors]
+    (https://huggingface.co/PaddlePaddle/PP-Chart2Table_safetensors)
 
     Args:
-            depth (`int`, *optional*, defaults to 12):
-                Number of hidden layers in the vision Transformer encoder.
-            embed_dim (`int`, *optional*, defaults to 768):
-                Dimensionality of the patch embedding layer in the vision encoder.
-            hidden_size (`int`, *optional*, defaults to 1024):
-                Dimensionality of the hidden layers in the vision Transformer encoder.
-            num_channels (`int`, *optional*, defaults to 3):
-                Number of input channels for the convolutional stem layer (default: RGB images with 3 channels).
-            image_size (`int`, *optional*, defaults to 1024):
-                The size (resolution) of input chart images (assumed to be square).
-            mlp_ratio (`float`, *optional*, defaults to 4.0):
-                Ratio of the dimensionality of the feed-forward layer to the hidden size in the vision Transformer blocks.
-            num_attention_heads (`int`, *optional*, defaults to 12):
-                Number of attention heads for each self-attention layer in the vision Transformer encoder.
-            patch_size (`int`, *optional*, defaults to 16):
-                The size (resolution) of each image patch extracted from the input chart image.
-            qkv_bias (`bool`, *optional*, defaults to `True`):
-                Whether to add bias terms to the query, key, and value projection layers in the self-attention mechanism.
-            use_rel_pos (`bool`, *optional*, defaults to `True`):
-                Whether to use relative positional embeddings in the self-attention layers of the vision encoder.
-            global_attn_indexes (`Optional[List[int]]`, *optional*, defaults to `None`):
-                List of layer indexes where global attention (instead of windowed attention) is applied in the vision encoder.
-                If `None`, defaults to `[2, 5, 8, 11]`.
-            window_size (`int`, *optional*, defaults to 14):
-                The size of the attention window for windowed self-attention in the vision Transformer layers.
-            output_channels (`int`, *optional*, defaults to 256):
-                Number of output channels from the convolutional stem layer before patch embedding.
-            net_channels (`int`, *optional*, defaults to 512):
-                Number of channels in the intermediate convolutional layers.
-            attention_dropout (`float`, *optional*, defaults to 0.0):
-                Dropout probability for the attention layers in the vision Transformer.
-            output_hidden_states (`bool`, *optional*, defaults to `False`): <fill_docstring>
-            output_attentions (`bool`, *optional*, defaults to `False`): <fill_docstring>
-            return_dict (`bool`, *optional*, defaults to `True`): <fill_docstring>
-            dtype (`Union`, *optional*): <fill_docstring>
-            tie_word_embeddings (`bool`, *optional*, defaults to `True`): <fill_docstring>
-            chunk_size_feed_forward (`int`, *optional*, defaults to 0): <fill_docstring>
-            is_encoder_decoder (`bool`, *optional*, defaults to `False`): <fill_docstring>
-            is_decoder (`bool`, *optional*, defaults to `False`): <fill_docstring>
-            cross_attention_hidden_size (`Optional`, *optional*): <fill_docstring>
-            add_cross_attention (`bool`, *optional*, defaults to `False`): <fill_docstring>
-            architectures (`Optional`, *optional*): <fill_docstring>
-            finetuning_task (`Optional`, *optional*): <fill_docstring>
-            id2label (`Optional`, *optional*): <fill_docstring>
-            label2id (`Optional`, *optional*): <fill_docstring>
-            num_labels (`Optional`, *optional*): <fill_docstring>
-            task_specific_params (`Optional`, *optional*): <fill_docstring>
-            problem_type (`Optional`, *optional*): <fill_docstring>
-            tokenizer_class (`Optional`, *optional*): <fill_docstring>
-            prefix (`Optional`, *optional*): <fill_docstring>
-            bos_token_id (`Optional`, *optional*): <fill_docstring>
-            pad_token_id (`Optional`, *optional*): <fill_docstring>
-            eos_token_id (`Optional`, *optional*): <fill_docstring>
-            sep_token_id (`Optional`, *optional*): <fill_docstring>
-            decoder_start_token_id (`Optional`, *optional*): <fill_docstring>
-
-    Example:
-
-    ```python
-    >>> from transformers import PPChart2TableVisionConfig, PPChart2TableVisionModel
-
-    >>> # Initializing a PPChart2TableVisionConfig with default PP-Chart2Table style configuration
-    >>> configuration = PPChart2TableVisionConfig()
-
-    >>> # Initializing a PPChart2TableVisionModel (with random weights) from the PP-Chart2Table style configuration
-    >>> model = PPChart2TableVisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
+        depth (`int`, *optional*, defaults to 12):
+            Number of transformer encoder layers in the vision backbone.
+        embed_dim (`int`, *optional*, defaults to 768):
+            Dimensionality of the patch embedding vectors.
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimensionality of the hidden layer in the feed-forward network (MLP).
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of input channels (3 for RGB images, 1 for grayscale).
+        image_size (`int`, *optional*, defaults to 1024):
+            Size (height/width) of the input images (assumed to be square).
+        mlp_ratio (`float`, *optional*, defaults to 4.0):
+            Ratio of the hidden layer size to the embedding dimension in the MLP (hidden_size = embed_dim * mlp_ratio).
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each transformer encoder layer.
+        patch_size (`int`, *optional*, defaults to 16):
+            Size (height/width) of the image patches extracted from the input image.
+        qkv_bias (`bool`, *optional*, defaults to True):
+            Whether to include bias terms in the query, key, value projection layers of self-attention.
+        use_rel_pos (`bool`, *optional*, defaults to True):
+            Whether to use relative positional embeddings in the self-attention mechanism.
+        global_attn_indexes (`Optional[list[int]]`, *optional*, defaults to [2, 5, 8, 11]):
+            List of layer indexes where global attention (instead of window attention) is applied.
+            If `None`, defaults to [2, 5, 8, 11].
+        window_size (`int`, *optional*, defaults to 14):
+            Size of the attention window for window-based self-attention (only effective when use_rel_pos=True).
+        output_channels (`int`, *optional*, defaults to 256):
+            Dimensionality of the final visual feature output channels.
+        net_channels (`int`, *optional*, defaults to 512):
+            Dimensionality of intermediate network channels in the vision backbone.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability applied to the attention weights.
+        **kwargs:
+            Additional keyword arguments passed to the parent `PreTrainedConfig` class.
     """
 
     model_type = "pp_chart2table_vision"
@@ -144,7 +108,7 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         patch_size: int = 16,
         qkv_bias: bool = True,
         use_rel_pos: bool = True,
-        global_attn_indexes: Optional[List[int]] = None,
+        global_attn_indexes: Optional[list[int]] = None,
         window_size: int = 14,
         output_channels: int = 256,
         net_channels: int = 512,
@@ -395,7 +359,6 @@ class PPChart2TableConfig(PreTrainedConfig):
         if text_config is None:
             text_config = {}
         self.text_config = PPChart2TableTextConfig(**text_config)
-
 
         text_config_keys = [
             "attention_dropout",
