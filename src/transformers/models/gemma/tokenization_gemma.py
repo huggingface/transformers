@@ -103,9 +103,5 @@ class GemmaTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-    def _unk_id(self) -> int:
-        # Align with historical Gemma convention: pad, eos, bos, unk
-        return 3
-
 
 __all__ = ["GemmaTokenizer"]

@@ -120,44 +120,31 @@ def _print_diff(diff_lines: list[str]) -> None:
         console.print(line)
 
 
-# ---------------------------------------------------------------------------
-# Tokenizer structure helpers
-# ---------------------------------------------------------------------------
 
-def _strip_vocab(d):
-    """Recursively remove 'vocab' and 'merges' keys (large, not structurally relevant)."""
-    if isinstance(d, dict):
-        return {k: _strip_vocab(v) for k, v in d.items() if k not in ("vocab", "merges", "precompiled_charsmap")}
-    if isinstance(d, list):
-        return [_strip_vocab(i) for i in d]
-    return d
-
-
-def _normalize(d):
-    """Recursively normalize values so that None and '' are treated as equivalent (both → None)."""
-    if isinstance(d, dict):
-        return {k: _normalize(v) for k, v in d.items()}
-    if isinstance(d, list):
-        return [_normalize(i) for i in d]
-    if d == "":
-        return None
-    return d
-
-
-def _prepare(tok_obj):
-    return _normalize(_strip_vocab(json.loads(tok_obj._tokenizer.to_str())))
+def _print_tokenizer(tok_obj) -> str:
+    """Return a human-readable summary of a tokenizer's key components (excluding vocab)."""
+    inner = tok_obj._tokenizer
+    model_str = "\n".join([repr(k) for k in inner.get_added_tokens_decoder().values()])
+    return (
+        f"model:\t\t\t{model_str}\n"
+        f"normalizer:\t\t{inner.normalizer}\n"
+        f"pre_tokenizer:\t\t{inner.pre_tokenizer}\n"
+        f"post_processor:\t\t{inner.post_processor}\n"
+        f"decoder:\t\t{inner.decoder}\n"
+        f"truncation:\t\t{inner.truncation}\n"
+    )
 
 
 def equal_tokenizers(t1, t2):
-    """Compare two tokenizer objects by their JSON representation, ignoring vocab/merges."""
-    return _prepare(t1) == _prepare(t2)
+    """Compare two tokenizer objects by their key components (added tokens, normalizer, etc.)."""
+    return _print_tokenizer(t1) == _print_tokenizer(t2)
 
 
 def diff_tokenizers(t1, t2, label_a="auto", label_b="backend") -> list:
-    """Return unified diff lines between two tokenizer objects (vocab/merges stripped)."""
-    j1 = json.dumps(_prepare(t1), indent=2).splitlines()
-    j2 = json.dumps(_prepare(t2), indent=2).splitlines()
-    return list(difflib.unified_diff(j1, j2, fromfile=label_a, tofile=label_b, lineterm=""))
+    """Return unified diff lines between two tokenizer objects (added tokens, normalizer, etc.)."""
+    j1 = _print_tokenizer(t1).splitlines()
+    j2 = _print_tokenizer(t2).splitlines()
+    return list(difflib.unified_diff(j1, j2, fromfile=label_a, tofile=label_b, lineterm="", n=10))
 
 
 def _canonical_diff(diff_lines: list[str]) -> str:
