@@ -823,6 +823,9 @@ class TrainerDynamicShapesAndIterableTest(TestCasePlus, TrainerIntegrationCommon
     def test_evaluation_iterable_dataset(self):
         config = RegressionModelConfig(a=1.5, b=2.5)
         model = RegressionPreTrainedModel(config)
+        # RegressionPreTrainedModel accepts **kwargs but doesn't actually use num_items_in_batch,
+        # so disable the loss scaling that assumes the model handles token-level averaging.
+        model.accepts_loss_kwargs = False
         # Adding one column not used by the model should have no impact
         eval_dataset = SampleIterableDataset(label_names=["labels", "extra"])
 
@@ -833,7 +836,7 @@ class TrainerDynamicShapesAndIterableTest(TestCasePlus, TrainerIntegrationCommon
             x, y = trainer.eval_dataset.dataset.x, trainer.eval_dataset.dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            self.assertAlmostEqual(results["eval_loss"], expected_loss, places=6)
             expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
@@ -844,7 +847,7 @@ class TrainerDynamicShapesAndIterableTest(TestCasePlus, TrainerIntegrationCommon
             x, y = eval_dataset.dataset.x, eval_dataset.dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            self.assertAlmostEqual(results["eval_loss"], expected_loss, places=6)
             expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 

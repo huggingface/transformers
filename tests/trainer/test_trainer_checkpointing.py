@@ -392,10 +392,10 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.train()
 
-        # Verify the checkpoint saved with batch_size=2
+        # Verify the checkpoint saved with the effective batch size (per_device * n_gpu)
         checkpoint = os.path.join(tmp_dir, "checkpoint-1")
         state = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json"))
-        self.assertEqual(state.train_batch_size, 2)
+        self.assertEqual(state.train_batch_size, args.train_batch_size)
 
         # Resume with a different batch_size=4 (without auto_find_batch_size)
         # The trainer should use the new batch_size, not the checkpoint's
@@ -886,7 +886,7 @@ class TrainerInterruptedTrainingTest(TestCasePlus, TrainerIntegrationCommon):
 
         def create_dummy_dataset():
             """Creates a dummy dataset for this specific test."""
-            num_samples = 13
+            num_samples = 100
             input_dim = 10
             dummy_input_ids = torch.rand(num_samples, input_dim)
             dummy_attention_mask = torch.ones(num_samples, input_dim)
@@ -923,8 +923,8 @@ class TrainerInterruptedTrainingTest(TestCasePlus, TrainerIntegrationCommon):
 
         # 4. Second training phase (resuming from the checkpoint)
         output_dir_resumed = self.get_auto_remove_tmp_dir()
-        # Note: total steps for one epoch is ceil(13 / (2*3)) = 3.
-        # We stopped at step 2, so the resumed training should run for 1 more step.
+        # Total steps for one epoch is ceil(100 / (train_batch_size * 3)).
+        # We stopped at step 2, so the resumed training should finish the remaining steps.
         training_args_resumed = TrainingArguments(
             output_dir=output_dir_resumed,
             num_train_epochs=1,
@@ -944,12 +944,14 @@ class TrainerInterruptedTrainingTest(TestCasePlus, TrainerIntegrationCommon):
         trainer_resumed.train(resume_from_checkpoint=checkpoint_path)
 
         # 5. Assertions: Check if the training completed and the final model was saved
-        # The training should have completed step 3.
-        # Total steps per epoch = ceil(13 samples / (2 batch_size * 3 grad_accum)) = 3
-        self.assertEqual(trainer_resumed.state.global_step, 3)
+        # Total steps per epoch = ceil(num_samples / (train_batch_size * grad_accum))
+        steps_per_epoch = math.ceil(
+            100 / (training_args_resumed.train_batch_size * training_args_resumed.gradient_accumulation_steps)
+        )
+        self.assertEqual(trainer_resumed.state.global_step, steps_per_epoch)
 
         # Check that a checkpoint for the final step exists.
-        final_checkpoint_path = os.path.join(output_dir_resumed, "checkpoint-3")
+        final_checkpoint_path = os.path.join(output_dir_resumed, f"checkpoint-{steps_per_epoch}")
         self.assertTrue(os.path.exists(final_checkpoint_path))
 
         # Check if the model weights file exists in the final checkpoint directory.
