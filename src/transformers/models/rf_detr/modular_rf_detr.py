@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 import torch
 from torch import Tensor, nn
+from torch.nn import Module
 from torch.nn import functional as F
 
 from ...activations import ACT2FN
@@ -743,6 +744,41 @@ class RfDetrModel(LwDetrModel):
         super().__init__(config)
         self.d_model = config.d_model
 
+    def gen_topk_proposals(
+        self, group_id: int, object_query_embedding: Tensor, output_proposals: Tensor, topk: int
+    ) -> tuple[Tensor, Tensor]:
+        """
+        Generates and selects the top-k object query embeddings and bounding box proposals for a specific query group.
+        """
+        # We start by projecting and normalizing the base query embeddings for the specific query group.
+        object_query = self.enc_output[group_id](object_query_embedding)
+        object_query = self.enc_output_norm[group_id](object_query)
+
+        # Predict classification scores and bounding box refinements for the current query features.
+        enc_outputs_class_proposals = self.enc_out_class_embed[group_id](object_query)
+        delta_bbox = self.enc_out_bbox_embed[group_id](object_query)
+
+        # Apply the predicted deltas to the initial proposals to obtain refined spatial coordinates.
+        enc_outputs_coord = refine_bboxes(output_proposals, delta_bbox)
+
+        # Identify the indices of the highest-confidence predictions based on their classification logits.
+        topk_proposals = torch.topk(enc_outputs_class_proposals.max(-1)[0], topk, dim=1)[1]
+
+        # Gather the refined coordinates corresponding to these top-k candidates, detaching
+        # them to prevent gradient flow back to the proposal generation stage if necessary.
+        topk_coords_logits_undetach = torch.gather(
+            enc_outputs_coord,
+            1,
+            topk_proposals.unsqueeze(-1).expand(-1, -1, 4),
+        )
+        topk_coords_logits = topk_coords_logits_undetach.detach()
+
+        # Similarly, gather the associated query features to be used as starting points for the decoder stage.
+        object_query_undetach = torch.gather(
+            object_query, 1, topk_proposals.unsqueeze(-1).expand(-1, -1, self.config.d_model)
+        )
+        return object_query_undetach, topk_coords_logits
+
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -761,7 +797,7 @@ class RfDetrModel(LwDetrModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
-        >>> model = DeformableDetrModel.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
+        >>> model = RfDetrModel.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -777,34 +813,18 @@ class RfDetrModel(LwDetrModel):
         if pixel_mask is None:
             pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
 
-        # First, retrieve feature maps from backbone
+        # We begin by extracting hierarchical feature maps from the backbone, which provides the
+        # multi-scale visual context for the detector.
         features = self.backbone(pixel_values, pixel_mask)
 
-        sources = []
-        masks = []
-        for level, (source, mask) in enumerate(features):
-            sources.append(source)
-            masks.append(mask)
-            if mask is None:
-                raise ValueError("No attention mask was provided")
-
-        # Get initial reference points and query features
-        if self.training:
-            reference_points = self.reference_point_embed.weight
-            query_feat = self.query_feat.weight
-        else:
-            # only use first group of reference points and query features during inference
-            # reference_points (num_queries, 4) : spatial locations of the queries
-            # query_feat (num_queries, d_model) : features of the queries
-            reference_points = self.reference_point_embed.weight[: self.num_queries]
-            query_feat = self.query_feat.weight[: self.num_queries]
-
-        # Prepare decoder inputs (by flattening)
+        # To prepare for transformer processing, we flatten the multi-scale features and masks
+        # while tracking spatial shapes and valid ratios to maintain cross-scale relationships.
         # source_flatten (batch_size, sum(H*W), d_model) : flattened multi-scale feature maps
         # mask_flatten (batch_size, sum(H*W)) : flattened mask
         # spatial_shapes (num_levels, 2) : spatial shapes of the feature maps
         # level_start_index (num_levels,) : start index of each level in source_flatten
         # valid_ratios (batch_size, num_levels, 2) : valid ratios of the feature maps
+        sources, masks = zip(*features)
         source_flatten = torch.cat([source.flatten(2).transpose(1, 2) for source in sources], dim=1)
         mask_flatten = torch.cat([mask.flatten(1) for mask in masks], dim=1)
         spatial_shapes_list = [source.shape[2:] for source in sources]
@@ -812,50 +832,46 @@ class RfDetrModel(LwDetrModel):
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
 
-        # Duplicate query features and reference points for each image in the batch
-        target = query_feat.unsqueeze(0).expand(batch_size, -1, -1)
-        reference_points = reference_points.unsqueeze(0).expand(batch_size, -1, -1)
-
-        # Generate encoder output proposals
+        # Next, we generate an initial set of object query embeddings and spatial location proposals
+        # derived directly from the backbone's flattened output.
         object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
             source_flatten, ~mask_flatten, spatial_shapes_list
         )
 
+        # We then initialize the storage for our refined encoder-stage predictions, accommodating
+        # potential multi-group query structures.
         group_detr = self.group_detr if self.training else 1
         topk = self.num_queries
         enc_outputs_coord_logits = torch.empty(
-            (batch_size, topk * group_detr, 4), device=self.device, dtype=object_query_embedding.dtype
+            (batch_size, topk * group_detr, 4), device=self.device, dtype=output_proposals.dtype
         )
         enc_outputs_class = torch.empty(
-            (batch_size, topk * group_detr, self.config.d_model),
-            device=self.device,
-            dtype=object_query_embedding.dtype,
+            (batch_size, topk * group_detr, self.config.d_model), device=self.device, dtype=output_proposals.dtype
         )
 
-        # Iterate over each group of object queries to refine the object queries
+        # Now, we iteratively refine the object queries and their corresponding coordinates for each
+        # query group to capture the highest-confidence candidates from the encoder stage.
         for group_id in range(group_detr):
-            object_query = self.enc_output[group_id](object_query_embedding)
-            object_query = self.enc_output_norm[group_id](object_query)
-
-            enc_outputs_class_proposals = self.enc_out_class_embed[group_id](object_query)
-            delta_bbox = self.enc_out_bbox_embed[group_id](object_query)
-            enc_outputs_coord = refine_bboxes(output_proposals, delta_bbox)
-
-            topk_proposals = torch.topk(enc_outputs_class_proposals.max(-1)[0], topk, dim=1)[1]
-            topk_coords_logits_undetach = torch.gather(
-                enc_outputs_coord,
-                1,
-                topk_proposals.unsqueeze(-1).expand(-1, -1, 4),
+            object_query_undetach, topk_coords_logits = self.gen_topk_proposals(
+                group_id, object_query_embedding, output_proposals, topk
             )
-            topk_coords_logits = topk_coords_logits_undetach.detach()
-            object_query_undetach = torch.gather(
-                object_query, 1, topk_proposals.unsqueeze(-1).expand(-1, -1, self.config.d_model)
-            )
-
             enc_outputs_coord_logits[:, group_id * topk : (group_id + 1) * topk] = topk_coords_logits
             enc_outputs_class[:, group_id * topk : (group_id + 1) * topk] = object_query_undetach
 
-        # Refine the reference points using the coordinate logits
+        # We initialize our learnable query features and their spatial reference points,
+        # typically restricting the set to the primary group during inference for efficiency.
+        if self.training:
+            reference_points = self.reference_point_embed.weight
+            query_feat = self.query_feat.weight
+        else:
+            reference_points = self.reference_point_embed.weight[: self.num_queries]
+            query_feat = self.query_feat.weight[: self.num_queries]
+
+        # Project the base reference points across the entire batch.
+        reference_points = reference_points.unsqueeze(0).expand(batch_size, -1, -1)
+
+        # We refine the initial reference points by applying the predicted coordinate refinements,
+        # effectively shifting our attention to the discovered object locations before decoding.
         two_stage_len = enc_outputs_coord_logits.shape[-2]
         reference_points_two_stage_subset = reference_points[..., :two_stage_len, :]
         reference_points_subset = reference_points[..., two_stage_len:, :]
@@ -863,7 +879,11 @@ class RfDetrModel(LwDetrModel):
         reference_points = torch.cat([reference_points_two_stage_subset, reference_points_subset], dim=-2)
         init_reference_points = reference_points
 
-        # Pass the object queries and reference points to the decoder
+        # Expand our target query features to match the batch dimensions.
+        target = query_feat.unsqueeze(0).expand(batch_size, -1, -1)
+
+        # Finally, we pass the refined queries and updated reference points through the transformer decoder,
+        # allowing them to aggregate detailed spatial context from the multi-scale features.
         decoder_outputs = self.decoder(
             inputs_embeds=target,
             reference_points=reference_points,
