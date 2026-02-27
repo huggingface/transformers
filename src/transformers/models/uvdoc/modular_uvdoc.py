@@ -6,8 +6,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers.models.resnet.modeling_resnet import ResNetConvLayer
-
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -451,18 +449,16 @@ class UVDocResidualBlockWithDilation(nn.Module):
         """
         super().__init__()
 
-        self.downsample = None
+        self.downsample = downsample
         if downsample:
-            self.downsample = nn.Sequential(
-                nn.Conv2d(
-                    in_channels,
-                    out_channels,
-                    kernel_size=kernel_size,
-                    stride=stride,
-                    padding=kernel_size // 2,
-                ),
-                nn.BatchNorm2d(out_channels),
+            self.downsample_conv = nn.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=kernel_size // 2,
             )
+            self.downsample_bn = nn.BatchNorm2d(out_channels)
 
         if stride != 1 or is_top:
             stride1, padding, dilation = stride, kernel_size // 2, 1
@@ -478,8 +474,10 @@ class UVDocResidualBlockWithDilation(nn.Module):
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         identity = hidden_state
-        if self.downsample is not None:
-            identity = self.downsample(hidden_state)
+        if self.downsample:
+            identity = self.downsample_conv(hidden_state)
+            identity = self.downsample_bn(identity)
+
         hidden_state = self.conv1(hidden_state)
         hidden_state = self.bn1(hidden_state)
         hidden_state = self.relu(hidden_state)
@@ -524,13 +522,11 @@ class UVDocResNetStraight(nn.Module):
             self.layers.append(layers)
             self.in_channels = out_channels
 
-
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-
         for layers in self.layers:
             for layer in layers:
                 hidden_state = layer(hidden_state)
-        
+
         return hidden_state
 
 
@@ -619,6 +615,7 @@ class UVDocConvLayer(nn.Module):
         out_channels: int,
         kernel_size: int = 3,
         stride: int = 1,
+        padding: int = 0,
         dilation: int = 3,
         activation: str = "relu",
     ):
@@ -629,14 +626,14 @@ class UVDocConvLayer(nn.Module):
             bias=False,
             kernel_size=kernel_size,
             stride=stride,
-            padding=dilation,
+            padding=padding,
             dilation=dilation,
         )
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, input: Tensor) -> Tensor:
-        hidden_state = self.convolution(input)
+    def forward(self, hidden_state):
+        hidden_state = self.convolution(hidden_state)
         hidden_state = self.normalization(hidden_state)
         hidden_state = self.activation(hidden_state)
         return hidden_state
@@ -651,15 +648,48 @@ class UVDocBridgeBlock(nn.Module):
         self.blocks = nn.ModuleList([])
 
         if isinstance(dilation_values, int):
-            self.blocks.append(UVDocConvLayer(in_channels, in_channels, dilation=dilation_values))
+            self.blocks.append(
+                UVDocConvLayer(in_channels, in_channels, padding=dilation_values, dilation=dilation_values)
+            )
         else:
             for dilation in dilation_values:
-                self.blocks.append(UVDocConvLayer(in_channels, in_channels, dilation=dilation))
-        
+                self.blocks.append(UVDocConvLayer(in_channels, in_channels, padding=dilation, dilation=dilation))
 
     def forward(self, hidden_state):
         for block in self.blocks:
             hidden_state = block(hidden_state)
+        return hidden_state
+
+
+class UVDocPointPositions2D(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.convolution1 = nn.Conv2d(
+            config.num_filter * config.map_num[2],
+            config.num_filter * config.map_num[0],
+            bias=False,
+            kernel_size=config.kernel_size,
+            stride=1,
+            padding=config.kernel_size // 2,
+            padding_mode=config.padding_mode,
+        )
+        self.normalization1 = nn.BatchNorm2d(config.num_filter * config.map_num[0])
+        self.prelu = nn.PReLU()
+        self.convolution2 = nn.Conv2d(
+            config.num_filter * config.map_num[0],
+            2,
+            kernel_size=config.kernel_size,
+            stride=1,
+            padding=config.kernel_size // 2,
+            padding_mode=config.padding_mode,
+        )
+
+    def forward(self, hidden_state):
+        hidden_state = self.convolution1(hidden_state)
+        hidden_state = self.normalization1(hidden_state)
+        hidden_state = self.prelu(hidden_state)
+        hidden_state = self.convolution2(hidden_state)
         return hidden_state
 
 
@@ -689,40 +719,18 @@ class UVDocModel(UVDocPreTrainedModel):
         for block_index in config.dilation_values.keys():
             self.bridge.append(UVDocBridgeBlock(config, block_index))
 
-        self.bridge_concat = nn.Sequential(
-            nn.Conv2d(
-                config.num_filter * config.map_num[2] * 6,
-                config.num_filter * config.map_num[2],
-                bias=False,
-                kernel_size=1,
-                stride=1,
-                padding=0,
-            ),
-            nn.BatchNorm2d(config.num_filter * config.map_num[2]),
-            nn.ReLU(),
+        self.num_bridge_layers = len(self.bridge)
+
+        self.bridge_concat = UVDocConvLayer(
+            in_channels=config.num_filter * config.map_num[2] * self.num_bridge_layers,
+            out_channels=config.num_filter * config.map_num[2],
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            dilation=1,
         )
 
-        self.out_point_positions2D = nn.Sequential(
-            nn.Conv2d(
-                config.num_filter * config.map_num[2],
-                config.num_filter * config.map_num[0],
-                bias=False,
-                kernel_size=config.kernel_size,
-                stride=1,
-                padding=config.kernel_size // 2,
-                padding_mode=config.padding_mode,
-            ),
-            nn.BatchNorm2d(config.num_filter * config.map_num[0]),
-            nn.PReLU(),
-            nn.Conv2d(
-                config.num_filter * config.map_num[0],
-                2,
-                kernel_size=config.kernel_size,
-                stride=1,
-                padding=config.kernel_size // 2,
-                padding_mode=config.padding_mode,
-            ),
-        )
+        self.out_point_positions2D = UVDocPointPositions2D(config)
 
         self.post_init()
 
@@ -761,7 +769,7 @@ class UVDocModel(UVDocPreTrainedModel):
         hidden_state = self.resnet_head(hidden_state)
         resnet_down = self.resnet_down(hidden_state)
         if output_hidden_states:
-                hidden_states = hidden_states + (resnet_down,)
+            hidden_states = hidden_states + (resnet_down,)
 
         bridge_outputs = []
         for bridge_layer in self.bridge:
