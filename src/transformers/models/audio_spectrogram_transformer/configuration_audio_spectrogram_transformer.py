@@ -25,6 +25,13 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="MIT/ast-finetuned-audioset-10-10-0.4593")
 class ASTConfig(PreTrainedConfig):
     r"""
+    frequency_stride (`int`, *optional*, defaults to 10):
+        Frequency stride to use when patchifying the spectrograms.
+    time_stride (`int`, *optional*, defaults to 10):
+        Temporal stride to use when patchifying the spectrograms.
+    max_length (`int`, *optional*, defaults to 1024):
+        Temporal dimension of the spectrograms.
+
     Example:
 
     ```python

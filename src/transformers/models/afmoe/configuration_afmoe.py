@@ -30,6 +30,15 @@ logger = logging.get_logger(__name__)
 )
 class AfmoeConfig(PreTrainedConfig):
     r"""
+    rope_theta (`float`, *optional*, defaults to 10000.0):
+        The base period of the RoPE embeddings.
+    global_attn_every_n_layers (`int`, *optional*, defaults to 4):
+        The frequency of full attention layers. Every Nth layer will use full attention, while others use sliding
+        window attention.
+    mup_enabled (`bool`, *optional*, defaults to `False`):
+        Whether to enable muP (Maximal Update Parametrization) input scaling. When enabled, input embeddings
+        are scaled by `sqrt(hidden_size)`.
+
     Example:
     ```python
     >>> from transformers import AfmoeModel, AfmoeConfig

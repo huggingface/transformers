@@ -23,6 +23,13 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="jinho8345/bros-base-uncased")
 class BrosConfig(PreTrainedConfig):
     r"""
+    dim_bbox (`int`, *optional*, defaults to 8):
+        The dimension of the bounding box coordinates. (x0, y1, x1, y0, x1, y1, x0, y1)
+    bbox_scale (`float`, *optional*, defaults to 100.0):
+        The scale factor of the bounding box coordinates.
+    n_relations (`int`, *optional*, defaults to 1):
+        The number of relations for SpadeEE(entity extraction), SpadeEL(entity linking) head.
+
     Examples:
 
     ```python

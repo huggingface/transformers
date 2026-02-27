@@ -23,6 +23,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="bigscience/bloom")
 class BloomConfig(PreTrainedConfig):
     r"""
+    apply_residual_connection_post_layernorm (`bool`, *optional*, defaults to `False`):
+        If enabled, use the layer norm of the hidden states as the residual in the transformer blocks
     slow_but_exact (`bool`, *optional*, defaults to `False`):
         Experimental feature. Whether to use slow but exact implementation of the attention mechanism. While
         merging the TP rank tensors, due to slicing operations the results may be slightly different between the

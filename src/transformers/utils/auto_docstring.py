@@ -653,11 +653,899 @@ class ConfigArgs:
     """,
     }
 
+    sep_token_id = {
+        "description": """
+    End of the separator token id.
+    """,
+    }
+
+    cls_token_id = {
+        "description": """
+    End of cls token id.
+    """,
+    }
+
     tie_word_embeddings = {
         "description": """
     Whether to tie weight embeddings
     """,
     }
+
+    d_model = {
+        "description": """
+    Size of the encoder layers and the pooler layer.
+    """,
+    }
+
+    d_kv = {
+        "description": """
+    Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
+    be defined as `num_heads * d_kv`.
+    """,
+    }
+
+    d_ff = {
+        "description": """
+    Whether to tie weight embeddings.
+    """,
+    }
+
+    num_layers = {
+        "description": """
+    Number of hidden layers in the Transformer encoder.
+    """,
+    }
+
+    num_decoder_layers = {
+        "description": """
+    Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
+    """,
+    }
+
+    num_heads = {
+        "description": """
+    Number of attention heads for each attention layer in the Transformer encoder.
+    """,
+    }
+
+    dropout_rate = {
+        "description": """
+    The ratio for all dropout layers.
+    """,
+    }
+
+    classifier_dropout = {
+        "description": """
+    The dropout ratio for classifier.
+    """,
+    }
+
+    layer_norm_eps = {
+        "description": """
+    The epsilon used by the layer normalization layers.
+    """,
+    }
+
+    initializer_factor = {
+        "description": """
+    A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+    testing).
+    """,
+    }
+
+    encoder_layers = {
+        "description": """
+    Number of encoder layers.
+    """,
+    }
+
+    decoder_layers = {
+        "description": """
+    Number of decoder layers.
+    """,
+    }
+
+    encoder_attention_heads = {
+        "description": """
+    Number of attention heads for each attention layer in the Transformer encoder.
+    """,
+    }
+
+    decoder_attention_heads = {
+        "description": """
+    Number of attention heads for each attention layer in the Transformer decoder.
+    """,
+    }
+
+    decoder_ffn_dim = {
+        "description": """
+    Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+    """,
+    }
+
+    encoder_ffn_dim = {
+        "description": """
+    Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+    """,
+    }
+
+    activation_function = {
+        "description": """
+    The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+    `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    """,
+    }
+
+    activation_dropout = {
+        "description": """
+    The dropout ratio for activations inside the fully connected layer.
+    """,
+    }
+
+    init_std = {
+        "description": """
+    The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    """,
+    }
+
+    encoder_layerdrop = {
+        "description": """
+    he LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
+    for more details.
+    """,
+    }
+
+    decoder_layerdrop = {
+        "description": """
+    The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
+    for more details.
+    """,
+    }
+
+    scale_embedding = {
+        "description": """
+    Scale embeddings by diving by sqrt(d_model).
+    """,
+    }
+
+    forced_eos_token_id = {
+        "description": """
+    The id of the token to force as the last generated token when `max_length` is reached. Usually set to
+    eos_token_id`.
+    """,
+    }
+
+    moe_intermediate_size = {
+        "description": """
+    Intermediate size of the routed expert MLPs.
+    """,
+    }
+
+    num_experts = {
+        "description": """
+    Number of routed experts in MoE layers.
+
+    """,
+    }
+
+    num_experts_per_tok = {
+        "description": """
+    Number of experts to route each token to. This is the top-k value for the token-choice routing.
+    """,
+    }
+
+    num_shared_experts = {
+        "description": """
+    Number of shared experts that are always activated for all tokens.
+    """,
+    }
+
+    route_scale = {
+        "description": """
+    Scaling factor applied to routing weights.
+    """,
+    }
+
+    layer_types = {
+        "description": """
+    A list that explicitly maps each layer index with its layer type. If not provided, it will be automatically
+    generated based on config values.
+    """,
+    }
+
+    norm_topk_prob = {
+        "description": """
+    Whether to normalize the weights of the routed experts.
+
+    """,
+    }
+
+    topk_group = {
+        "description": """
+    Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
+    """,
+    }
+
+    qk_rope_head_dim = {
+        "description": """
+    Dimension of the query/key heads that use rotary position embeddings.
+    """,
+    }
+
+    v_head_dim = {
+        "description": """
+    Dimension of the value heads.
+    """,
+    }
+
+    qk_nope_head_dim = {
+        "description": """
+    Dimension of the query/key heads that don't use rotary position embeddings.
+    """,
+    }
+
+    kv_lora_rank = {
+        "description": """
+    Rank of the LoRA matrices for key and value projections.
+    """,
+    }
+
+    q_lora_rank = {
+        "description": """
+    Rank of the LoRA matrices for query projections.
+    """,
+    }
+
+    routed_scaling_factor = {
+        "description": """
+    Scaling factor or routed experts.
+    """,
+    }
+
+    n_routed_experts = {
+        "description": """
+    Number of routed experts.
+    """,
+    }
+
+    n_shared_experts = {
+        "description": """
+    Number of shared experts.
+    """,
+    }
+
+    vision_config = {
+        "description": """
+    The config object or dictionary of the vision backbone.
+    """,
+    }
+
+    text_config = {
+        "description": """
+    The config object or dictionary of the text backbone.
+    """,
+    }
+
+    projector_hidden_act = {
+        "description": """
+    Number of shared experts.
+    The activation function used by the multimodal projector.
+
+    """,
+    }
+
+    vision_feature_select_strategy = {
+        "description": """
+    The feature selection strategy used to select the vision feature from the vision backbone.
+    """,
+    }
+
+    vision_feature_layer = {
+        "description": """
+    The index of the layer to select the vision feature. If multiple indices are provided,
+    the vision feature of the corresponding indices will be concatenated to form the
+    vision features.
+    """,
+    }
+
+    multimodal_projector_bias = {
+        "description": """
+    Whether to use bias in the multimodal projector.
+    """,
+    }
+    projector_bias = multimodal_projector_bias
+
+    image_token_id = {
+        "description": """
+    The image token index used as a placeholder for input images.
+    """,
+    }
+
+    video_token_id = {
+        "description": """
+    The video token index used as a placeholder for input videos.
+    """,
+    }
+
+    audio_token_id = {
+        "description": """
+    The audio token index used as a placeholder for input audio.
+    """,
+    }
+
+    image_token_index = {
+        "description": """
+    The image token index used as a placeholder for input images.
+    """,
+    }
+
+    video_token_index = {
+        "description": """
+    The video token index used as a placeholder for video images.
+    """,
+    }
+
+    image_seq_length = {
+        "description": """
+    equence length of one image embedding.
+    """,
+    }
+
+    video_seq_length = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    add_cross_attention = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    is_decoder = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    sliding_window = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    use_sliding_window = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    shared_expert_intermediate_size = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    decoder_sparse_step = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    output_router_logits = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    router_aux_loss_coef = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    out_indices = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    out_features = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    dropout = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    image_size = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    patch_size = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    num_channels = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+    in_channels = num_channels
+
+    num_mel_bins = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    sampling_rate = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    attention_probs_dropout_prob = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    hidden_dropout_prob = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    classifier_dropout_prob = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    mlp_ratio = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    qkv_bias = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    num_encoder_attention_heads = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    num_decoder_attention_heads = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    n_embd = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    n_layers = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    n_heads = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    n_positions = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    attn_pdrop = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    resid_pdrop = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    embd_pdrop = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    clip_qkv = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    type_vocab_size = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    audio_config = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    layerdrop = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    expert_capacity = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    decoder_start_token_id = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    is_encoder_decoder = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    num_codebooks = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    codebook_dim = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    hidden_sizes = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    depths = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    patch_sizes = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    strides = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    router_jitter_noise = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    num_local_experts = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    hidden_dropout = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    qk_layernorm = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    backbone_config = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    no_object_weight = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    class_weight = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    mask_weight = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    dice_weight = {
+        "description": """
+    Sequence length of one video embedding.
+    """,
+    }
+
+    class_cost = {
+        "description": """
+    Accepted range of time step values for clamping.
+    """,
+    }
+
+    bbox_cost = {
+        "description": """
+    Accepted range of time step values for clamping.
+    """,
+    }
+
+    giou_cost = {
+        "description": """
+    Accepted range of time step values for clamping.
+    """,
+    }
+
+    focal_alpha = {
+        "description": """
+    Accepted range of time step values for clamping.
+    """,
+    }
+
+    mask_loss_coefficient = {
+        "description": """
+    Accepted range of time step values for clamping.
+    """,
+    }
+
+    giou_loss_coefficient = {
+        "description": """
+    Accepted range of time step values for clamping.
+    """,
+    }
+
+    bbox_loss_coefficient = {
+        "description": """
+    Accepted range of time step values for clamping.
+    """,
+    }
+
+    cls_loss_coefficient = {
+        "description": """
+    Accepted range of time step values for clamping.
+    """,
+    }
+
+    dice_loss_coefficient = {
+        "description": """
+    Accepted range of time step values for clamping.
+    """,
+    }
+
+    semantic_loss_ignore_index = {
+        "description": """
+    Accepted range of time step values for clamping.
+    """,
+    }
+
+    projection_dim = {
+        "description": """
+    Dimensionality of text and vision projection layers.
+    """,
+    }
+
+    logit_scale_init_value = {
+        "description": """
+    The initial value of the *logit_scale* parameter.
+    """,
+    }
+
+    embedding_size = {
+        "description": """
+    Dimensionality of vocabulary embeddings.
+    """,
+    }
+
+    num_dense_layers = {
+        "description": """
+    Number of initial dense layers before MoE layers begin. Layers with index < num_dense_layers will use
+    standard dense MLPs instead of MoE.
+    """,
+    }
+
+    projection_hidden_act = {
+        "description": """
+    The non-linear activation function (function or string) in the projection layer. If string, `"gelu"`,
+    `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    """,
+    }
+
+    drop_path_rate = {
+        "description": """
+    Drop path rate for the patch fusion.
+    """,
+    }
+
+    vq_config = {
+        "description": """
+    Configuration dict of the vector quantize module.
+    """,
+    }
+
+    embed_dim = {
+        "description": """
+    Dimensionality of each embedding vector.
+    """,
+    }
+
+    num_embeddings = {
+        "description": """
+    Number of codebook embeddings.
+    """,
+    }
+
+    double_latent = {
+        "description": """
+    Whether to use double z channels.
+    """,
+    }
+
+    latent_channels = {
+        "description": """
+    Number of channels for the latent space.
+    """,
+    }
+
+    qformer_config = {
+        "description": """
+    Configuration dict of the Q-Former module.
+    """,
+    }
+
+    mamba_n_heads = {
+        "description": """
+    The number of mamba heads used in the v2 implementation.
+    """,
+    }
+
+    mamba_d_head = {
+        "description": """
+    Head embedding dimension size
+    """,
+    }
+
+    mamba_n_groups = {
+        "description": """
+    The number of the mamba groups used in the v2 implementation.
+    """,
+    }
+
+    mamba_d_state = {
+        "description": """
+    The dimension the mamba state space latents.
+    """,
+    }
+
+    mamba_d_conv = {
+        "description": """
+    The size of the mamba convolution kernel
+    """,
+    }
+
+    mamba_expand = {
+        "description": """
+    Expanding factor (relative to hidden_size) used to determine the mamba intermediate size
+    """,
+    }
+
+    mamba_chunk_size = {
+        "description": """
+    The chunks in which to break the sequence when doing prefill/training
+    """,
+    }
+
+    mamba_conv_bias = {
+        "description": """
+    Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
+    """,
+    }
+
+    mamba_proj_bias = {
+        "description": """
+    Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
+    """,
+    }
+
+    time_step_min = {
+        "description": """
+    Minimum `time_step` used to bound `dt_proj.bias`.
+    """,
+    }
+
+    time_step_max = {
+        "description": """
+    Maximum `time_step` used to bound `dt_proj.bias`.
+    """,
+    }
+
+    time_step_limit = {
+        "description": """
+    Accepted range of time step values for clamping.
+    """,
+    }
+
+    scale_attn_weights = {
+        "description": """
+    Scale attention weights by dividing by sqrt(hidden_size).
+    """,
+    }
+
+    layer_norm_epsilon = layer_norm_eps
+    n_layer = num_hidden_layers
+    n_head = num_attention_heads
+    decoder_intermediate_size = intermediate_size
+    decoder_hidden_act = hidden_act
+    decoder_attention_dropout = attention_dropout
+    decoder_num_attention_heads = num_attention_heads
+    decoder_num_heads = num_attention_heads
+    decoder_hidden_dim = hidden_size
+    decoder_num_layers = num_hidden_layers
+    decoder_dropout = dropout
+    encoder_hidden_dim = hidden_size
+    encoder_num_layers = num_hidden_layers
+    encoder_num_heads = num_attention_heads
+    encoder_dropout = dropout
+    attn_dropout = attention_dropout
+    hidden_activation = hidden_act
+    rms_norm = rms_norm_eps
+    activation = hidden_act
+    d_head = head_dim
+    d_inner = intermediate_size
+    initializer_std = init_std
+    resid_dropout = resid_pdrop
+    dim_head = head_dim
 
 
 class ModelArgs:
@@ -2428,6 +3316,11 @@ def auto_method_docstring(
     # Get model information
     model_name_lowercase, class_name, config_class = _get_model_info(func, parent_class)
     func_documentation = func.__doc__
+
+    # Temporary workaround for config classes until #41250 is merged. We usually add docs at class-lvl
+    if func_documentation is None and parent_class and parent_class.__name__.endswith("Config"):
+        func_documentation = parent_class.__doc__
+
     if custom_args is not None and func_documentation is not None:
         func_documentation = "\n" + set_min_indent(custom_args.strip("\n"), 0) + "\n" + func_documentation
     elif custom_args is not None:
@@ -2522,7 +3415,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
     indent_level = get_indent_level(cls)
     model_name_lowercase = get_model_name(cls)
     model_name_title = " ".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
-    model_base_class = f"{model_name_title.title()}Model"
+    model_base_class = f"{model_name_title.title()}Model" if model_name_lowercase else None
     if model_name_lowercase is not None:
         try:
             model_base_class = getattr(

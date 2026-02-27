@@ -23,8 +23,6 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="calp-hsat-fused")
 class ClapTextConfig(PreTrainedConfig):
     r"""
-    type_vocab_size (`int`, *optional*, defaults to 2):
-        The vocabulary size of the `token_type_ids` passed when calling [`ClapTextModel`].
 
     Examples:
 
@@ -89,6 +87,16 @@ class ClapTextConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="calp-hsat-fused")
 class ClapAudioConfig(PreTrainedConfig):
     r"""
+    window_size (`int`, *optional*, defaults to 8):
+        Image size of the spectrogram
+    spec_size (`int`, *optional*, defaults to 256):
+        Desired input size of the spectrogram that the model supports. It can be different from the output of the
+        `ClapFeatureExtractor`, in which case the input features will be resized. Corresponds to the `image_size`
+        of the audio models.
+    patch_stride (`list`, *optional*, defaults to `[4, 4]`):
+        Patch stride for the audio spectrogram
+    num_classes (`int`, *optional*, defaults to 527):
+        Number of classes used for the head training
     enable_fusion (`bool`, *optional*, defaults to `False`):
         Whether or not to enable patch fusion. This is the main contribution of the authors, and should give the
         best results.

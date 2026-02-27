@@ -146,6 +146,13 @@ class ClvpDecoderConfig(PreTrainedConfig):
         Whether to use bias in Query, Key and Value layers during self attention.
     decoder_fixing_codes (`list`, *optional*, defaults to `[83, 45, 45, 248]`):
         These values are used in the method `fix_speech_decoder_output` to fix decoder generated outputs.
+    n_inner (`int`, *optional*):
+        Dimensionality of the inner feed-forward layers. `None` will set it to 4 times `hidden_size`.
+    num_mel_attn_blocks (`int`, *optional*, defaults to 6):
+        Denotes the number of self attention layers in [`ClvpConditioningEncoder`].
+    max_text_tokens (`int`, *optional*, defaults to 404):
+        The maximum sequence length of text tokens that this model might ever be used with. Similar to
+        `n_positions` in `GPT2Config`.
 
     Example:
 
@@ -233,6 +240,11 @@ class ClvpDecoderConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="susnato/clvp_dev")
 class ClvpConfig(PreTrainedConfig):
     r"""
+    speech_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize CLVP speech encoder.
+    decoder_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`ClvpDecoderConfig`].
+
     Example:
 
     ```python

@@ -82,6 +82,40 @@ class AlignTextConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="kakaobrain/align-base")
 class AlignVisionConfig(PreTrainedConfig):
     r"""
+    width_coefficient (`float`, *optional*, defaults to 2.0):
+        Scaling coefficient for network width at each stage.
+    depth_coefficient (`float`, *optional*, defaults to 3.1):
+        Scaling coefficient for network depth at each stage.
+    depth_divisor (`int`, *optional*, defaults to 8):
+        A unit of network width.
+    kernel_sizes (`list[int]`, *optional*, defaults to `[3, 3, 5, 3, 5, 5, 3]`):
+        List of kernel sizes to be used in each block.
+    in_channels (`list[int]`, *optional*, defaults to `[32, 16, 24, 40, 80, 112, 192]`):
+        List of input channel sizes to be used in each block for convolutional layers.
+    out_channels (`list[int]`, *optional*, defaults to `[16, 24, 40, 80, 112, 192, 320]`):
+        List of output channel sizes to be used in each block for convolutional layers.
+    depthwise_padding (`list[int]`, *optional*, defaults to `[]`):
+        List of block indices with square padding.
+    strides (`list[int]`, *optional*, defaults to `[1, 2, 2, 2, 1, 2, 1]`):
+        List of stride sizes to be used in each block for convolutional layers.
+    num_block_repeats (`list[int]`, *optional*, defaults to `[1, 2, 2, 3, 3, 4, 1]`):
+        List of the number of times each block is to repeated.
+    expand_ratios (`list[int]`, *optional*, defaults to `[1, 6, 6, 6, 6, 6, 6]`):
+        List of scaling coefficient of each block.
+    squeeze_expansion_ratio (`float`, *optional*, defaults to 0.25):
+        Squeeze expansion ratio.
+    pooling_type (`str` or `function`, *optional*, defaults to `"mean"`):
+        Type of final pooling to be applied before the dense classification head. Available options are [`"mean"`,
+        `"max"`]
+    batch_norm_eps (`float`, *optional*, defaults to 1e-3):
+        The epsilon used by the batch normalization layers.
+    batch_norm_momentum (`float`, *optional*, defaults to 0.99):
+        The momentum used by the batch normalization layers.
+    drop_connect_rate (`float`, *optional*, defaults to 0.2):
+        The drop rate for skip connections.
+    hidden_dim (`int`, *optional*, defaults to 1280):
+        The hidden dimension of the layer before the classification head.
+
     Example:
 
     ```python
@@ -152,6 +186,9 @@ class AlignVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="kakaobrain/align-base")
 class AlignConfig(PreTrainedConfig):
     r"""
+    temperature_init_value (`float`, *optional*, defaults to 1.0):
+        The initial value of the *temperature* parameter. Default is used as per the original ALIGN implementation.
+
     Example:
 
     ```python

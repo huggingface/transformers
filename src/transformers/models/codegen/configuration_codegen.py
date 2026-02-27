@@ -26,10 +26,10 @@ class CodeGenConfig(PreTrainedConfig):
     n_ctx (`int`, *optional*, defaults to 2048):
         This attribute is used in `CodeGenModel.__init__` without any real effect.
         The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-    embd_pdrop (`int`, *optional*, defaults to 0.0):
-        The dropout ratio for the embeddings.
-    attn_pdrop (`float`, *optional*, defaults to 0.0):
-        The dropout ratio for the attention.
+    rotary_dim (`int`, *optional*, defaults to 64):
+        Number of dimensions in the embedding that Rotary Position Embedding is applied to.
+    n_inner (`int`, *optional*):
+        Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
 
     Example:
 

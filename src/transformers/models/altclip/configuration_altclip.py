@@ -23,6 +23,9 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="BAAI/AltCLIP")
 class AltCLIPTextConfig(PreTrainedConfig):
     r"""
+    project_dim (`int`, *optional*, defaults to 768):
+        The dimensions of the teacher model before the mapping layer.
+
     Examples:
 
     ```python

@@ -23,6 +23,23 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="meta/chameleon-7B")
 class ChameleonVQVAEConfig(PreTrainedConfig):
+    r"""
+    base_channels (`int`, *optional*, defaults to 128):
+        Base channel count.
+    channel_multiplier (`list[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
+        Channel multipliers for each resolution.
+    num_res_blocks (`int`, *optional*, defaults to 2):
+        Number of residual blocks.
+    attn_resolutions (`list[int]`, *optional*):
+        Resolutions to apply attention.
+    dropout (`float`, *optional*, defaults to 0.0):
+        Dropout rate.
+    attn_type (`str`, *optional*, defaults to `"vanilla"`):
+        Attention type used in VQ-GAN encoder. Can be "vanilla" or None
+    resolution (`int`, *optional*, defaults to 512):
+        Resolution of the input images.
+    """
+
     model_type = "chameleon_vqgan"
     base_config_key = "vq_config"
 
