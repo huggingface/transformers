@@ -2034,7 +2034,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         **lm_kwargs: Unpack[TransformersKwargs],
-    ) -> Gemma3nCausalLMOutputWithPast:
+    ) -> Gemma3nModelOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

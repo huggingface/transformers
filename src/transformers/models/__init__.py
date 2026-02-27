@@ -68,6 +68,7 @@ if TYPE_CHECKING:
     from .cohere import *
     from .cohere2 import *
     from .cohere2_vision import *
+    from .colmodernvbert import *
     from .colpali import *
     from .colqwen2 import *
     from .conditional_detr import *
@@ -261,6 +262,7 @@ if TYPE_CHECKING:
     from .mobilevitv2 import *
     from .modernbert import *
     from .modernbert_decoder import *
+    from .modernvbert import *
     from .moonshine import *
     from .moonshine_streaming import *
     from .moshi import *
@@ -281,6 +283,7 @@ if TYPE_CHECKING:
     from .olmo import *
     from .olmo2 import *
     from .olmo3 import *
+    from .olmo_hybrid import *
     from .olmoe import *
     from .omdet_turbo import *
     from .oneformer import *

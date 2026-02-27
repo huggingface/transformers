@@ -231,7 +231,6 @@ class Florence2ForConditionalGenerationModelTest(
     all_model_classes = (Florence2Model, Florence2ForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "image-to-text": Florence2ForConditionalGeneration,
             "image-text-to-text": Florence2ForConditionalGeneration,
             "any-to-any": Florence2ForConditionalGeneration,
         }
