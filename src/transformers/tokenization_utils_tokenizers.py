@@ -117,7 +117,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # we extract vocab / merges from the tokenizer file to pass them to __init__
-            processor = TokenizerFast.from_file(fast_tokenizer_file).post_processor
+            tokenizer_from_file = TokenizerFast.from_file(fast_tokenizer_file)
+            local_kwargs["tokenizer_object"] = tokenizer_from_file
+            processor = tokenizer_from_file.post_processor
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
             vocab = tokenizer_json.get("model", {}).get("vocab", None)
@@ -180,7 +182,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     local_kwargs = cls.convert_from_spm_model(**local_kwargs)
 
                 # Generic spm fallback to build tokenizer_object from spm proto
-                if "tokenizer_object" not in local_kwargs:
+                # Only for TokenizersBackend itself (e.g. MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS);
+                # subclasses with their own __init__ build their own tokenizer with proper config.
+                if "tokenizer_object" not in local_kwargs and (
+                    cls is TokenizersBackend or "__init__" not in cls.__dict__
+                ):
                     tokenizer_object = SpmConverter.converted_from_proto(
                         proto=extractor.proto,
                         vocab=local_kwargs.get("vocab"),
