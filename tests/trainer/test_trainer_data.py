@@ -146,7 +146,7 @@ class TrainerDataloaderTest(TestCasePlus):
             model=RegressionModel(),
             train_dataset=train_dataset,
             eval_dataset=train_dataset,
-            args=TrainingArguments(output_dir=self.get_auto_remove_tmp_dir(), report_to="none"),
+            args=TrainingArguments(output_dir=self.get_auto_remove_tmp_dir()),
         )
 
         trainer.train()
@@ -156,7 +156,7 @@ class TrainerDataloaderTest(TestCasePlus):
         train_dataset = RegressionDataset()
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
         tiny_gpt2 = GPT2LMHeadModel(config)
-        args = TrainingArguments(self.get_auto_remove_tmp_dir(), report_to="none", dataloader_persistent_workers=False)
+        args = TrainingArguments(self.get_auto_remove_tmp_dir(), dataloader_persistent_workers=False)
 
         # Single evaluation dataset
         eval_dataset = RegressionDataset()
@@ -201,7 +201,6 @@ class TrainerDataloaderTest(TestCasePlus):
         tiny_gpt2 = GPT2LMHeadModel(config)
         args = TrainingArguments(
             self.get_auto_remove_tmp_dir(),
-            report_to="none",
             dataloader_persistent_workers=True,
             dataloader_num_workers=2,
         )
@@ -770,7 +769,7 @@ class TrainerDynamicShapesAndIterableTest(TestCasePlus, TrainerIntegrationCommon
         eval_dataset = DynamicShapesDataset(batch_size=self.batch_size)
         model = RegressionModel(a=2, b=1)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, report_to="none")
+            args = TrainingArguments(tmp_dir)
             trainer = Trainer(model, args, eval_dataset=eval_dataset)
 
             # Check evaluation can run to completion
@@ -788,7 +787,7 @@ class TrainerDynamicShapesAndIterableTest(TestCasePlus, TrainerIntegrationCommon
 
         # Same tests with eval accumulation
         with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, eval_accumulation_steps=2, report_to="none")
+            args = TrainingArguments(tmp_dir, eval_accumulation_steps=2)
             trainer = Trainer(model, args, eval_dataset=eval_dataset)
 
             # Check evaluation can run to completion

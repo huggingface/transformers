@@ -175,14 +175,6 @@ class TorchTracemalloc:
 class RegressionTrainingArguments(TrainingArguments):
     a: float = 0.0
     b: float = 0.0
-    keep_report_to: bool = False
-
-    def __post_init__(self):
-        super().__post_init__()
-        # save resources not dealing with reporting unless specified (also avoids the warning when it's not set)
-        # can be explicitly disabled via `keep_report_to`
-        if not self.keep_report_to:
-            self.report_to = []
 
 
 class RepeatDataset:
@@ -463,7 +455,6 @@ if is_torch_available():
         train_len=64,
         eval_len=64,
         pretrained=True,
-        keep_report_to=False,
         output_dir=None,
         **kwargs,
     ):
@@ -493,7 +484,7 @@ if is_torch_available():
         optimizers = kwargs.pop("optimizers", (None, None))
         preprocess_logits_for_metrics = kwargs.pop("preprocess_logits_for_metrics", None)
         assert output_dir is not None, "output_dir should be specified for testing"
-        args = RegressionTrainingArguments(output_dir, a=a, b=b, keep_report_to=keep_report_to, **kwargs)
+        args = RegressionTrainingArguments(output_dir, a=a, b=b, **kwargs)
         trainer = Trainer(
             model,
             args,

@@ -281,7 +281,6 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
                 "save_steps": 1,
                 "logging_strategy": "steps",
                 "logging_steps": 1,
-                "report_to": "none",
             }
 
             trainer = get_language_model_trainer(**kwargs)
@@ -651,7 +650,6 @@ class TrainerAutoBatchSizeTest(TestCasePlus, TrainerIntegrationCommon):
                 --learning_rate 2e-5
                 --num_train_epochs 1
                 --output_dir {tmpdir}
-                --report_to none
                 --auto_find_batch_size 0
                 """.split()
             with self.assertRaises(RuntimeError):
@@ -906,7 +904,6 @@ class TrainerInterruptedTrainingTest(TestCasePlus, TrainerIntegrationCommon):
             gradient_accumulation_steps=3,
             save_strategy="steps",
             save_steps=1,  # Save at every step
-            report_to=[],  # Disable wandb/tensorboard and other loggers
             max_steps=2,  # Stop after step 2 to simulate interruption
         )
 
@@ -932,7 +929,6 @@ class TrainerInterruptedTrainingTest(TestCasePlus, TrainerIntegrationCommon):
             gradient_accumulation_steps=3,
             save_strategy="steps",
             save_steps=1,
-            report_to=[],
         )
 
         trainer_resumed = Trainer(
@@ -1029,7 +1025,6 @@ class TrainerInterruptedTrainingTest(TestCasePlus, TrainerIntegrationCommon):
             optim="sgd",
             disable_tqdm=True,
             dataloader_num_workers=0,  # Ensures that main process loads the data
-            report_to=[],  # Disable wandb/tensorboard and other loggers
         )
 
         trainer_baseline = Trainer(
@@ -1071,7 +1066,6 @@ class TrainerInterruptedTrainingTest(TestCasePlus, TrainerIntegrationCommon):
             optim="sgd",
             disable_tqdm=True,
             dataloader_num_workers=0,  # Ensures that main process loads the data
-            report_to=[],  # Disable wandb/tensorboard and other loggers
         )
 
         trainer_resume = Trainer(
@@ -1525,7 +1519,7 @@ class TrainerSavingTest(TestCasePlus, TrainerIntegrationCommon):
             config = RegressionModelConfig(a=1.5, b=2.5)
             trainer = Trainer(
                 model=RegressionPreTrainedModel(config),
-                args=TrainingArguments(output_dir=tmp_dir, report_to="none"),
+                args=TrainingArguments(output_dir=tmp_dir),
                 processing_class=image_processor,
             )
             trainer.save_model()
@@ -1541,7 +1535,7 @@ class TrainerSavingTest(TestCasePlus, TrainerIntegrationCommon):
             config = RegressionModelConfig(a=1.5, b=2.5)
             trainer = Trainer(
                 model=RegressionPreTrainedModel(config),
-                args=TrainingArguments(output_dir=tmp_dir, report_to="none"),
+                args=TrainingArguments(output_dir=tmp_dir),
                 processing_class=feature_extractor,
             )
             trainer.save_model()
@@ -1561,7 +1555,7 @@ class TrainerSavingTest(TestCasePlus, TrainerIntegrationCommon):
             config = RegressionModelConfig(a=1.5, b=2.5)
             trainer = Trainer(
                 model=RegressionPreTrainedModel(config),
-                args=TrainingArguments(output_dir=tmp_dir, report_to="none"),
+                args=TrainingArguments(output_dir=tmp_dir),
                 processing_class=processor,
             )
             trainer.save_model()
@@ -2165,7 +2159,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                     hub_token=self._token,
                     save_strategy="epoch",
                     report_to=["tensorboard"],
-                    keep_report_to=True,
                 )
                 trainer.train()
                 # Push the runs via `push_to_hub()`

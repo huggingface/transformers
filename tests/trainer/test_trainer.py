@@ -192,7 +192,6 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
         args_kwargs = {
-            "report_to": "none",
             "logging_steps": 1,
             "max_steps": 5,
             "learning_rate": 3e-4,
@@ -303,7 +302,6 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         base_loss_callback = StoreLossCallback()
 
         args_kwargs = {
-            "report_to": "none",
             "logging_steps": 1,
             "max_steps": 5,
             "learning_rate": 3e-4,
@@ -458,7 +456,6 @@ class TrainerNEFTuneTest(TestCasePlus):
             logging_steps=5,
             logging_nan_inf_filter=False,
             neftune_noise_alpha=0.4,
-            report_to="none",
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
@@ -480,7 +477,6 @@ class TrainerNEFTuneTest(TestCasePlus):
             logging_steps=5,
             logging_nan_inf_filter=False,
             neftune_noise_alpha=0.4,
-            report_to="none",
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
@@ -520,7 +516,6 @@ class TrainerLoggingTest(TestCasePlus):
             learning_rate=1e9,
             logging_steps=5,
             logging_nan_inf_filter=False,
-            report_to="none",
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
         trainer.train()
@@ -532,7 +527,6 @@ class TrainerLoggingTest(TestCasePlus):
             learning_rate=1e9,
             logging_steps=5,
             logging_nan_inf_filter=True,
-            report_to="none",
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
         trainer.train()
@@ -664,7 +658,6 @@ class TrainerMetricsTest(TestCasePlus):
                 include_num_input_tokens_seen="non_padding",
                 per_device_train_batch_size=2,
                 max_steps=1,
-                report_to="none",
             )
             trainer = Trainer(
                 model=model,
@@ -737,7 +730,7 @@ class TrainerMetricsTest(TestCasePlus):
         layer_1 = 128 * 64 + 64
         layer_2 = 64 * 32 + 32
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir))
             self.assertEqual(trainer.get_num_trainable_parameters(), layer_1 + layer_2)
             # Freeze the last layer
             for param in model[-1].parameters():
@@ -880,7 +873,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         # Base training. Should have the same results as test_reproducible_training
         model = RegressionModel()
         with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, learning_rate=0.1, report_to="none")
+            args = TrainingArguments(tmp_dir, learning_rate=0.1)
             trainer = Trainer(model, args, train_dataset=train_dataset)
             trainer.train()
             self.check_trained_model(trainer.model)
@@ -903,7 +896,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
     def test_model_init(self):
         train_dataset = RegressionDataset()
         with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, learning_rate=0.1, report_to="none")
+            args = TrainingArguments(tmp_dir, learning_rate=0.1)
             trainer = Trainer(args=args, train_dataset=train_dataset, model_init=lambda: RegressionModel())
             trainer.train()
             self.check_trained_model(trainer.model)
@@ -938,7 +931,6 @@ class TrainerTorchCompileTest(TestCasePlus):
             per_device_train_batch_size=2,
             torch_compile=True,
             max_steps=1,  # compile happens on the first step
-            report_to="none",
         )
         trainer = Trainer(model=tiny_llama, args=args, train_dataset=train_dataset)  # noqa
         trainer.train()
@@ -1206,8 +1198,6 @@ class TrainerIntegrationTest(TestCasePlus):
                 "--predict_with_generate",
                 "--ddp_timeout",
                 "60",
-                "--report_to",
-                "none",
             ]
             execute_subprocess_async(command)
             # successful return here == success - any errors would have caused an error or a timeout in the sub-call
@@ -1235,9 +1225,7 @@ class TrainerIntegrationTest(TestCasePlus):
         dataset = RepeatDataset(x, length=2)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            training_args = TrainingArguments(
-                output_dir=tmpdir, report_to="none", max_steps=1, per_device_train_batch_size=1
-            )
+            training_args = TrainingArguments(output_dir=tmpdir, max_steps=1, per_device_train_batch_size=1)
             trainer = Trainer(
                 model=model,
                 args=training_args,
@@ -1274,7 +1262,7 @@ class TrainerIntegrationTest(TestCasePlus):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             training_args = TrainingArguments(
-                output_dir=tmpdir, report_to="none", max_steps=5, per_device_train_batch_size=1, use_cpu=True
+                output_dir=tmpdir, max_steps=5, per_device_train_batch_size=1, use_cpu=True
             )
             trainer = Trainer(
                 model=model,

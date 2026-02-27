@@ -214,7 +214,6 @@ class TrainerCallbackTest(unittest.TestCase):
 
         # disable_tqdm must be explicit since it depends on logging level
         kwargs.setdefault("disable_tqdm", False)
-        kwargs.setdefault("report_to", [])
 
         args = TrainingArguments(self.output_dir, **kwargs)
         return Trainer(
@@ -490,7 +489,6 @@ class StatefulCallbackTest(unittest.TestCase):
         model = RegressionPreTrainedModel(config)
 
         kwargs.setdefault("disable_tqdm", False)
-        kwargs.setdefault("report_to", [])
 
         args = TrainingArguments(self.output_dir, **kwargs)
         return Trainer(

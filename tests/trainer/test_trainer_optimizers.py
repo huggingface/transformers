@@ -166,7 +166,7 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         train_dataset = RegressionDataset()
         with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, report_to="none")
+            args = TrainingArguments(tmp_dir)
             model = RegressionModel()
             optimizer = Adafactor(
                 model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None
@@ -207,7 +207,6 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             for name_optim in ["rmsprop_bnb_8bit", "adamw_8bit"]:
                 args = TrainingArguments(
                     output_dir=tmp_dir,
-                    report_to="none",
                     optim=name_optim,
                 )
                 trainer = Trainer(model=model, args=args)
@@ -532,7 +531,7 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_get_optimizer_group(self):
         model = nn.Sequential(nn.Linear(128, 64))
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir))
             # ValueError is raised if optimizer is None
             with self.assertRaises(ValueError):
                 trainer.get_optimizer_group()
@@ -555,7 +554,7 @@ class TrainerOptimizerTest(TestCasePlus):
     def test_get_optimizer_group(self):
         model = nn.Sequential(nn.Linear(128, 64))
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir))
             # ValueError is raised if optimizer is None
             with self.assertRaises(ValueError):
                 trainer.get_optimizer_group()
@@ -594,7 +593,7 @@ class TrainerOptimizerTest(TestCasePlus):
     def test_custom_optimizer(self):
         train_dataset = RegressionDataset()
         with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, report_to="none")
+            args = TrainingArguments(tmp_dir)
             model = RegressionModel()
             optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
             lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda x: 1.0)
@@ -616,7 +615,7 @@ class TrainerOptimizerTest(TestCasePlus):
     def test_no_wd_param_group(self):
         model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir))
             trainer.create_optimizer_and_scheduler(10)
             wd_names = ['0.linear1.weight', '0.linear2.weight', '1.0.linear1.weight', '1.0.linear2.weight', '1.1.linear1.weight', '1.1.linear2.weight']  # fmt: skip
             wd_params = [p for n, p in model.named_parameters() if n in wd_names]
@@ -630,7 +629,7 @@ class TrainerLRTest(TestCasePlus):
     def test_get_learning_rates(self):
         model = nn.Sequential(nn.Linear(128, 64))
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir, report_to="none"))
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir))
             with self.assertRaises(ValueError):
                 trainer.get_learning_rates()
             trainer.create_optimizer()
@@ -651,7 +650,6 @@ class TrainerLRTest(TestCasePlus):
                 lr_scheduler_kwargs=extra_kwargs,
                 learning_rate=0.2,
                 warmup_steps=num_warmup_steps,
-                report_to="none",
             )
             trainer = Trainer(model, args, train_dataset=train_dataset)
             trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
@@ -679,7 +677,6 @@ class TrainerLRTest(TestCasePlus):
                 lr_scheduler_kwargs=extra_kwargs,
                 learning_rate=0.2,
                 warmup_steps=num_warmup_steps,
-                report_to="none",
             )
             trainer = Trainer(model, args, train_dataset=train_dataset)
             trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
@@ -703,7 +700,6 @@ class TrainerLRTest(TestCasePlus):
             lr_scheduler_kwargs=extra_kwargs,
             learning_rate=0.2,
             warmup_steps=num_warmup_steps,
-            report_to="none",
         )
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
@@ -729,7 +725,6 @@ class TrainerLRTest(TestCasePlus):
                 tmp_dir,
                 eval_strategy="epoch",
                 metric_for_best_model="eval_loss",
-                report_to="none",
             )
             model = RegressionModel()
             optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
@@ -769,7 +764,6 @@ class TrainerLRTest(TestCasePlus):
                 metric_for_best_model="eval_loss",
                 num_train_epochs=10,
                 learning_rate=0.2,
-                report_to="none",
             )
             model = RegressionModel()
             trainer = TrainerWithLRLogs(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)

@@ -192,7 +192,7 @@ class TrainerEvaluationTest(TestCasePlus, TrainerIntegrationCommon):
         eval_dataset = RegressionDataset()
         model = RegressionDictModel()
         with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, report_to="none", eval_use_gather_object=True)
+            args = TrainingArguments(tmp_dir, eval_use_gather_object=True)
             trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
             trainer.train()
             _ = trainer.evaluate()
@@ -481,7 +481,7 @@ class TrainerSlowEvalTest(TestCasePlus):
         eval_dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="dev")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            training_args = TrainingArguments(output_dir=tmp_dir, use_cpu=True, report_to="none")
+            training_args = TrainingArguments(output_dir=tmp_dir, use_cpu=True)
             trainer = Trainer(model=model, args=training_args, eval_dataset=eval_dataset)
             result = trainer.evaluate()
             self.assertLess(result["eval_loss"], 0.2)
@@ -498,7 +498,6 @@ class TrainerSlowEvalTest(TestCasePlus):
                 output_dir=tmp_dir,
                 use_cpu=True,
                 per_device_eval_batch_size=1,
-                report_to="none",
             )
             trainer = Trainer(
                 model=model,
