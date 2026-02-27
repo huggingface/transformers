@@ -282,6 +282,7 @@ class JinaEmbeddingsV3SelfAttention(nn.Module):
 
         self.Wqkv = nn.Linear(config.hidden_size, 3 * self.attention_head_size * config.num_attention_heads)
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.is_causal = False
 
     def forward(
         self,
@@ -528,7 +529,6 @@ class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.lm_head.decoder = new_embeddings
-        self.lm_head.bias = new_embeddings.bias
 
     def get_input_embeddings(self) -> nn.Embedding:
         return self.roberta.embeddings.word_embeddings
