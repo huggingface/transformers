@@ -60,6 +60,8 @@ converts/renames those (base) model.safetensors keys to proper modeling file bas
 
 Then, check model.state_dict().keys()
 
+Should add xlmrobert for pretraining thing?
+
 """
 
 
@@ -523,13 +525,16 @@ class JinaEmbeddingsV3Model(XLMRobertaModel):
         )
         sequence_output = encoder_outputs.last_hidden_state
         pooled_output = (
-            self.pooler(sequence_output, pool=True) if self.pooler is not None else None
+            self.pooler(sequence_output) if self.pooler is not None else None
         )
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
         )
+
+    def _create_attention_masks(self):
+        raise AttributeError("Not needed for JinaEmbeddingsV3")
 
 
 class JinaEmbeddingsV3LMHead(XLMRobertaLMHead):

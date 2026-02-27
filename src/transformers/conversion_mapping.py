@@ -314,16 +314,14 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "jina_embeddings_v3": [
-            WeightRenaming(source_patterns="roberta.emb_ln", target_patterns="embeddings.LayerNorm"),
-            WeightRenaming(source_patterns="roberta.embeddings", target_patterns="embeddings"),
-            WeightRenaming(source_patterns="roberta.encoder.layers", target_patterns="encoder.layer"),
+            WeightRenaming(source_patterns="emb_ln", target_patterns="embeddings.LayerNorm"),
+            WeightRenaming(source_patterns="encoder.layers", target_patterns="encoder.layer"),
             WeightRenaming(source_patterns="mixer.Wqkv", target_patterns="attention.attention_class.Wqkv"),
             WeightRenaming(source_patterns="mixer.out_proj", target_patterns="attention.output.dense"),
             WeightRenaming(source_patterns="norm1", target_patterns="attention.output.LayerNorm"),
             WeightRenaming(source_patterns="mlp.fc1", target_patterns="intermediate.dense"),
             WeightRenaming(source_patterns="mlp.fc2", target_patterns="output.dense"),
             WeightRenaming(source_patterns="norm2", target_patterns="output.LayerNorm"),
-            WeightRenaming(source_patterns="roberta.pooler", target_patterns="pooler"),
         ],
     }
     mapping["legacy"] += [

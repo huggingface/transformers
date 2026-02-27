@@ -14,7 +14,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN, gelu
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
-from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
@@ -513,46 +513,12 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
             **kwargs,
         )
         sequence_output = encoder_outputs.last_hidden_state
-        pooled_output = self.pooler(sequence_output, pool=True) if self.pooler is not None else None
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
         )
-
-    def _create_attention_masks(
-        self,
-        attention_mask,
-        encoder_attention_mask,
-        embedding_output,
-        encoder_hidden_states,
-        cache_position,
-        past_key_values,
-    ):
-        if self.config.is_decoder:
-            attention_mask = create_causal_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
-                past_key_values=past_key_values,
-            )
-        else:
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=attention_mask,
-            )
-
-        if encoder_attention_mask is not None:
-            encoder_attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=encoder_attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
-            )
-
-        return attention_mask, encoder_attention_mask
 
 
 class JinaEmbeddingsV3LMHead(nn.Module):
