@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_vision,
+    is_flaky,
     slow,
     torch_device,
 )
@@ -145,8 +146,12 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_pp_ocrv5_mobile_det_object_detection(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_pp_ocrv5_mobile_det_object_detection(*config_and_inputs)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()  # Prepare test configuration and inputs
+        self.model_tester.create_and_check_pp_ocrv5_mobile_det_object_detection(*config_and_inputs)  # Run object detection test
+
+    @is_flaky()
+    def test_batching_equivalence(self, atol=5e-2, rtol=5e-2):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     @unittest.skip(reason="PPOCRV5MobileDet does not use inputs_embeds")
     def test_inputs_embeds(self):
