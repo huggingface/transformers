@@ -833,26 +833,26 @@ def test_model_moe_backward_pass(nproc_per_node):
 
 @pytest.mark.parametrize("nproc_per_node", [2])
 @pytest.mark.parametrize("mode", ["train", "eval"])
+@pytest.mark.parametrize("dtype", ["float32", "bfloat16"])
 @pytest.mark.parametrize("experts_implementation", ["batched_mm", "grouped_mm"])
 @require_torch_multi_accelerator
-def test_model_moe_forward_compile(nproc_per_node, mode, experts_implementation):
+def test_model_moe_forward_compile(nproc_per_node, mode, dtype, experts_implementation):
     """Test that TP and non-TP MoE models produce the same outputs with torch.compile."""
     skip_if_insufficient_devices(nproc_per_node)
-    # grouped_mm requires bfloat16
-    dtype = torch.bfloat16 if experts_implementation == "grouped_mm" else torch.float32
+    dtype = torch.bfloat16 if dtype == "bfloat16" else torch.float32
     init_distributed(tp=nproc_per_node)(_test_model_moe_forward_compile_impl)(
         mode, dtype, experts_implementation=experts_implementation
     )
 
 
 @pytest.mark.parametrize("nproc_per_node", [2])
+@pytest.mark.parametrize("dtype", ["float32", "bfloat16"])
 @pytest.mark.parametrize("experts_implementation", ["batched_mm", "grouped_mm"])
 @require_torch_multi_accelerator
-def test_model_moe_backward_compile(nproc_per_node, experts_implementation):
+def test_model_moe_backward_compile(nproc_per_node, dtype, experts_implementation):
     """Test that TP and non-TP MoE models produce the same gradients with torch.compile."""
     skip_if_insufficient_devices(nproc_per_node)
-    # grouped_mm requires bfloat16
-    dtype = torch.bfloat16 if experts_implementation == "grouped_mm" else torch.float32
+    dtype = torch.bfloat16 if dtype == "bfloat16" else torch.float32
     init_distributed(tp=nproc_per_node)(_test_model_moe_backward_compile_impl)(
         dtype, experts_implementation=experts_implementation
     )

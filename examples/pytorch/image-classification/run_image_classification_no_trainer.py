@@ -291,8 +291,9 @@ def main():
 
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
-    if args.dataset_name is not None:
-        # Downloading and loading a dataset from the hub.
+    if (
+        args.dataset_name is not None and args.train_dir is None and args.validation_dir is None
+    ):  # Downloading and loading a dataset from the hub.
         dataset = load_dataset(args.dataset_name, trust_remote_code=args.trust_remote_code)
     else:
         data_files = {}
