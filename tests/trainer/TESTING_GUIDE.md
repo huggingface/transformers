@@ -79,7 +79,7 @@ def test_optim(self, optim): ...
 
 The Trainer uses `nn.DataParallel` when `n_gpu > 1`. Key rules:
 
-1. **Never hardcode batch sizes.** `state.train_batch_size = per_device * n_gpu`. Use `args.train_batch_size`.
+1. **Batch size depends on GPU count.** `args.train_batch_size` equals `per_device_train_batch_size * n_gpu`, so assertions with hardcoded values break on multi-GPU. Use `args.per_device_train_batch_size` (GPU-invariant) or `args.train_batch_size` (GPU-aware) instead.
 2. **Compute steps dynamically.** `steps = math.ceil(num_samples / (batch_size * grad_accum))`.
 3. **Use large enough datasets.** Small datasets (13 samples) can leave zero steps to resume on multi-GPU. Use 100+.
 4. **Tolerate FP rounding.** DataParallel gather introduces ~1e-8 differences. Use `places=6` for loss assertions.
