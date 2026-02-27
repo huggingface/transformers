@@ -21,11 +21,12 @@
 
 import math
 import random
+from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import dataclass
 from functools import partial, wraps
 from math import ceil
-from typing import Callable, Optional, Union
+from typing import Optional
 
 import torch
 import torch.distributed as dist
@@ -37,7 +38,7 @@ from torch.nn import Module, Parameter
 from transformers.activations import ACT2FN
 
 from ...cache_utils import Cache
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -49,7 +50,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import maybe_autocast
 from ..auto import AutoModel
 from .configuration_xcodec2 import Xcodec2Config
 
@@ -74,10 +75,10 @@ class Xcodec2Output(ModelOutput):
             Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
     """
 
-    audio_values: Optional[torch.FloatTensor] = None
-    audio_codes: Optional[torch.LongTensor] = None
-    quantized_representation: Optional[torch.Tensor] = None
-    codes_padding_mask: Optional[torch.Tensor] = None
+    audio_values: torch.FloatTensor | None = None
+    audio_codes: torch.LongTensor | None = None
+    quantized_representation: torch.Tensor | None = None
+    codes_padding_mask: torch.Tensor | None = None
 
 
 @dataclass
@@ -95,9 +96,9 @@ class Xcodec2EncoderOutput(ModelOutput):
 
     """
 
-    audio_codes: Optional[torch.LongTensor] = None
-    quantized_representation: Optional[torch.Tensor] = None
-    codes_padding_mask: Optional[torch.Tensor] = None
+    audio_codes: torch.LongTensor | None = None
+    quantized_representation: torch.Tensor | None = None
+    codes_padding_mask: torch.Tensor | None = None
 
 
 @dataclass
@@ -110,7 +111,7 @@ class Xcodec2DecoderOutput(ModelOutput):
             the reconstructed audio that can be played back.
     """
 
-    audio_values: Optional[torch.FloatTensor] = None
+    audio_values: torch.FloatTensor | None = None
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -130,7 +131,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -140,8 +141,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -186,6 +186,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Xcodec2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -212,14 +213,13 @@ class Xcodec2Attention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -237,9 +237,9 @@ class Xcodec2Attention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -262,20 +262,49 @@ class Xcodec2RotaryEmbedding(nn.Module):
 
     def __init__(self, config: Xcodec2Config, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Xcodec2Config | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -284,7 +313,7 @@ class Xcodec2RotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -312,7 +341,7 @@ class Xcodec2MLP(nn.Module):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class Xcodec2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         Xcodec2RMSNorm is equivalent to T5LayerNorm
         """
@@ -320,7 +349,7 @@ class Xcodec2RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -342,16 +371,15 @@ class Xcodec2DecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = Xcodec2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Xcodec2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -1063,10 +1091,10 @@ class Xcodec2FSQ(Module):
     def __init__(
         self,
         levels: list[int],
-        dim: Optional[int] = None,
+        dim: int | None = None,
         num_codebooks=1,
-        keep_num_codebooks_dim: Optional[bool] = None,
-        scale: Optional[float] = None,
+        keep_num_codebooks_dim: bool | None = None,
+        scale: float | None = None,
         allowed_dtypes: tuple[torch.dtype, ...] = (torch.float32, torch.float64),
         channel_first: bool = False,
         projection_has_bias: bool = True,
@@ -1261,7 +1289,7 @@ class Xcodec2ResidualFSQ(Module):
         *,
         levels: list[int],
         num_quantizers,
-        dim: Optional[int] = None,
+        dim: int | None = None,
         is_channel_first=False,
         quantize_dropout=False,
         quantize_dropout_cutoff_index=0,
@@ -1651,9 +1679,9 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         self,
         audio: torch.Tensor,
         audio_spectrogram: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], Xcodec2EncoderOutput]:
+        padding_mask: torch.Tensor | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor] | Xcodec2EncoderOutput:
         """
         Encodes the input audio waveform into discrete codes.
 
@@ -1719,8 +1747,8 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
     def decode(
         self,
         audio_codes,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], Xcodec2DecoderOutput]:
+        return_dict: bool | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor] | Xcodec2DecoderOutput:
         """
         Decodes the given frames into an output audio waveform.
 
@@ -1755,9 +1783,9 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         self,
         audio: torch.Tensor,
         audio_spectrogram: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], Xcodec2Output]:
+        padding_mask: torch.Tensor | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor] | Xcodec2Output:
         r"""
         Returns:
             `Xcodec2Output` or `tuple(torch.FloatTensor, torch.LongTensor, torch.FloatTensor)`:

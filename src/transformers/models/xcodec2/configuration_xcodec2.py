@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Xcodec2 model configuration"""
 
 import math
 
@@ -74,8 +73,10 @@ class Xcodec2Config(PretrainedConfig):
             Levels for the VQ codebook.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with. Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the rotary position embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         istft_padding (`str`, *optional*, defaults to `"same"`):
             Padding type for the iSTFT in the decoder. Should be one of `"center"` or `"same"`.
     """
@@ -106,7 +107,7 @@ class Xcodec2Config(PretrainedConfig):
         vq_dim=2048,
         vq_levels=[4, 4, 4, 4, 4, 4, 4, 4],
         max_position_embeddings=4096,
-        rope_theta=10000.0,
+        rope_parameters=None,
         istft_padding="same",
         **kwargs,
     ):
@@ -150,7 +151,7 @@ class Xcodec2Config(PretrainedConfig):
         self.hidden_act = hidden_act
         self.rms_norm_eps = rms_norm_eps
         self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
+        self.rope_parameters = rope_parameters if rope_parameters is not None else {"rope_theta": 10000.0, "rope_type": "default"}
         # -- Vocos vocoder parameters
         self.istft_padding = istft_padding
 

@@ -23,7 +23,7 @@ import os
 import warnings
 from collections.abc import Sequence
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Union, Optional
 
 import httpx
 import numpy as np
