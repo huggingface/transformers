@@ -94,9 +94,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
             is_device_supported_mxfp4 = compute_capability >= (7, 5)
             kernels_available = is_triton_available("3.4.0") and is_kernels_available()
         elif device.type == "cpu":
-            # CPU support mxfp4 in kernels
             is_device_supported_mxfp4 = True
             kernels_available = is_triton_available("3.5.0") and is_kernels_available()
+        else:
+            is_device_supported_mxfp4 = False
+            kernels_available = False
 
         if self.pre_quantized:
             # On unsupported GPUs or without kernels, we will dequantize the model to bf16
