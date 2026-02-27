@@ -59,10 +59,10 @@ torchrun -–nproc-per-node=4 examples/llm_finetune/finetune.py -c /path/to/yaml
 
 ## Transformers integration
 
-1. Tight integration with Transformers allows any LLM or VLM that can be instantiated through Transformers to also be instantiated through NeMo Automodel. Full model coverage can be found [here](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/overview.html).
-2. Builds directly on top of Hugging Face models by instantiating [`AutoModel.from_pretrained`] and dynamically swapping in high performance models and layers, enabling API compatibility, with extensions for more refined parallelisms (e.g., EP).
-3. Scans the architecture field in the [`AutoConfig.from_pretrained`] to automatically instantiate custom model implementations like Nemotron Nano V3.
-4. We follow the Transformers API closely, allowing for a near drop-in compatibility experience.
+- Any LLM or VLM supported in Transformers can also be instantiated through NeMo Automodel. See the [full model coverage](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/overview.html).
+- Built on top of Hugging Face models with [`AutoModel.from_pretrained`], with dynamic high-performance layer swaps and support for more refined parallelisms like Expert Parallelism (EP).
+- Detects the architecture field in [`AutoConfig.from_pretrained`] to automatically load custom implementations like Nemotron Nano V3.
+- Follows the Transformers API closely for drop-in compatibility.
 
 ## Resources
 
