@@ -25,8 +25,7 @@ from pathlib import Path
 
 from parameterized import parameterized
 
-import tests.trainer.test_trainer
-from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
+from tests.trainer.trainer_test_utils import TrainerIntegrationCommon, get_regression_trainer  # noqa
 from transformers import is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
@@ -102,7 +101,7 @@ set_seed(42)
 
 if is_torch_available():
     # hack to restore original logging level pre #21700
-    get_regression_trainer = partial(tests.trainer.test_trainer.get_regression_trainer, log_level="info")
+    get_regression_trainer = partial(get_regression_trainer, log_level="info")
 
 if is_accelerate_available():
     from accelerate.utils.constants import FSDP_SHARDING_STRATEGY
