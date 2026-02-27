@@ -69,7 +69,7 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
         height = width = image_size // patch_size
         grid_tokens = height * (width + 1)
         kwargs.setdefault("num_image_tokens", tokens_per_patch + grid_tokens)
-        kwargs.setdefault("image_token_index", kwargs.get("vocab_size", 99) - 1)
+        kwargs.setdefault("image_token_index", kwargs.get("image_token_id", 3))
         super().__init__(parent, **kwargs)
 
     def create_pixel_values(self):
