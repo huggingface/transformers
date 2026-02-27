@@ -18,7 +18,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
+from ...utils.import_utils import is_mambapy_available, is_torch_greater_or_equal, is_torchdynamo_compiling, is_tracing
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
     MambaBlock,
@@ -34,6 +34,11 @@ from ..mamba.modeling_mamba import (
 
 
 logger = logging.get_logger(__name__)
+
+if is_torch_greater_or_equal("2.9.0"):
+    from torch._higher_order_ops.associative_scan import associative_scan
+else:
+    associative_scan = None
 
 if is_mambapy_available():
     from mambapy.pscan import pscan
@@ -108,6 +113,11 @@ class FalconMambaConfig(MambaConfig):
         use_falcon_mambapy (`bool`, *optional*, defaults to `False`):
             This argument corresponds to `use_mambapy` in MambaConfig.
             Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not available. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
+        use_associative_scan (`bool`, *optional*, defaults to `True`):
+            Whether to use PyTorch's `torch._higher_order_ops.associative_scan` for the parallel scan instead of the naive
+            sequential implementation. The associative scan is only active during `torch.compile` tracing and
+            requires torch >= 2.9.0. Both paths are tested to produce numerically identical results (see
+            `test_associative_scan_matches_sequential`). Set to `False` to fall back to the sequential loop.
         mixer_rms_eps (`float`, *optional*, defaults to 1e-06):
             The RMS norm epsilon value that is used in the Mixer RMS norm for B, C and dt states.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
@@ -155,6 +165,7 @@ class FalconMambaConfig(MambaConfig):
         rescale_prenorm_residual=False,
         use_cache=True,
         use_falcon_mambapy=False,
+        use_associative_scan=True,
         mixer_rms_eps=1e-6,
         tie_word_embeddings=True,
         **kwargs,
@@ -184,6 +195,7 @@ class FalconMambaConfig(MambaConfig):
             rescale_prenorm_residual=rescale_prenorm_residual,
             use_cache=use_cache,
             use_falcon_mambapy=use_falcon_mambapy,
+            use_associative_scan=use_associative_scan,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
@@ -483,16 +495,39 @@ class FalconMambaMixer(MambaMixer):
             scan_output = scan_output + hidden_states * self.D[None, :, None]
             scan_output = scan_output * self.act(gate)
         else:
-            scan_outputs = []
-            for i in range(seq_len):
-                ssm_state = (
-                    discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]
-                )  # [batch, intermediate_size, ssm_state]
-                scan_output = torch.matmul(
-                    ssm_state.to(dtype), C[:, i, :].unsqueeze(-1)
-                )  # [batch, intermediate_size, 1]
-                scan_outputs.append(scan_output[:, :, 0])
-            scan_output = torch.stack(scan_outputs, dim=-1)  # [batch, intermediate_size, seq_len]
+            # Use associative_scan for parallel computation when available
+            if (
+                self.use_associative_scan
+                and associative_scan is not None
+                and is_tracing(hidden_states)
+                and cache_params is None
+            ):
+
+                def combine_fn(left, right):
+                    a_left, b_left = left
+                    a_right, b_right = right
+                    return (a_left * a_right, a_right * b_left + b_right)
+
+                combine_mode = "pointwise" if discrete_A.device.type in ("cuda", "xpu") else "generic"
+                _, all_h = associative_scan(combine_fn, (discrete_A, deltaB_u), dim=2, combine_mode=combine_mode)
+                # all_h: [B, D, S, N] -> output: [B, D, S]
+                scan_output = (
+                    torch.matmul(all_h.permute(0, 2, 1, 3).to(dtype), C.unsqueeze(-1)).squeeze(-1).permute(0, 2, 1)
+                )
+                ssm_state = all_h[:, :, -1, :]
+            else:
+                # Sequential loop for decoding or when associative_scan unavailable
+                scan_outputs = []
+                for i in range(seq_len):
+                    ssm_state = (
+                        discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]
+                    )  # [batch, intermediate_size, ssm_state]
+                    scan_output = torch.matmul(
+                        ssm_state.to(dtype), C[:, i, :].unsqueeze(-1)
+                    )  # [batch, intermediate_size, 1]
+                    scan_outputs.append(scan_output[:, :, 0])
+                scan_output = torch.stack(scan_outputs, dim=-1)  # [batch, intermediate_size, seq_len]
+
             scan_output = scan_output + (hidden_states * self.D[None, :, None])
             scan_output = scan_output * self.act(gate)
 

@@ -45,7 +45,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -545,7 +545,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
-                self.assertTrue(has_similar_generate_outputs(dynamic_cache_generation, static_cache_generation))
+                assert_similar_generate_outputs(dynamic_cache_generation, static_cache_generation)
 
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
