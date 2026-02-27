@@ -313,7 +313,7 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
         model_id = "jinaai/jina-embeddings-v3"
         revision = "refs/pr/137"
         task = "retrieval_passage"
-        
+
         model = JinaEmbeddingsV3Model.from_pretrained(model_id, revision=revision, dtype=torch.float32)
         model.load_adapter(model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": revision})
         model.set_adapter(task)
