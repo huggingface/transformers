@@ -13,12 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import json
 import os
-import os.path as osp
+import random
 from collections import defaultdict
-from collections.abc import Sequence
 
 import numpy as np
 import PIL.Image
@@ -26,14 +24,37 @@ import torch
 import whisper
 from torch.nn.utils.rnn import pad_sequence
 
-import transformers
 from transformers import WhisperFeatureExtractor
+from transformers.audio_utils import load_audio
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import load_image
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from transformers.video_utils import load_video
 
 from .configuration_omnivinci import MEDIA_TOKENS, MM_BOS_EOS_TOKENS
-from .media import Sound, Video, extract_media
+
+
+_OMNIVINCI_CHAT_TEMPLATE = (
+    "{% if messages[0]['role'] != 'system' %}"
+    "{{ '<|im_start|>system\\nYou are a helpful assistant<|im_end|>\\n' }}"
+    "{% endif %}"
+    "{% for message in messages if message['content'] is not none %}"
+    "{{ '<|im_start|>' + message['role'] + '\\n' }}"
+    "{% if message['content'] is string %}"
+    "{{ message['content'] }}"
+    "{% else %}"
+    "{% for c in message['content'] %}"
+    "{% if c.get('type') == 'text' %}{{ c['text'] }}"
+    "{% elif c.get('type') == 'image' %}{{ '<image>' }}"
+    "{% elif c.get('type') == 'video' %}{{ '<vila/video>' }}"
+    "{% elif c.get('type') in ['audio', 'sound'] %}{{ '<sound>' }}"
+    "{% endif %}"
+    "{% endfor %}"
+    "{% endif %}"
+    "{{ '<|im_end|>\\n' }}"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{% endif %}"
+)
 
 
 def _collect_encoder_boundary_tokens(config) -> list[str]:
@@ -159,9 +180,9 @@ def _process_image(image_file, data_args, image_folder, enable_dynamic_s2=False)
     processor = data_args.image_processor
     if isinstance(image_file, str):
         if image_folder is not None:
-            image = PIL.Image.open(os.path.join(image_folder, image_file)).convert("RGB")
+            image = load_image(os.path.join(image_folder, image_file))
         else:
-            image = PIL.Image.open(image_file).convert("RGB")
+            image = load_image(image_file)
     else:
         image = image_file
     image = image.convert("RGB")
@@ -202,95 +223,16 @@ def _process_images(images, image_processor, model_cfg):
     raise ValueError(f"new_images rank does not equal to 4, rank: {len(new_images[0].shape)}")
 
 
-def _tokenize_conversation(
-    messages: Sequence[dict[str, str]],
-    tokenizer: transformers.PreTrainedTokenizer,
-    mm_use_bos_eos_tokens: bool = False,
-    add_generation_prompt: bool = False,
-    overrides: dict[str, str] | None = None,
-    no_system_prompt: bool = False,
-    return_ids_only: bool = True,
-) -> torch.Tensor:
-    for message in messages:
-        message["value"] = message["value"].strip()
-
-    conversation = []
-    for m in messages:
-        message = {}
-        if m["from"] == "human":
-            message["role"] = "user"
-        elif m["from"] == "gpt":
-            message["role"] = "assistant"
-        elif m["from"] == "system":
-            message["role"] = "system"
-            if no_system_prompt:
-                raise ValueError("message[role]=system is not allowed when no_system_prompt is set to True.")
-        else:
-            raise ValueError(f"Unexpected sender '{m['from']}' in conversation entry.")
-
-        message["content"] = m["value"]
-        if overrides is not None and m["from"] in overrides:
-            message["content"] = overrides[m["from"]]
-        conversation.append(message)
-
-    if no_system_prompt:
-        conversation = [{"role": "system", "content": ""}] + conversation
-
-    text = tokenizer.apply_chat_template(
-        conversation,
-        add_generation_prompt=add_generation_prompt,
-        tokenize=False,
-    )
-
-    if mm_use_bos_eos_tokens:
-
-        def add_mm_bos_eos_tokens(text: str) -> str:
-            for k in ("image", "video", "sound"):
-                _bos, _eos = MM_BOS_EOS_TOKENS[k]
-                _media_token = MEDIA_TOKENS[k]
-                if _media_token in text:
-                    try:
-                        text_parts = text.split(_media_token)
-                        text_parts[0] = text_parts[0] + _bos
-                        text_parts[-1] = _eos + text_parts[-1]
-                        text = _media_token.join(text_parts)
-                    except Exception:
-                        print(f"mm_use_bos_eos_tokens error text: {text}")
-            return text
-
-        text = add_mm_bos_eos_tokens(text)
-
-    tokenized = tokenizer(text, return_tensors="pt")
-    if return_ids_only:
-        return tokenized.input_ids[0]
-    return tokenized
-
-
-def _fetch_image_url_or_fpath(url_or_fpath: str) -> str:
-    """Return a local file path for a URL or filesystem path."""
-    if url_or_fpath.startswith(("http://", "https://")):
-        import tempfile
-
-        import requests
-
-        # Download the image to a temporary file
-        temp_dir = tempfile.mkdtemp()
-        temp_file = os.path.join(temp_dir, os.path.basename(url_or_fpath))
-
-        response = requests.get(url_or_fpath, stream=True)
-        response.raise_for_status()
-
-        with open(temp_file, "wb") as f:
-            f.writelines(response.iter_content(chunk_size=8192))
-
-        return temp_file
-
-    fpath = url_or_fpath.replace("file://", "") if url_or_fpath.startswith("file://") else url_or_fpath
-    if not osp.exists(fpath):
-        raise ValueError(f"Unsupported image path: {url_or_fpath}")
-    if not osp.isfile(fpath):
-        raise ValueError(f"Path is not a file: {fpath}")
-    return fpath
+def _add_mm_bos_eos_tokens(text: str) -> str:
+    for k in ("image", "video", "sound"):
+        _bos, _eos = MM_BOS_EOS_TOKENS[k]
+        _media_token = MEDIA_TOKENS[k]
+        if _media_token in text:
+            text_parts = text.split(_media_token)
+            text_parts[0] = text_parts[0] + _bos
+            text_parts[-1] = _eos + text_parts[-1]
+            text = _media_token.join(text_parts)
+    return text
 
 
 def _pad_fn(input_ids_list: list[torch.Tensor], padding_value=0, target_len=None, padding_side="left") -> torch.Tensor:
@@ -346,7 +288,12 @@ def _resolve_target_audio_samples(sound: np.ndarray, audio_info, config) -> int:
     return int(target)
 
 
-def _extract_sound_features(sound_media: list, audio_infos: list | None, config) -> list:
+def _extract_sound_features(
+    sound_media: list,
+    audio_infos: list | None,
+    config,
+    feature_extractor: WhisperFeatureExtractor | None = None,
+) -> list:
     if audio_infos is None:
         audio_infos = []
     if audio_infos and len(audio_infos) != len(sound_media):
@@ -355,6 +302,10 @@ def _extract_sound_features(sound_media: list, audio_infos: list | None, config)
     feature_size = _resolve_sound_feature_size(config)
     sampling_rate = config.audio_sampling_rate
     hop_length = config.audio_hop_length
+    if feature_extractor is not None:
+        feature_size = getattr(feature_extractor, "feature_size", feature_size)
+        sampling_rate = getattr(feature_extractor, "sampling_rate", sampling_rate)
+        hop_length = getattr(feature_extractor, "hop_length", hop_length)
     new_media = []
 
     for idx, sound in enumerate(sound_media):
@@ -373,12 +324,17 @@ def _extract_sound_features(sound_media: list, audio_infos: list | None, config)
 
             cur_audio_n_samples = _resolve_target_audio_samples(audio, audio_info, config)
             cur_audio_duration = cur_audio_n_samples // sampling_rate
-            whisper_feature_extractor = WhisperFeatureExtractor(
-                feature_size=feature_size,
-                chunk_length=cur_audio_duration,
-                sampling_rate=sampling_rate,
-                hop_length=hop_length,
-            )
+            whisper_feature_extractor = feature_extractor
+            if (
+                whisper_feature_extractor is None
+                or getattr(whisper_feature_extractor, "chunk_length", None) != cur_audio_duration
+            ):
+                whisper_feature_extractor = WhisperFeatureExtractor(
+                    feature_size=feature_size,
+                    chunk_length=cur_audio_duration,
+                    sampling_rate=sampling_rate,
+                    hop_length=hop_length,
+                )
             audio = whisper.pad_or_trim(audio, length=cur_audio_n_samples)
             stft_features = whisper_feature_extractor(
                 audio,
@@ -401,41 +357,202 @@ def _extract_sound_features(sound_media: list, audio_infos: list | None, config)
     return new_media
 
 
-def _extract_value_from_conv(chat):
-    value = []
-    if isinstance(chat["content"], str):
-        value.append(chat["content"])
-        return value
-
-    # otherwise, it's a list of content
-    for content in chat["content"]:
-        if content["type"] == "image":
-            if "path" in content:
-                # VILA style, can be either filepath or http url
-                value.append(load_image(content["path"]))
-            elif "image" in content:
-                # Qwen style
-                value.append(load_image(content["image"]))
-            elif "image_pil" in content:
-                # Qwen style
-                assert isinstance(content["image_pil"], PIL.Image.Image), "Type of image_pil must be PIL.Image.Image"
-                value.append(content["image_pil"])
-            else:
-                raise ValueError(f"Type = `image` , but no `path` or `image` in  {chat['content']}")
-        elif content["type"] == "video":
-            if "video" in content:
-                # Qwen style
-                value.append(Video(_fetch_image_url_or_fpath(content["video"])))
-            else:
-                raise ValueError(f"Type = `video` , but no `video` in {chat['content']}")
-        elif content["type"] == "text":
-            value.append(content["text"])
-        elif content["type"] in ("audio", "sound"):
-            key = "audio" if content["type"] == "audio" else "sound"
-            value.append(Sound(_fetch_image_url_or_fpath(content[key])))
+def _load_audio_hf_with_info(audio_input, config) -> tuple[np.ndarray, dict[str, float | int]]:
+    sampling_rate = config.audio_sampling_rate
+    audio_chunk_length = config.audio_chunk_length
+    load_max_audio = isinstance(audio_chunk_length, str) and "max" in audio_chunk_length
+    if load_max_audio:
+        if "_" in audio_chunk_length:
+            max_audio_chunk_length = int(audio_chunk_length.split("_", maxsplit=1)[1])
+            audio_n_samples_limit = max_audio_chunk_length * sampling_rate
         else:
-            raise ValueError(f"Unsupported content type: {content['type']}")
-    return value
+            audio_n_samples_limit = None
+    else:
+        try:
+            audio_n_samples_limit = int(audio_chunk_length) * sampling_rate
+        except Exception as error:
+            raise ValueError(f"Error setting audio_chunk_length: {error}") from error
+
+    def _resolve_window(ori_n_samples: int) -> tuple[int, int]:
+        if audio_n_samples_limit is None:
+            target_samples = ori_n_samples
+        else:
+            target_samples = min(audio_n_samples_limit, ori_n_samples)
+
+        audio_start_sample_id = 0
+        if bool(getattr(config, "random_audio_sample", False)) and not load_max_audio and ori_n_samples > target_samples:
+            audio_start_sample_id = random.randint(0, ori_n_samples - target_samples)
+        audio_end_sample_id = audio_start_sample_id + target_samples
+        return audio_start_sample_id, audio_end_sample_id
+
+    if isinstance(audio_input, np.ndarray):
+        speech_data = audio_input.astype(np.float32, copy=False)
+        ori_n_samples = int(speech_data.shape[0])
+        audio_start_sample_id, audio_end_sample_id = _resolve_window(ori_n_samples)
+        ori_audio_duration = ori_n_samples / sampling_rate
+        speech_data = speech_data[audio_start_sample_id:audio_end_sample_id]
+    else:
+        try:
+            speech_data = load_audio(audio_input, sampling_rate=sampling_rate).astype(np.float32, copy=False)
+            ori_n_samples = int(speech_data.shape[0])
+            audio_start_sample_id, audio_end_sample_id = _resolve_window(ori_n_samples)
+            ori_audio_duration = ori_n_samples / sampling_rate
+            speech_data = speech_data[audio_start_sample_id:audio_end_sample_id]
+        except Exception:
+            if not isinstance(audio_input, str) or not audio_input.lower().endswith(".mp4"):
+                raise
+            from decord import AudioReader, cpu
+
+            audio_reader = AudioReader(audio_input, ctx=cpu(0), sample_rate=sampling_rate, mono=True)
+            ori_n_samples = int(audio_reader.shape[1])
+            audio_start_sample_id, audio_end_sample_id = _resolve_window(ori_n_samples)
+            ori_audio_duration = ori_n_samples / sampling_rate
+            speech_data = audio_reader[audio_start_sample_id:audio_end_sample_id].asnumpy()[0].astype(
+                np.float32, copy=False
+            )
+
+    audio_n_samples = int(np.ceil(speech_data.shape[0] / (sampling_rate * 30)) * (sampling_rate * 30))
+    speech_data = whisper.pad_or_trim(speech_data, length=audio_n_samples)
+
+    audio_info = {
+        "new_audio_chunk_length": int(audio_n_samples // sampling_rate),
+        "new_audio_n_samples": audio_n_samples,
+        "ori_audio_duration": ori_audio_duration,
+        "audio_start_sec": audio_start_sample_id / sampling_rate,
+        "audio_end_sample_sec": audio_end_sample_id / sampling_rate,
+    }
+    return speech_data, audio_info
+
+
+def _extract_video_hf(
+    video_input, config
+) -> (
+    tuple[list[PIL.Image.Image], dict[str, object]]
+    | tuple[list[PIL.Image.Image], np.ndarray | None, dict[str, object]]
+):
+    num_frames = config.num_video_frames
+
+    def _legacy_uniform_indices(metadata, **kwargs):
+        total_num_frames = int(getattr(metadata, "total_num_frames", 0) or 0)
+        if total_num_frames <= 0:
+            return np.array([], dtype=int)
+
+        # Match legacy OmniVinci sampling by locating the last readable frame first.
+        last_valid_frame_count = total_num_frames
+        if isinstance(video_input, str):
+            import cv2
+
+            video_capture = cv2.VideoCapture(video_input)
+            try:
+                while last_valid_frame_count > 0:
+                    video_capture.set(cv2.CAP_PROP_POS_FRAMES, last_valid_frame_count - 1)
+                    if video_capture.grab():
+                        break
+                    last_valid_frame_count -= 1
+            finally:
+                video_capture.release()
+
+        if last_valid_frame_count <= 0:
+            return np.array([], dtype=int)
+        return np.round(np.linspace(0, last_valid_frame_count - 1, num_frames)).astype(int)
+
+    frames_array, metadata = load_video(
+        video_input,
+        backend="opencv",
+        sample_indices_fn=_legacy_uniform_indices,
+    )
+    if isinstance(metadata, list):
+        metadata = None
+
+    frames_array = np.asarray(frames_array)
+    output_frames = [PIL.Image.fromarray(frame).convert("RGB") for frame in frames_array]
+
+    fps = float(getattr(metadata, "fps", None) or 1.0)
+    sampled_frame_indices = getattr(metadata, "frames_indices", None) if metadata is not None else None
+    if sampled_frame_indices is None:
+        frame_indices = list(range(len(output_frames)))
+    else:
+        frame_indices = list(np.asarray(sampled_frame_indices).tolist())
+
+    metadata_total_frames = getattr(metadata, "total_num_frames", None) if metadata is not None else None
+    frame_count = int(frame_indices[-1] + 1) if frame_indices else int(metadata_total_frames or len(output_frames))
+    video_duration = float(frame_count / fps if fps > 0 else len(output_frames))
+    output_frame_times = [i / fps for i in frame_indices]
+
+    video_path = video_input if isinstance(video_input, str) else None
+
+    aud_feature = None
+    audio_info = None
+    if config.load_audio_in_video and isinstance(video_input, str):
+        try:
+            aud_feature, audio_info = _load_audio_hf_with_info(video_input, config)
+        except Exception:
+            aud_feature, audio_info = None, None
+
+    video_info = {
+        "video_path": video_path,
+        "has_audio": aud_feature is not None,
+        "video_duration": video_duration,
+        "audio_info": audio_info,
+        "video_frame_times": output_frame_times,
+    }
+    if audio_info is not None and video_path is not None:
+        audio_info["video_path"] = video_path
+
+    if config.load_audio_in_video and config.interleaved_vis_aud_in_video and aud_feature is not None:
+        segment_duration = config.interleaved_video_segment_duration
+        if segment_duration == -1:
+            raise ValueError("video_segment_duration is not set")
+
+        segment_vis_indices_list = []
+        segment_aud_indices_list = []
+        segment_counts = int(np.ceil(video_duration / segment_duration))
+
+        audio_start_sec = audio_info["audio_start_sec"]
+        audio_end_sec = audio_info["audio_end_sample_sec"]
+        stft_frames_per_second = config.audio_sampling_rate // config.audio_hop_length
+
+        idx = 0
+        aud_sample_start_idx = 0
+        for i in range(segment_counts):
+            end_frame = min((i + 1) * segment_duration * fps, frame_count)
+
+            segment_indices = []
+            while idx < len(frame_indices) and frame_indices[idx] < end_frame:
+                segment_indices.append(frame_indices[idx])
+                idx += 1
+            segment_vis_indices_list.append(segment_indices)
+
+            clip_start_sec = i * segment_duration
+            clip_end_sec = min(clip_start_sec + segment_duration, video_duration)
+            overlap_start = max(clip_start_sec, audio_start_sec)
+            overlap_end = min(clip_end_sec, audio_end_sec)
+            if overlap_start < overlap_end:
+                aud_sample_end_idx = round((overlap_end - audio_start_sec) * stft_frames_per_second)
+                segment_aud_indices_list.append([aud_sample_start_idx, aud_sample_end_idx])
+                aud_sample_start_idx = aud_sample_end_idx
+            else:
+                segment_aud_indices_list.append([])
+
+        new_segment_vis_indices_list = []
+        processed_frame_index = 0
+        for segment_indices in segment_vis_indices_list:
+            new_segment_vis_indices_list.append([])
+            for _ in segment_indices:
+                new_segment_vis_indices_list[-1].append(processed_frame_index)
+                processed_frame_index += 1
+
+        video_info.update(
+            {
+                "segment_vis_indices_list": new_segment_vis_indices_list,
+                "segment_aud_indices_list": segment_aud_indices_list,
+                "expected_frame_count": len(frame_indices),
+            }
+        )
+
+    if config.load_audio_in_video:
+        return output_frames, aud_feature, video_info
+    return output_frames, video_info
 
 
 class OmniVinciProcessorKwargs(ProcessingKwargs, total=False):
@@ -447,19 +564,40 @@ class OmniVinciProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class OmniVinciProcessor(ProcessorMixin):
-    attributes = ["image_processor", "tokenizer"]
+    attributes = ["image_processor", "feature_extractor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"
+    feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
     valid_kwargs = []
 
     def __init__(
-        self, image_processor=None, tokenizer=None, chat_template=None, config=None, padding_side="left", **kwargs
+        self,
+        image_processor=None,
+        feature_extractor=None,
+        tokenizer=None,
+        chat_template=None,
+        config=None,
+        padding_side="left",
+        **kwargs,
     ):
+        if chat_template is None:
+            chat_template = _OMNIVINCI_CHAT_TEMPLATE
         self.image_token = MEDIA_TOKENS["image"]
         self.video_token = MEDIA_TOKENS["video"]
         self.sound_token = MEDIA_TOKENS["sound"]
         self.config = config
         self.image_processor = image_processor
+        if feature_extractor is None:
+            default_chunk_length = getattr(config, "audio_chunk_length", 30) if config is not None else 30
+            if not isinstance(default_chunk_length, int):
+                default_chunk_length = 30
+            feature_extractor = WhisperFeatureExtractor(
+                feature_size=_resolve_sound_feature_size(config) if config is not None else 80,
+                chunk_length=default_chunk_length,
+                sampling_rate=getattr(config, "audio_sampling_rate", 16000) if config is not None else 16000,
+                hop_length=getattr(config, "audio_hop_length", 160) if config is not None else 160,
+            )
+        self.feature_extractor = feature_extractor
         self.tokenizer = tokenizer
         self.padding_side = padding_side
         self.tokenizer.padding_side = padding_side
@@ -493,111 +631,179 @@ class OmniVinciProcessor(ProcessorMixin):
                 for token_text in _collect_encoder_boundary_tokens(self.config)
             }
 
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        super().__init__(image_processor, feature_extractor, tokenizer, chat_template=chat_template)
 
     def __repr__(self):
-        return f"OmniVinciProcessor(image_processor=SigLip, tokenizer={self.tokenizer}, config={self.config})"
+        return (
+            f"OmniVinciProcessor(image_processor=SigLip, feature_extractor={self.feature_extractor}, "
+            f"tokenizer={self.tokenizer}, config={self.config})"
+        )
 
     def __call__(
         self,
-        conversation=None,
+        text=None,
+        images=None,
+        videos=None,
+        audio=None,
         **kwargs: Unpack[OmniVinciProcessorKwargs],
     ) -> BatchFeature:
-        """
-        The `conv` will be look like
-        [
-            {
-                'from': 'human',
-                'value': [
-                    <transformers_modules.NVILA-Lite-2B-hf-preview.media.Image object at 0x154e68e4c460>,
-                    'What are the common elements in these pictures?'
-                ]
-            }
-        ]
-        and `conversation` will be a list of such `conv`s
-        """
-        if kwargs.get("text") is not None:
-            conversation = kwargs.get("text")
-        assert conversation is not None, "`conversation` or `text` is required"
-        padding_side = kwargs.get("padding_side", self.padding_side)
+        if text is None:
+            raise ValueError("`text` is required.")
+        if not isinstance(text, str) and not (
+            isinstance(text, (list, tuple)) and (len(text) == 0 or isinstance(text[0], str))
+        ):
+            raise ValueError("`text` must be a string or a list/tuple of strings.")
+        return self._call_native(text=text, images=images, videos=videos, audio=audio, **kwargs)
 
-        input_ids_list = []
+    def _normalize_nested_media(self, values, batch_size: int) -> list[list]:
+        if values is None:
+            return [[] for _ in range(batch_size)]
+
+        if batch_size == 1 and (
+            not isinstance(values, (list, tuple)) or (values and not isinstance(values[0], (list, tuple)))
+        ):
+            if isinstance(values, (list, tuple)):
+                return [list(values)]
+            return [[values]]
+
+        if not isinstance(values, (list, tuple)) or len(values) != batch_size:
+            raise ValueError(f"Expected batched media list with length {batch_size}, got {type(values)}")
+
+        normalized = []
+        for item in values:
+            if item is None:
+                normalized.append([])
+            elif isinstance(item, (list, tuple)):
+                normalized.append(list(item))
+            else:
+                normalized.append([item])
+        return normalized
+
+    def _single_native_call(
+        self,
+        text: str,
+        images: list | None = None,
+        videos: list | None = None,
+        audio: list | None = None,
+    ) -> BatchFeature:
         media = defaultdict(list)
         media_config = defaultdict(dict)
-        for conv in conversation:
-            feat = self.__single_call__(conv, **kwargs)
-            input_ids_list.append(feat.input_ids)
-            for name in feat.media:
-                media[name] += feat.media[name]
-            for name in feat.media_config:
-                media_config[name].update(feat.media_config[name])
+        raw_sounds = []
+        video_infos = []
 
-        # pad the input_ids to batchfy
-        input_ids = _pad_fn(
-            input_ids_list,
-            padding_value=self.pad_token_id,
-            padding_side=padding_side,
-        )
-        # Ignore the pad token in the attention mask
-        attention_mask = torch.ones_like(input_ids, dtype=torch.bool)
-        attention_mask[input_ids == self.pad_token_id] = False
-        bdata = BatchFeature(
+        if images:
+            if len(images) == 1 and self.config.image_aspect_ratio == "dynamic_s2":
+                self.config.image_processor = self.image_processor
+                if isinstance(self.config.s2_scales, str):
+                    self.config.s2_scales = list(map(int, self.config.s2_scales.split(",")))
+                image_tensor, block_sizes = _process_image(images[0], self.config, None, enable_dynamic_s2=True)
+                media["image"] = list(image_tensor.half())
+                media_config["image"]["block_sizes"] = [block_sizes]
+            else:
+                media["image"] = list(_process_images(images, self.image_processor, self.config).half())
+
+        audio_info_list = []
+        if videos:
+            for video in videos:
+                if self.config.load_audio_in_video:
+                    frames, audio_waveform, video_info = _extract_video_hf(video, self.config)
+                    if audio_waveform is not None:
+                        raw_sounds.append(audio_waveform)
+                        audio_info_list.append(video_info["audio_info"])
+                else:
+                    frames, video_info = _extract_video_hf(video, self.config)
+                media["video"].append(_process_images(frames, self.image_processor, self.config).half())
+                video_infos.append(video_info)
+            media["video_info"] = [video_infos]
+
+        explicit_audio_count = len(audio) if audio else 0
+        if audio:
+            for audio_item in audio:
+                audio_waveform, audio_info = _load_audio_hf_with_info(audio_item, self.config)
+                raw_sounds.append(audio_waveform)
+                audio_info_list.append(audio_info)
+
+        if raw_sounds:
+            media["sound"] = _extract_sound_features(
+                raw_sounds, audio_info_list, self.config, feature_extractor=self.feature_extractor
+            )
+
+        if audio_info_list:
+            media["audio_info"] = [audio_info_list]
+
+        if video_infos and self.config.load_audio_in_video:
+            expected_sound_tokens = explicit_audio_count + sum(
+                1 for video_info in video_infos if video_info.get("has_audio", False)
+            )
+            missing_sound_tokens = expected_sound_tokens - text.count(self.sound_token)
+            if missing_sound_tokens > 0:
+                rebuilt = []
+                cursor = 0
+                for video_info in video_infos:
+                    pos = text.find(self.video_token, cursor)
+                    if pos < 0:
+                        break
+                    rebuilt.append(text[cursor:pos])
+                    if video_info.get("has_audio", False) and missing_sound_tokens > 0:
+                        rebuilt.append(self.sound_token)
+                        missing_sound_tokens -= 1
+                    rebuilt.append(self.video_token)
+                    cursor = pos + len(self.video_token)
+                rebuilt.append(text[cursor:])
+                text = "".join(rebuilt)
+
+        if getattr(self.config, "mm_use_bos_eos_tokens", False):
+            text = _add_mm_bos_eos_tokens(text)
+
+        tokenized = self.tokenizer(text, return_tensors="pt")
+        input_ids = tokenized.input_ids
+        attention_mask = tokenized.attention_mask.to(dtype=torch.bool)
+
+        return BatchFeature(
             data={
-                # "input_texts": input_texts,
                 "input_ids": input_ids,
                 "attention_mask": attention_mask,
                 "media": media,
                 "media_config": media_config,
             }
         )
-        return bdata
 
-    def __single_call__(
-        self,
-        conversation,
-        **kwargs: Unpack[OmniVinciProcessorKwargs],
-    ) -> BatchFeature:
-        conversation = copy.deepcopy(conversation)
-        media = extract_media(conversation, self.config)
-        # Process media
+    def _call_native(self, text, images=None, videos=None, audio=None, **kwargs) -> BatchFeature:
+        texts = [text] if isinstance(text, str) else list(text)
+        if not texts:
+            raise ValueError("`text` must contain at least one prompt.")
+
+        image_batches = self._normalize_nested_media(images, len(texts))
+        video_batches = self._normalize_nested_media(videos, len(texts))
+
+        if audio is None:
+            audio_batches = [[] for _ in range(len(texts))]
+        elif len(texts) == 1:
+            audio_batches = [[audio]] if not isinstance(audio, (list, tuple)) else [list(audio)]
+        else:
+            raise ValueError(
+                "Batched `audio` with native `apply_chat_template(tokenize=True)` is not supported in OmniVinciProcessor yet."
+            )
+
+        padding_side = kwargs.get("padding_side", self.padding_side)
+        input_ids_list = []
+        media = defaultdict(list)
         media_config = defaultdict(dict)
-        for name in media:
-            if name == "image":
-                if len(media["image"]) == 1 and self.config.image_aspect_ratio == "dynamic_s2":
-                    self.config.image_processor = self.image_processor
-                    if isinstance(self.config.s2_scales, str):
-                        self.config.s2_scales = list(map(int, self.config.s2_scales.split(",")))
-                    images, block_sizes = _process_image(media["image"][0], self.config, None, enable_dynamic_s2=True)
-                    images = images.half()
-                    media_config[name]["block_sizes"] = [block_sizes]
-                else:
-                    images = _process_images(media["image"], self.image_processor, self.config).half()
-                media[name] = list(images)
-            elif name == "video":
-                media[name] = [
-                    _process_images(images, self.image_processor, self.config).half() for images in media[name]
-                ]
-            elif name == "sound":
-                sounds = media["sound"]
-                audio_infos = media.get("audio_info", [])
-                media[name] = _extract_sound_features(list(sounds), audio_infos, self.config)
-            elif name == "video_info":
-                media[name] = [media["video_info"]]
-            elif name == "audio_info":
-                media[name] = [media["audio_info"]]
-            else:
-                raise ValueError(f"Unsupported media type: {name}")
 
-        inputs = _tokenize_conversation(
-            conversation,
-            self.tokenizer,
-            mm_use_bos_eos_tokens=self.config.mm_use_bos_eos_tokens,
-            add_generation_prompt=kwargs.get("add_generation_prompt", True),
-        )
+        for prompt, sample_images, sample_videos, sample_audio in zip(
+            texts, image_batches, video_batches, audio_batches
+        ):
+            feat = self._single_native_call(prompt, images=sample_images, videos=sample_videos, audio=sample_audio)
+            input_ids_list.append(feat.input_ids)
+            for name in feat.media:
+                media[name] += feat.media[name]
+            for name in feat.media_config:
+                media_config[name].update(feat.media_config[name])
 
-        input_ids = inputs.unsqueeze(0)
-
+        input_ids = _pad_fn(input_ids_list, padding_value=self.pad_token_id, padding_side=padding_side)
         attention_mask = torch.ones_like(input_ids, dtype=torch.bool)
+        attention_mask[input_ids == self.pad_token_id] = False
+
         return BatchFeature(
             data={
                 "input_ids": input_ids,
@@ -641,46 +847,10 @@ class OmniVinciProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
-    def convert_gpt_conv_to_vila_conv(self, conversation):
-        vila_conv = []
-        role_map = {"user": "human", "system": "system", "assistant": "gpt"}
-        for chat in conversation:
-            role = chat["role"]
-            if role not in role_map:
-                raise ValueError(f"Unsupported role: {role} in chat {chat}")
-            vila_conv.append({"from": role_map[role], "value": _extract_value_from_conv(chat)})
-
-        return vila_conv
-
-    def apply_chat_template(
-        self,
-        conversation,
-        add_generation_prompt=True,
-        tokenize=False,
-        return_dict=True,
-        **kwargs,
-    ):
-        is_batched = (
-            isinstance(conversation, (list, tuple))
-            and len(conversation) > 0
-            and isinstance(conversation[0], (list, tuple))
+        feature_extractor_input_names = (
+            self.feature_extractor.model_input_names if self.feature_extractor is not None else []
         )
-        converted = (
-            [self.convert_gpt_conv_to_vila_conv(conv) for conv in conversation]
-            if is_batched
-            else self.convert_gpt_conv_to_vila_conv(conversation)
-        )
-
-        if not tokenize:
-            return converted
-
-        batched_conversations = converted if is_batched else [converted]
-        outputs = self(conversation=batched_conversations, add_generation_prompt=add_generation_prompt, **kwargs)
-        if return_dict:
-            return outputs
-        return outputs["input_ids"]
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names + feature_extractor_input_names))
 
 
 __all__ = [

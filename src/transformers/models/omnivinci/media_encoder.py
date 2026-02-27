@@ -26,23 +26,6 @@ from torch import Tensor, broadcast_tensors, einsum, nn
 from torch.nn import Module
 
 
-class CacheFeatures:
-    def __init__(self, value, type):
-        self.value = value
-        self.type = type
-
-    def my_to(self, device, dtype):
-        self.value["features"] = (
-            self.value["features"].to(device, dtype)
-            if "features" in self.value and self.value["features"] is not None
-            else None
-        )
-        return self
-
-    def __call__(self):
-        return self.value
-
-
 def exists(val):
     return val is not None
 
@@ -486,7 +469,8 @@ class BasicVideoEncoder(BaseEncoder):
             features = torch.cat([features, end_embeds], dim=1)
         return features.flatten(0, 1)
 
-    def forward(self, videos: list[torch.Tensor], config: dict[str, Any]) -> list[torch.Tensor]:
+    def forward(self, videos: list[torch.Tensor], config: dict[str, Any], mm_info: dict) -> list[torch.Tensor]:
+        _ = mm_info
         num_frames = [video.shape[0] for video in videos]
         images = torch.cat(videos, dim=0)
         features = self.parent.encode_images(images)
@@ -858,14 +842,7 @@ class TSPVideoEncoder(BasicVideoEncoder):
         return torch.cat(outputs, dim=0)
 
     def forward(self, videos: list[torch.Tensor], config: dict[str, Any], mm_info: dict) -> list[torch.Tensor]:
-        cache_feas = []
-        cache_feas_index = []
-        for _idx in range(len(videos)):
-            if isinstance(videos[_idx], CacheFeatures):
-                cache_feas.append(videos[_idx])
-                cache_feas_index.append(_idx)
-
-        num_frames = [_.value["features"].shape[0] if isinstance(_, CacheFeatures) else _.shape[0] for _ in videos]
+        num_frames = [_.shape[0] for _ in videos]
 
         features = self.parent.encode_video(videos, mm_info=mm_info, num_frames=num_frames)
         features = torch.split(features, num_frames)
@@ -961,8 +938,3 @@ class TSPVideoEncoder(BasicVideoEncoder):
         else:
             features = [process_features(f) for f in features]
         return features
-
-    def _encode_video_frames(self, video_frames: torch.Tensor) -> torch.Tensor:
-        """Helper method to encode video frames when cached features are not available."""
-        features = self.parent.encode_images(video_frames.unsqueeze(0))
-        return features.squeeze(0)

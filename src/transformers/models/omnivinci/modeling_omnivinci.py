@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import copy
-import json
 import math
 import warnings
 from collections import defaultdict, deque
@@ -42,7 +41,7 @@ from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import SiglipVisionModel
 
 from .configuration_omnivinci import IGNORE_INDEX, OmniVinciConfig
-from .media_encoder import BasicImageEncoder, BasicSoundEncoder, CacheFeatures, TSPVideoEncoder
+from .media_encoder import BasicImageEncoder, BasicSoundEncoder, TSPVideoEncoder
 
 
 def context_length_extension(config):
@@ -258,32 +257,9 @@ class VILAPretrainedModel(PreTrainedModel):
     def _init_omnivinci_components(self, *args, **kwargs):
         _ = args
         config = self.config
-
-        def _is_missing_component(spec):
-            return spec in (None, "", {})
-
-        llm_spec = getattr(config, "llm_cfg", None)
-        vision_tower_spec = getattr(config, "vision_tower_cfg", None)
-        mm_projector_spec = getattr(config, "mm_projector_cfg", None)
-        sound_tower_spec = getattr(config, "sound_tower_cfg", None)
-        sound_mm_projector_spec = getattr(config, "sound_mm_projector_cfg", None)
-
-        missing = [
-            name
-            for name, spec in [
-                ("llm_cfg", llm_spec),
-                ("vision_tower_cfg", vision_tower_spec),
-                ("mm_projector_cfg", mm_projector_spec),
-            ]
-            if _is_missing_component(spec)
-        ]
-        if missing:
-            raise ValueError(f"Missing required OmniVinci components in config: {', '.join(missing)}")
-
-        has_sound_tower = not _is_missing_component(sound_tower_spec)
-        has_sound_projector = not _is_missing_component(sound_mm_projector_spec)
-        if has_sound_tower != has_sound_projector:
-            raise ValueError("`sound_tower_cfg` and `sound_mm_projector_cfg` must be both set or both empty.")
+        llm_spec = config.llm_cfg
+        vision_tower_spec = config.vision_tower_cfg
+        sound_tower_spec = config.sound_tower_cfg
 
         self.mm_projector = MultimodalProjector(config)
 
@@ -292,10 +268,9 @@ class VILAPretrainedModel(PreTrainedModel):
         self.vision_tower = SiglipVisionTowerDynamicS2(vision_tower_spec, config)
         config.mm_hidden_size = self.vision_tower.hidden_size
 
-        if has_sound_tower:
-            self.sound_tower = Qwen2AudioTower(sound_tower_spec, config)
-            config.sound_hidden_size = 1280
-            self.sound_mm_projector = SoundMultimodalProjector(config)
+        self.sound_tower = Qwen2AudioTower(sound_tower_spec, config)
+        config.sound_hidden_size = 1280
+        self.sound_mm_projector = SoundMultimodalProjector(config)
 
         llm_cfg = Qwen2Config(**{k: v for k, v in llm_spec.items() if k != "model_type"})
         llm_cfg._attn_implementation = config._attn_implementation
@@ -310,41 +285,20 @@ class VILAPretrainedModel(PreTrainedModel):
         self.vocab_size = self.llm.config.vocab_size
         self.update_vocab_size = lambda: setattr(self, "vocab_size", self.llm.config.vocab_size)
 
-        self.encoders = {}
-        for name in ["image", "video", "sound"]:
-            encoder_config = getattr(self.config, f"{name}_encoder")
-            if isinstance(encoder_config, str):
-                encoder_config = json.loads(encoder_config)
-            if encoder_config.get("embed_time", False) == "True":
-                if "trope_dim" not in encoder_config and encoder_config.get("time_embed_type", "") in [
-                    "pixel",
-                    "lang",
-                ]:
-                    encoder_config["trope_dim"] = self.config.hidden_size // 2
-                    print(
-                        f"Warning: trope_dim not found in config, defaulting to hidden_size // 2: {encoder_config['trope_dim']}"
-                    )
+        image_encoder_config = dict(self.config.image_encoder)
+        video_encoder_config = dict(self.config.video_encoder)
+        sound_encoder_config = dict(self.config.sound_encoder)
+        image_encoder_config.pop("_target_", None)
+        video_encoder_config.pop("_target_", None)
+        sound_encoder_config.pop("_target_", None)
 
-            encoder_config.pop("_target_")
-            if name == "video":
-                self.encoders[name] = TSPVideoEncoder(parent=self, **encoder_config)
-            elif name == "image":
-                self.encoders[name] = BasicImageEncoder(self)
-            else:
-                self.encoders[name] = BasicSoundEncoder(parent=self, **encoder_config)
+        self.encoders = {
+            "image": BasicImageEncoder(parent=self, **image_encoder_config),
+            "video": TSPVideoEncoder(parent=self, **video_encoder_config),
+            "sound": BasicSoundEncoder(parent=self, **sound_encoder_config),
+        }
 
         self.post_config()
-
-        self.llm_only_need_embed = kwargs.get("llm_only_need_embed", False)
-        if self.llm_only_need_embed:
-            print("We only need the embed_tokens in llm.")
-            del self.llm
-            self.llm = None
-            torch.cuda.empty_cache()
-
-        assert self.llm is not None or self.vision_tower is not None or self.mm_projector is not None, (
-            "At least one of the components must be instantiated."
-        )
 
     @property
     def llm_model_embed_tokens(self):
@@ -561,49 +515,14 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
         if not getattr(self.config, "dynamic_s2", False):
             raise NotImplementedError("Current OmniVinci checkpoint requires `dynamic_s2=True`.")
 
-        bs = len(inp)
-        cache_feas = []
-        cache_feas_index = []
         inp_block_sizes = block_sizes
-
-        # handle cache features
-        for _idx in range(len(inp)):
-            if isinstance(inp[_idx], CacheFeatures):
-                cache_feas.append(inp[_idx])
-                cache_feas_index.append(_idx)
-        raw_images = [_ for _ in inp if not isinstance(_, CacheFeatures)]
-
-        raw_videos_num_frames = [_.shape[0] for _ in raw_images]
-        if len(raw_images) > 0:
-            images = torch.cat(raw_images, dim=0)
+        if len(inp) > 0:
+            images = torch.cat(inp, dim=0)
         else:
             images = []
 
         if block_sizes is None:
             block_sizes = [None] * len(images)
-
-        def _load_video_features(image_features, cache_feas, cache_feas_index, raw_videos_num_frames):
-            # load cache features
-            if len(cache_feas) > 0:
-                if len(image_features) > 0:
-                    image_features = torch.split(image_features, raw_videos_num_frames)
-                new_image_features = []
-                cache_feas_idx = 0
-                raw_fea_idx = 0
-                for _idx in range(bs):
-                    if _idx in cache_feas_index:
-                        new_image_features.append(
-                            cache_feas[cache_feas_idx].value["features"].to(self.device, self.dtype)
-                        )
-                        cache_feas_idx += 1
-                    else:
-                        new_image_features.append(image_features[raw_fea_idx])
-                        raw_fea_idx += 1
-
-                assert len(new_image_features) == bs
-                image_features = new_image_features
-                image_features = torch.cat(image_features, dim=0)
-            return image_features
 
         if len(images) > 0:
             image_features = self.vision_tower(images)
@@ -619,9 +538,6 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
             )  # B * N * C
         else:
             image_features = []
-
-        # load cache features
-        image_features = _load_video_features(image_features, cache_feas, cache_feas_index, raw_videos_num_frames)
 
         if inp_block_sizes is None:
             new_block_sizes = [(1, 1)] * len(image_features)
@@ -1014,7 +930,6 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor = None,
         media: dict[str, list[torch.Tensor]] | None = None,
-        images: torch.FloatTensor | None = None,
         media_config: list | None = None,
         pixel_values: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
@@ -1029,12 +944,6 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         self.freezed_module_patch()
-
-        if images is not None:
-            if media is not None:
-                raise ValueError("Both 'media' and 'images' are provided. Please provide only one.")
-            print("The 'images' argument is deprecated. Please use 'media' instead.")
-            media = {"image": images}
 
         if media_config is None:
             media_config = defaultdict(dict)
