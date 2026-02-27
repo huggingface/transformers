@@ -1157,20 +1157,22 @@ class RfDetrSegmentationBlock(ConvNextLayer):
     def __init__(self, config: RfDetrConfig):
         dim = config.d_model
         super().__init__(config)
-        self.dwconv = nn.Conv2d(dim, dim, kernel_size=3, padding=1, groups=dim)  # depthwise conv
+        self.depthwise_conv = nn.Conv2d(dim, dim, kernel_size=3, padding=1, groups=dim)
         self.layernorm = RfDetrLayerNorm(dim, eps=1e-6)
-        self.pwconv1 = nn.Linear(dim, dim)  # pointwise/1x1 convs, implemented with linear layers
+        self.pointwise_conv = nn.Linear(dim, dim)
         self.act = ACT2FN[config.segmentation_head_activation_function]
+        del self.dwconv
+        del self.pwconv1
         del self.pwconv2
         del self.layer_scale_parameter
         del self.drop_path
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         residual = features
-        features = self.dwconv(features)
+        features = self.depthwise_conv(features)
         features = features.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
         features = self.layernorm(features)
-        features = self.pwconv1(features)
+        features = self.pointwise_conv(features)
         features = self.act(features)
         features = features.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
         features = features + residual
@@ -1224,6 +1226,8 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         r"^segmentation_head.query_features_block": "query_features_block",
         r"^segmentation_head.query_features_proj": "query_features_proj",
         r"segmentation_head.bias": "segmentation_bias",
+        r"segmentation_head.blocks.(\d+).dwconv": r"blocks.\1.depthwise_conv",
+        r"segmentation_head.blocks.(\d+).pwconv1": r"blocks.\1.pointwise_conv",
         r"segmentation_head.blocks.(\d+)": r"blocks.\1",
     }
 
