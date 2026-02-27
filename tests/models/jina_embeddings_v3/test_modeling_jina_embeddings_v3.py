@@ -83,6 +83,7 @@ class JinaEmbeddingsV3ModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.num_labels = num_labels
+        self.scope = scope
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -287,7 +288,7 @@ class JinaEmbeddingsV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = JinaEmbeddingsV3Model.from_pretrained("jinaai/jina-embeddings-v3", dtype=torch.float32)
+        model = JinaEmbeddingsV3Model.from_pretrained("jinaai/jina-embeddings-v3", revision = "refs/pr/137", dtype=torch.float32)
         model.eval()
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
@@ -302,72 +303,124 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
-    def test_inference_all_task_adapters(self):
-        model = JinaEmbeddingsV3Model.from_pretrained("jinaai/jina-embeddings-v3", dtype=torch.float32)
+    def test_inference_retrieval_query_adapter(self):
+        model_id = "jinaai/jina-embeddings-v3"
+        revision = "refs/pr/137"
+        task = "retrieval_query"
+
+        model = JinaEmbeddingsV3Model.from_pretrained(model_id, revision=revision, dtype=torch.float32)
+        model.load_adapter(model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": revision})
+        model.set_adapter(task)
         model.eval()
+
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
 
-        tasks = [
-            "retrieval.query",
-            "retrieval.passage",
-            "separation",
-            "classification",
-            "text-matching",
-        ]
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=attention_mask)[0]
+
+        self.assertEqual(output.shape, torch.Size((1, 11, 1024)))
+        expected_slice = torch.tensor(
+            [[[-1.5202, 2.4074, -0.9706], [-1.5279, 2.4025, -1.1237], [-1.5252, 2.6143, -0.9416]]]
+        )
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
+
+    @slow
+    def test_inference_retrieval_passage_adapter(self):
+        model_id = "jinaai/jina-embeddings-v3"
+        revision = "refs/pr/137"
+        task = "retrieval_passage"
+        
+        model = JinaEmbeddingsV3Model.from_pretrained(model_id, revision=revision, dtype=torch.float32)
+        model.load_adapter(model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": revision})
+        model.set_adapter(task)
+        model.eval()
+
+        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=attention_mask)[0]
 
         expected_shape = torch.Size((1, 11, 1024))
-        expected_slices = {
-            "retrieval.query": torch.tensor(
-                [[[-1.5202, 2.4074, -0.9706], [-1.5279, 2.4025, -1.1237], [-1.5252, 2.6143, -0.9416]]]
-            ),
-            "retrieval.passage": torch.tensor(
-                [[[-1.0778, 1.8124, -0.8223], [-1.3796, 1.8108, -0.9868], [-1.1073, 1.9459, -0.8104]]]
-            ),
-            "separation": torch.tensor(
-                [[[-2.3134, 1.9034, 0.1885], [-2.1804, 1.9923, 0.1184], [-2.2325, 2.0251, 0.2533]]]
-            ),
-            "classification": torch.tensor(
-                [
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[[-1.0778, 1.8124, -0.8223], [-1.3796, 1.8108, -0.9868], [-1.1073, 1.9459, -0.8104]]]
+        )
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
+
+    @slow
+    def test_inference_separation_adapter(self):
+        model_id = "jinaai/jina-embeddings-v3"
+        revision = "refs/pr/137"
+        task = "separation"
+
+        model = JinaEmbeddingsV3Model.from_pretrained(model_id, revision=revision, dtype=torch.float32)
+        model.load_adapter(model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": revision})
+        model.set_adapter(task)
+        model.eval()
+
+        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=attention_mask)[0]
+
+        self.assertEqual(output.shape, torch.Size((1, 11, 1024)))
+        expected_slice = torch.tensor(
+            [[[-2.3134, 1.9034, 0.1885], [-2.1804, 1.9923, 0.1184], [-2.2325, 2.0251, 0.2533]]]
+        )
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
+
+    @slow
+    def test_inference_classification_adapter(self):
+        model_id = "jinaai/jina-embeddings-v3"
+        revision = "refs/pr/137"
+        task = "classification"
+
+        model = JinaEmbeddingsV3Model.from_pretrained(model_id, revision=revision, dtype=torch.float32)
+        model.load_adapter(model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": revision})
+        model.set_adapter(task)
+        model.eval()
+
+        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=attention_mask)[0]
+
+        self.assertEqual(output.shape, torch.Size((1, 11, 1024)))
+        expected_slice = torch.tensor(
+            [
                     [
                         [-1.9793e00, 2.2602e00, -1.7995e-01],
                         [-1.8780e00, 2.2660e00, -2.1822e-01],
                         [-1.9202e00, 2.4457e00, -2.2832e-04],
                     ]
                 ]
-            ),
-            "text-matching": torch.tensor(
-                [[[-1.6952, 1.8568, -0.2258], [-1.6239, 1.9056, -0.2681], [-1.5218, 1.8185, 0.0062]]]
-            ),
-        }
+        )
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
-        # Store outputs for cross-task comparison
-        outputs = {}
+    @slow
+    def test_inference_text_matching_adapter(self):
+        model_id = "jinaai/jina-embeddings-v3"
+        revision = "refs/pr/137"
+        task = "text_matching"
 
-        for task in tasks:
-            with self.subTest(task=task):
-                task_id = model._adaptation_map[task]
-                adapter_mask = torch.full((1,), task_id, dtype=torch.int32)
+        model = JinaEmbeddingsV3Model.from_pretrained(model_id, revision=revision, dtype=torch.float32)
+        model.load_adapter(model_id, adapter_name=task, adapter_kwargs={"subfolder": task, "revision": revision})
+        model.set_adapter(task)
+        model.eval()
 
-                with torch.no_grad():
-                    output = model(
-                        input_ids,
-                        attention_mask=attention_mask,
-                        adapter_mask=adapter_mask,
-                    )[0]
+        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
 
-                self.assertEqual(output.shape, expected_shape)
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=attention_mask)[0]
 
-                expected_slice = expected_slices[task]
-
-                torch.testing.assert_close(
-                    output[:, 1:4, 1:4],
-                    expected_slice,
-                    rtol=1e-4,
-                    atol=1e-4,
-                )
-                outputs[task] = output
-
-        # Ensure adapters actually change outputs
-        self.assertFalse(torch.allclose(outputs["retrieval.query"], outputs["classification"]))
-        self.assertFalse(torch.allclose(outputs["retrieval.query"], outputs["retrieval.passage"]))
+        self.assertEqual(output.shape, torch.Size((1, 11, 1024)))
+        expected_slice = torch.tensor(
+            [[[-1.6952, 1.8568, -0.2258], [-1.6239, 1.9056, -0.2681], [-1.5218, 1.8185, 0.0062]]]
+        )
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
