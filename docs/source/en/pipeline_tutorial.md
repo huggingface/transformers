@@ -110,6 +110,44 @@ pipeline(
 )
 [{'answer': 'statue of liberty'}]
 ```
+### Zero-shot classification
+`````py
+from transformers import pipeline
+
+classifier = pipeline(task="zero-shot-classification", model="facebook/bart-large-mnli")
+classifier(
+    "I have a problem with my iPhone that needs to be resolved asap!!",
+    candidate_labels=["urgent", "phone", "computer", "not urgent", "tablet"],
+)
+[{'sequence': 'I have a problem with my iPhone that needs to be resolved asap!!',
+  'labels': ['urgent', 'phone', 'computer', 'not urgent', 'tablet'],
+  'scores': [0.504, 0.479, 0.013, 0.003, 0.002]}]
+`````
+`````
+
+---
+
+So in the file it should look like this after your edit:
+`````
+...existing visual-question-answering block...
+
+[{'answer': 'statue of liberty'}]
+`````← existing closing fence
+
+### Zero-shot classification
+```py
+from transformers import pipeline
+
+classifier = pipeline(task="zero-shot-classification", model="facebook/bart-large-mnli")
+classifier(
+    "I have a problem with my iPhone that needs to be resolved asap!!",
+    candidate_labels=["urgent", "phone", "computer", "not urgent", "tablet"],
+)
+[{'sequence': 'I have a problem with my iPhone that needs to be resolved asap!!',
+  'labels': ['urgent', 'phone', 'computer', 'not urgent', 'tablet'],
+  'scores': [0.504, 0.479, 0.013, 0.003, 0.002]}]
+```
+
 
 </hfoption>
 </hfoptions>
