@@ -87,7 +87,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
         ],
         "colpali": [
-            WeightRenaming(source_patterns=r"vlm", target_patterns="vlm.model"),
+            WeightRenaming(source_patterns=r"vlm(?!\.model)", target_patterns="vlm.model"),
         ],
         "emu3": [
             WeightRenaming(source_patterns=r"text_model.model", target_patterns="text_model"),

@@ -497,7 +497,7 @@ def process_pattern_for_reverse_mapping(target_pattern: str, source_pattern: str
     - Detects capturing groups and replaces them with `\\1` backreference
 
     Args:
-        taregt_pattern: The target pattern to process for reverse mapping.
+        target_pattern: The target pattern to process for reverse mapping.
         source_pattern: The source pattern to process for reverse mapping.
 
     Returns:
@@ -516,7 +516,7 @@ def process_pattern_for_reverse_mapping(target_pattern: str, source_pattern: str
 
     # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
     # Qwen2.5, Sam3, Ernie4.5 VL MoE!
-    target_pattern = re.sub(r"\(\?.+\)", "", target_pattern)
+    target_pattern = re.sub(r"\(\?.+?\)?\)", "", target_pattern)
     # Remove the backslash for literal dots
     target_pattern = target_pattern.replace(r"\.", ".")
     # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
