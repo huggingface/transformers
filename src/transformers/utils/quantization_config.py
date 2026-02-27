@@ -1964,12 +1964,16 @@ class FourOverSixConfig(QuantizationConfigMixin):
     error. Refer to the original publication for more details: https://arxiv.org/abs/2512.02010.
 
     Args:
+        activation_dtype (`str`, *optional*):
+            Data type to use when quantizing activation tensors. If not provided, `dtype` is used.
         activation_scale_rule (`str`, *optional*):
             Scaling rule to use when selecting a scale for blocks in activation tensors. If not
             provided, `scale_rule` is used.
         dtype (`str`, default "nvfp4", *optional*, defaults to `"nvfp4"`):
             The data type to use for the layer's weights, activations, and tensors. Can be
             `"nvfp4"` or `"mxfp4"`.
+        gradient_dtype (`str`, *optional*):
+            Data type to use when quantizing gradient tensors. If not provided, `dtype` is used.
         gradient_scale_rule (`str`, *optional*):
             Scaling rule to use when selecting a scale for blocks in gradient tensors. If not
             provided, `scale_rule` is used.
@@ -1992,6 +1996,8 @@ class FourOverSixConfig(QuantizationConfigMixin):
             Rule to use when selecting block scales. Can be `"mse"`, `"mae"`, or `"abs_max"` for
             Four Over Six, `"static_6"` for default NVFP4 quantization, or `"static_4"` to scale
             all blocks to a maximum value of 4.
+        weight_dtype (`str`, *optional*):
+            Data type to use when quantizing weight tensors. If not provided, `dtype` is used.
         weight_scale_2d (`bool`, default False, *optional*, defaults to `False`):
             Whether to compute scale factors on weight tensors in 2D blocks. This should be done
             during training.
@@ -2008,14 +2014,17 @@ class FourOverSixConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
+        activation_dtype: str | None = None,
         activation_scale_rule: str | None = None,
         dtype: str = "nvfp4",
+        gradient_dtype: str | None = None,
         gradient_scale_rule: str | None = None,
         keep_master_weights: bool = False,
         matmul_backend: str | None = None,
         output_dtype: str | None = "bfloat16",
         quantize_backend: str | None = None,
         scale_rule: str = "mse",
+        weight_dtype: str | None = None,
         weight_scale_2d: bool = False,
         weight_scale_rule: str | None = None,
         module_config_overrides: dict[str, dict[str, Any]] | None = None,
@@ -2024,14 +2033,17 @@ class FourOverSixConfig(QuantizationConfigMixin):
     ):
         self.quant_method = QuantizationMethod.FOUR_OVER_SIX
 
+        self.activation_dtype = activation_dtype
         self.activation_scale_rule = activation_scale_rule
         self.dtype = dtype
+        self.gradient_dtype = gradient_dtype
         self.gradient_scale_rule = gradient_scale_rule
         self.keep_master_weights = keep_master_weights
         self.matmul_backend = matmul_backend
         self.quantize_backend = quantize_backend
         self.output_dtype = output_dtype
         self.scale_rule = scale_rule
+        self.weight_dtype = weight_dtype
         self.weight_scale_2d = weight_scale_2d
         self.weight_scale_rule = weight_scale_rule
         self.module_config_overrides = module_config_overrides
