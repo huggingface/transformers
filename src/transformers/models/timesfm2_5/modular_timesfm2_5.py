@@ -49,9 +49,9 @@ from ..timesfm.modeling_timesfm import (
 logger = logging.get_logger(__name__)
 
 
-class Timesfm2P5Config(TimesFmConfig):
+class TimesFm2_5Config(TimesFmConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Timesfm2P5ModelForPrediction`]. It is used to
+    This is the configuration class to store the configuration of a [`TimesFm2_5ModelForPrediction`]. It is used to
     instantiate a TimesFM 2.5 model according to the specified arguments, defining the model architecture. Instantiating
     a configuration with the defaults will yield a similar configuration to that of the TimesFM 2.5
     [google/timesfm-2.5-200m-transformers](https://huggingface.co/google/timesfm-2.5-200m-transformers) architecture.
@@ -110,15 +110,15 @@ class Timesfm2P5Config(TimesFmConfig):
     Example:
 
     ```python
-    >>> from transformers import Timesfm2P5Config, Timesfm2P5ModelForPrediction
+    >>> from transformers import TimesFm2_5Config, TimesFm2_5ModelForPrediction
 
-    >>> configuration = Timesfm2P5Config()
-    >>> model = Timesfm2P5ModelForPrediction(configuration)
+    >>> configuration = TimesFm2_5Config()
+    >>> model = TimesFm2_5ModelForPrediction(configuration)
     >>> configuration = model.config
     ```
     """
 
-    model_type = "timesfm_2p5"
+    model_type = "timesfm2_5"
 
     def __init__(
         self,
@@ -190,7 +190,7 @@ class Timesfm2P5Config(TimesFmConfig):
 
 @dataclass
 @auto_docstring
-class Timesfm2P5Output(TimesFmOutput):
+class TimesFm2_5Output(TimesFmOutput):
     r"""
     context_mu (`torch.Tensor` of shape `(batch_size, num_patches)`):
         Running means computed per input patch during normalization.
@@ -204,7 +204,7 @@ class Timesfm2P5Output(TimesFmOutput):
 
 @dataclass
 @auto_docstring
-class Timesfm2P5OutputForPrediction(TimesFmOutputForPrediction):
+class TimesFm2_5OutputForPrediction(TimesFmOutputForPrediction):
     r"""
     mean_predictions (`torch.Tensor` of shape `(batch_size, horizon_length)`):
         Deterministic forecasts after denormalization.
@@ -217,10 +217,10 @@ class Timesfm2P5OutputForPrediction(TimesFmOutputForPrediction):
     pass
 
 
-class Timesfm2P5MLP(nn.Module):
+class TimesFm2_5MLP(nn.Module):
     """TimesFM 2.5 MLP with two linear layers and configurable activation."""
 
-    def __init__(self, config: Timesfm2P5Config):
+    def __init__(self, config: TimesFm2_5Config):
         super().__init__()
         self.ff0 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
         self.ff1 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
@@ -232,7 +232,7 @@ class Timesfm2P5MLP(nn.Module):
         return self.ff1(hidden_states)
 
 
-class Timesfm2P5ResidualBlock(TimesFmResidualBlock):
+class TimesFm2_5ResidualBlock(TimesFmResidualBlock):
     """[`TimesFmResidualBlock`] variant with configurable `use_bias` and `activation`."""
 
     def __init__(self, config, input_dims: int, hidden_dims: int, output_dims: int, use_bias: bool | None = None):
@@ -244,22 +244,22 @@ class Timesfm2P5ResidualBlock(TimesFmResidualBlock):
         self.activation = ACT2FN[config.activation]
 
 
-class Timesfm2P5RMSNorm(LlamaRMSNorm):
+class TimesFm2_5RMSNorm(LlamaRMSNorm):
     pass
 
 
-class Timesfm2P5RotaryEmbedding(LlamaRotaryEmbedding):
+class TimesFm2_5RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class Timesfm2P5Attention(LlamaAttention):
+class TimesFm2_5Attention(LlamaAttention):
     """TimesFM 2.5 attention with QK normalization and learnable per-dimension query scaling."""
 
-    def __init__(self, config: Timesfm2P5Config, layer_idx: int):
+    def __init__(self, config: TimesFm2_5Config, layer_idx: int):
         super().__init__(config, layer_idx)
 
-        self.q_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = Timesfm2P5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = TimesFm2_5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = TimesFm2_5RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
 
     def forward(
@@ -312,13 +312,13 @@ class Timesfm2P5Attention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class Timesfm2P5DecoderLayer(LlamaDecoderLayer):
+class TimesFm2_5DecoderLayer(LlamaDecoderLayer):
     """TimesFM 2.5 Transformer decoder layer with pre/post RMS normalization and no KV cache."""
 
-    def __init__(self, config: Timesfm2P5Config, layer_idx: int):
+    def __init__(self, config: TimesFm2_5Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.pre_feedforward_layernorm = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Timesfm2P5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.pre_feedforward_layernorm = TimesFm2_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = TimesFm2_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -348,25 +348,25 @@ class Timesfm2P5DecoderLayer(LlamaDecoderLayer):
 
 
 @auto_docstring
-class Timesfm2P5PreTrainedModel(TimesFmPreTrainedModel):
-    config_class = Timesfm2P5Config
+class TimesFm2_5PreTrainedModel(TimesFmPreTrainedModel):
+    config_class = TimesFm2_5Config
     base_model_prefix = "model"
-    _no_split_modules = ["Timesfm2P5DecoderLayer"]
+    _no_split_modules = ["TimesFm2_5DecoderLayer"]
     _supports_flash_attn = True
     _supports_flex_attn = True
     _can_record_outputs = {
-        "hidden_states": Timesfm2P5DecoderLayer,
-        "attentions": Timesfm2P5Attention,
+        "hidden_states": TimesFm2_5DecoderLayer,
+        "attentions": TimesFm2_5Attention,
     }
 
 
-class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
-    def __init__(self, config: Timesfm2P5Config):
+class TimesFm2_5Model(TimesFm2_5PreTrainedModel):
+    def __init__(self, config: TimesFm2_5Config):
         super().__init__(config)
         self.config = config
         self.tolerance = 1e-6
 
-        self.input_ff_layer = Timesfm2P5ResidualBlock(
+        self.input_ff_layer = TimesFm2_5ResidualBlock(
             config,
             input_dims=2 * config.patch_length,
             hidden_dims=config.hidden_size,
@@ -375,9 +375,9 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         )
 
         self.layers = nn.ModuleList(
-            [Timesfm2P5DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [TimesFm2_5DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.rotary_emb = Timesfm2P5RotaryEmbedding(config)
+        self.rotary_emb = TimesFm2_5RotaryEmbedding(config)
         self.gradient_checkpointing = False
 
         self.post_init()
@@ -462,7 +462,7 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         past_values: torch.Tensor,
         past_values_padding: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Timesfm2P5Output:
+    ) -> TimesFm2_5Output:
         r"""
         past_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Past values of the time series used as input to the model.
@@ -534,7 +534,7 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         loc = context_mu[:, -1]
         scale = torch.clamp(context_sigma[:, -1], min=self.tolerance)
 
-        return Timesfm2P5Output(
+        return TimesFm2_5Output(
             last_hidden_state=hidden_states,
             loc=loc,
             scale=scale,
@@ -543,8 +543,8 @@ class Timesfm2P5Model(Timesfm2P5PreTrainedModel):
         )
 
 
-class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
-    def __init__(self, config: Timesfm2P5Config):
+class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
+    def __init__(self, config: TimesFm2_5Config):
         super().__init__(config)
         self.config = config
         self.context_len = config.context_length
@@ -554,16 +554,16 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
         del self.decoder
         del self.horizon_ff_layer
 
-        self.model = Timesfm2P5Model(config)
+        self.model = TimesFm2_5Model(config)
 
         num_quantiles = len(config.quantiles) + 1
-        self.output_projection_point = Timesfm2P5ResidualBlock(
+        self.output_projection_point = TimesFm2_5ResidualBlock(
             config,
             input_dims=config.hidden_size,
             hidden_dims=config.hidden_size,
             output_dims=config.horizon_length * num_quantiles,
         )
-        self.output_projection_quantiles = Timesfm2P5ResidualBlock(
+        self.output_projection_quantiles = TimesFm2_5ResidualBlock(
             config,
             input_dims=config.hidden_size,
             hidden_dims=config.hidden_size,
@@ -623,7 +623,7 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
         truncate_negative: bool | None = None,
         force_flip_invariance: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Timesfm2P5OutputForPrediction:
+    ) -> TimesFm2_5OutputForPrediction:
         r"""
         past_values (`Sequence[torch.Tensor]`):
             Past values of the time series that serves as input to the model. Each tensor is a 1D time series.
@@ -719,7 +719,7 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
             else:
                 loss = mse_loss
 
-        return Timesfm2P5OutputForPrediction(
+        return TimesFm2_5OutputForPrediction(
             last_hidden_state=model_outputs.last_hidden_state,
             hidden_states=model_outputs.hidden_states,
             attentions=model_outputs.attentions,
@@ -730,8 +730,8 @@ class Timesfm2P5ModelForPrediction(TimesFmModelForPrediction):
 
 
 __all__ = [
-    "Timesfm2P5Config",
-    "Timesfm2P5ModelForPrediction",
-    "Timesfm2P5PreTrainedModel",
-    "Timesfm2P5Model",
+    "TimesFm2_5Config",
+    "TimesFm2_5ModelForPrediction",
+    "TimesFm2_5PreTrainedModel",
+    "TimesFm2_5Model",
 ]

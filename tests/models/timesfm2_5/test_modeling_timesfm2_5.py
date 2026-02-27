@@ -18,7 +18,7 @@ import numpy as np
 import torch
 from parameterized import parameterized
 
-from transformers import Timesfm2P5Config, is_torch_available
+from transformers import TimesFm2_5Config, is_torch_available
 from transformers.testing_utils import require_flash_attn, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -26,11 +26,11 @@ from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERI
 
 
 if is_torch_available():
-    from transformers import Timesfm2P5ModelForPrediction
+    from transformers import TimesFm2_5ModelForPrediction
 
 
 
-class Timesfm2P5ModelTester:
+class TimesFm2_5ModelTester:
     def __init__(
         self,
         parent,
@@ -67,7 +67,7 @@ class Timesfm2P5ModelTester:
         self.seq_length = context_length // patch_length
 
     def get_config(self):
-        return Timesfm2P5Config(
+        return TimesFm2_5Config(
             patch_length=self.patch_length,
             context_length=self.context_length,
             horizon_length=self.horizon_length,
@@ -101,19 +101,19 @@ class Timesfm2P5ModelTester:
 
 
 @require_torch
-class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (Timesfm2P5ModelForPrediction,) if is_torch_available() else ()
+class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TimesFm2_5ModelForPrediction,) if is_torch_available() else ()
     test_resize_embeddings = False
     is_encoder_decoder = False
     test_inputs_embeds = False
 
     def setUp(self):
-        self.model_tester = Timesfm2P5ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Timesfm2P5Config)
+        self.model_tester = TimesFm2_5ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=TimesFm2_5Config)
 
     def test_create_and_run_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Timesfm2P5ModelForPrediction(config)
+        model = TimesFm2_5ModelForPrediction(config)
         model.to(torch_device)
         model.eval()
         results = model(**inputs_dict)
@@ -151,11 +151,11 @@ class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
 
-        model_eager = Timesfm2P5ModelForPrediction._from_config(config, attn_implementation="eager")
+        model_eager = TimesFm2_5ModelForPrediction._from_config(config, attn_implementation="eager")
         model_eager.to(dtype=dtype, device=torch_device)
         model_eager.eval()
 
-        model_sdpa = Timesfm2P5ModelForPrediction._from_config(config, attn_implementation="sdpa")
+        model_sdpa = TimesFm2_5ModelForPrediction._from_config(config, attn_implementation="sdpa")
         model_sdpa.load_state_dict(model_eager.state_dict())
         model_sdpa.to(dtype=dtype, device=torch_device)
         model_sdpa.eval()
@@ -195,11 +195,11 @@ class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
         dtype = torch.bfloat16
         tolerance = 1e-2
 
-        model_eager = Timesfm2P5ModelForPrediction._from_config(config, attn_implementation="eager")
+        model_eager = TimesFm2_5ModelForPrediction._from_config(config, attn_implementation="eager")
         model_eager.to(dtype=dtype, device=torch_device)
         model_eager.eval()
 
-        model_fa = Timesfm2P5ModelForPrediction._from_config(config, attn_implementation=attn_implementation)
+        model_fa = TimesFm2_5ModelForPrediction._from_config(config, attn_implementation=attn_implementation)
         model_fa.load_state_dict(model_eager.state_dict())
         model_fa.to(dtype=dtype, device=torch_device)
         model_fa.eval()
@@ -276,9 +276,9 @@ class Timesfm2P5ModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 @slow
-class Timesfm2P5ModelIntegrationTests(unittest.TestCase):
+class TimesFm2_5ModelIntegrationTests(unittest.TestCase):
     def test_inference(self):
-        model = Timesfm2P5ModelForPrediction.from_pretrained("google/timesfm-2.5-200m-transformers").to(torch_device)
+        model = TimesFm2_5ModelForPrediction.from_pretrained("google/timesfm-2.5-200m-transformers").to(torch_device)
         forecast_input = [
             np.sin(np.linspace(0, 20, 100)),
             np.sin(np.linspace(0, 20, 200)),

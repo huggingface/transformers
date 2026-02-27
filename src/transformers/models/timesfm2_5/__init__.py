@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_timesfm_2p5 import *
-    from .modeling_timesfm_2p5 import *
+    from .configuration_timesfm2_5 import *
+    from .modeling_timesfm2_5 import *
 else:
     import sys
 

@@ -22,14 +22,14 @@ import timesfm
 import torch
 from huggingface_hub import snapshot_download
 
-from transformers import Timesfm2P5Config, Timesfm2P5ModelForPrediction
+from transformers import TimesFm2_5Config, TimesFm2_5ModelForPrediction
 
 
 """
 Sample usage:
 
 ```
- python src/transformers/models/timesfm_2p5/convert_timesfm_2p5_original_to_hf.py \
+ python src/transformers/models/timesfm2_5/convert_timesfm2_5_original_to_hf.py \
     --output_dir /output/path
 ```
 """
@@ -87,7 +87,7 @@ def write_model(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytorch
     # Original TimesFM 2.5 has 9 quantiles + 1 extra (median/point prediction) = 10 total
     actual_quantile_len = quantile_output_dims // 10  # 9 quantiles + 1 = 10 total
 
-    timesfm_config = Timesfm2P5Config(
+    timesfm_config = TimesFm2_5Config(
         patch_length=32,
         context_length=16384,
         horizon_length=128,
@@ -106,7 +106,7 @@ def write_model(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytorch
         rope_theta=10000.0,
     )
     timesfm_config.save_pretrained(tmp_model_path)
-    timesfm_model = Timesfm2P5ModelForPrediction(timesfm_config)
+    timesfm_model = TimesFm2_5ModelForPrediction(timesfm_config)
 
     # Mapping of the layers from the original TimesFM 2.5 model to the Transformers model
     MODEL_LAYER_MAPPING = {
@@ -251,7 +251,7 @@ def check_outputs(model_path, huggingface_repo_id="google/timesfm-2.5-200m-pytor
     )
 
     # Load converted model
-    converted_model = Timesfm2P5ModelForPrediction.from_pretrained(
+    converted_model = TimesFm2_5ModelForPrediction.from_pretrained(
         model_path,
         dtype=torch.float32,
         attn_implementation="sdpa",

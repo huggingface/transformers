@@ -426,7 +426,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("textnet", "TextNetModel"),
         ("time_series_transformer", "TimeSeriesTransformerModel"),
         ("timesfm", "TimesFmModel"),
-        ("timesfm_2p5", "Timesfm2P5Model"),
+        ("timesfm2_5", "TimesFm2_5Model"),
         ("timesformer", "TimesformerModel"),
         ("timm_backbone", "TimmBackbone"),
         ("timm_wrapper", "TimmWrapperModel"),
@@ -1735,7 +1735,7 @@ MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING_NAMES = OrderedDict(
     [
         ("timesfm", "TimesFmModelForPrediction"),
-        ("timesfm_2p5", "Timesfm2P5ModelForPrediction"),
+        ("timesfm2_5", "TimesFm2_5ModelForPrediction"),
     ]
 )
 

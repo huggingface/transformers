@@ -42,10 +42,10 @@ You can find the checkpoint at [`google/timesfm-2.5-200m-transformers`](https://
 ```python
 import numpy as np
 import torch
-from transformers import Timesfm2P5ModelForPrediction
+from transformers import TimesFm2_5ModelForPrediction
 
 
-model = Timesfm2P5ModelForPrediction.from_pretrained(
+model = TimesFm2_5ModelForPrediction.from_pretrained(
     "google/timesfm-2.5-200m-transformers",
     device_map="auto",
 )
@@ -63,16 +63,16 @@ with torch.no_grad():
     quantile_forecast = outputs.full_predictions
 ```
 
-## Timesfm2P5Config
+## TimesFm2_5Config
 
-[[autodoc]] Timesfm2P5Config
+[[autodoc]] TimesFm2_5Config
 
-## Timesfm2P5Model
+## TimesFm2_5Model
 
-[[autodoc]] Timesfm2P5Model
+[[autodoc]] TimesFm2_5Model
     - forward
 
-## Timesfm2P5ModelForPrediction
+## TimesFm2_5ModelForPrediction
 
-[[autodoc]] Timesfm2P5ModelForPrediction
+[[autodoc]] TimesFm2_5ModelForPrediction
     - forward
