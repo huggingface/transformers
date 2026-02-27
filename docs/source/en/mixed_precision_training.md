@@ -15,7 +15,7 @@ limitations under the License.
 
 # Mixed precision training
 
-Full precision (fp32) training stores and computes everything in 32-bits. Mixed precision uses a lower precision (fp16 or bf16) data type for the compute intensive computations in the forward and backward passes, while keeping a "main copy" of the fp32 weights for the optimizer update. This makes compute faster and halves activation memory, and preserves training stability.
+Full precision (fp32) training stores and computes everything in 32-bits. Mixed precision uses a lower precision (fp16 or bf16) data type for the compute intensive computations in the forward and backward passes, while keeping a "main copy" of the fp32 weights for the optimizer update. This makes compute faster and halves weights and activation memory, and preserves training stability. 
 
 ```text
 ┌─────────────────────────────────────────────────────┐
@@ -50,10 +50,15 @@ args = TrainingArguments(..., fp16=True)
 
 ## tf32
 
-[tf32](https://blogs.nvidia.com/blog/tensorfloat-32-precision-format/) is a compute mode on Ampere GPUs that uses 10-bit mantissa for matmuls instead of 23-bits. This can give you a nice speedup, especially when paired with bf16 or fp16. tf32 mode is enabled by default on supported hardware, but you can explicitly add it to your training code.
+[tf32](https://blogs.nvidia.com/blog/tensorfloat-32-precision-format/) is a compute mode on Ampere GPUs that uses 10-bit mantissa for matmuls instead of 23-bits. This can give you a speedup, especially when paired with bf16 or fp16. PyTorch enables tf32 for matmuls by default on Ampere and newer GPUs, but setting it explicitly in [`TrainingArguments`] ensures it's active regardless of the PyTorch version or environment defaults.
 
 ```py
 from transformers import TrainingArguments
 
 args = TrainingArguments(..., bf16=True, tf32=True)
 ```
+
+## Next steps
+
+- See the [Kernels](./kernels) guide to learn how to speed up training with custom fused kernels.
+- See the [torch.compile](./torch_compile) guide to learn how to compile the forward and backward pass for additional throughput.
