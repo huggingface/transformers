@@ -36,11 +36,18 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.import_utils import (
     is_mambapy_available,
+    is_torch_greater_or_equal,
     is_torchdynamo_compiling,
+    is_tracing,
     resolve_internal_import,
 )
 from .configuration_falcon_mamba import FalconMambaConfig
 
+
+if is_torch_greater_or_equal("2.9.0"):
+    from torch._higher_order_ops.associative_scan import associative_scan
+else:
+    associative_scan = None
 
 if is_mambapy_available():
     from mambapy.pscan import pscan
@@ -204,6 +211,7 @@ class FalconMambaMixer(nn.Module):
         self.act = ACT2FN[config.hidden_act]
 
         self.use_falcon_mambapy = config.use_falcon_mambapy
+        self.use_associative_scan = config.use_associative_scan
 
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
@@ -466,16 +474,39 @@ class FalconMambaMixer(nn.Module):
             scan_output = scan_output + hidden_states * self.D[None, :, None]
             scan_output = scan_output * self.act(gate)
         else:
-            scan_outputs = []
-            for i in range(seq_len):
-                ssm_state = (
-                    discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]
-                )  # [batch, intermediate_size, ssm_state]
-                scan_output = torch.matmul(
-                    ssm_state.to(dtype), C[:, i, :].unsqueeze(-1)
-                )  # [batch, intermediate_size, 1]
-                scan_outputs.append(scan_output[:, :, 0])
-            scan_output = torch.stack(scan_outputs, dim=-1)  # [batch, intermediate_size, seq_len]
+            # Use associative_scan for parallel computation when available
+            if (
+                self.use_associative_scan
+                and associative_scan is not None
+                and is_tracing(hidden_states)
+                and cache_params is None
+            ):
+
+                def combine_fn(left, right):
+                    a_left, b_left = left
+                    a_right, b_right = right
+                    return (a_left * a_right, a_right * b_left + b_right)
+
+                combine_mode = "pointwise" if discrete_A.device.type in ("cuda", "xpu") else "generic"
+                _, all_h = associative_scan(combine_fn, (discrete_A, deltaB_u), dim=2, combine_mode=combine_mode)
+                # all_h: [B, D, S, N] -> output: [B, D, S]
+                scan_output = (
+                    torch.matmul(all_h.permute(0, 2, 1, 3).to(dtype), C.unsqueeze(-1)).squeeze(-1).permute(0, 2, 1)
+                )
+                ssm_state = all_h[:, :, -1, :]
+            else:
+                # Sequential loop for decoding or when associative_scan unavailable
+                scan_outputs = []
+                for i in range(seq_len):
+                    ssm_state = (
+                        discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]
+                    )  # [batch, intermediate_size, ssm_state]
+                    scan_output = torch.matmul(
+                        ssm_state.to(dtype), C[:, i, :].unsqueeze(-1)
+                    )  # [batch, intermediate_size, 1]
+                    scan_outputs.append(scan_output[:, :, 0])
+                scan_output = torch.stack(scan_outputs, dim=-1)  # [batch, intermediate_size, seq_len]
+
             scan_output = scan_output + (hidden_states * self.D[None, :, None])
             scan_output = scan_output * self.act(gate)
 

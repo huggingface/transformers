@@ -1,4 +1,4 @@
-<!--Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
+<!--Copyright 2025 The Baidu and HuggingFace Inc. team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -59,7 +59,7 @@ pipe = pipeline(
     task="image-text-to-text",
     model="baidu/ERNIE-4.5-VL-28B-A3B-PT",
     device_map="auto",
-    revision="refs/pr/10",
+    revision="refs/pr/11",
 )
 message = [
     {
@@ -86,12 +86,12 @@ model = AutoModelForImageTextToText.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
     dtype="auto",
     device_map="auto",  # Use tp_plan="auto" instead to enable Tensor Parallelism!
-    revision="refs/pr/10",
+    revision="refs/pr/11",
 )
 processor = AutoProcessor.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
     # use_fast=False,  # closer to the original implementation for less speed
-    revision="refs/pr/10",
+    revision="refs/pr/11",
 )
 message = [
     {
@@ -137,9 +137,9 @@ model = AutoModelForImageTextToText.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
     dtype="auto",
     device_map="auto",  # Use tp_plan="auto" instead to enable Tensor Parallelism!
-    revision="refs/pr/10",
+    revision="refs/pr/11",
 )
-processor = AutoProcessor.from_pretrained("baidu/ERNIE-4.5-VL-28B-A3B-PT", revision="refs/pr/10")
+processor = AutoProcessor.from_pretrained("baidu/ERNIE-4.5-VL-28B-A3B-PT", revision="refs/pr/11")
 message = [
     {
         "role": "user",
@@ -171,63 +171,63 @@ output_text = processor.batch_decode(
 print(output_text)
 ```
 
-## Ernie4_5_VL_MoeConfig
+## Ernie4_5_VLMoeConfig
 
-[[autodoc]] Ernie4_5_VL_MoeConfig
+[[autodoc]] Ernie4_5_VLMoeConfig
 
-## Ernie4_5_VL_MoeTextConfig
+## Ernie4_5_VLMoeTextConfig
 
-[[autodoc]] Ernie4_5_VL_MoeTextConfig
+[[autodoc]] Ernie4_5_VLMoeTextConfig
 
-## Ernie4_5_VL_MoeVisionConfig
+## Ernie4_5_VLMoeVisionConfig
 
-[[autodoc]] Ernie4_5_VL_MoeVisionConfig
+[[autodoc]] Ernie4_5_VLMoeVisionConfig
 
-## Ernie4_5_VL_MoeImageProcessor
+## Ernie4_5_VLMoeImageProcessor
 
-[[autodoc]] Ernie4_5_VL_MoeImageProcessor
+[[autodoc]] Ernie4_5_VLMoeImageProcessor
     - preprocess
 
-## Ernie4_5_VL_MoeImageProcessorFast
+## Ernie4_5_VLMoeImageProcessorFast
 
-[[autodoc]] Ernie4_5_VL_MoeImageProcessorFast
+[[autodoc]] Ernie4_5_VLMoeImageProcessorFast
     - preprocess
 
-## Ernie4_5_VL_MoeVideoProcessor
+## Ernie4_5_VLMoeVideoProcessor
 
-[[autodoc]] Ernie4_5_VL_MoeVideoProcessor
+[[autodoc]] Ernie4_5_VLMoeVideoProcessor
     - preprocess
 
-## Ernie4_5_VL_MoeProcessor
+## Ernie4_5_VLMoeProcessor
 
-[[autodoc]] Ernie4_5_VL_MoeProcessor
+[[autodoc]] Ernie4_5_VLMoeProcessor
     - __call__
 
-## Ernie4_5_VL_MoeTextModel
+## Ernie4_5_VLMoeTextModel
 
-[[autodoc]] Ernie4_5_VL_MoeTextModel
+[[autodoc]] Ernie4_5_VLMoeTextModel
     - forward
 
-## Ernie4_5_VL_MoeVisionTransformerPretrainedModel
+## Ernie4_5_VLMoeVisionTransformerPretrainedModel
 
-[[autodoc]] Ernie4_5_VL_MoeVisionTransformerPretrainedModel
+[[autodoc]] Ernie4_5_VLMoeVisionTransformerPretrainedModel
     - forward
 
-## Ernie4_5_VL_MoeVariableResolutionResamplerModel
+## Ernie4_5_VLMoeVariableResolutionResamplerModel
 
-[[autodoc]] Ernie4_5_VL_MoeVariableResolutionResamplerModel
+[[autodoc]] Ernie4_5_VLMoeVariableResolutionResamplerModel
     - forward
 
-## Ernie4_5_VL_MoeModel
+## Ernie4_5_VLMoeModel
 
-[[autodoc]] Ernie4_5_VL_MoeModel
+[[autodoc]] Ernie4_5_VLMoeModel
     - forward
     - get_video_features
     - get_image_features
 
-## Ernie4_5_VL_MoeForConditionalGeneration
+## Ernie4_5_VLMoeForConditionalGeneration
 
-[[autodoc]] Ernie4_5_VL_MoeForConditionalGeneration
+[[autodoc]] Ernie4_5_VLMoeForConditionalGeneration
     - forward
     - get_video_features
     - get_image_features

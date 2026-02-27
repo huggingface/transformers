@@ -1515,7 +1515,11 @@ class TrainingArguments:
         if self.greater_is_better is None and self.metric_for_best_model is not None:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
 
-        if self.report_to == "none" or self.report_to == ["none"]:
+        if self.report_to == "all" or self.report_to == ["all"]:
+            from .integrations import get_available_reporting_integrations
+
+            self.report_to = get_available_reporting_integrations()
+        elif self.report_to == "none" or self.report_to == ["none"]:
             self.report_to = []
         elif not isinstance(self.report_to, list):
             self.report_to = [self.report_to]

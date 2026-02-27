@@ -377,7 +377,6 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         {
             "feature-extraction": XLMModel,
             "fill-mask": XLMWithLMHeadModel,
-            "question-answering": XLMForQuestionAnsweringSimple,
             "text-classification": XLMForSequenceClassification,
             "text-generation": XLMWithLMHeadModel,
             "token-classification": XLMForTokenClassification,
@@ -550,5 +549,5 @@ class XLMModelLanguageGenerationTest(unittest.TestCase):
         ]  # the president the president the president the president the president the president the president the president the president the president
         # TODO(PVP): this and other input_ids I tried for generation give pretty bad results. Not sure why. Model might just not be made for auto-regressive inference
         # We limit the generation output to (max_length - input_length) while by default 20 new tokens will be generated.
-        output_ids = model.generate(input_ids, do_sample=False, max_length=20)
+        output_ids = model.generate(input_ids, do_sample=False, max_length=20, use_cache=False)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

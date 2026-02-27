@@ -2,7 +2,7 @@ import json
 
 import datasets
 
-from tests.trainer.test_trainer import StoreLossCallback
+from tests.trainer.trainer_test_utils import StoreLossCallback
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
