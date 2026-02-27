@@ -68,7 +68,7 @@ Training requires and produces many tensor types that need to be stored.
 
 There are three main types of training ops.
 
-- Matrix multiplications (matmuls) are the main op type, covering linear layers, QKV projections, attention output projections, and FFN layers. The main memory hog are the attention score matrices which grows with the square of the sequence length. This is why long sequences are so expensive and different [attention backends](./attention_interface) exist to avoid materializing the full matrix in memory.
+- Matrix multiplications (matmuls) are the main op type, covering linear layers, QKV projections, attention output projections, and FFN layers. The main memory hogs are the attention score matrices which grow with the square of the sequence length. This is why long sequences are so expensive and different [attention backends](./attention_interface) exist to avoid materializing the full matrix in memory.
 
 - Reduction ops, like softmax and layer norm, read a full tensor, computes a statistic across a dimension, and then reads the tensor again to apply it. This requires accessing memory multiple times per operation.
 
@@ -78,3 +78,5 @@ There are three main types of training ops.
 
 - See the [Gradient accumulation](./grad_accumulation) guide to learn how to simulate training on a larger effective batch size without running out of GPU memory.
 - See the [Gradient checkpointing](./grad_checkpointing) guide to learn how to reduce memory usage by only storing some intermediate activations.
+- See the [Mixed precision training](./mixed_precision_training) guide to learn how to use lower precision data types to reduce memory and speed up training.
+- See the [Kernels](./kernels) guide to learn how to speed up training with custom fused kernels.

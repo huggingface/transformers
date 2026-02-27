@@ -15,15 +15,17 @@ limitations under the License.
 
 # torch.compile
 
-[torch.compile](https://docs.pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) compiles PyTorch code to fused kernels to make it run faster. The backend choice is important because not all backends support training.
+[torch.compile](https://docs.pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) compiles PyTorch code to fused kernels to make it run faster. For training, it traces both the forward and backward pass together and compiles them into optimized kernels, reducing the overhead of individual op launches and fusing operations to cut memory bandwidth usage.
+
+The table below lists the backends that support training.
 
 | backend | description |
 |---|---|
-| inductor | default backend that traces forward/backward graphs ahead of time and compiles to Triton kernels that run on CUDA |
-| aot_cudagraphs | uses CUDA graphs with AOTAutograd to capture the entire sequence of GPU operations and replay them with minimal CPU overhead |
-| nvfuser/aot_nvfuser | NVIDIA's fusion compiler integrated with TorchScript or AOTAutograd |
+| `inductor` | default; traces forward/backward graphs ahead of time and compiles to Triton kernels that run on CUDA |
+| `aot_cudagraphs` | captures the GPU operation sequence and replays it with minimal CPU dispatch overhead; best for fixed-shape workloads |
+| `aot_nvfuser` / `nvfuser` | NVIDIA's fusion compiler via AOTAutograd or TorchScript |
 
-Set `torch_compile=True` in [`TrainingArguments`] to enable it.
+Set `torch_compile=True` in [`TrainingArguments`] to enable it. Unlike inference, which only compiles the forward pass, training must also trace and compile the backward pass. Expect the first step to be slower.
 
 ```py
 from transformers import TrainingArguments
@@ -38,4 +40,4 @@ args = TrainingArguments(
 
 ## Next steps
 
-- See [torch.compile for inference](./perf_torch_compile) guide for more details about mode and fullgraph..
+- See the [torch.compile for inference](./perf_torch_compile) guide for details on modes and fullgraph compilation.

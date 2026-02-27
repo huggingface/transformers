@@ -49,7 +49,6 @@ args = TrainingArguments(
 ```py
 import torch
 import torch.nn.functional as F
-from transformers import Trainer, TrainingArguments
 
 def my_loss_fn(outputs, labels, num_items_in_batch=None):
     logits = outputs["logits"]
@@ -64,3 +63,5 @@ def my_loss_fn(outputs, labels, num_items_in_batch=None):
 ## Next steps
 
 - Read the [GPU memory usage](./model_memory_anatomy) doc to understand what is driving memory usage on the GPU during training.
+- See the [Gradient checkpointing](./grad_checkpointing) guide to learn how to reduce activation memory by recomputing activations instead of caching them.
+- See the [Mixed precision training](./mixed_precision_training) guide to learn how to use lower precision data types to reduce memory and speed up training.
