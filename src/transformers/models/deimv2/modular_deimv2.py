@@ -154,8 +154,6 @@ class Deimv2Config(DFineConfig):
             Parameter gamma used to compute the focal loss.
         weight_loss_vfl (`float`, *optional*, defaults to 1.0):
             Relative weight of the varifocal loss in the object detection loss.
-        weight_loss_mal (`float`, *optional*, defaults to 1.0):
-            Relative weight of the matching auxiliary loss in the object detection loss.
         weight_loss_bbox (`float`, *optional*, defaults to 5.0):
             Relative weight of the L1 bounding box loss in the object detection loss.
         weight_loss_giou (`float`, *optional*, defaults to 2.0):
@@ -188,6 +186,8 @@ class Deimv2Config(DFineConfig):
             The method to use for the decoder: `"default"` or `"discrete"`.
         up (`float`, *optional*, defaults to 0.5):
             Controls the upper bounds of the Weighting Function.
+        weight_loss_mal (`float`, *optional*, defaults to 1.0):
+            Relative weight of the matching auxiliary loss in the object detection loss.
         use_dense_o2o (`bool`, *optional*, defaults to `True`):
             Whether to use dense one-to-one matching across decoder layers.
         mal_alpha (`float`, *optional*):
