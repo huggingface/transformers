@@ -15,48 +15,20 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING
 
 
+@auto_docstring(checkpoint="UsefulSensors/moonshine-streaming-tiny")
 class MoonshineStreamingEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MoonshineStreamingEncoder`]. It is used to
-    instantiate a Moonshine Streaming encoder according to the specified arguments, defining the encoder architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Moonshine Streaming tiny model.
-    e.g. [UsefulSensors/moonshine-streaming-tiny](https://huggingface.co/UsefulSensors/moonshine-streaming-tiny)
+    sample_rate (`int`, *optional*, defaults to 16000):
+        The sample rate of the audio input in Hz.
+    frame_ms (`float`, *optional*, defaults to 5.0):
+        The frame duration in milliseconds for audio processing.
+    sliding_windows (`list[tuple[int, int]]`, *optional*, defaults to `[(16, 4), (16, 4), (16, 0), (16, 0), (16, 4), (16, 4)]`):
+        List of sliding window configurations for each encoder layer. Each tuple contains (window_size, shift).
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 320):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 1280):
-            Dimension of the MLP representations.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 6):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used.
-        max_position_embeddings (`int`, *optional*, defaults to 4096):
-            The maximum sequence length that this model might ever be used with.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        sample_rate (`int`, *optional*, defaults to 16000):
-            The sample rate of the audio input in Hz.
-        frame_ms (`float`, *optional*, defaults to 5.0):
-            The frame duration in milliseconds for audio processing.
-        sliding_windows (`list[tuple[int, int]]`, *optional*, defaults to `[(16, 4), (16, 4), (16, 0), (16, 0), (16, 4), (16, 4)]`):
-            List of sliding window configurations for each encoder layer. Each tuple contains (window_size, shift).
-        head_dim (`int`, *optional*):
-            The attention head dimension. If None, it will default to hidden_size // num_attention_heads.
 
     ```python
     >>> from transformers import MoonshineStreamingEncoder, MoonshineStreamingEncoderConfig
