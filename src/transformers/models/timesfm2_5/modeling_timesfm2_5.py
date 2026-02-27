@@ -81,8 +81,8 @@ class TimesFm2_5MLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.activation]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)

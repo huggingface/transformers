@@ -222,6 +222,8 @@ class TimesFm2_5MLP(CLIPMLP):
     def __init__(self, config: TimesFm2_5Config):
         super().__init__()
         self.activation_fn = ACT2FN[config.activation]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
 
 
 class TimesFm2_5ResidualBlock(TimesFmResidualBlock):
