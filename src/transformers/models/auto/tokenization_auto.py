@@ -264,7 +264,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("qwen2_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
-        # Qwen3.5 Hub tokenizer_config uses "Qwen2Tokenizer"; use same so save_pretrained round-trips correctly (see #44297)
         ("qwen3_5", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_5_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
