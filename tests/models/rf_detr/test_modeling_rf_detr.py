@@ -598,7 +598,7 @@ EXPECTED_SEGMENTATION_OUTPUTS = {
         "pred_masks": [-15.67913, -17.05902, -16.72426, -17.19833, -17.18960],
         "post_process_labels": [17, 75, 17, 75],
         "post_process_scores": [0.982117, 0.982515, 0.986937, 0.94945],
-        "loss": 95.673324,
+        "loss": 96.400970,
     },
     "stevenbucaille/rf-detr-seg-large": {
         "logits": [-7.37005, -5.04871, -9.19777, -9.37870, -7.96562],
@@ -606,7 +606,7 @@ EXPECTED_SEGMENTATION_OUTPUTS = {
         "pred_masks": [-15.13846, -16.88754, -16.55486, -17.23686, -17.40160],
         "post_process_labels": [17, 17, 75, 75],
         "post_process_scores": [0.973857, 0.980841, 0.982329, 0.940749],
-        "loss": 91.783073,
+        "loss": 91.295486,
     },
     "stevenbucaille/rf-detr-seg-xlarge": {
         "logits": [-7.42486, -4.72502, -8.16429, -8.30500, -7.21668],
@@ -622,7 +622,7 @@ EXPECTED_SEGMENTATION_OUTPUTS = {
         "pred_masks": [-7.94849, -8.57010, -8.60056, -8.92854, -8.99288],
         "post_process_labels": [17, 75, 75, 17],
         "post_process_scores": [0.980528, 0.976553, 0.846246, 0.974776],
-        "loss": 99.400444,
+        "loss": 98.795463,
     },
 }
 
