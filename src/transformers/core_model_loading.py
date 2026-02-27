@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import math
 import os
+import sys
 import re
 import traceback
 from abc import abstractmethod
@@ -1207,8 +1208,10 @@ def convert_and_load_state_dict_in_model(
         with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
             for first_param_name, mapping in param_name_to_load.items():
                 pbar.update(1)
-                pbar.set_postfix({"Materializing param": first_param_name})
-                pbar.refresh()
+                # Only show param name when stdout is a TTY to avoid huge log files (e.g. CI); see #44303
+                if sys.stdout.isatty():
+                    pbar.set_postfix({"Materializing param": first_param_name})
+                    pbar.refresh()
                 try:
                     realized_value = mapping.convert(
                         first_param_name,
