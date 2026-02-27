@@ -15,7 +15,6 @@ from dataclasses import dataclass
 
 import torch
 from torch import Tensor, nn
-from torch.nn import Module
 from torch.nn import functional as F
 
 from ...activations import ACT2FN
@@ -44,9 +43,9 @@ from ..lw_detr.modeling_lw_detr import (
     LwDetrLayerNorm,
     LwDetrModel,
     LwDetrModelOutput,
+    LwDetrMultiscaleDeformableAttention,
     LwDetrObjectDetectionOutput,
     LwDetrPreTrainedModel,
-    LwDetrSamplingLayer,
     LwDetrScaleProjector,
     refine_bboxes,
 )
@@ -261,7 +260,6 @@ class RfDetrConfig(LwDetrConfig):
         # backbone
         backbone_config=None,
         # projector
-        projector_scale_factors: list[float] = [],
         hidden_expansion=0.5,
         c2f_num_blocks=3,
         activation_function="silu",
@@ -340,12 +338,6 @@ class RfDetrConfig(LwDetrConfig):
         self.backbone_config = backbone_config
 
         # projector
-        self.projector_scale_factors = projector_scale_factors
-        for scale in projector_scale_factors:
-            if scale not in [0.5, 1.0, 2.0]:
-                raise ValueError(f"Unsupported scale factor: {scale}")
-        self.projector_in_channels = [d_model] * len(projector_scale_factors)
-        self.projector_out_channels = d_model
         self.activation_function = activation_function
         self.hidden_expansion = hidden_expansion
         self.c2f_num_blocks = c2f_num_blocks
@@ -354,7 +346,6 @@ class RfDetrConfig(LwDetrConfig):
         self.dropout = dropout
         self.num_queries = num_queries
         self.decoder_ffn_dim = decoder_ffn_dim
-        self.num_feature_levels = len(self.projector_scale_factors)
         self.decoder_n_points = decoder_n_points
         self.decoder_layers = decoder_layers
         self.decoder_activation_function = decoder_activation_function
@@ -674,44 +665,40 @@ class RfDetrC2FLayer(LwDetrC2FLayer):
     pass
 
 
-class RfDetrSamplingLayer(LwDetrSamplingLayer):
-    def __init__(self, config: RfDetrConfig, channel_size: int, scale: float):
-        nn.Module.__init__(self)
-
-        self.scale = scale
-        self.channel_size = channel_size
-
-        layers = []
-        if scale == 2.0:
-            layers.append(nn.ConvTranspose2d(channel_size, channel_size // 2, 2, 2))
-        elif scale == 0.5:
-            layers.append(RfDetrConvNormLayer(config, channel_size, channel_size, 3, 2, activation="relu"))
-        self.layers = nn.ModuleList(layers)
-
-
 class RfDetrScaleProjector(LwDetrScaleProjector):
-    def __init__(self, config: RfDetrConfig, scale: float):
+    def __init__(self, config: RfDetrConfig):
         nn.Module.__init__(self)
-
         intermediate_dims = [config.backbone_config.hidden_size] * len(config.backbone_config.out_indices)
-        sampling_layers = []
-        for channel_size in intermediate_dims:
-            sampling_layers.append(RfDetrSamplingLayer(config, channel_size, scale))
-        self.sampling_layers = nn.ModuleList(sampling_layers)
-
         intermediate_dim = intermediate_dims[-1]
-        if scale == 2.0:
-            intermediate_dim = intermediate_dim // 2
         projector_input_dim = intermediate_dim * len(intermediate_dims)
-
         self.projector_layer = RfDetrC2FLayer(config, projector_input_dim)
         self.layer_norm = RfDetrLayerNorm(config.d_model, data_format="channels_first")
+
+    def forward(self, hidden_states_tuple: tuple[torch.Tensor]) -> torch.Tensor:
+        hidden_states = torch.cat(hidden_states_tuple, dim=1)
+        hidden_states = self.projector_layer(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+        return hidden_states
 
 
 class RfDetrConvEncoder(LwDetrConvEncoder):
     def __init__(self, config: RfDetrConfig):
         super().__init__(config)
         self.backbone = RfDetrDinov2Backbone(config.backbone_config)
+        self.projector = RfDetrScaleProjector(config)
+
+    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
+        # send pixel_values through the model to get list of feature maps
+        features = self.backbone(pixel_values).feature_maps
+        features = self.projector(features)
+        mask = nn.functional.interpolate(pixel_mask[None].float(), size=features.shape[-2:]).to(torch.bool)[0]
+        return features, mask
+
+
+class RfDetrMultiscaleDeformableAttention(LwDetrMultiscaleDeformableAttention):
+    def __init__(self, config: RfDetrConfig, num_heads: int, n_points: int):
+        super().__init__(config, num_heads, n_points)
+        self.n_levels = 1
 
 
 class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
@@ -815,7 +802,7 @@ class RfDetrModel(LwDetrModel):
 
         # We begin by extracting hierarchical feature maps from the backbone, which provides the
         # multi-scale visual context for the detector.
-        features = self.backbone(pixel_values, pixel_mask)
+        features, mask = self.backbone(pixel_values, pixel_mask)
 
         # To prepare for transformer processing, we flatten the multi-scale features and masks
         # while tracking spatial shapes and valid ratios to maintain cross-scale relationships.
@@ -824,13 +811,12 @@ class RfDetrModel(LwDetrModel):
         # spatial_shapes (num_levels, 2) : spatial shapes of the feature maps
         # level_start_index (num_levels,) : start index of each level in source_flatten
         # valid_ratios (batch_size, num_levels, 2) : valid ratios of the feature maps
-        sources, masks = zip(*features)
-        source_flatten = torch.cat([source.flatten(2).transpose(1, 2) for source in sources], dim=1)
-        mask_flatten = torch.cat([mask.flatten(1) for mask in masks], dim=1)
-        spatial_shapes_list = [source.shape[2:] for source in sources]
+        source_flatten = features.flatten(2).transpose(1, 2)
+        mask_flatten = mask.flatten(1)
+        spatial_shapes_list = [features.shape[2:]]
         spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
+        valid_ratios = self.get_valid_ratio(mask, dtype=source_flatten.dtype).unsqueeze(1)
 
         # Next, we generate an initial set of object query embeddings and spatial location proposals
         # derived directly from the backbone's flattened output.
@@ -901,7 +887,7 @@ class RfDetrModel(LwDetrModel):
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_reference_points=decoder_outputs.intermediate_reference_points,
-            backbone_features=sources,
+            backbone_features=features,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
             hidden_states=decoder_outputs.hidden_states,
@@ -1248,7 +1234,7 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         # multi-scale spatial features, query embeddings, and their transformation history.
         outputs = self.rf_detr.model(pixel_values, pixel_mask=pixel_mask, **kwargs)
 
-        spatial_features = outputs.backbone_features[-1]
+        spatial_features = outputs.backbone_features
         last_hidden_states = outputs.last_hidden_state
         intermediate_reference_points = outputs.intermediate_reference_points
         enc_outputs_class = outputs.enc_outputs_class

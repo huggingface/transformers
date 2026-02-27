@@ -708,87 +708,196 @@ class RfDetrC2FLayer(nn.Module):
         return hidden_states
 
 
-class RfDetrSamplingLayer(nn.Module):
-    def __init__(self, config: RfDetrConfig, channel_size: int, scale: float):
-        super().__init__()
-
-        self.scale = scale
-        self.channel_size = channel_size
-
-        layers = []
-        if scale == 2.0:
-            layers.append(nn.ConvTranspose2d(channel_size, channel_size // 2, 2, 2))
-        elif scale == 0.5:
-            layers.append(RfDetrConvNormLayer(config, channel_size, channel_size, 3, 2, activation="relu"))
-        self.layers = nn.ModuleList(layers)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        for layer in self.layers:
-            hidden_states = layer(hidden_states)
-        return hidden_states
-
-
 class RfDetrScaleProjector(nn.Module):
-    def __init__(self, config: RfDetrConfig, scale: float):
+    def __init__(self, config: RfDetrConfig):
         super().__init__()
-
         intermediate_dims = [config.backbone_config.hidden_size] * len(config.backbone_config.out_indices)
-        sampling_layers = []
-        for channel_size in intermediate_dims:
-            sampling_layers.append(RfDetrSamplingLayer(config, channel_size, scale))
-        self.sampling_layers = nn.ModuleList(sampling_layers)
-
         intermediate_dim = intermediate_dims[-1]
-        if scale == 2.0:
-            intermediate_dim = intermediate_dim // 2
         projector_input_dim = intermediate_dim * len(intermediate_dims)
-
         self.projector_layer = RfDetrC2FLayer(config, projector_input_dim)
         self.layer_norm = RfDetrLayerNorm(config.d_model, data_format="channels_first")
 
     def forward(self, hidden_states_tuple: tuple[torch.Tensor]) -> torch.Tensor:
-        sampled_hidden_states = []
-        for sampling_layer, hidden_states in zip(self.sampling_layers, hidden_states_tuple):
-            hidden_states = sampling_layer(hidden_states)
-            sampled_hidden_states.append(hidden_states)
-        hidden_states = torch.cat(sampled_hidden_states, dim=1)
+        hidden_states = torch.cat(hidden_states_tuple, dim=1)
         hidden_states = self.projector_layer(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
         return hidden_states
-
-
-class RfDetrMultiScaleProjector(nn.Module):
-    def __init__(self, config: RfDetrConfig):
-        super().__init__()
-
-        self.config = config
-        scale_factors = config.projector_scale_factors
-
-        self.scale_layers = nn.ModuleList([RfDetrScaleProjector(config, scale) for scale in scale_factors])
-
-    def forward(self, hidden_states: tuple[torch.Tensor]) -> list[torch.Tensor]:
-        output_hidden_states = []
-        for scale_layer in self.scale_layers:
-            output_hidden_states.append(scale_layer(hidden_states))
-        return output_hidden_states
 
 
 class RfDetrConvEncoder(nn.Module):
     def __init__(self, config: RfDetrConfig):
         super().__init__()
         self.backbone = RfDetrDinov2Backbone(config.backbone_config)
-        self.projector = RfDetrMultiScaleProjector(config)
+        self.projector = RfDetrScaleProjector(config)
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
         features = self.backbone(pixel_values).feature_maps
         features = self.projector(features)
-        out = []
-        for feature_map in features:
-            # downsample pixel_mask to match shape of corresponding feature_map
-            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
-            out.append((feature_map, mask))
-        return out
+        mask = nn.functional.interpolate(pixel_mask[None].float(), size=features.shape[-2:]).to(torch.bool)[0]
+        return features, mask
+
+
+@use_kernel_forward_from_hub("MultiScaleDeformableAttention")
+class MultiScaleDeformableAttention(nn.Module):
+    def forward(
+        self,
+        value: Tensor,
+        value_spatial_shapes: Tensor,
+        value_spatial_shapes_list: list[tuple],
+        level_start_index: Tensor,
+        sampling_locations: Tensor,
+        attention_weights: Tensor,
+        im2col_step: int,
+    ):
+        batch_size, _, num_heads, hidden_dim = value.shape
+        _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+        value_list = value.split([height * width for height, width in value_spatial_shapes_list], dim=1)
+        sampling_grids = 2 * sampling_locations - 1
+        sampling_value_list = []
+        for level_id, (height, width) in enumerate(value_spatial_shapes_list):
+            # batch_size, height*width, num_heads, hidden_dim
+            # -> batch_size, height*width, num_heads*hidden_dim
+            # -> batch_size, num_heads*hidden_dim, height*width
+            # -> batch_size*num_heads, hidden_dim, height, width
+            value_l_ = (
+                value_list[level_id]
+                .flatten(2)
+                .transpose(1, 2)
+                .reshape(batch_size * num_heads, hidden_dim, height, width)
+            )
+            # batch_size, num_queries, num_heads, num_points, 2
+            # -> batch_size, num_heads, num_queries, num_points, 2
+            # -> batch_size*num_heads, num_queries, num_points, 2
+            sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+            # batch_size*num_heads, hidden_dim, num_queries, num_points
+            sampling_value_l_ = nn.functional.grid_sample(
+                value_l_,
+                sampling_grid_l_,
+                mode="bilinear",
+                padding_mode="zeros",
+                align_corners=False,
+            )
+            sampling_value_list.append(sampling_value_l_)
+        # (batch_size, num_queries, num_heads, num_levels, num_points)
+        # -> (batch_size, num_heads, num_queries, num_levels, num_points)
+        # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
+        attention_weights = attention_weights.transpose(1, 2).reshape(
+            batch_size * num_heads, 1, num_queries, num_levels * num_points
+        )
+        output = (
+            (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
+            .sum(-1)
+            .view(batch_size, num_heads * hidden_dim, num_queries)
+        )
+        return output.transpose(1, 2).contiguous()
+
+
+class RfDetrMultiscaleDeformableAttention(nn.Module):
+    """
+    Multiscale deformable attention as proposed in Deformable DETR.
+    """
+
+    def __init__(self, config: RfDetrConfig, num_heads: int, n_points: int):
+        super().__init__()
+
+        self.attn = MultiScaleDeformableAttention()
+
+        if config.d_model % num_heads != 0:
+            raise ValueError(
+                f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {num_heads}"
+            )
+        dim_per_head = config.d_model // num_heads
+        # check if dim_per_head is power of 2
+        if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
+            warnings.warn(
+                "You'd better set embed_dim (d_model) in RfDetrMultiscaleDeformableAttention to make the"
+                " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
+                " implementation."
+            )
+
+        self.im2col_step = 64
+
+        self.d_model = config.d_model
+        self.n_levels = 1
+        self.n_heads = num_heads
+        self.n_points = n_points
+
+        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
+        self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
+        self.value_proj = nn.Linear(config.d_model, config.d_model)
+        self.output_proj = nn.Linear(config.d_model, config.d_model)
+
+        self.disable_custom_kernels = config.disable_custom_kernels
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        position_embeddings: torch.Tensor | None = None,
+        reference_points=None,
+        spatial_shapes=None,
+        spatial_shapes_list=None,
+        level_start_index=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # add position embeddings to the hidden states before projecting to queries and keys
+        if position_embeddings is not None:
+            hidden_states = hidden_states + position_embeddings
+
+        batch_size, num_queries, _ = hidden_states.shape
+        batch_size, sequence_length, _ = encoder_hidden_states.shape
+        total_elements = sum(height * width for height, width in spatial_shapes_list)
+        torch_compilable_check(
+            total_elements == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
+
+        value = self.value_proj(encoder_hidden_states)
+        if attention_mask is not None:
+            # we invert the attention_mask
+            value = value.masked_fill(~attention_mask[..., None], float(0))
+        value = value.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
+        sampling_offsets = self.sampling_offsets(hidden_states).view(
+            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2
+        )
+        attention_weights = self.attention_weights(hidden_states).view(
+            batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
+        )
+        attention_weights = F.softmax(attention_weights, -1).view(
+            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
+        )
+        # batch_size, num_queries, n_heads, n_levels, n_points, 2
+        num_coordinates = reference_points.shape[-1]
+        if num_coordinates == 2:
+            offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
+            sampling_locations = (
+                reference_points[:, :, None, :, None, :]
+                + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
+            )
+        elif num_coordinates == 4:
+            sampling_locations = (
+                reference_points[:, :, None, :, None, :2]
+                + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
+            )
+        else:
+            raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
+
+        output = self.attn(
+            value,
+            spatial_shapes,
+            spatial_shapes_list,
+            level_start_index,
+            sampling_locations,
+            attention_weights,
+            self.im2col_step,
+        )
+
+        output = self.output_proj(output)
+
+        return output, attention_weights
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -874,168 +983,6 @@ class RfDetrAttention(nn.Module):
             attn_output = torch.cat(torch.split(attn_output, batch_size, dim=0), dim=1)
 
         return attn_output, attn_weights
-
-
-@use_kernel_forward_from_hub("MultiScaleDeformableAttention")
-class MultiScaleDeformableAttention(nn.Module):
-    def forward(
-        self,
-        value: Tensor,
-        value_spatial_shapes: Tensor,
-        value_spatial_shapes_list: list[tuple],
-        level_start_index: Tensor,
-        sampling_locations: Tensor,
-        attention_weights: Tensor,
-        im2col_step: int,
-    ):
-        batch_size, _, num_heads, hidden_dim = value.shape
-        _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-        value_list = value.split([height * width for height, width in value_spatial_shapes_list], dim=1)
-        sampling_grids = 2 * sampling_locations - 1
-        sampling_value_list = []
-        for level_id, (height, width) in enumerate(value_spatial_shapes_list):
-            # batch_size, height*width, num_heads, hidden_dim
-            # -> batch_size, height*width, num_heads*hidden_dim
-            # -> batch_size, num_heads*hidden_dim, height*width
-            # -> batch_size*num_heads, hidden_dim, height, width
-            value_l_ = (
-                value_list[level_id]
-                .flatten(2)
-                .transpose(1, 2)
-                .reshape(batch_size * num_heads, hidden_dim, height, width)
-            )
-            # batch_size, num_queries, num_heads, num_points, 2
-            # -> batch_size, num_heads, num_queries, num_points, 2
-            # -> batch_size*num_heads, num_queries, num_points, 2
-            sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
-            # batch_size*num_heads, hidden_dim, num_queries, num_points
-            sampling_value_l_ = nn.functional.grid_sample(
-                value_l_,
-                sampling_grid_l_,
-                mode="bilinear",
-                padding_mode="zeros",
-                align_corners=False,
-            )
-            sampling_value_list.append(sampling_value_l_)
-        # (batch_size, num_queries, num_heads, num_levels, num_points)
-        # -> (batch_size, num_heads, num_queries, num_levels, num_points)
-        # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
-        attention_weights = attention_weights.transpose(1, 2).reshape(
-            batch_size * num_heads, 1, num_queries, num_levels * num_points
-        )
-        output = (
-            (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
-            .sum(-1)
-            .view(batch_size, num_heads * hidden_dim, num_queries)
-        )
-        return output.transpose(1, 2).contiguous()
-
-
-class RfDetrMultiscaleDeformableAttention(nn.Module):
-    """
-    Multiscale deformable attention as proposed in Deformable DETR.
-    """
-
-    def __init__(self, config: RfDetrConfig, num_heads: int, n_points: int):
-        super().__init__()
-
-        self.attn = MultiScaleDeformableAttention()
-
-        if config.d_model % num_heads != 0:
-            raise ValueError(
-                f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {num_heads}"
-            )
-        dim_per_head = config.d_model // num_heads
-        # check if dim_per_head is power of 2
-        if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
-            warnings.warn(
-                "You'd better set embed_dim (d_model) in RfDetrMultiscaleDeformableAttention to make the"
-                " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
-                " implementation."
-            )
-
-        self.im2col_step = 64
-
-        self.d_model = config.d_model
-        self.n_levels = config.num_feature_levels
-        self.n_heads = num_heads
-        self.n_points = n_points
-
-        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
-        self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
-        self.value_proj = nn.Linear(config.d_model, config.d_model)
-        self.output_proj = nn.Linear(config.d_model, config.d_model)
-
-        self.disable_custom_kernels = config.disable_custom_kernels
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        position_embeddings: torch.Tensor | None = None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # add position embeddings to the hidden states before projecting to queries and keys
-        if position_embeddings is not None:
-            hidden_states = hidden_states + position_embeddings
-
-        batch_size, num_queries, _ = hidden_states.shape
-        batch_size, sequence_length, _ = encoder_hidden_states.shape
-        total_elements = sum(height * width for height, width in spatial_shapes_list)
-        torch_compilable_check(
-            total_elements == sequence_length,
-            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
-        )
-
-        value = self.value_proj(encoder_hidden_states)
-        if attention_mask is not None:
-            # we invert the attention_mask
-            value = value.masked_fill(~attention_mask[..., None], float(0))
-        value = value.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
-        sampling_offsets = self.sampling_offsets(hidden_states).view(
-            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2
-        )
-        attention_weights = self.attention_weights(hidden_states).view(
-            batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
-        )
-        attention_weights = F.softmax(attention_weights, -1).view(
-            batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
-        )
-        # batch_size, num_queries, n_heads, n_levels, n_points, 2
-        num_coordinates = reference_points.shape[-1]
-        if num_coordinates == 2:
-            offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
-            sampling_locations = (
-                reference_points[:, :, None, :, None, :]
-                + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
-            )
-        elif num_coordinates == 4:
-            sampling_locations = (
-                reference_points[:, :, None, :, None, :2]
-                + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
-            )
-        else:
-            raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
-
-        output = self.attn(
-            value,
-            spatial_shapes,
-            spatial_shapes_list,
-            level_start_index,
-            sampling_locations,
-            attention_weights,
-            self.im2col_step,
-        )
-
-        output = self.output_proj(output)
-
-        return output, attention_weights
 
 
 class RfDetrMLP(nn.Module):
@@ -1564,7 +1511,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
 
         # We begin by extracting hierarchical feature maps from the backbone, which provides the
         # multi-scale visual context for the detector.
-        features = self.backbone(pixel_values, pixel_mask)
+        features, mask = self.backbone(pixel_values, pixel_mask)
 
         # To prepare for transformer processing, we flatten the multi-scale features and masks
         # while tracking spatial shapes and valid ratios to maintain cross-scale relationships.
@@ -1573,13 +1520,12 @@ class RfDetrModel(RfDetrPreTrainedModel):
         # spatial_shapes (num_levels, 2) : spatial shapes of the feature maps
         # level_start_index (num_levels,) : start index of each level in source_flatten
         # valid_ratios (batch_size, num_levels, 2) : valid ratios of the feature maps
-        sources, masks = zip(*features)
-        source_flatten = torch.cat([source.flatten(2).transpose(1, 2) for source in sources], dim=1)
-        mask_flatten = torch.cat([mask.flatten(1) for mask in masks], dim=1)
-        spatial_shapes_list = [source.shape[2:] for source in sources]
+        source_flatten = features.flatten(2).transpose(1, 2)
+        mask_flatten = mask.flatten(1)
+        spatial_shapes_list = [features.shape[2:]]
         spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
+        valid_ratios = self.get_valid_ratio(mask, dtype=source_flatten.dtype).unsqueeze(1)
 
         # Next, we generate an initial set of object query embeddings and spatial location proposals
         # derived directly from the backbone's flattened output.
@@ -1650,7 +1596,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_reference_points=decoder_outputs.intermediate_reference_points,
-            backbone_features=sources,
+            backbone_features=features,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
             hidden_states=decoder_outputs.hidden_states,
@@ -2082,7 +2028,7 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         # multi-scale spatial features, query embeddings, and their transformation history.
         outputs = self.rf_detr.model(pixel_values, pixel_mask=pixel_mask, **kwargs)
 
-        spatial_features = outputs.backbone_features[-1]
+        spatial_features = outputs.backbone_features
         last_hidden_states = outputs.last_hidden_state
         intermediate_reference_points = outputs.intermediate_reference_points
         enc_outputs_class = outputs.enc_outputs_class
