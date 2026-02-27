@@ -1846,7 +1846,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         # Merge list tokens, converting dicts to AddedToken
                         existing = list(init_kwargs.get("extra_special_tokens") or [])
                         for tok in value:
-                            tok = AddedToken(**tok, special=True) if isinstance(tok, dict) else tok
+                            if isinstance(tok, dict):
+                                tok.pop("special", None)
+                                tok = AddedToken(**tok, special=True)
+
                             if tok not in existing:
                                 existing.append(tok)
                         value = existing
