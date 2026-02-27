@@ -544,7 +544,7 @@ class JinaEmbeddingsV3LMHead(nn.Module):
 
 class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
     _tied_weights_keys = {
-        "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.parametrizations.weight.original",
+        "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.weight",
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
