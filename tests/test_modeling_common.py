@@ -3873,9 +3873,6 @@ class ModelTesterMixin:
         if not is_torch_fp16_available_on_device(torch_device):
             self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
 
-        if torch_device == "xpu":
-            self.skipTest("XPU FA2 currently does not support backward.")
-
         torch.compiler.reset()
         dtype = torch.float16
 
