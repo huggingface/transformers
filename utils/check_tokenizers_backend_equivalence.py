@@ -160,14 +160,15 @@ def _canonical_diff(diff_lines: list[str]) -> str:
       so that structurally identical diffs at different offsets collapse into the
       same pattern.
     """
-    import re
-    _hunk_re = re.compile(r"@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@")
     out = []
     for line in diff_lines:
+        # Keep only changed lines; skip file headers, hunk headers, and context
         if line.startswith("---") or line.startswith("+++"):
             continue
         if line.startswith("@@"):
-            line = _hunk_re.sub("@@ @@", line)
+            continue
+        if not (line.startswith("+") or line.startswith("-")):
+            continue
         out.append(line)
     return "\n".join(out)
 
@@ -377,9 +378,9 @@ def check_one_model(
     output_dir: str,
     v4_python: str | None,
     xnli_samples: int,
-) -> tuple[str | None, list[str], str | None]:
+) -> tuple[str | None, list[str], str | None, str | None]:
     """
-    Check a single model.  Returns (mismatch_id_or_None, output_lines).
+    Check a single model.  Returns (mismatch_id_or_None, output_lines, canonical_diff, converter).
     Nothing is printed directly — all output is buffered so the caller can
     flush it atomically (no interleaving between concurrent models).
     Only mismatches and (when verbose) errors/skips produce output.
@@ -387,6 +388,7 @@ def check_one_model(
     out: list[str] = []
     mismatch: str | None = None
     canonical: str | None = None
+    converter: str | None = None
 
     try:
         auto_tok = AutoTokenizer.from_pretrained(model_id)
@@ -396,12 +398,14 @@ def check_one_model(
                 out.append(f"  [yellow dim][SKIP][/] [cyan]{model_id}[/]: gated repo")
         elif verbose:
             out.append(f"  [yellow dim][SKIP][/] [cyan]{model_id}[/]: AutoTokenizer.from_pretrained failed: {e}")
-        return mismatch, out, canonical
+        return mismatch, out, canonical, converter
 
     if not hasattr(auto_tok, "_tokenizer") or auto_tok._tokenizer is None:
         if verbose:
             out.append(f"  [yellow dim][SKIP][/] [cyan]{model_id}[/]: no fast tokenizer (_tokenizer is None)")
-        return mismatch, out, canonical
+        return mismatch, out, canonical, converter
+
+    converter = get_converter_name(auto_tok)
 
     try:
         backend_tok = TokenizersBackend.from_pretrained(model_id)
@@ -411,12 +415,12 @@ def check_one_model(
                 out.append(f"  [yellow dim][SKIP][/] [cyan]{model_id}[/]: gated repo")
         elif verbose:
             out.append(f"  [yellow dim][SKIP][/] [cyan]{model_id}[/]: TokenizersBackend.from_pretrained failed: {e}")
-        return mismatch, out, canonical
+        return mismatch, out, canonical, converter
 
     if backend_tok._tokenizer is None:
         if verbose:
             out.append(f"  [yellow dim][SKIP][/] [cyan]{model_id}[/]: TokenizersBackend._tokenizer is None")
-        return mismatch, out, canonical
+        return mismatch, out, canonical, converter
 
     try:
         diff_lines = diff_tokenizers(
@@ -428,7 +432,6 @@ def check_one_model(
         if diff_lines:
             mismatch = model_id
             canonical = _canonical_diff(diff_lines)
-            converter = get_converter_name(auto_tok)
             out.append(
                 f"[bold red]MISMATCH[/]: [cyan]{model_id}[/] model_type={model_type}  converter={converter}"
             )
@@ -444,7 +447,7 @@ def check_one_model(
         if verbose:
             out.append(f"  [red][ERROR][/] [cyan]{model_id}[/]: comparison failed: {e}")
 
-    return mismatch, out, canonical
+    return mismatch, out, canonical, converter
 
 
 # ---------------------------------------------------------------------------
@@ -478,14 +481,14 @@ def _write_html_report(
     total_models = sum(len(v) for v in all_mismatches.values())
 
     # Reverse maps for cross-linking
-    model_to_type = {mid: mtype for mtype, mids in all_mismatches.items() for mid in mids}
+    model_to_converter = {mid: conv for conv, mids in all_mismatches.items() for mid in mids}
     sorted_patterns = sorted(diff_groups.items(), key=lambda x: len(x[1]), reverse=True)
     model_to_pattern: dict[str, int] = {}
     for i, (_, mids) in enumerate(sorted_patterns, 1):
         for mid in mids:
             model_to_pattern[mid] = i
 
-    # --- Section 1: mismatches grouped by model type ---
+    # --- Section 1: mismatches grouped by converter ---
     def _hf_link(mid: str) -> str:
         return f'<a href="https://huggingface.co/{html.escape(mid)}" target="_blank">{html.escape(mid)}</a>'
 
@@ -495,9 +498,9 @@ def _write_html_report(
             return ""
         return f'<a class="badge" href="#pattern-{pnum}">P#{pnum}</a>'
 
-    # Section 1: one card per model type — hover to reveal model list
+    # Section 1: one card per converter — hover to reveal model list
     type_card_parts = []
-    for model_type, model_ids in sorted(all_mismatches.items()):
+    for converter_name, model_ids in sorted(all_mismatches.items()):
         model_rows = "".join(
             f'<div class="model-row">{_hf_link(mid)} {_pattern_badge(mid)}</div>'
             for mid in sorted(model_ids)
@@ -506,7 +509,7 @@ def _write_html_report(
         type_card_parts.append(
             f'<div class="type-card">'
             f'<div class="type-header">'
-            f'<span class="mtype">{html.escape(model_type)}</span>'
+            f'<span class="mtype">{html.escape(converter_name)}</span>'
             f'<span class="mtype-count">{n} model{"s" if n != 1 else ""}</span>'
             f'</div>'
             f'<div class="model-list">{model_rows}</div>'
@@ -519,22 +522,22 @@ def _write_html_report(
         else "<p>No mismatches found.</p>"
     )
 
-    # --- Section 2: diff pattern cards with per-type sub-tables ---
+    # --- Section 2: diff pattern cards with per-converter sub-tables ---
     pattern_sections = []
     for i, (canonical, model_ids) in enumerate(sorted_patterns, 1):
-        # Group models by type
-        by_type: dict[str, list[str]] = {}
+        # Group models by converter
+        by_converter: dict[str, list[str]] = {}
         for mid in model_ids:
-            mtype = model_to_type.get(mid, "unknown")
-            by_type.setdefault(mtype, []).append(mid)
+            conv = model_to_converter.get(mid, "unknown")
+            by_converter.setdefault(conv, []).append(mid)
 
         sub_rows = "".join(
-            f"<tr><td>{html.escape(mtype)}</td>"
+            f"<tr><td>{html.escape(conv)}</td>"
             f'<td>{"  ".join(_hf_link(m) for m in sorted(mids))}</td></tr>'
-            for mtype, mids in sorted(by_type.items())
+            for conv, mids in sorted(by_converter.items())
         )
         sub_table = (
-            f'<table class="sub-table"><thead><tr><th>Model type</th><th>Models</th></tr></thead>'
+            f'<table class="sub-table"><thead><tr><th>Converter</th><th>Models</th></tr></thead>'
             f'<tbody>{sub_rows}</tbody></table>'
         )
 
@@ -683,12 +686,12 @@ def _write_html_report(
       <div class="label">Unique diff patterns</div>
     </div>
     <div class="stat {'bad' if all_mismatches else 'good'}">
-      <div class="num">{len(all_mismatches)}<span class="denom">{f" / {total_types}" if total_types else ""}</span></div>
-      <div class="label">Model types affected</div>
+      <div class="num">{len(all_mismatches)}</div>
+      <div class="label">Converters affected</div>
     </div>
   </div>
 
-  <h2 style="margin-bottom:0.75rem">Mismatches by model type</h2>
+  <h2 style="margin-bottom:0.75rem">Mismatches by converter</h2>
   {section1_html}
 
   <hr>
@@ -788,8 +791,9 @@ def main():
                 seen.add(model_type)
                 model_types.append(model_type)
 
-    all_mismatches: dict[str, set[str]] = {}
-    diff_groups: dict[str, list[str]] = {}
+    all_mismatches: dict[str, set[str]] = {}  # converter → set of model_ids
+    diff_groups: dict[str, list[str]] = {}  # canonical → list of model_ids
+    diff_group_converters: dict[str, set[str]] = {}  # canonical → set of converter names
     diff_groups_lock = threading.Lock()
     models_checked = 0
     spm_registry: dict = {}
@@ -861,11 +865,12 @@ def main():
                 for future in as_completed(check_futures):
                     model_id, model_type = check_futures[future]
                     try:
-                        mismatch, output_lines, canonical = future.result()
+                        mismatch, output_lines, canonical, converter = future.result()
                     except Exception as e:
                         output_lines = [f"  [red][ERROR][/] [cyan]{model_id}[/]: unexpected exception: {e}"]
                         mismatch = None
                         canonical = None
+                        converter = None
 
                     models_checked += 1
 
@@ -873,10 +878,12 @@ def main():
                         console.print(line)
 
                     if mismatch is not None:
-                        all_mismatches.setdefault(model_type, set()).add(mismatch)
+                        key = converter or model_type
+                        all_mismatches.setdefault(key, set()).add(mismatch)
                         if canonical:
                             with diff_groups_lock:
                                 diff_groups.setdefault(canonical, []).append(mismatch)
+                                diff_group_converters.setdefault(canonical, set()).add(key)
 
     finally:
         print_diffs(spm_registry)
@@ -886,16 +893,21 @@ def main():
         if not all_mismatches:
             console.print("[bold green]✓ No mismatches — all clear[/]")
         else:
-            table = Table(title="Models to add to ignore list", show_header=True, header_style="bold magenta")
-            table.add_column("Model ID", style="cyan")
-            for model_type, mismatched_models in all_mismatches.items():
-                table.add_row(f"{model_type} : {mismatched_models}")
+            table = Table(title="Mismatches by converter", show_header=True, header_style="bold magenta")
+            table.add_column("Converter", style="yellow")
+            table.add_column("# models", justify="right")
+            table.add_column("Model IDs", style="cyan")
+            for converter_name, mismatched_models in sorted(all_mismatches.items()):
+                table.add_row(converter_name, str(len(mismatched_models)), ", ".join(sorted(mismatched_models)))
             console.print(table)
 
         if diff_groups:
             console.print(Rule("[bold]Unique diff patterns[/]"))
+            console.print(f"  [bold red]--- AutoTokenizer[/]   [bold green]+++ TokenizersBackend[/]")
             for i, (canonical, model_ids) in enumerate(sorted(diff_groups.items(), key=lambda x: len(x[1]), reverse=True), 1):
-                console.print(f"\n[bold yellow]Pattern #{i}[/] — {len(model_ids)} model(s): {', '.join(model_ids)}")
+                converters_str = ", ".join(sorted(diff_group_converters.get(canonical, set())))
+                console.print(f"\n[bold yellow]Pattern #{i}[/] — {len(model_ids)} model(s)  [yellow]converter(s): {converters_str}[/]")
+                console.print(f"  [bold red]--- AutoTokenizer[/]   [bold green]+++ TokenizersBackend[/]")
                 for line in _format_diff(canonical.splitlines()):
                     console.print(line)
 
