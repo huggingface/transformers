@@ -3,7 +3,6 @@
 
 import torch
 
-from transformers.models.omnivinci.configuration_omnivinci import OmniVinciConfig
 from transformers.models.omnivinci.modeling_omnivinci import OmniVinciForCausalLM
 from transformers.models.omnivinci.processing_omnivinci import OmniVinciProcessor
 
@@ -13,17 +12,13 @@ def main() -> None:
     model_path = "/fs/nexus-projects/JSALT_workshop/lasha/Dev/comni"
     dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-    config = OmniVinciConfig.from_pretrained(model_path)
-    config._name_or_path = str(model_path)
-    config.load_audio_in_video = True
-    config.num_video_frames = 128
-    config.audio_chunk_length = "max_3600"
-
     model = OmniVinciForCausalLM.from_pretrained(
         model_path,
-        config=config,
         dtype=dtype,
         device_map="auto",
+        load_audio_in_video=True,
+        num_video_frames=128,
+        audio_chunk_length="max_3600",
     ).eval()
     processor = OmniVinciProcessor.from_pretrained(
         model_path, config=model.config, padding_side="left", use_fast=False
