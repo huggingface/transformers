@@ -377,6 +377,7 @@ VLMS = [
     "fuyu",
     "gotocr2",
     "gemma3",
+    "hcxvision",
     "internvl",
     "llava",  # all llava prefixed models fall under this check
     "mistral3",
