@@ -778,9 +778,9 @@ class Sam3TrackerVisionEncoderOutput(BaseModelOutputWithPooling):
 )
 class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
     input_modalities = ("image", "text")
-    base_model_prefix = "tracker_model"
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerTwoWayAttentionBlock, index=2)}
     _tied_weights_keys = {}
+    _base_model_prefix = "tracker_model"
     _keys_to_ignore_on_load_unexpected = [
         r"^detector_model.",
         r"^memory_.*",

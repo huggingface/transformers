@@ -41,12 +41,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from .configuration_ernie4_5_vl_moe import (
-    Ernie4_5_VL_MoeConfig,
-    Ernie4_5_VLMoeConfig,
-    Ernie4_5_VLMoeTextConfig,
-    Ernie4_5_VLMoeVisionConfig,
-)
+from .configuration_ernie4_5_vl_moe import Ernie4_5_VLMoeConfig, Ernie4_5_VLMoeTextConfig, Ernie4_5_VLMoeVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -1090,7 +1085,6 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    config: Ernie4_5_VL_MoeConfig
     _no_split_modules = ["Ernie4_5_VL_MoeDecoderLayer", "Ernie4_5_VL_MoeVisionBlock"]
 
     def __init__(self, config: Ernie4_5_VLMoeConfig):
