@@ -104,9 +104,13 @@ def _format_diff(diff_lines: list[str]) -> list[str]:
     """Convert raw unified-diff lines into Rich markup strings."""
     out = []
     for line in diff_lines:
-        if line.startswith("+") and not line.startswith("+++"):
+        if line.startswith("---"):
+            out.append(f"[bold red]{line}[/]")
+        elif line.startswith("+++"):
+            out.append(f"[bold green]{line}[/]")
+        elif line.startswith("+"):
             out.append(f"[green]{line}[/]")
-        elif line.startswith("-") and not line.startswith("---"):
+        elif line.startswith("-"):
             out.append(f"[red]{line}[/]")
         elif line.startswith("@@"):
             out.append(f"[cyan]{line}[/]")
