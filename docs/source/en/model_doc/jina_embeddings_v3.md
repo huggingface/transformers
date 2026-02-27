@@ -77,7 +77,7 @@ print(f"Features shape: {last_hidden_states.shape}")
 
 ## Task-Specific LoRA Adapters
 
-A key feature of `JinaEmbeddingsV3` is its built-in LoRA adapters, which allow you to tailor the output embeddings to specific use cases without the overhead of loading entirely different models. You can control this behavior by passing an `adapter_mask` to the model.
+A key feature of `JinaEmbeddingsV3` is it's LoRA adapters, which allow you to tailor the output embeddings to specific useful use cases without the overhead of loading entirely different models.
 
 The following tasks are supported:
 

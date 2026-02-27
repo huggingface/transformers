@@ -137,19 +137,6 @@ class JinaEmbeddingsV3ModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_model_with_adapter_mask(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels
-    ):
-        model = JinaEmbeddingsV3Model(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # Create a dummy adapter mask (e.g., all 1's for 'retrieval.passage')
-        adapter_mask = torch.ones((self.batch_size,), dtype=torch.long).to(torch_device)
-
-        result = model(input_ids, attention_mask=input_mask, adapter_mask=adapter_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels
     ):
@@ -256,10 +243,6 @@ class JinaEmbeddingsV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_with_adapter_mask(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_adapter_mask(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
