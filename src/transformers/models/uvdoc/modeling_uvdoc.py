@@ -32,7 +32,7 @@ class UVDocResidualBlockWithDilation(nn.Module):
         out_channels: int,
         kernel_size: int,
         stride: int = 1,
-        downsample: Optional[nn.Sequential] = None,
+        downsample: Optional[bool] = None,
         is_top: bool = False,
     ) -> None:
         """
@@ -43,13 +43,25 @@ class UVDocResidualBlockWithDilation(nn.Module):
             out_channels (`int`): Number of output channels
             kernel_size (`int`): Size of convolutional kernel
             stride (`int`, *optional*, defaults to 1): Stride of the first convolution
-            downsample (`nn.Sequential`, *optional*, defaults to None):
+            downsample (`bool`, *optional*, defaults to None):
                 Downsampling layer for residual connection (when stride != 1 or channel mismatch)
             is_top (`bool`, *optional*, defaults to False):
                 Whether this is the first block in the layer (uses standard conv instead of dilated conv)
         """
         super().__init__()
-        self.downsample = downsample
+
+        self.downsample = None
+        if downsample:
+            self.downsample = nn.Sequential(
+                nn.Conv2d(
+                    in_channels,
+                    out_channels,
+                    kernel_size=kernel_size,
+                    stride=stride,
+                    padding=kernel_size // 2,
+                ),
+                nn.BatchNorm2d(out_channels),
+            )
 
         if stride != 1 or is_top:
             stride1, padding, dilation = stride, kernel_size // 2, 1
@@ -64,15 +76,6 @@ class UVDocResidualBlockWithDilation(nn.Module):
         self.bn2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of residual block with dilation.
-
-        Args:
-            hidden_state (`torch.Tensor`): Input tensor of shape [B, C, H, W]
-
-        Returns:
-            `torch.Tensor`: Output tensor of shape [B, C_out, H_out, W_out]
-        """
         identity = hidden_state
         if self.downsample is not None:
             identity = self.downsample(hidden_state)
@@ -86,102 +89,87 @@ class UVDocResidualBlockWithDilation(nn.Module):
         return hidden_state
 
 
-class UVDocResnetStraight(nn.Module):
+class UVDocResNetStraight(nn.Module):
     """
     Modified ResNet backbone for UVDoc with dilated residual blocks.
     Extracts multi-scale features from document images through progressive downsampling,
     using dilated convolution to maintain large receptive fields.
     """
 
-    def __init__(
-        self,
-        num_filter: int,
-        map_num: list[int],
-        block_nums: list[int] = [3, 4, 6, 3],
-        kernel_size: int = 5,
-        stride: list[int] = [1, 1, 2, 2],
-    ) -> None:
-        """
-        Initialize ResNet backbone for UVDoc downsampling.
-
-        Args:
-            num_filter (`int`): Base number of convolutional filters
-            map_num (`List[int]`): Channel scaling factors for each ResNet layer
-            block_nums (`List[int]`, *optional*, defaults to [3,4,6,3]):
-                Number of residual blocks per layer
-            kernel_size (`int`, *optional*, defaults to 5): Size of convolutional kernel
-            stride (`List[int]`, *optional*, defaults to [1,1,2,2]):
-                Stride values for each ResNet layer (controls downsampling rate)
-        """
+    def __init__(self, config) -> None:
         super().__init__()
-        self.in_channels = num_filter * map_num[0]
-        self.stride = stride
+        self.in_channels = config.num_filter * config.map_num[0]
         self.relu = nn.ReLU()
-        self.block_nums = block_nums
-        self.kernel_size = kernel_size
-        for layer_idx, (map_num_val, block_num, stride_val) in enumerate(zip(map_num[:3], block_nums[:3], stride[:3])):
-            layer = self.blocklayer(
-                num_filter * map_num_val,
-                block_num,
-                kernel_size=self.kernel_size,
-                stride=stride_val,
-            )
-            setattr(self, f"layer{layer_idx + 1}", layer)
 
-    def blocklayer(self, out_channels: int, block_nums: int, kernel_size: int, stride: int = 1) -> nn.Sequential:
-        """
-        Build a single ResNet layer containing multiple residual blocks.
+        self.layers = nn.ModuleList([])
+        for map_num, block_num, stride in zip(config.map_num[:3], config.block_nums[:3], config.stride[:3]):
+            layers = nn.ModuleList([])
+            out_channels = config.num_filter * map_num
 
-        Args:
-            out_channels (`int`): Number of output channels for the layer
-            block_nums (`int`): Number of residual blocks in the layer
-            kernel_size (`int`): Size of convolutional kernel
-            stride (`int`, *optional*, defaults to 1): Stride for the first block (downsampling)
+            downsample = None
+            if stride != 1 or self.in_channels != out_channels:
+                downsample = True
 
-        Returns:
-            `nn.Sequential`: ResNet layer with multiple residual blocks
-        """
-        downsample = None
-        if stride != 1 or self.in_channels != out_channels:
-            downsample = nn.Sequential(
-                nn.Conv2d(
-                    self.in_channels,
-                    out_channels,
-                    kernel_size=kernel_size,
-                    stride=stride,
-                    padding=kernel_size // 2,
-                ),
-                nn.BatchNorm2d(out_channels),
-            )
-
-        layers = []
-        for i in range(block_nums):
-            layers.append(
-                UVDocResidualBlockWithDilation(
+            for i in range(block_num):
+                layer = UVDocResidualBlockWithDilation(
                     in_channels=self.in_channels if i == 0 else out_channels,
                     out_channels=out_channels,
-                    kernel_size=kernel_size,
+                    kernel_size=config.kernel_size,
                     stride=stride if i == 0 else 1,
                     downsample=downsample if i == 0 else None,
                     is_top=i == 0,
                 )
-            )
-        self.in_channels = out_channels
-        return nn.Sequential(*layers)
+                layers.append(layer)
+            self.layers.append(layers)
+            self.in_channels = out_channels
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of ResNet backbone (downsampling path).
+        for layers in self.layers:
+            for layer in layers:
+                hidden_state = layer(hidden_state)
 
-        Args:
-            hidden_state (`torch.Tensor`): Input tensor of shape [B, C, H, W]
+        return hidden_state
 
-        Returns:
-            `torch.Tensor`: Output feature map from the last ResNet layer (layer3)
-        """
-        hidden_state = self.layer1(hidden_state)
-        hidden_state = self.layer2(hidden_state)
-        hidden_state = self.layer3(hidden_state)
+
+class UVDocResNetHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        in_channels = config.in_channels
+        num_filter = config.num_filter
+        map_num_0 = config.map_num[0]
+        kernel_size = config.kernel_size
+        out_channels = num_filter * map_num_0
+
+        self.conv1 = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            bias=False,
+            kernel_size=kernel_size,
+            stride=2,
+            padding=kernel_size // 2,
+        )
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.relu1 = nn.ReLU()
+
+        self.conv2 = nn.Conv2d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            bias=False,
+            kernel_size=kernel_size,
+            stride=2,
+            padding=kernel_size // 2,
+        )
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.relu2 = nn.ReLU()
+
+    def forward(self, hidden_state):
+        hidden_state = self.conv1(hidden_state)
+        hidden_state = self.bn1(hidden_state)
+        hidden_state = self.relu1(hidden_state)
+
+        hidden_state = self.conv2(hidden_state)
+        hidden_state = self.bn2(hidden_state)
+        hidden_state = self.relu2(hidden_state)
         return hidden_state
 
 
@@ -251,6 +239,26 @@ class UVDocConvLayer(nn.Module):
         return hidden_state
 
 
+class UVDocBridgeBlock(nn.Module):
+    def __init__(self, config, block_index):
+        super().__init__()
+        dilation_values = config.dilation_values[block_index]
+        in_channels = config.num_filter * config.map_num[2]
+
+        self.blocks = nn.ModuleList([])
+
+        if isinstance(dilation_values, int):
+            self.blocks.append(UVDocConvLayer(in_channels, in_channels, dilation=dilation_values))
+        else:
+            for dilation in dilation_values:
+                self.blocks.append(UVDocConvLayer(in_channels, in_channels, dilation=dilation))
+
+    def forward(self, hidden_state):
+        for block in self.blocks:
+            hidden_state = block(hidden_state)
+        return hidden_state
+
+
 class UVDocModel(UVDocPreTrainedModel):
     """
     Core UVDoc model for document rectification.
@@ -269,67 +277,13 @@ class UVDocModel(UVDocPreTrainedModel):
 
         self.upsample_size = config.upsample_size
         self.upsample_mode = config.upsample_mode
-        self.resnet_head = nn.Sequential(
-            nn.Conv2d(
-                config.in_channels,
-                config.num_filter * config.map_num[0],
-                bias=False,
-                kernel_size=config.kernel_size,
-                stride=2,
-                padding=config.kernel_size // 2,
-            ),
-            nn.BatchNorm2d(config.num_filter * config.map_num[0]),
-            nn.ReLU(),
-            nn.Conv2d(
-                config.num_filter * config.map_num[0],
-                config.num_filter * config.map_num[0],
-                bias=False,
-                kernel_size=config.kernel_size,
-                stride=2,
-                padding=config.kernel_size // 2,
-            ),
-            nn.BatchNorm2d(config.num_filter * config.map_num[0]),
-            nn.ReLU(),
-        )
 
-        self.resnet_down = UVDocResnetStraight(
-            config.num_filter,
-            config.map_num,
-            block_nums=config.block_nums,
-            kernel_size=config.kernel_size,
-            stride=config.stride,
-        )
+        self.resnet_head = UVDocResNetHead(config)
+        self.resnet_down = UVDocResNetStraight(config)
 
-        bridge_in_channels = config.num_filter * config.map_num[2]
-
-        def _build_bridge(bridge_key: str) -> nn.Sequential:
-            """
-            Build bridge layer with specified dilation values from config.
-            Supports both single dilation rate and multiple dilation rates.
-
-            Args:
-                bridge_key (`str`): Key for dilation values in config (e.g., "bridge_1")
-
-            Returns:
-                `nn.Sequential`: Bridge layer with dilated convolution blocks
-            """
-            dilation_values = config.dilation_values[bridge_key]
-            if isinstance(dilation_values, int):
-                return UVDocConvLayer(bridge_in_channels, bridge_in_channels, dilation=dilation_values)
-            else:
-                return nn.Sequential(
-                    *[
-                        UVDocConvLayer(bridge_in_channels, bridge_in_channels, dilation=dilation)
-                        for dilation in dilation_values
-                    ]
-                )
-
-        self.bridge_1 = _build_bridge("bridge_1")
-        self.bridge_2 = _build_bridge("bridge_2")
-        self.bridge_3 = _build_bridge("bridge_3")
-        self.bridge_4 = _build_bridge("bridge_4")
-        self.bridge_5 = _build_bridge("bridge_5")
-        self.bridge_6 = _build_bridge("bridge_6")
+        self.bridge = nn.ModuleList([])
+        for block_index in config.dilation_values.keys():
+            self.bridge.append(UVDocBridgeBlock(config, block_index))
 
         self.bridge_concat = nn.Sequential(
             nn.Conv2d(
@@ -404,27 +358,17 @@ class UVDocModel(UVDocPreTrainedModel):
         resnet_down = self.resnet_down(hidden_state)
         if output_hidden_states:
             hidden_states = hidden_states + (resnet_down,)
-        bridge_1 = self.bridge_1(resnet_down)
-        if output_hidden_states:
-            hidden_states = hidden_states + (bridge_1,)
-        bridge_2 = self.bridge_2(resnet_down)
-        if output_hidden_states:
-            hidden_states = hidden_states + (bridge_2,)
-        bridge_3 = self.bridge_3(resnet_down)
-        if output_hidden_states:
-            hidden_states = hidden_states + (bridge_3,)
-        bridge_4 = self.bridge_4(resnet_down)
-        if output_hidden_states:
-            hidden_states = hidden_states + (bridge_4,)
-        bridge_5 = self.bridge_5(resnet_down)
-        if output_hidden_states:
-            hidden_states = hidden_states + (bridge_5,)
-        bridge_6 = self.bridge_6(resnet_down)
-        if output_hidden_states:
-            hidden_states = hidden_states + (bridge_6,)
-        last_hidden_state = bridge_6
 
-        bridge_concat = torch.cat([bridge_1, bridge_2, bridge_3, bridge_4, bridge_5, bridge_6], dim=1)
+        bridge_outputs = []
+        for bridge_layer in self.bridge:
+            bridge_out = bridge_layer(resnet_down)
+            bridge_outputs.append(bridge_out)
+            if output_hidden_states:
+                hidden_states = hidden_states + (bridge_out,)
+
+        last_hidden_state = bridge_outputs[-1] if bridge_outputs else None
+
+        bridge_concat = torch.cat(bridge_outputs, dim=1)
         bridge = self.bridge_concat(bridge_concat)
 
         out_point_positions2D = self.out_point_positions2D(bridge)
