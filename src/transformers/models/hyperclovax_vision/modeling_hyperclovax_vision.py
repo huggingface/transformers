@@ -757,18 +757,13 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
 
         self.multi_modal_projector = HCXVisionMultiModalProjector(config)
 
-        vision_archs = getattr(config.vision_config, "architectures", None) or []
-        if "Qwen2_5_VisionTransformerPretrainedModel" in vision_archs:
+        if "qwen2_5_vl" == config.vision_config.model_type:
             vision_model = Qwen2_5_VisionTransformerPretrainedModel(config.vision_config)
         else:
-            # Default to Qwen2_5_VL ViT when architectures is not set (e.g. freshly created configs)
-            vision_model = Qwen2_5_VisionTransformerPretrainedModel(config.vision_config)
+            vision_model = AutoModel.from_config(config.vision_config)
         self.vision_model = vision_model
 
-        # Use HyperClovaXTextModel (bare text model without lm_head) so the lm_head
-        # lives only at the HCXVisionForConditionalGeneration level.
-        text_archs = getattr(config.text_config, "architectures", None) or []
-        if "HyperCLOVAXForCausalLM" in text_archs or not text_archs:
+        if "hyperclovax" == config.text_config.model_type:
             language_model = HyperClovaXTextModel(config.text_config)
         else:
             language_model = AutoModel.from_config(config.text_config)
