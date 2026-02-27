@@ -439,6 +439,7 @@ class JinaEmbeddingsV3Model(JinaEmbeddingsV3PreTrainedModel):
         """
         super().__init__(config)
         self.config = config
+        self.gradient_checkpointing = False
 
         self.embeddings = JinaEmbeddingsV3Embeddings(config)
         self.encoder = JinaEmbeddingsV3Encoder(config)
@@ -552,8 +553,8 @@ class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
         self.lm_head = JinaEmbeddingsV3LMHead(config)
+        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
 
         # Initialize weights and apply final processing
         self.post_init()

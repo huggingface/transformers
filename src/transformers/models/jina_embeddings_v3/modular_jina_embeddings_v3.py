@@ -149,6 +149,7 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
         lora_rank: int | None = 4,
         lora_dropout_p: float | None = 0.0,
         lora_alpha: int | None = 1,
+        tie_word_embeddings=True,
         load_trained_adapters: bool | None = True,
         emb_pooler: str | None = None,
         matryoshka_dimensions: list[int] | None = None,
@@ -201,6 +202,7 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
         self.lora_rank = lora_rank
         self.lora_alpha = lora_alpha
         self.lora_dropout_p = lora_dropout_p
+        self.tie_word_embeddings = tie_word_embeddings
         self.load_trained_adapters = load_trained_adapters
         self.matryoshka_dimensions = matryoshka_dimensions
         self.task_instructions = task_instructions
@@ -428,7 +430,6 @@ class JinaEmbeddingsV3PreTrainedModel(XLMRobertaPreTrainedModel):
 class JinaEmbeddingsV3Model(XLMRobertaModel):
     def __init__(self, config: JinaEmbeddingsV3Config, add_pooling_layer=True):
         super().__init__(config)
-        del self.gradient_checkpointing
         self.rotary_emb = JinaEmbeddingsV3RotaryEmbedding(config)
 
         # Initialize weights and apply final processing
@@ -518,8 +519,8 @@ class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
         self.lm_head = JinaEmbeddingsV3LMHead(config)
+        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -121,6 +121,7 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
         lora_rank: int | None = 4,
         lora_dropout_p: float | None = 0.0,
         lora_alpha: int | None = 1,
+        tie_word_embeddings=True,
         load_trained_adapters: bool | None = True,
         emb_pooler: str | None = None,
         matryoshka_dimensions: list[int] | None = None,
@@ -173,6 +174,7 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
         self.lora_rank = lora_rank
         self.lora_alpha = lora_alpha
         self.lora_dropout_p = lora_dropout_p
+        self.tie_word_embeddings = tie_word_embeddings
         self.load_trained_adapters = load_trained_adapters
         self.matryoshka_dimensions = matryoshka_dimensions
         self.task_instructions = task_instructions
