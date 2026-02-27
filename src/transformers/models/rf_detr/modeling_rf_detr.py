@@ -1834,21 +1834,18 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
         intermediate_reference_points = outputs.intermediate_reference_points
 
         # Get logits and boxes from first stage object queries
-        enc_outputs_class_logits = self.get_encoder_outputs_class_logits(outputs.enc_outputs_class)
+        enc_outputs_class_logits = self.predict_encoder_class_logits(outputs.enc_outputs_class)
 
         # Get logits and boxes from second stage object queries
-        logits = self.class_embed(last_hidden_states)
-        pred_boxes_delta = self.bbox_embed(last_hidden_states)
-        pred_boxes = refine_bboxes(intermediate_reference_points[-1], pred_boxes_delta)
+        logits, pred_boxes = self.predict_class_and_boxes(last_hidden_states, intermediate_reference_points[-1])
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
             outputs_class, outputs_coord = None, None
             if self.config.auxiliary_loss:
-                intermediate_hidden_states = outputs.intermediate_hidden_states
-                outputs_coord_delta = self.bbox_embed(intermediate_hidden_states)
-                outputs_coord = refine_bboxes(intermediate_reference_points, outputs_coord_delta)
-                outputs_class = self.class_embed(intermediate_hidden_states)
+                outputs_class, outputs_coord = self.predict_class_and_boxes(
+                    outputs.intermediate_hidden_states, intermediate_reference_points
+                )
 
             loss, loss_dict, auxiliary_outputs = self.loss_function(
                 logits,
@@ -1880,15 +1877,28 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def get_encoder_outputs_class_logits(self, enc_outputs_class_logits: torch.Tensor) -> Tensor:
-        enc_outputs_class_logits_list = enc_outputs_class_logits.split(self.config.num_queries, dim=1)
+    def predict_encoder_class_logits(self, enc_outputs_class: torch.Tensor) -> Tensor:
+        """
+        Predicts classification logits from encoder hidden states for each query group.
+        """
+        enc_outputs_class_list = enc_outputs_class.split(self.config.num_queries, dim=1)
         group_detr = self.config.group_detr if self.training else 1
         pred_class = [
-            self.model.enc_out_class_embed[group_index](enc_outputs_class_logits_list[group_index])
+            self.model.enc_out_class_embed[group_index](enc_outputs_class_list[group_index])
             for group_index in range(group_detr)
         ]
-        enc_outputs_class_logits = torch.cat(pred_class, dim=1)
-        return enc_outputs_class_logits
+        return torch.cat(pred_class, dim=1)
+
+    def predict_class_and_boxes(
+        self, hidden_states: torch.Tensor, reference_points: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Predicts classification logits and refined bounding boxes from transformer hidden states and reference points.
+        """
+        logits = self.class_embed(hidden_states)
+        boxes_delta = self.bbox_embed(hidden_states)
+        boxes = refine_bboxes(reference_points, boxes_delta)
+        return logits, boxes
 
 
 @dataclass
@@ -2072,13 +2082,13 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         enc_outputs_class = outputs.enc_outputs_class
 
         # First stage segmentation proposals
-        enc_outputs_class_logits = self.rf_detr.get_encoder_outputs_class_logits(enc_outputs_class)
+        enc_outputs_class_logits = self.rf_detr.predict_encoder_class_logits(enc_outputs_class)
         enc_outputs_masks = self.segmentation_head(spatial_features, enc_outputs_class, image_size, skip_blocks=True)
 
         # Second stage segmentation proposals
-        logits = self.rf_detr.class_embed(last_hidden_states)
-        pred_boxes_delta = self.rf_detr.bbox_embed(last_hidden_states)
-        pred_boxes = refine_bboxes(intermediate_reference_points[-1], pred_boxes_delta)
+        logits, pred_boxes = self.rf_detr.predict_class_and_boxes(
+            last_hidden_states, intermediate_reference_points[-1]
+        )
         outputs_masks = self.segmentation_head(spatial_features, outputs.intermediate_hidden_states, image_size)
         pred_masks = outputs_masks[-1]
 
@@ -2086,10 +2096,9 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         if labels is not None:
             outputs_class, outputs_coord = None, None
             if self.config.auxiliary_loss:
-                intermediate_hidden_states = outputs.intermediate_hidden_states
-                outputs_coord_delta = self.rf_detr.bbox_embed(intermediate_hidden_states)
-                outputs_coord = refine_bboxes(intermediate_reference_points, outputs_coord_delta)
-                outputs_class = self.rf_detr.class_embed(intermediate_hidden_states)
+                outputs_class, outputs_coord = self.rf_detr.predict_class_and_boxes(
+                    outputs.intermediate_hidden_states, intermediate_reference_points
+                )
             loss, loss_dict, auxiliary_outputs = self.loss_function(
                 logits,
                 labels,
