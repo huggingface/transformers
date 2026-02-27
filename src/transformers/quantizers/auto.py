@@ -31,6 +31,7 @@ from ..utils.quantization_config import (
     GPTQConfig,
     HiggsConfig,
     HqqConfig,
+    MetalConfig,
     Mxfp4Config,
     QuantizationConfigMixin,
     QuantizationMethod,
@@ -57,6 +58,7 @@ from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
+from .quantizer_metal import MetalHfQuantizer
 from .quantizer_mxfp4 import Mxfp4HfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
@@ -88,6 +90,7 @@ AUTO_QUANTIZER_MAPPING = {
     "fp8": FineGrainedFP8HfQuantizer,
     "auto-round": AutoRoundQuantizer,
     "mxfp4": Mxfp4HfQuantizer,
+    "metal": MetalHfQuantizer,
     "sinq": SinqHfQuantizer,
 }
 
@@ -113,6 +116,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "fp8": FineGrainedFP8Config,
     "auto-round": AutoRoundConfig,
     "mxfp4": Mxfp4Config,
+    "metal": MetalConfig,
     "sinq": SinqConfig,
 }
 
@@ -239,6 +243,7 @@ class AutoHfQuantizer:
                     FbgemmFp8Config,
                     CompressedTensorsConfig,
                     Mxfp4Config,
+                    MetalConfig,
                     FineGrainedFP8Config,
                 ),
             )
@@ -250,7 +255,7 @@ class AutoHfQuantizer:
 
             warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
-        if warning_msg != "" and not isinstance(quantization_config, (Mxfp4Config, FineGrainedFP8Config)):
+        if warning_msg != "" and not isinstance(quantization_config, (Mxfp4Config, MetalConfig, FineGrainedFP8Config)):
             warnings.warn(warning_msg)
         else:
             # in the case of mxfp4, we don't want to print the warning message, bit confusing for users
