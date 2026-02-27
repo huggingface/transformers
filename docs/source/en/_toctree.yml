@@ -712,6 +712,8 @@
         title: Olmo3
       - local: model_doc/olmoe
         title: OLMoE
+      - local: model_doc/olmo_hybrid
+        title: OlmoHybrid
       - local: model_doc/opt
         title: OPT
       - local: model_doc/pegasus
