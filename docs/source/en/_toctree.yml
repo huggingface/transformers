@@ -232,6 +232,8 @@
     title: HIGGS
   - local: quantization/hqq
     title: HQQ
+  - local: quantization/metal
+    title: Metal
   - local: quantization/mxfp4
     title: MXFP4
   - local: quantization/optimum
@@ -1328,6 +1330,8 @@
         title: Time Series Transformer
       - local: model_doc/timesfm
         title: TimesFM
+      - local: model_doc/timesfm2_5
+        title: TimesFM2.5
       title: Time series models
     title: Models
   - sections:
