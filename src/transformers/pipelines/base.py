@@ -281,8 +281,7 @@ def get_default_model_and_revision(targeted_task: dict, task_options: Any | None
            Dictionary representing the given task, that should contain default models
 
         task_options (`Any`, None)
-           Any further value required by the task to get fully specified, for instance (SRC, TGT) languages for
-           translation task.
+           Any further value required by the task to get fully specified.
 
     Returns
 
@@ -298,9 +297,7 @@ def get_default_model_and_revision(targeted_task: dict, task_options: Any | None
     elif "model" in defaults:
         default_models = targeted_task["default"]["model"]
     else:
-        # XXX This error message needs to be updated to be more generic if more tasks are going to become
-        # parametrized
-        raise ValueError('The task defaults can\'t be correctly selected. You probably meant "translation_xx_to_yy"')
+        raise ValueError("The task defaults can't be correctly selected.")
 
     return default_models
 
@@ -1341,17 +1338,7 @@ class PipelineRegistry:
             targeted_task = self.supported_tasks[task]
             return task, targeted_task, None
 
-        if task.startswith("translation"):
-            tokens = task.split("_")
-            if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
-                targeted_task = self.supported_tasks["translation"]
-                task = "translation"
-                return task, targeted_task, (tokens[1], tokens[3])
-            raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
-
-        raise KeyError(
-            f"Unknown task {task}, available tasks are {self.get_supported_tasks() + ['translation_XX_to_YY']}"
-        )
+        raise KeyError(f"Unknown task {task}, available tasks are {self.get_supported_tasks()}")
 
     def register_pipeline(
         self,

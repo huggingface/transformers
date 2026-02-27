@@ -274,6 +274,59 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                     AutoModel.from_pretrained(T5_TINY)
         self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
 
+    @require_torch_accelerator
+    def test_from_config_zero3_weight_init(self):
+        # test that from_config() correctly initializes weights under zero3
+        # (regression test: without the fix, _init_weights runs on partitioned empty tensors
+        # and custom initialization is silently skipped)
+        import deepspeed
+        import torch
+
+        from transformers import AutoConfig, AutoModelForCausalLM
+
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+            "bf16": {
+                "enabled": True,
+            },
+        }
+
+        config = AutoConfig.from_pretrained(GPT2_TINY)
+
+        # 1. Baseline: from_config without DeepSpeed, in bf16 to match ZeRO-3 dtype
+        torch.manual_seed(42)
+        baseline_model = AutoModelForCausalLM.from_config(config, dtype=torch.bfloat16)
+        baseline_std = baseline_model.transformer.h[0].attn.c_attn.weight.data.float().std().item()
+        del baseline_model
+
+        # 2. ZeRO-3: from_config with DeepSpeed
+        torch.manual_seed(42)
+        HfDeepSpeedConfig(ds_config)
+
+        with mockenv_context(**self.dist_env_1_gpu):
+            model = AutoModelForCausalLM.from_config(config)
+
+        param = model.transformer.h[0].attn.c_attn.weight
+        with deepspeed.zero.GatheredParameters([param]):
+            zero3_std = param.data.float().std().item()
+
+        # Weight std should be in the same ballpark between baseline and ZeRO-3.
+        # The seeds produce slightly different values due to different init ordering,
+        # but delta=0.3 catches the buggy case (ratio ~0.58, i.e. 42% off).
+        ratio = zero3_std / baseline_std
+        self.assertAlmostEqual(
+            ratio,
+            1.0,
+            delta=0.3,
+            msg=(
+                f"ZeRO-3 from_config() weight init diverges from baseline: "
+                f"baseline_std={baseline_std:.6f}, zero3_std={zero3_std:.6f}, ratio={ratio:.4f}"
+            ),
+        )
+
     def test_init_zero3_missing_params(self):
         # test that zero.Init() for missing parameters works correctly under zero3
         import deepspeed

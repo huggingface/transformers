@@ -41,7 +41,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -408,7 +408,7 @@ class GlmOcrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
                 )
 
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
-                self.assertTrue(has_similar_generate_outputs(dynamic_result, compiled_result))
+                assert_similar_generate_outputs(dynamic_result, compiled_result)
 
 
 @require_torch
