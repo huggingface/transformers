@@ -42,7 +42,8 @@ pipeline = pipeline(
     task="feature-extraction",
     model="jinaai/jina-embeddings-v3",
     dtype=torch.float16,
-    device="cuda" if torch.cuda.is_available() else "cpu"
+    device="cuda" if torch.cuda.is_available() else "cpu",
+    revision="refs/pr/137",
 )
 # Returns a list of lists containing the embeddings for each token
 embeddings = pipeline("Jina Embeddings V3 is great for semantic search.")
@@ -58,11 +59,7 @@ import torch
 from transformers import AutoModel, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("jinaai/jina-embeddings-v3")
-model = AutoModel.from_pretrained(
-    "jinaai/jina-embeddings-v3",
-    dtype=torch.float16,
-    device_map="auto"
-)
+model = AutoModel.from_pretrained("jinaai/jina-embeddings-v3", dtype=torch.float16, revision="refs/pr/137")
 
 prompt = "Jina Embeddings V3 is great for semantic search."
 inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
@@ -117,17 +114,19 @@ sentences = [
 ]
 
 tokenizer = AutoTokenizer.from_pretrained("jinaai/jina-embeddings-v3")
-model = AutoModel.from_pretrained("jinaai/jina-embeddings-v3")
+model = AutoModel.from_pretrained("jinaai/jina-embeddings-v3", revision="refs/pr/137")
 
-encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors="pt")
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors="pt").to(model.device)
 
 # Set up the adapter mask for your specific task
-task = 'retrieval.query'  # Can be any of (retrieval.passage, separation, classification, text-matching) depending on the use-case.
-task_id = model._adaptation_map[task]
-adapter_mask = torch.full((len(sentences),), task_id, dtype=torch.int32).to(model.device)
+task = 'retrieval_query'  # Can be any of (retrieval_passage, separation, classification, text_matching) depending on the use-case.
+
+model.load_adapter("jinaai/jina-embeddings-v3", revision="refs/pr/137", adapter_name=task, adapter_kwargs={"subfolder": task})
+
+model.set_adapter("retrieval_query")
 
 with torch.no_grad():
-    model_output = model(**encoded_input, adapter_mask=adapter_mask)
+    model_output = model(**encoded_input)
 
 embeddings = mean_pooling(model_output, encoded_input["attention_mask"])
 embeddings = F.normalize(embeddings, p=2, dim=1)
