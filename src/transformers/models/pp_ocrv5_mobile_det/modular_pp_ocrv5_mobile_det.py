@@ -1233,6 +1233,7 @@ class PPOCRV5MobileDetBlock(nn.Module):
             x = layer(x)
         return x
 
+
 class PPOCRV5MobileDetBackbone(nn.Module):
     """
     Backbone network for PPOCRV5 Mobile Det, built with LCNetV3Blocks.
