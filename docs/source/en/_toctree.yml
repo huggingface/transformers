@@ -173,6 +173,25 @@
     title: Parameter-efficient fine-tuning
   - isExpanded: false
     sections:
+    - sections:
+      - local: grad_accumulation
+        title: Gradient accumulation
+      - local: grad_checkpointing
+        title: Gradient checkpointing
+      - local: model_memory_anatomy
+        title: GPU memory usage
+      title: Memory optimization
+    - sections:
+      - local: mixed_precision_training
+        title: Mixed precision training
+      - local: torch_compile
+        title: torch.compile
+      - local: kernels
+        title: Kernels
+      title: Speed optimization
+    title: Performance
+  - isExpanded: false
+    sections:
     - local: accelerator_selection
       title: Accelerator selection
     - local: accelerate
@@ -200,8 +219,6 @@
       title: Intel Gaudi
     - local: perf_hardware
       title: Build your own machine
-    - local: model_memory_anatomy
-      title: Model training anatomy
     title: Hardware
   title: Training
 - isExpanded: false
