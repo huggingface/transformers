@@ -26,7 +26,8 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast, PreTrainedModel
+from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
