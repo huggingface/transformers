@@ -225,6 +225,11 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 np.testing.assert_allclose(padded_image, padded_image_original)
 
             # background color length should match channel length
+            if image_inputs[0].shape[0] == image_inputs[0].shape[1]:
+                # This avoids a source of test flakiness - if the image is already square
+                # no padding is done and background colour is not checked.
+                return
+
             with self.assertRaises(ValueError):
                 padded_image = image_processor.pad_to_square(image_inputs[0], background_color=(122, 104))
 

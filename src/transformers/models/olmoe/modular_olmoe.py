@@ -23,7 +23,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_grouped_mm_available, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
@@ -164,9 +164,7 @@ class OlmoePreTrainedModel(PreTrainedModel):
         "hidden_states": OlmoeDecoderLayer,
         "attentions": OlmoeAttention,
     }
-    _can_compile_fullgraph = (
-        is_grouped_mm_available()
-    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
+
     _supports_attention_backend = True
 
     @torch.no_grad()

@@ -300,6 +300,7 @@ class Qwen3VLMoeTextDecoderLayer(Qwen3MoeDecoderLayer):
 
 class Qwen3VLMoePreTrainedModel(Qwen3MoePreTrainedModel):
     config: Qwen3VLMoeConfig
+    input_modalities = ("text", "image", "video")
     _no_split_modules = ["Qwen3VLMoeTextDecoderLayer", "Qwen3VLMoeVisionBlock"]
 
     @torch.no_grad()
@@ -379,17 +380,17 @@ class Qwen3VLMoeTextModel(Qwen3VLTextModel):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
-        # the hard coded `3` is for temporal, height and width.
+        # the hard coded `4` is for text, temporal, height and width.
         if position_ids is None:
-            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
+            position_ids = cache_position.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
-            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
+            position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
 
         if position_ids.ndim == 3 and position_ids.shape[0] == 4:
             text_position_ids = position_ids[0]
             position_ids = position_ids[1:]
         else:
-            text_position_ids = position_ids[0]
+            text_position_ids = None
 
         attention_mask = create_causal_mask(
             config=self.config,
@@ -457,6 +458,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -519,6 +521,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
+            mm_token_type_ids=mm_token_type_ids,
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
