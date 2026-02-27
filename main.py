@@ -39,19 +39,16 @@ def main() -> None:
 
     inputs = processor.apply_chat_template(conversation, tokenize=True, add_generation_prompt=True, return_dict=True)
 
-    inputs.input_ids = inputs.input_ids.to(model.device)
-    inputs.attention_mask = inputs.attention_mask.to(model.device)
+    inputs["input_ids"] = inputs["input_ids"].to(model.device)
+    inputs["attention_mask"] = inputs["attention_mask"].to(model.device)
 
     output_ids = model.generate(
-        input_ids=inputs.input_ids,
-        attention_mask=inputs.attention_mask,
-        media=getattr(inputs, "media", None),
-        media_config=getattr(inputs, "media_config", None),
+        **inputs,
         max_new_tokens=1024,
         do_sample=False,
     )
 
-    generated_ids = output_ids[:, inputs.input_ids.shape[1] :]
+    generated_ids = output_ids[:, inputs["input_ids"].shape[1] :]
     print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 
 
