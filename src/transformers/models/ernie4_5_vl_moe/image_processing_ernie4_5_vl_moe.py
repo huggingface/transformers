@@ -26,14 +26,17 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
 
 
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 
 
-class Ernie4_5_VL_MoeImageProcessorKwargs(ImagesKwargs, total=False):
+logger = logging.get_logger(__name__)
+
+
+class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
@@ -78,7 +81,7 @@ def smart_resize(
 
 
 @auto_docstring
-class Ernie4_5_VL_MoeImageProcessor(TorchvisionBackend):
+class Ernie4_5_VLMoeImageProcessor(TorchvisionBackend):
     do_resize = True
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}
@@ -92,17 +95,17 @@ class Ernie4_5_VL_MoeImageProcessor(TorchvisionBackend):
     patch_size = 14
     temporal_patch_size = None  # Unused
     merge_size = 2
-    valid_kwargs = Ernie4_5_VL_MoeImageProcessorKwargs
+    valid_kwargs = Ernie4_5_VLMoeImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Ernie4_5_VL_MoeImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs]):
         super().__init__(**kwargs)
         if self.size is not None:
             if not self.size.shortest_edge or not self.size.longest_edge:
                 raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Ernie4_5_VL_MoeImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _standardize_kwargs(self, **kwargs) -> dict:
@@ -240,4 +243,12 @@ class Ernie4_5_VL_MoeImageProcessor(TorchvisionBackend):
         return grid_h * grid_w
 
 
-__all__ = ["Ernie4_5_VL_MoeImageProcessor"]
+class Ernie4_5_VL_MoeImageProcessor(Ernie4_5_VLMoeImageProcessor):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeImageProcessor` is deprecated; please use `Ernie4_5_VLMoeImageProcessor` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+__all__ = ["Ernie4_5_VL_MoeImageProcessor", "Ernie4_5_VLMoeImageProcessor"]

@@ -688,7 +688,7 @@ class Wav2Vec2Encoder(nn.Module):
         )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
+        hidden_states = hidden_states + position_embeddings.to(hidden_states.device)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -838,7 +838,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
         else:
             marginal_probs = probs.mean(dim=0)
 
-        perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
+        perplexity = torch.exp(-torch.sum(torch.xlogy(marginal_probs, marginal_probs), dim=-1)).sum()
         return perplexity
 
     def forward(self, hidden_states, mask_time_indices=None):

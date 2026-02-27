@@ -25,16 +25,19 @@ from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-from .image_processing_ernie4_5_vl_moe import Ernie4_5_VL_MoeImageProcessorKwargs, smart_resize
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
+from .image_processing_ernie4_5_vl_moe import Ernie4_5_VLMoeImageProcessorKwargs, smart_resize
 
 
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 
 
+logger = logging.get_logger(__name__)
+
+
 @auto_docstring
-class Ernie4_5_VL_MoeImageProcessorPil(PilBackend):
+class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
     do_resize = True
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}
@@ -48,17 +51,17 @@ class Ernie4_5_VL_MoeImageProcessorPil(PilBackend):
     patch_size = 14
     temporal_patch_size = None  # Unused
     merge_size = 2
-    valid_kwargs = Ernie4_5_VL_MoeImageProcessorKwargs
+    valid_kwargs = Ernie4_5_VLMoeImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Ernie4_5_VL_MoeImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs]):
         super().__init__(**kwargs)
         if self.size is not None:
             if not self.size.shortest_edge or not self.size.longest_edge:
                 raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Ernie4_5_VL_MoeImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _standardize_kwargs(self, **kwargs) -> dict:
@@ -191,4 +194,12 @@ class Ernie4_5_VL_MoeImageProcessorPil(PilBackend):
         return grid_h * grid_w
 
 
-__all__ = ["Ernie4_5_VL_MoeImageProcessorPil"]
+class Ernie4_5_VL_MoeImageProcessorPil(Ernie4_5_VLMoeImageProcessorPil):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeImageProcessorPil` is deprecated; please use `Ernie4_5_VLMoeImageProcessorPil` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+__all__ = ["Ernie4_5_VL_MoeImageProcessorPil", "Ernie4_5_VLMoeImageProcessorPil"]

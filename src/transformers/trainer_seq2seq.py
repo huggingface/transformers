@@ -333,7 +333,7 @@ class Seq2SeqTrainer(Trainer):
             self.model.generation_config._from_model_config = False
 
         # Retrieves GenerationConfig from model.generation_config
-        # Update with defaults because earlier the generation config used ot be init
+        # Update with defaults because earlier the generation config used to be init
         # with default values. Now we init it with `None` and keep defaults for BC
         gen_config = self.model.generation_config
         default_gen_config = gen_config._get_default_generation_params()

@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 # Build the list of all image processors
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...image_processing_utils import ImageProcessingMixin
 from ...utils import (
     CONFIG_NAME,
     IMAGE_PROCESSOR_NAME,
@@ -116,7 +117,7 @@ else:
             ("eomt_dinov3", {"torchvision": "EomtImageProcessor", "pil": "EomtImageProcessorPil"}),
             (
                 "ernie4_5_vl_moe",
-                {"torchvision": "Ernie4_5_VL_MoeImageProcessor", "pil": "Ernie4_5_VL_MoeImageProcessorPil"},
+                {"torchvision": "Ernie4_5_VLMoeImageProcessor", "pil": "Ernie4_5_VLMoeImageProcessorPil"},
             ),
             ("flava", {"torchvision": "FlavaImageProcessor", "pil": "FlavaImageProcessorPil"}),
             ("florence2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
@@ -192,6 +193,7 @@ else:
             ("pixio", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("pixtral", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
             ("poolformer", {"torchvision": "PoolFormerImageProcessor", "pil": "PoolFormerImageProcessorPil"}),
+            ("pp_doclayout_v2", {"torchvision": "PPDocLayoutV2ImageProcessor"}),
             ("pp_doclayout_v3", {"torchvision": "PPDocLayoutV3ImageProcessor"}),
             (
                 "prompt_depth_anything",
@@ -629,7 +631,6 @@ class AutoImageProcessor:
             image_processor_filename = IMAGE_PROCESSOR_NAME
 
         # Load the image processor config
-        from ...image_processing_utils import ImageProcessingMixin
 
         try:
             config_dict, _ = ImageProcessingMixin.get_image_processor_dict(

@@ -100,11 +100,11 @@ class GenerationConfig(PushToHubMixin):
 
     </Tip>
 
-    Note: the configuration field that are still `None` will be overriden by `GenerationConfig._get_default_generation_params()`
+    Note: the configuration fields that are still `None` will be overridden by `GenerationConfig._get_default_generation_params()`
     during the generation loop. If you want to use different values for these fields, make sure to explicitly set them in the
     generation config.
 
-    Arg:
+    Args:
         > Parameters that control the length of the output
 
         max_length (`int`, *optional*):
@@ -1485,7 +1485,7 @@ class CompileConfig:
 
     Args:
         fullgraph (`bool`, *optional*, defaults to `False`):
-            If False (default), attempts to discover compileable regions that will be optimized. If True, then require
+            If False (default), attempts to discover compilable regions that will be optimized. If True, then require
             that the entire function be capturable into a single graph. If this is not possible (that is, if there are
             graph breaks), then an error will be raised.
         dynamic (`bool` or `None`, *optional*):

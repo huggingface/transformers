@@ -202,7 +202,6 @@ class Olmo3RMSNorm(Olmo2RMSNorm):
 class Olmo3Attention(Olmo2Attention):
     def __init__(self, config: Olmo3Config, layer_idx: int):
         super().__init__(config, layer_idx=layer_idx)
-        assert config.layer_types is not None
         self.attention_type = config.layer_types[layer_idx]
         self.sliding_window = config.sliding_window if self.attention_type == "sliding_attention" else None
 

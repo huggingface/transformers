@@ -34,7 +34,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class Ernie4_5_VL_MoeImageProcessorTester:
+class Ernie4_5_VLMoeImageProcessorTester:
     def __init__(
         self,
         parent,
@@ -92,10 +92,10 @@ class Ernie4_5_VL_MoeImageProcessorTester:
 
 @require_torch
 @require_vision
-class Ernie4_5_VL_MoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = Ernie4_5_VL_MoeImageProcessorTester(self)
+        self.image_processor_tester = Ernie4_5_VLMoeImageProcessorTester(self)
 
     @property
     def image_processor_dict(self):

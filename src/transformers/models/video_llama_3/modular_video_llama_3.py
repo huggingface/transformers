@@ -597,6 +597,12 @@ class VideoLlama3Model(Qwen2VLModel):
     def get_rope_index(self):
         raise AttributeError("Not needed for VideoLLaMA3")
 
+    def get_vision_position_ids(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
+
+    def compute_3d_position_ids(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
+
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -898,6 +904,9 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
         return model_inputs
 
+    def _prepare_position_ids_for_generation(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
+
     def _get_image_nums_and_video_nums(
         self,
         input_ids: torch.LongTensor | None,
@@ -1197,9 +1206,13 @@ class VideoLlama3Processor(Qwen2VLProcessor):
             array_ids = np.array(text_inputs["input_ids"])
             mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
             mm_token_type_ids[array_ids == self.image_token_id] = 1
+            mm_token_type_ids[array_ids == self.video_token_id] = 2
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+
+    def model_input_names(self):
+        raise AttributeError("VideoLlama doesn't need to override it")
 
 
 class VideoLlama3ImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
