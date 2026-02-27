@@ -42,7 +42,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.trainer_callback import TrainerState
-from transformers.trainer_utils import FSDPOption, set_seed
+from transformers.trainer_utils import FSDPOption, get_last_checkpoint, set_seed
 from transformers.utils import (
     is_accelerate_available,
     is_torch_bf16_available_on_device,
@@ -86,7 +86,10 @@ sharding_strategies = ["full_shard", "shard_grad_op"]  # zero3 and zero2
 fsdp_versions = ["fsdp1", "fsdp2"]
 
 config_params = list(itertools.product(sharding_strategies, dtypes))
-params = list(itertools.product(sharding_strategies, dtypes, fsdp_versions))
+# Mixed precision: model loaded in fp32, training with --bf16/--fp16
+mixed_precision_params = list(itertools.product(sharding_strategies, dtypes, fsdp_versions))
+# Pure dtype: model loaded in target dtype, no mixed precision flags
+pure_dtype_params = list(itertools.product(["fp32"] + dtypes, fsdp_versions))
 
 resume_params = [
     ("FULL_STATE_DICT", "fsdp1"),  # FULL_STATE_DICT only supported for fsdp1
@@ -223,7 +226,7 @@ class TestFSDPConfig(TestCasePlus):
                 self.assertEqual(v, self.accelerate_fsdp_config[k])
 
     def test_torchrun_fsdp_config(self):
-        """Verify that --fsdp + --fsdp_config (torchrun-style JSON string) are parsed correctly."""
+        """Verify that --fsdp + --fsdp_config (torchrun-style) are parsed correctly."""
         output_dir = self.get_auto_remove_tmp_dir()
         fsdp_config = {"fsdp_transformer_layer_cls_to_wrap": "Qwen2DecoderLayer"}
         kwargs = {
@@ -239,7 +242,8 @@ class TestFSDPConfig(TestCasePlus):
             trainer = get_regression_trainer(**kwargs)
             self.assertEqual(trainer.args.fsdp[0], "full_shard")
             self.assertEqual(trainer.args.fsdp[1], FSDPOption.AUTO_WRAP)
-            self.assertEqual(trainer.args.fsdp_config["fsdp_transformer_layer_cls_to_wrap"], "Qwen2DecoderLayer")
+            # fsdp_ prefix is stripped and value is normalized to a list during parsing
+            self.assertIn("Qwen2DecoderLayer", trainer.args.fsdp_config["transformer_layer_cls_to_wrap"])
 
     @parameterized.expand(config_params, name_func=_parameterized_custom_name_func)
     def test_fsdp_config(self, sharding_strategy, dtype):
@@ -274,19 +278,48 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
     # FSDP training — accelerate (parameterized over fsdp version)
     # -------------------------------------------------------------------
 
-    # Testing all combinations for simple training
-    @parameterized.expand(params, name_func=_parameterized_custom_name_func)
-    def test_training(self, sharding_strategy, dtype, fsdp_version):
+    # Pure dtype training: model loaded in target dtype, no mixed precision
+    @parameterized.expand(pure_dtype_params, name_func=_parameterized_custom_name_func)
+    def test_training(self, dtype, fsdp_version):
         output_dir = self.get_auto_remove_tmp_dir()
-        sharding_idx = FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1
-        args = self._get_train_args(output_dir) + [f"--{dtype}"]
-        if dtype == "fp16":
-            # # fp16 + fsdp + fused adamw torch breaks so we switch optimizers
-            args += ["--optim", "adamw_torch"]
+        args = self._get_train_args(output_dir) + ["--model_dtype", dtype]
         cmd = self.get_accelerate_cmd(
             TRAIN_SCRIPT,
             config_file=FSDP_CONFIGS[fsdp_version],
-            launch_args=TRAIN_LAUNCH_ARGS + ["--fsdp_sharding_strategy", str(sharding_idx)],
+            launch_args=self._get_launch_args(),
+            extra_args=args,
+        )
+        execute_subprocess_async(cmd, env=self.get_env())
+
+    # Mixed precision: model loaded in fp32, training with --bf16/--fp16
+    @parameterized.expand(mixed_precision_params, name_func=_parameterized_custom_name_func)
+    def test_training_mixed_precision(self, sharding_strategy, dtype, fsdp_version):
+        output_dir = self.get_auto_remove_tmp_dir()
+        sharding_idx = FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1
+        args = self._get_train_args(output_dir) + ["--model_dtype", "fp32", f"--{dtype}"]
+        if dtype == "fp16":
+            args += ["--optim", "adamw_torch"]
+        launch_args = self._get_launch_args() + ["--fsdp_sharding_strategy", str(sharding_idx)]
+        cmd = self.get_accelerate_cmd(
+            TRAIN_SCRIPT,
+            config_file=FSDP_CONFIGS[fsdp_version],
+            launch_args=launch_args,
+            extra_args=args,
+        )
+        execute_subprocess_async(cmd, env=self.get_env())
+
+    @parameterized.expand(["true", "false"], name_func=_parameterized_custom_name_func)
+    def test_fsdp2_cpu_ram_efficient_loading(self, cpu_ram_efficient_loading):
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = self._get_train_args(output_dir) + ["--model_dtype", "bf16"]
+        launch_args = self._get_launch_args() + [
+            "--fsdp_cpu_ram_efficient_loading",
+            cpu_ram_efficient_loading,
+        ]
+        cmd = self.get_accelerate_cmd(
+            TRAIN_SCRIPT,
+            config_file=FSDP2_CONFIG_FILE,
+            launch_args=launch_args,
             extra_args=args,
         )
         execute_subprocess_async(cmd, env=self.get_env())
@@ -298,7 +331,7 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
         cmd = self.get_accelerate_cmd(
             TRAIN_SCRIPT,
             config_file=FSDP_CONFIGS[fsdp_version],
-            launch_args=TRAIN_LAUNCH_ARGS,
+            launch_args=self._get_launch_args(),
             extra_args=args,
         )
         execute_subprocess_async(cmd, env=self.get_env())
@@ -307,10 +340,11 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
     def test_basic_run_with_cpu_offload(self, fsdp_version):
         output_dir = self.get_auto_remove_tmp_dir()
         args = self._get_train_args(output_dir) + ["--bf16", "--max_steps", "10"]
+        launch_args = self._get_launch_args() + ["--fsdp_offload_params", "true"]
         cmd = self.get_accelerate_cmd(
             TRAIN_SCRIPT,
             config_file=FSDP_CONFIGS[fsdp_version],
-            launch_args=TRAIN_LAUNCH_ARGS + ["--fsdp_offload_params", "true"],
+            launch_args=launch_args,
             extra_args=args,
         )
         execute_subprocess_async(cmd, env=self.get_env())
@@ -318,9 +352,9 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
     @parameterized.expand(resume_params, name_func=_parameterized_custom_name_func)
     def test_training_and_can_resume_normally(self, state_dict_type, fsdp_version):
         output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir, num_epochs=2, save_steps=5)
+        args = self._get_train_args(output_dir, num_epochs=2, logging_steps=2, save_steps=2)
 
-        launch_args = list(TRAIN_LAUNCH_ARGS)
+        launch_args = self._get_launch_args()
         launch_args += ["--fsdp_state_dict_type", state_dict_type]
 
         logs = self._run_and_get_logs(
@@ -331,7 +365,7 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
         )
 
         # resume from ckpt
-        checkpoint = os.path.join(output_dir, "checkpoint-5")
+        checkpoint = os.path.join(output_dir, "checkpoint-2")
         resume_args = args + ["--resume_from_checkpoint", checkpoint]
 
         is_fsdp_ckpt = os.path.isdir(checkpoint) and (
@@ -453,7 +487,12 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
     # -------------------------------------------------------------------
     def _run_and_get_logs(self, cmd, output_dir):
         execute_subprocess_async(cmd, env=self.get_env())
-        return TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
+        checkpoint = get_last_checkpoint(output_dir)
+        state_file = os.path.join(checkpoint, "trainer_state.json")
+        return TrainerState.load_from_json(state_file).log_history
+
+    def _get_launch_args(self):
+        return list(TRAIN_LAUNCH_ARGS)
 
     def _get_train_args(self, output_dir, num_epochs=1, logging_steps=5, save_steps=None):
         args = [

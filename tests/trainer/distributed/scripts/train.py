@@ -17,12 +17,14 @@
 Uses a tiny Qwen2 model with synthetic data so tests run fast
 and don't require downloading real datasets.
 
-128 training samples are created; with per_device_train_batch_size=4
-and 2 GPUs this gives 16 steps per epoch.
+32 training samples are created; with per_device_train_batch_size=4
+and 2 GPUs this gives 4 steps per epoch.
 """
 
 import json
 import sys
+
+import torch
 
 from transformers import (
     AutoModelForCausalLM,
@@ -33,37 +35,51 @@ from transformers import (
     TrainingArguments,
 )
 
+DTYPE_MAP = {"fp32": torch.float32, "bf16": torch.bfloat16, "fp16": torch.float16}
+
+
+def _pop_custom_arg(name):
+    """Pop a custom --name value arg from sys.argv before HfArgumentParser sees it."""
+    if name in sys.argv:
+        idx = sys.argv.index(name)
+        value = sys.argv[idx + 1]
+        sys.argv.pop(idx)
+        sys.argv.pop(idx)
+        return value
+    return None
+
 
 def main():
     model_name = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
 
-    # Parse --loss_output_file (not a TrainingArguments field)
-    loss_output_file = None
-    if "--loss_output_file" in sys.argv:
-        idx = sys.argv.index("--loss_output_file")
-        loss_output_file = sys.argv[idx + 1]
-        sys.argv.pop(idx)
-        sys.argv.pop(idx)
+    # Parse custom args (not TrainingArguments fields)
+    loss_output_file = _pop_custom_arg("--loss_output_file")
+    model_dtype = _pop_custom_arg("--model_dtype")
 
     parser = HfArgumentParser((TrainingArguments,))
     (training_args,) = parser.parse_args_into_dataclasses()
+
+    torch_dtype = DTYPE_MAP[model_dtype] if model_dtype else None
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch_dtype)
     model.generation_config.pad_token_id = tokenizer.pad_token_id
 
-    # Synthetic dataset — 128 samples of tokenized text
+    # Synthetic dataset — 32 samples of tokenized text
+    # With per_device_train_batch_size=4 and 2 GPUs this gives 4 steps per epoch.
     texts = [
         "The quick brown fox jumps over the lazy dog. " * 5,
         "A journey of a thousand miles begins with a single step. " * 5,
         "To be or not to be, that is the question. " * 5,
         "All that glitters is not gold, all that wanders is not lost. " * 5,
-    ] * 32
+    ] * 8
 
     train_dataset = [tokenizer(text, max_length=128, truncation=True, padding="max_length") for text in texts]
+
+    training_args.disable_tqdm = True
 
     trainer = Trainer(
         model=model,

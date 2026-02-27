@@ -48,8 +48,7 @@ if __name__ == "__main__":
     parser = HfArgumentParser((TrainingArguments,))
     training_args = parser.parse_args_into_dataclasses()[0]
 
-    # Use SmolLM (small Llama-based model that works with CP)
-    model_name = "HuggingFaceTB/SmolLM-135M"
+    model_name = "hf-internal-testing/tiny-random-LlamaForCausalLM"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -78,6 +77,8 @@ if __name__ == "__main__":
         mlm=False,
         pad_to_multiple_of=4,
     )
+
+    training_args.disable_tqdm = True
 
     trainer = Trainer(
         model=model,
