@@ -3384,7 +3384,9 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(out.shape[-1] <= (input_length + 7))
 
     def test_model_kwarg_assisted_decoding_decoder_only(self):
-        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-gpt2", attn_implementation="eager"
+        ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model.generation_config.pad_token_id = tokenizer.eos_token_id
 
@@ -3405,7 +3407,9 @@ class GenerationIntegrationTests(unittest.TestCase):
             self.assertListEqual(outputs_tti.tolist(), outputs_normal.tolist())
 
         # Assistant model
-        assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        assistant = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-gpt2", attn_implementation="eager"
+        ).to(torch_device)
         assistant.config.pad_token_id = tokenizer.eos_token_id
 
         # If assisted generation passes model_kwargs correctly, should be same as previous
@@ -3668,8 +3672,9 @@ class GenerationIntegrationTests(unittest.TestCase):
         draft_name = "double7/vicuna-68m"
         target_name = "Qwen/Qwen2-0.5B-Instruct"
 
-        draft_model = AutoModelForCausalLM.from_pretrained(draft_name)
-        target_model = AutoModelForCausalLM.from_pretrained(target_name)
+        set_seed(42)
+        draft_model = AutoModelForCausalLM.from_pretrained(draft_name, attn_implementation="eager")
+        target_model = AutoModelForCausalLM.from_pretrained(target_name, attn_implementation="eager")
 
         assistant_tokenizer = AutoTokenizer.from_pretrained(draft_name)
         target_tokenizer = AutoTokenizer.from_pretrained(target_name)
@@ -3932,7 +3937,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(checkpoint)
         inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
 
-        model = AutoModelForCausalLM.from_pretrained(checkpoint).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(checkpoint, attn_implementation="eager").to(torch_device)
         original_outputs = model.generate(**inputs, do_sample=False, max_new_tokens=20)
         original_decoded = tokenizer.batch_decode(original_outputs, skip_special_tokens=True)
         self.assertEqual(original_decoded, [expected_output])
