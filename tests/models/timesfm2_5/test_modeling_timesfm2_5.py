@@ -29,7 +29,6 @@ if is_torch_available():
     from transformers import TimesFm2_5ModelForPrediction
 
 
-
 class TimesFm2_5ModelTester:
     def __init__(
         self,
