@@ -280,10 +280,6 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Ignore copy
-    def _init_weights(self, module):
-        super()._init_weights(module)
-
     def _freeze_parameters(self):
         for param in self.parameters():
             param.requires_grad = False

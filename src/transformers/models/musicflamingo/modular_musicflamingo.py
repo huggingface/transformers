@@ -21,11 +21,12 @@ import torch
 from torch import Tensor, broadcast_tensors, nn
 from torch.amp import autocast
 
+from ... import initialization as init
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast, PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -37,7 +38,6 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3PreTrainedModel,
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor, AudioFlamingo3ProcessorKwargs
-from ..auto import AutoConfig
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 
 
@@ -516,12 +516,12 @@ class MusicFlamingoEncoder(AudioFlamingo3Encoder):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
-
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, MusicFlamingoRotaryEmbedding):
-            module.position_angles = module._compute_position_angles(
+            buffer_value = module._compute_position_angles(
                 module.inv_freq, device=module.inv_freq.device, dtype=module.inv_freq.dtype
             )
+            init.copy_(module.position_angles, buffer_value)
 
     @can_return_tuple
     def forward(

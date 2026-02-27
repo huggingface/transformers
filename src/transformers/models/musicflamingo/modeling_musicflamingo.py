@@ -28,15 +28,16 @@ import torch
 from torch import Tensor, broadcast_tensors, nn
 from torch.amp import autocast
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast, PreTrainedModel
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel, AutoModelForCausalLM
@@ -443,16 +444,6 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Ignore copy
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-
-        if isinstance(module, MusicFlamingoRotaryEmbedding):
-            module.position_angles = module._compute_position_angles(
-                module.inv_freq, device=module.inv_freq.device, dtype=module.inv_freq.dtype
-            )
-
     def _freeze_parameters(self):
         for param in self.parameters():
             param.requires_grad = False
@@ -535,6 +526,15 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
         input_lengths = (input_lengths - 1) // 2 + 1
         output_lengths = (input_lengths - 2) // 2 + 1
         return input_lengths, output_lengths
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, MusicFlamingoRotaryEmbedding):
+            buffer_value = module._compute_position_angles(
+                module.inv_freq, device=module.inv_freq.device, dtype=module.inv_freq.dtype
+            )
+            init.copy_(module.position_angles, buffer_value)
 
 
 class MusicFlamingoMultiModalProjector(nn.Module):
