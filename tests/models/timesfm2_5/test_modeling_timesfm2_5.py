@@ -277,7 +277,9 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class TimesFm2_5ModelIntegrationTests(unittest.TestCase):
     def test_inference(self):
-        model = TimesFm2_5ModelForPrediction.from_pretrained("google/timesfm-2.5-200m-transformers").to(torch_device)
+        model = TimesFm2_5ModelForPrediction.from_pretrained(
+            "google/timesfm-2.5-200m-transformers", revision="refs/pr/3"
+        ).to(torch_device)
         forecast_input = [
             np.sin(np.linspace(0, 20, 100)),
             np.sin(np.linspace(0, 20, 200)),
