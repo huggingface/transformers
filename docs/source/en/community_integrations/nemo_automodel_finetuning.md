@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 NVIDIA [NeMo Automodel](https://github.com/NVIDIA-NeMo/Automodel) is a Pytorch DTensor‑native SPMD open-source training library under NVIDIA [NeMo Framework](https://github.com/NVIDIA-NeMo), designed to streamline and scale pretraining and fine-tuning for [LLMs](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/llm.html) and [VLMs](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/vlm.html). Designed for flexibility, reproducibility, and scale, NeMo AutoModel enables both small-scale experiments and massive multi-GPU, multi-node training for fast experimentation in research and production environments. It supports Fully Sharded Data Parallelism (FSDP2), tensor, pipeline, expert, and context parallel in addition to fast kernels from DeepEP and TransformerEngine to enable high throughput. NeMo Automodel supports both dense models and Mixture-of-Expert (MoE) Models with [benchmarks](https://docs.nvidia.com/nemo/automodel/latest/performance-summary.html) here.
 
-Define your training run in a YAML config file. The full config file can be found [here](https://github.com/NVIDIA-NeMo/Automodel/blob/0d05e245e0bbc9128b869b21a3908512affc6cae/examples/llm_finetune/nemotron/nemotron_nano_v3_hellaswag_peft.yaml).
+Define your training run in a YAML config file (see full [config file](https://github.com/NVIDIA-NeMo/Automodel/blob/0d05e245e0bbc9128b869b21a3908512affc6cae/examples/llm_finetune/nemotron/nemotron_nano_v3_hellaswag_peft.yaml)).
 
 ```yaml
 # Instantiate a Nemotron V3 Nano model
