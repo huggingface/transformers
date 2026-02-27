@@ -51,15 +51,14 @@ distributed:
 # ... other parameters
 ```
 
-Training can be launched via `torchrun`. For example, this config can be launched using `torchrun –nproc-per-node=4 examples/llm_finetune/finetune.py -c /path/to/yaml`.
+Training can be launched via `torchrun`. For example, this config can be launched using `torchrun --nproc-per-node=4 examples/llm_finetune/finetune.py -c /path/to/yaml`.
 
 ## Transformers integration
 
 1. Tight integration with Transformers allows any LLM or VLM that can be instantiated through Transformers to also be instantiated through NeMo Automodel. Full model coverage can be found [here](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/overview.html).
-2. Builds directly on top of Hugging Face models by instanting ['AutoModel.from_pretrained()'] and dynamically swapping in high performance models and layers, enabling API compatibility, with extensions for more refined parallelisms (e.g., EP).
+2. Builds directly on top of Hugging Face models by instantiating [`AutoModel.from_pretrained`] and dynamically swapping in high performance models and layers, enabling API compatibility, with extensions for more refined parallelisms (e.g., EP).
 3. Scans the architecture field in the [`AutoConfig.from_pretrained`] to automatically instantiate custom model implementations like Nemotron Nano V3.
 4. We follow the Transformers API closely, allowing for a near drop-in compatibility experience.
-
 
 ## Resources
 
