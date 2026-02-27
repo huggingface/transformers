@@ -60,7 +60,7 @@ from .image_processing_ernie4_5_vl_moe import smart_resize
 logger = logging.get_logger(__name__)
 
 
-class Ernie4_5_VL_MoeVideoProcessorInitKwargs(VideosKwargs, total=False):
+class Ernie4_5_VLMoeVideoProcessorInitKwargs(VideosKwargs, total=False):
     patch_size: int
     temporal_patch_size: int
     merge_size: int
@@ -95,7 +95,7 @@ class Ernie4_5_VL_MoeVideoProcessorInitKwargs(VideosKwargs, total=False):
     """,
 )
 @requires(backends=("torchvision",))
-class Ernie4_5_VL_MoeVideoProcessor(BaseVideoProcessor):
+class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 299 * 28 * 28, "longest_edge": 1196 * 28 * 28}
     image_mean = OPENAI_CLIP_MEAN
@@ -112,10 +112,10 @@ class Ernie4_5_VL_MoeVideoProcessor(BaseVideoProcessor):
     do_sample_frames = True
     draw_on_frames = True
     font = "Roboto-Regular.ttf"
-    valid_kwargs = Ernie4_5_VL_MoeVideoProcessorInitKwargs
+    valid_kwargs = Ernie4_5_VLMoeVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Ernie4_5_VL_MoeVideoProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[Ernie4_5_VLMoeVideoProcessorInitKwargs]):
         temporal_patch_size = kwargs.get("temporal_patch_size", 2)
         if temporal_patch_size is None or temporal_patch_size != 2:
             raise ValueError("`Ernie 4.5 VL` only supports a temporal patch size of 2")
@@ -590,4 +590,4 @@ class Ernie4_5_VL_MoeVideoProcessor(BaseVideoProcessor):
         return preprocessed_videos
 
 
-__all__ = ["Ernie4_5_VL_MoeVideoProcessor"]
+__all__ = ["Ernie4_5_VLMoeVideoProcessor"]

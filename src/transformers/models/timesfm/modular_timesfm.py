@@ -557,46 +557,41 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         self.post_init()
 
     def _preprocess(
-        self, inputs: Sequence[torch.Tensor], freq: Sequence[int]
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Formats and pads raw inputs to feed into the model.
-
-        This function both pads each time series to match the context length, and
-        pads the inputs to meet the SPMD shape requirement.
+        self, inputs: Sequence[torch.Tensor], freq: Sequence[int] | None = None, context_len: int | None = None
+    ) -> tuple[torch.Tensor, ...]:
+        """Pad/truncate input time series to `context_len` and build a padding mask.
 
         Args:
-          inputs: A list of 1d Tensors. Each Tensor is the context time series of
-            a single forecast task.
-          freq: list of frequencies
+            inputs: A list of 1d Tensors. Each Tensor is the context time series of a single forecast task.
+            freq: Optional list of frequencies (returned as a tensor when provided).
+            context_len: Optional context length override (defaults to `self.context_len`).
 
         Returns:
-        A tuple of:
-        - the padded input time series to meet the model required context.
-        - the padding indicator.
-        - the number of padded examples for SPMD so that each core has the same
-            number (a multiple of `batch_size`) of examples.
+            Tuple of (padded_inputs, padding_mask) and optionally a freq tensor.
         """
+        if context_len is None:
+            context_len = self.context_len
+
         input_ts, input_padding = [], []
 
-        for i, ts in enumerate(inputs):
+        for ts in inputs:
             input_len = ts.shape[0]
             padding = torch.zeros(input_len + self.horizon_len, dtype=ts.dtype, device=ts.device)
-            if input_len < self.context_len:
-                num_front_pad = self.context_len - input_len
+            if input_len < context_len:
+                num_front_pad = context_len - input_len
                 ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
                 padding = torch.cat([torch.ones(num_front_pad, dtype=ts.dtype, device=padding.device), padding], dim=0)
-            elif input_len > self.context_len:
-                ts = ts[-self.context_len :]
-                padding = padding[-(self.context_len + self.horizon_len) :]
+            elif input_len > context_len:
+                ts = ts[-context_len:]
+                padding = padding[-(context_len + self.horizon_len) :]
 
             input_ts.append(ts)
             input_padding.append(padding)
 
-        return (
-            torch.stack(input_ts, dim=0),
-            torch.stack(input_padding, dim=0),
-            torch.tensor(freq[: len(inputs)], dtype=torch.int32).reshape(-1, 1),
-        )
+        result = (torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0))
+        if freq is not None:
+            result = result + (torch.tensor(freq[: len(inputs)], dtype=torch.int32).reshape(-1, 1),)
+        return result
 
     def _postprocess_output(
         self, model_output: torch.Tensor, stats: tuple[torch.Tensor, torch.Tensor]
