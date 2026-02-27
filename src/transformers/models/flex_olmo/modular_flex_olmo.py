@@ -223,7 +223,7 @@ class FlexOlmoSparseMoeBlock(OlmoeSparseMoeBlock):
     pass
 
 
-# FlexOlmo decoder layer is identical to OlmoE decoder layer except:
+# FlexOlmo decoder layer is identical to OlmoE decoder layer except Exception:
 # - Norm is applied after attention/feedforward rather than before.
 class FlexOlmoDecoderLayer(OlmoeDecoderLayer):
     def __init__(self, config: FlexOlmoConfig, layer_idx: int):
@@ -278,7 +278,7 @@ class FlexOlmoPreTrainedModel(MixtralPreTrainedModel):
 
 # FlexOlmo uses Mixtral model as its base instead of OlmoE model since Mixtral is more up-to-date with the rest
 # of the transformers library. For example, it uses the newer mechanisms of recording submodule outputs.
-# FlexOlmo model is identical to Mixtral model except:
+# FlexOlmo model is identical to Mixtral model except Exception:
 # - FlexOlmo does not use sliding window attention.
 class FlexOlmoModel(MixtralModel):
     @merge_with_config_defaults

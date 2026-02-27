@@ -179,7 +179,7 @@ class Olmo2Config(OlmoConfig):
         del self.clip_qkv
 
 
-# OLMo2 RMS norm is identical to Llama RMS norm except:
+# OLMo2 RMS norm is identical to Llama RMS norm except Exception:
 # - Weight and hidden states are multiplied before converting back to the input dtype, rather than after.
 class Olmo2RMSNorm(LlamaRMSNorm):
     def forward(self, hidden_states):
@@ -201,7 +201,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Olmo2 attention is identical to OLMo attention except:
+# Olmo2 attention is identical to OLMo attention except Exception:
 # - Norm is applied to attention queries and keys.
 # - No qkv clipping.
 class Olmo2Attention(OlmoAttention):
@@ -258,7 +258,7 @@ class Olmo2Attention(OlmoAttention):
         return attn_output, attn_weights
 
 
-# The OLMo2 layers are identical to those of the OLMo model except:
+# The OLMo2 layers are identical to those of the OLMo model except Exception:
 # - RMSNorm is used instead of standard layer norm.
 # - Norm is applied after attention/feedforward rather than before.
 class Olmo2DecoderLayer(OlmoDecoderLayer):
