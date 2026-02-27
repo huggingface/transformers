@@ -187,8 +187,8 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     # BNB optimizer tests
     # ---------------------------------------------------------------------------
 
-    @require_bitsandbytes
     @parameterized.expand(["rmsprop_bnb", "ademamix", "ademamix_8bit", "rmsprop_bnb_8bit", "rmsprop_bnb_32bit"])
+    @require_bitsandbytes
     def test_bnb_optim(self, optim):
         tiny_gpt2, train_dataset = self._get_gpt2_and_dataset()
         args = TrainingArguments(
@@ -255,9 +255,9 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     # Schedule-free tests
     # ---------------------------------------------------------------------------
 
+    @parameterized.expand([("schedule_free_adamw",), ("schedule_free_radam",)])
     @require_schedulefree
     @require_torch_accelerator
-    @parameterized.expand([("schedule_free_adamw",), ("schedule_free_radam",)])
     def test_schedulefree(self, optim):
         self._train_with_llama(optim, lr_scheduler_type="constant")
 
@@ -346,9 +346,9 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             if is_module_matched:
                 self.assertFalse(is_regex)
 
+    @parameterized.expand([("galore_adamw",), ("galore_adamw_layerwise",), ("galore_adamw_8bit",)])
     @require_galore_torch
     @require_torch_accelerator
-    @parameterized.expand([("galore_adamw",), ("galore_adamw_layerwise",), ("galore_adamw_8bit",)])
     def test_galore(self, optim):
         self._train_with_llama(optim, optim_target_modules=_ATTN_MLP_TARGET_MODULES)
 
@@ -370,8 +370,6 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             lr_scheduler_type="cosine",
         )
 
-    @require_galore_torch
-    @require_torch_accelerator
     @parameterized.expand(
         [
             (_ATTN_MLP_TARGET_MODULES,),
@@ -379,6 +377,8 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             ("all-linear",),
         ]
     )
+    @require_galore_torch
+    @require_torch_accelerator
     def test_galore_adafactor(self, optim_target_modules):
         upper_bound_pm = 700
         lower_bound_pm = 650
@@ -412,9 +412,9 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     # Apollo tests
     # ---------------------------------------------------------------------------
 
+    @parameterized.expand([("apollo_adamw",), ("apollo_adamw_layerwise",)])
     @require_apollo_torch
     @require_torch_accelerator
-    @parameterized.expand([("apollo_adamw",), ("apollo_adamw_layerwise",)])
     def test_apollo(self, optim):
         self._train_with_llama(optim, optim_target_modules=_ATTN_MLP_TARGET_MODULES)
 

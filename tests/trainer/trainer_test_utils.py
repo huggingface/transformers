@@ -154,6 +154,8 @@ class TorchTracemalloc:
             backend_empty_cache(torch_device)
             backend_reset_max_memory_allocated(torch_device)  # reset the peak gauge to zero
             self.begin = backend_memory_allocated(torch_device)
+        else:
+            self.begin = 0
         return self
 
     def __exit__(self, *exc):
@@ -162,6 +164,9 @@ class TorchTracemalloc:
             backend_empty_cache(torch_device)
             self.end = backend_memory_allocated(torch_device)
             self.peak = backend_max_memory_allocated(torch_device)
+        else:
+            self.end = 0
+            self.peak = 0
         self.used = bytes2megabytes(self.end - self.begin)
         self.peaked = bytes2megabytes(self.peak - self.begin)
 
