@@ -112,6 +112,7 @@ def _build_checkpoint_conversion_mapping():
         ],
         "gemma3n_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
+        ],
         "olmo_hybrid": [
             WeightRenaming("attention_layer_norm", "input_layernorm"),
             WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
