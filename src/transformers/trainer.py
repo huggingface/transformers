@@ -1388,6 +1388,9 @@ class Trainer:
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
 
+        if self.model_init is not None and self.args.use_liger_kernel:
+            apply_liger_kernel(self.model, self.args.liger_kernel_config)
+
         if DebugOption.UNDERFLOW_OVERFLOW in args.debug:
             if args.n_gpu > 1:
                 # nn.DataParallel(model) replicates the model, creating new variables and module
