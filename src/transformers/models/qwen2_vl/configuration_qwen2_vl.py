@@ -118,6 +118,8 @@ class Qwen2VLTextConfig(PreTrainedConfig):
             The id of the _end-of-stream_ token.
         pad_token_id (`int`, *optional*):
             The id of the _padding_ token.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Qwen2VLTextModel, Qwen2VLConfig
@@ -174,6 +176,7 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         bos_token_id: int | None = 151643,
         eos_token_id: int | None = 151645,
         pad_token_id: int | None = None,
+        tie_word_embeddings: bool = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -211,6 +214,7 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(
             ignore_keys_at_rope_validation={"mrope_section"},
             **kwargs,

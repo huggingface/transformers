@@ -88,6 +88,10 @@ class ColQwen2Config(PreTrainedConfig):
         self.embedding_dim = embedding_dim
         self.initializer_range = initializer_range
         self.tie_word_embeddings = tie_word_embeddings
+
+        # Move `tie_word_embeddings` under `vlm_config` for BC
+        if self.vlm_config.text_config.tie_word_embeddings and not self.vlm_config.tie_word_embeddings:
+            self.vlm_config.tie_word_embeddings = self.vlm_config.text_config.tie_word_embeddings
         super().__init__(**kwargs)
 
     def get_text_config(self, *args, **kwargs) -> PreTrainedConfig:
