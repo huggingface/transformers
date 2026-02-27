@@ -1092,6 +1092,7 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
@@ -1101,15 +1102,12 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
-        # Only pass visual inputs on the first generation step (position 0).
+        # Only pass visual inputs on the first generation step.
         # On subsequent steps the KV cache already holds the visual tokens.
-        if cache_position is not None and cache_position[0] != 0:
-            pixel_values = None
-            pixel_values_videos = None
-            image_grid_thw = None
-            video_grid_thw = None
+        if is_first_iteration or not kwargs.get("use_cache", True):
         model_inputs["pixel_values"] = pixel_values
         model_inputs["pixel_values_videos"] = pixel_values_videos
         model_inputs["image_grid_thw"] = image_grid_thw
