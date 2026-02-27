@@ -43,6 +43,9 @@ You can find all the available RF-DETR checkpoints under the [stevenbucaille](ht
 organization.
 The original code can be found [here](https://github.com/roboflow/rf-detr).
 
+RfDetr is compatible with models from the original [rf-detr](https://github.com/roboflow/rf-detr) library. You can train your models using the [Roboflow](https://roboflow.com/) platform, then use `RfDetr` in `transformers` to import the weights and deploy your model anywhere.
+
+
 > [!TIP]
 > This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
 >
