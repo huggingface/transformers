@@ -26,13 +26,23 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_torchaudio_available
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchaudio_available,
+    logging,
+)
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig, ParakeetTDTConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -797,6 +807,12 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                     "torchaudio is required for TDT loss computation. Install it with: pip install torchaudio"
                 )
             from torchaudio.functional import rnnt_loss
+
+            logger.warning_once(
+                "Training uses standard RNNT loss from torchaudio, which does not train the duration head. "
+                "The model will be trained as a regular RNNT. To train with TDT loss (including duration "
+                "prediction), use NeMo's TDT loss implementation."
+            )
 
             # Compute encoder output lengths
             attention_mask = (
