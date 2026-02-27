@@ -405,8 +405,12 @@ class HCXVisionPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=std)
-            if module.padding_idx is not None and module.weight.shape[0] > module.padding_idx:
-                init.zeros_(module.weight[module.padding_idx])
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                try:
+                    init.zeros_(module.weight[module.padding_idx])
+                except Exception:
+                    breakpoint()
+                    pass
         elif isinstance(module, (nn.LayerNorm, HyperCLOVAXRMSNorm)):
             init.ones_(module.weight)
             if hasattr(module, "bias"):
@@ -1084,34 +1088,36 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
         self,
         input_ids,
         past_key_values=None,
+        attention_mask=None,
         inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        use_cache=True,
         pixel_values=None,
         pixel_values_videos=None,
         image_grid_thw=None,
         video_grid_thw=None,
-        attention_mask=None,
-        cache_position=None,
-        logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
             cache_position=cache_position,
-            logits_to_keep=logits_to_keep,
+            position_ids=position_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            use_cache=use_cache,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
-        # Only pass visual inputs on the first generation step.
-        # On subsequent steps the KV cache already holds the visual tokens.
-        if is_first_iteration or not kwargs.get("use_cache", True):
-        model_inputs["pixel_values"] = pixel_values
-        model_inputs["pixel_values_videos"] = pixel_values_videos
-        model_inputs["image_grid_thw"] = image_grid_thw
-        model_inputs["video_grid_thw"] = video_grid_thw
+        if not is_first_iteration and use_cache:
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["pixel_values_videos"] = pixel_values_videos
         return model_inputs
 
 
