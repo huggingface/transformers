@@ -493,17 +493,17 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         >>> prediction_logits = outputs.prediction_logits
         >>> sop_logits = outputs.sop_logits
         ```"""
-        outputs = self.albert(
+        outputs: BaseModelOutputWithPooling = self.albert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
 
-        sequence_output, pooled_output = outputs[:2]
+        sequence_output = outputs.last_hidden_state
+        pooled_output = outputs.pooler_output
 
         prediction_scores = self.predictions(sequence_output)
         sop_scores = self.sop_classifier(pooled_output)
@@ -631,16 +631,15 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         0.81
         ```
         """
-        outputs = self.albert(
+        outputs: BaseModelOutputWithPooling = self.albert(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
-        sequence_outputs = outputs[0]
+        sequence_outputs = outputs.last_hidden_state
 
         prediction_scores = self.predictions(sequence_outputs)
 
@@ -694,17 +693,16 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        outputs = self.albert(
+        outputs: BaseModelOutputWithPooling = self.albert(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
 
-        pooled_output = outputs[1]
+        pooled_output = outputs.pooler_output
 
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
@@ -774,17 +772,16 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        outputs = self.albert(
+        outputs: BaseModelOutputWithPooling = self.albert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
 
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
@@ -827,17 +824,16 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> AlbertForPreTrainingOutput | tuple:
-        outputs = self.albert(
+        outputs: BaseModelOutputWithPooling = self.albert(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
 
         logits: torch.Tensor = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
@@ -935,17 +931,16 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
             if inputs_embeds is not None
             else None
         )
-        outputs = self.albert(
+        outputs: BaseModelOutputWithPooling = self.albert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=True,
             **kwargs,
         )
 
-        pooled_output = outputs[1]
+        pooled_output = outputs.pooler_output
 
         pooled_output = self.dropout(pooled_output)
         logits: torch.Tensor = self.classifier(pooled_output)
