@@ -94,6 +94,7 @@ if TYPE_CHECKING:
     from .deepseek_vl import *
     from .deepseek_vl_hybrid import *
     from .deformable_detr import *
+    from .deimv2 import *
     from .deit import *
     from .deprecated import *
     from .depth_anything import *

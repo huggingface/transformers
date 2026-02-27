@@ -88,6 +88,7 @@ else:
             ("deepseek_vl", ("DeepseekVLImageProcessor", "DeepseekVLImageProcessorFast")),
             ("deepseek_vl_hybrid", ("DeepseekVLHybridImageProcessor", "DeepseekVLHybridImageProcessorFast")),
             ("deformable_detr", ("DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast")),
+            ("deimv2", ("RTDetrImageProcessor", "RTDetrImageProcessorFast")),
             ("deit", ("DeiTImageProcessor", "DeiTImageProcessorFast")),
             ("depth_anything", ("DPTImageProcessor", "DPTImageProcessorFast")),
             ("depth_pro", ("DepthProImageProcessor", "DepthProImageProcessorFast")),
