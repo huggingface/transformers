@@ -87,7 +87,7 @@ def window_partition(
     num_w_patches_per_window = num_w_patches // num_windows
     num_h_patches_per_window = num_h_patches // num_windows
     windowed_pixel_tokens = pixel_tokens_with_pos_embed.view(
-        batch_size, num_windows, num_h_patches_per_window, num_windows, num_h_patches_per_window, -1
+        batch_size, num_windows, num_w_patches_per_window, num_windows, num_h_patches_per_window, -1
     )
     windowed_pixel_tokens = windowed_pixel_tokens.permute(0, 1, 3, 2, 4, 5)
     windowed_pixel_tokens = windowed_pixel_tokens.reshape(
