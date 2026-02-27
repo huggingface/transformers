@@ -35,7 +35,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -174,8 +174,8 @@ def eager_attention_forward(
         scaling = query.size(-1) ** -0.5
 
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None and attention_mask.ndim == 4:
-        attn_weights = attn_weights + attention_mask[:, :, :, : key.shape[-2]]
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -288,9 +288,9 @@ class MusicFlamingoAttention(nn.Module):
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -417,6 +417,11 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
     input_modalities = "audio"
     _no_split_modules = ["MusicFlamingoEncoderLayer"]
 
+    _can_record_outputs = {
+        "hidden_states": MusicFlamingoEncoderLayer,
+        "attentions": MusicFlamingoAttention,
+    }
+
     def __init__(self, config: MusicFlamingoEncoderConfig):
         super().__init__(config)
         self.dropout = config.dropout
@@ -424,7 +429,6 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
 
         embed_dim = config.d_model
         self.num_mel_bins = config.num_mel_bins
-        self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
@@ -462,7 +466,7 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
         input_features_mask: torch.Tensor | None = None,
         audio_times: torch.Tensor | None = None,
         **kwargs,
-    ):
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Args:
             input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
@@ -598,27 +602,25 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector."
+    )
     def get_audio_features(
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
         audio_times: torch.Tensor | None = None,
     ) -> torch.FloatTensor:
-        """
-        This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
-        Args:
-            input_features (`torch.FloatTensor`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-            input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
-                Mask to avoid performing attention on padded feature indices.
-
-        Returns:
-            `torch.FloatTensor`:
-                The audio embeddings.
+        r"""
+        input_features (`torch.FloatTensor`):
+            Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
+            `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+            and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padded feature indices.
         """
         # Encode audio with audio_times
         encoder_output = self.audio_tower(
