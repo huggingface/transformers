@@ -507,7 +507,7 @@ class SiglipTextTransformer(SiglipPreTrainedModel):
         # note: SigLIP's text model does not use a causal mask, unlike the original CLIP model.
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 

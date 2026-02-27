@@ -313,7 +313,7 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
 
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 
@@ -356,7 +356,7 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
             target_len, source_len = probe.shape[1], hidden_state.shape[1]
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=probe,
+                inputs_embeds=probe,
                 attention_mask=attention_mask,
                 encoder_hidden_states=hidden_state,
             )

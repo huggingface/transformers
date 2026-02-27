@@ -39,7 +39,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from .image_processing_glm4v import Glm4vImageProcessorKwargs, smart_resize
+from .image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs, smart_resize
 
 
 logger = logging.get_logger(__name__)
@@ -183,6 +183,9 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        return Glm4vImageProcessor.get_number_of_image_patches(self, height, width, images_kwargs)
 
     @auto_docstring
     def preprocess(

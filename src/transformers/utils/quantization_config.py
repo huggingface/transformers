@@ -62,6 +62,8 @@ class QuantizationMethod(str, Enum):
     FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
+    FOUR_OVER_SIX = "fouroversix"
+    SINQ = "sinq"
 
 
 class AwqFormat(str, Enum):
@@ -158,6 +160,12 @@ class QuantizationConfigMixin:
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
+    def to_diff_dict(self) -> dict[str, Any]:
+        """
+        Default behavior: no diffing implemented for this config.
+        """
+        return self.to_dict()
+
     def to_json_string(self, use_diff: bool = True) -> str:
         """
         Serializes this instance to a JSON string.
@@ -170,10 +178,7 @@ class QuantizationConfigMixin:
         Returns:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
         """
-        if use_diff is True:
-            config_dict = self.to_diff_dict()
-        else:
-            config_dict = self.to_dict()
+        config_dict = self.to_diff_dict() if use_diff else self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
     def update(self, **kwargs):
@@ -1254,7 +1259,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
     def is_quantization_compressed(self):
         from compressed_tensors.quantization import QuantizationStatus
 
-        return self.is_quantized and self.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
+        qc = self.quantization_config
+        return self.is_quantized and (qc is not None and qc.quantization_status == QuantizationStatus.COMPRESSED)
 
     @property
     def is_sparsification_compressed(self):
@@ -1902,3 +1908,155 @@ class Mxfp4Config(QuantizationConfigMixin):
             `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         return {"quant_method": self.quant_method, "modules_to_not_convert": self.modules_to_not_convert}
+
+
+@dataclass
+class FourOverSixConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class containing all options for quantization with `fouroversix`. In brief,
+    Four Over Six is a modification to NVFP4 quantization which adaptively scales the largest value
+    in each block of 16 FP4 values to either 4 or 6. Selecting a scale of 6 uses the full range of
+    FP4 values, but selecting a scale of 4 allows for a more uniform distribution of quantization
+    error. Refer to the original publication for more details: https://arxiv.org/abs/2512.02010.
+
+    Args:
+        activation_scale_rule (`str`, *optional*):
+            Scaling rule to use when selecting a scale for blocks in activation tensors. If not
+            provided, `scale_rule` is used.
+        dtype (`str`, default "nvfp4", *optional*, defaults to `"nvfp4"`):
+            The data type to use for the layer's weights, activations, and tensors. Can be
+            `"nvfp4"` or `"mxfp4"`.
+        gradient_scale_rule (`str`, *optional*):
+            Scaling rule to use when selecting a scale for blocks in gradient tensors. If not
+            provided, `scale_rule` is used.
+        keep_master_weights (`bool`, default False, *optional*, defaults to `False`):
+            Whether to keep the master weights. If `True`, high-precision weights are kept at all
+            times and weights are quantized online in each forward pass. This is useful for
+            quantized training.
+        matmul_backend (`str`, *optional*):
+            The backend to use for matrix multiplications. Can be `"cutlass"` or `"pytorch"`. If
+            not provided, CUTLASS will be used if available and PyTorch will be used otherwise.
+        output_dtype (`str`, *optional*, defaults to `"bfloat16"`):
+            The data type to use for the output of the layer. Can be `"bfloat16"` or `"float16"`.
+        quantize_backend (`str`, *optional*):
+            The backend to use for quantization. Can be `"cuda"`, `"triton"`, or `"pytorch"`. If
+            not provided, the fastest backend will be selected based on your environment, and based
+            on the options supported by each backend. Typically, `"cuda"` will be used for
+            inference, `"triton"` will be used for training, and `"pytorch"` will be used on
+            non-CUDA devices.
+        scale_rule (`str`, default "mse", *optional*, defaults to `"mse"`):
+            Rule to use when selecting block scales. Can be `"mse"`, `"mae"`, or `"abs_max"` for
+            Four Over Six, `"static_6"` for default NVFP4 quantization, or `"static_4"` to scale
+            all blocks to a maximum value of 4.
+        weight_scale_2d (`bool`, default False, *optional*, defaults to `False`):
+            Whether to compute scale factors on weight tensors in 2D blocks. This should be done
+            during training.
+        weight_scale_rule (`str`, *optional*):
+            Scaling rule to use when selecting a scale for blocks in weight tensors. If not
+            provided, `scale_rule` is used.
+        module_config_overrides (`dict[str, dict[str, Any]]`, *optional*):
+            A dictionary of module-specific configuration overrides. Keys should be module names, and
+            values should be dictionaries containing the quantization configuration for that module.
+            This can be used to override the default configuration for specific modules.
+        modules_to_not_convert (`list[str]`, *optional*, defaults to `['lm_head']`):
+            The list of modules to exclude from quantization. By default, the `lm_head` is excluded.
+    """
+
+    def __init__(
+        self,
+        activation_scale_rule: str | None = None,
+        dtype: str = "nvfp4",
+        gradient_scale_rule: str | None = None,
+        keep_master_weights: bool = False,
+        matmul_backend: str | None = None,
+        output_dtype: str | None = "bfloat16",
+        quantize_backend: str | None = None,
+        scale_rule: str = "mse",
+        weight_scale_2d: bool = False,
+        weight_scale_rule: str | None = None,
+        module_config_overrides: dict[str, dict[str, Any]] | None = None,
+        modules_to_not_convert: list[str] | None = ["lm_head"],
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.FOUR_OVER_SIX
+
+        self.activation_scale_rule = activation_scale_rule
+        self.dtype = dtype
+        self.gradient_scale_rule = gradient_scale_rule
+        self.keep_master_weights = keep_master_weights
+        self.matmul_backend = matmul_backend
+        self.quantize_backend = quantize_backend
+        self.output_dtype = output_dtype
+        self.scale_rule = scale_rule
+        self.weight_scale_2d = weight_scale_2d
+        self.weight_scale_rule = weight_scale_rule
+        self.module_config_overrides = module_config_overrides
+        self.modules_to_not_convert = modules_to_not_convert
+
+
+class SinqConfig(QuantizationConfigMixin):
+    """
+    Quantization config for SINQ / A-SINQ.
+
+    Pass this to:
+
+        AutoModel.from_pretrained(..., quantization_config=SinqConfig(...))
+
+    Args:
+        nbits (`int`, default 4):
+            Quantization bits for weights.
+        group_size (`int`, default 64):
+            Group size used in SINQ weight quantization (must be multiple of 8).
+        tiling_mode (`str`, default "1D"):
+            Tiling mode for SINQ (typically "1D"; "2D" if supported in your backend).
+        method (`str`, default "sinq"):
+            "sinq"  – calibration-free weight-only SINQ
+            "asinq" – A-SINQ (activation-aware), not supported in Hugging Face. Please refer to the official SINQ repository.
+        modules_to_not_convert (`list[str]`, *optional*):
+            List of module names/prefixes to keep in full precision.
+
+        **kwargs:
+            Extra user arguments (kept in `_extra_kwargs` for round-tripping).
+    """
+
+    def __init__(
+        self,
+        nbits: int = 4,
+        group_size: int = 64,
+        tiling_mode: str = "1D",
+        method: str = "sinq",  # "sinq" | "asinq"
+        modules_to_not_convert: list[str] | None = None,
+        **kwargs: Any,
+    ):
+        self.quant_method = QuantizationMethod.SINQ
+
+        self.nbits = nbits
+        self.group_size = group_size
+        self.tiling_mode = tiling_mode
+        self.method = method
+
+        self.modules_to_not_convert = modules_to_not_convert
+
+        self._extra_kwargs: dict[str, Any] = dict(kwargs)
+
+        self.post_init()
+
+    def post_init(self):
+        self.nbits = int(self.nbits)
+        self.group_size = int(self.group_size)
+        self.tiling_mode = str(self.tiling_mode)
+        self.method = str(self.method).lower()
+
+        # Validation
+        if not isinstance(self.nbits, int):
+            raise TypeError("`nbits` must be convertible to an int")
+        if not isinstance(self.group_size, int):
+            raise TypeError("`group_size` must be convertible to an int")
+        if not isinstance(self.tiling_mode, str):
+            raise TypeError("`tiling_mode` must be convertible to a string")
+        if self.method not in {"sinq", "asinq"}:
+            raise ValueError(f"`method` must be either 'sinq' or 'asinq', got {self.method}")
+        if self.group_size is not None and self.group_size % 8 != 0:
+            logger.warning(
+                f"SINQ: group_size={self.group_size} is not a multiple of 8; this may be rejected by the backend."
+            )

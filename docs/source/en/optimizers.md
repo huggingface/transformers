@@ -199,3 +199,77 @@ args = TrainingArguments(
     run_name="stable-adamw",
 )
 ```
+
+## GaLore
+
+[Gradient Low-Rank Projection (GaLore)](https://hf.co/papers/2403.03507) significantly reduces memory usage when training large language models (LLMs). One of GaLores key benefits is *full-parameter* learning, unlike low-rank adaptation methods like [LoRA](https://hf.co/papers/2106.09685), which produces better model performance.
+
+Install the [GaLore](https://github.com/jiaweizzhao/GaLore) and [TRL](https://hf.co/docs/trl/index) libraries.
+
+```bash
+pip install galore-torch trl
+```
+
+Pick a GaLore optimizer (`"galore_adamw"`, `"galore_adafactor"`, `"galore_adamw_8bit`") and pass it to the `optim` parameter in [`trl.SFTConfig`]. Use the `optim_target_modules` parameter to specify which modules to adapt (can be a list of strings, regex, or a full path).
+
+Extra parameters supported by GaLore, `rank`, `update_proj_gap`, and `scale`, should be passed to the `optim_args` parameter in [`trl.SFTConfig`].
+
+The example below enables GaLore with [`~trl.SFTTrainer`] that targets the `attn` and `mlp` layers with regex.
+
+> [!TIP]
+> It can take some time before training starts (~3 minutes for a 2B model on a NVIDIA A100).
+
+<hfoptions id="galore">
+<hfoption id="GaLore optimizer">
+
+```py
+import datasets
+from trl import SFTConfig, SFTTrainer
+
+train_dataset = datasets.load_dataset('imdb', split='train')
+args = SFTConfig(
+    output_dir="./test-galore",
+    max_steps=100,
+    optim="galore_adamw",
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
+    optim_args="rank=64, update_proj_gap=100, scale=0.10",
+    gradient_checkpointing=True,
+)
+trainer = SFTTrainer(
+    model="google/gemma-2b",
+    args=args,
+    train_dataset=train_dataset,
+)
+trainer.train()
+```
+
+</hfoption>
+<hfoption id="GaLore optimizer with layerwise optimization">
+
+Append `layerwise` to the optimizer name to enable layerwise optimization. For example, `"galore_adamw"` becomes `"galore_adamw_layerwise"`. This feature is still experimental and does not support Distributed Data Parallel (DDP). The code below can only be run on a [single GPU](https://github.com/jiaweizzhao/GaLore?tab=readme-ov-file#train-7b-model-with-a-single-gpu-with-24gb-memory). Other features like gradient clipping and DeepSpeed may not be available out of the box. Feel free to open an [issue](https://github.com/huggingface/transformers/issues) if you encounter any problems!
+
+```py
+import datasets
+from trl import SFTConfig, SFTTrainer
+
+train_dataset = datasets.load_dataset('imdb', split='train')
+args = SFTConfig(
+    output_dir="./test-galore",
+    max_steps=100,
+    optim="galore_adamw_layerwise",
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
+    optim_args="rank=64, update_proj_gap=100, scale=0.10",
+    gradient_checkpointing=True,
+)
+trainer = SFTTrainer(
+    model="google/gemma-2b",
+    args=args,
+    train_dataset=train_dataset,
+)
+trainer.train()
+```
+
+</hfoption>
+</hfoptions>
+
+Only linear layers that are considered GaLore layers can be trained with low-rank decomposition. The rest of the model layers are optimized in the usual way.
