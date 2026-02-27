@@ -16,7 +16,7 @@
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -62,7 +62,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         max_patches: int,
         use_thumbnail: bool = True,
         patch_size: tuple | int | dict | None = None,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
     ):
         """
         Crop the images to patches and return a list of cropped images.
@@ -133,7 +133,7 @@ class GotOcr2ImageProcessorFast(BaseImageProcessorFast):
         crop_to_patches: bool,
         min_patches: int,
         max_patches: int,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

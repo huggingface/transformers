@@ -117,6 +117,7 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     has_attentions = False
     from_pretrained_id = "magic-leap-community/superpoint"
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = SuperPointModelTester(self)

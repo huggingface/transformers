@@ -33,6 +33,8 @@ from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.models import BPE, Unigram
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
+from transformers.utils.hub import cached_file
+
 from .integrations.ggml import convert_gguf_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_utils_base import (
@@ -250,7 +252,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
-            gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
+            gguf_path = cached_file(kwargs.get("name_or_path", ""), gguf_file, **kwargs)
+            gguf_param = load_gguf_checkpoint(gguf_path)
             architecture = gguf_param["config"]["model_type"]
             tokenizer_dict = gguf_param["tokenizer"]
             tokenizer_config = gguf_param["tokenizer_config"]
@@ -422,15 +425,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         bos = self.bos_token
         bos_token_id = self.bos_token_id
         if bos is None and self.add_bos_token:
-            raise ValueError("add_bos_token = True but bos_token = None")
+            self.add_bos_token = False
 
         eos = self.eos_token
         eos_token_id = self.eos_token_id
-        # If eos_token is None and add_eos_token is True, silently disable add_eos_token
-        # This allows tokenizers to set add_eos_token even if eos_token is not configured
         if eos is None and self.add_eos_token:
             self.add_eos_token = False
-            return
 
         single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
         pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
@@ -525,6 +525,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             `dict[str, int]`: The added tokens.
         """
         return self._tokenizer.get_added_tokens_decoder()
+
+    # BC v5: expose ``_added_tokens_encoder`` / ``_added_tokens_decoder`` attrs for custom tokenizers that expect
+    # them from slow tokenizers. Only supports read, not write (won't sync to Rust backend, use add_tokens() instead
+    _added_tokens_encoder = added_tokens_encoder
+    _added_tokens_decoder = added_tokens_decoder
 
     def get_added_vocab(self) -> dict[str, int]:
         """
@@ -923,7 +928,17 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             token_ids = [token_ids]
         if isinstance(token_ids, dict):
             token_ids = token_ids["input_ids"]
-        return self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+        text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
+        if clean_up_tokenization_spaces:
+            text = self.clean_up_tokenization(text)
+
+        return text
 
     def _save_pretrained(
         self,

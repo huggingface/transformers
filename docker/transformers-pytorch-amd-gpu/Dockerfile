@@ -21,7 +21,7 @@ ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main ve
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
 # Install transformers
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing,video,audio]
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,testing,video,audio]
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

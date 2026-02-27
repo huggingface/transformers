@@ -370,3 +370,4 @@ This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb)
 
 [[autodoc]] VoxtralForConditionalGeneration
     - forward
+    - get_audio_features

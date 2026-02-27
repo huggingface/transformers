@@ -727,6 +727,9 @@ class Serve:
         Returns:
             `str`: The built chunk, a string containing a JSON string with the payload.
         """
+        if isinstance(chunk, str):
+            # Error paths may yield pre-formatted strings — pass them through as-is.
+            return chunk if chunk.startswith("data: ") else f"data: {chunk}\n\n"
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
     @staticmethod
@@ -839,8 +842,22 @@ class Serve:
                 for result in self.running_continuous_batching_manager.request_id_iter(request_id):
                     n_tokens_generated += 1
 
+                    # Always yield the token content (even for the final FINISHED token)
+                    if result.generated_tokens:
+                        token_id = result.generated_tokens[-1]
+                        yield self.build_chat_completion_chunk(
+                            request_id=request_id,
+                            content=token_id,
+                            model=model_id_and_revision,
+                            decode_stream=decode_stream,
+                            tokenizer=tokenizer,
+                        )
+
                     if result.status == RequestStatus.FINISHED:
-                        generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
+                        generated_all_tokens = (
+                            generation_config.max_new_tokens is not None
+                            and n_tokens_generated >= generation_config.max_new_tokens
+                        )
 
                         # If the tokenizer has an eos_token, we can have a more robust check.
                         if hasattr(tokenizer, "eos_token"):
@@ -855,14 +872,6 @@ class Serve:
                             model=model_id_and_revision,
                         )
                         break
-                    else:
-                        yield self.build_chat_completion_chunk(
-                            request_id=request_id,
-                            content=result.generated_tokens[-1],
-                            model=model_id_and_revision,
-                            decode_stream=decode_stream,
-                            tokenizer=tokenizer,
-                        )
 
             except Exception as e:
                 logger.error(str(e))
@@ -1192,7 +1201,10 @@ class Serve:
                             _request_id, content=result, model=model_id_and_revision
                         )
 
-                generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
+                generated_all_tokens = (
+                    generation_config.max_new_tokens is not None
+                    and n_tokens_generated >= generation_config.max_new_tokens
+                )
 
                 # If the tokenizer has an eos_token, we can have a more robust check.
                 if hasattr(streamer.tokenizer, "eos_token"):

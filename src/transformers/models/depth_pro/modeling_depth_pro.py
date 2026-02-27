@@ -279,9 +279,12 @@ class DepthProPatchEncoder(nn.Module):
             patches,
             # required for intermediate features
             output_hidden_states=self.n_intermediate_hooks > 0,
+            return_dict=True,
         )
 
-        scaled_images_last_hidden_state = torch.split_with_sizes(encodings[0], n_patches_per_scaled_image[::-1])
+        scaled_images_last_hidden_state = torch.split_with_sizes(
+            encodings.last_hidden_state, n_patches_per_scaled_image[::-1]
+        )
         # -1 (reverse list) as patch encoder returns high res patches first, we need low res first
         scaled_images_last_hidden_state = scaled_images_last_hidden_state[::-1]
 
@@ -312,7 +315,7 @@ class DepthProPatchEncoder(nn.Module):
         intermediate_features = []
         for i in range(self.n_intermediate_hooks):
             # +1 to correct index position as hidden_states contain embedding output as well
-            hidden_state = encodings[2][self.intermediate_hook_ids[i] + 1]
+            hidden_state = encodings.hidden_states[self.intermediate_hook_ids[i] + 1]
             padding = torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[-1]))
             output_height = base_height * 2 ** (self.n_scaled_images - 1)
             output_width = base_width * 2 ** (self.n_scaled_images - 1)
@@ -651,11 +654,13 @@ class DepthProModel(DepthProPreTrainedModel):
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, DepthProModel
 
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> checkpoint = "apple/DepthPro-hf"
         >>> processor = AutoProcessor.from_pretrained(checkpoint)
@@ -1038,10 +1043,12 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         >>> from transformers import AutoImageProcessor, DepthProForDepthEstimation
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> checkpoint = "apple/DepthPro-hf"
         >>> processor = AutoImageProcessor.from_pretrained(checkpoint)

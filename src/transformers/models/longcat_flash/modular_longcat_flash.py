@@ -217,9 +217,9 @@ class LongcatFlashMLA(DeepseekV3Attention):
         if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -340,6 +340,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
         "hidden_states": LongcatFlashDecoderLayer,
         "attentions": LongcatFlashMLA,
     }
+    _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -354,8 +355,6 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
 
 
 class LongcatFlashModel(DeepseekV3Model):
-    _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
-
     def __init__(self, config):
         super().__init__(config)
         self.layers = nn.ModuleList(
@@ -403,7 +402,7 @@ class LongcatFlashModel(DeepseekV3Model):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

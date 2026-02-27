@@ -102,6 +102,7 @@ class GPTJConfig(PreTrainedConfig):
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
+        pad_token_id=None,
         tie_word_embeddings=False,
         **kwargs,
     ):
@@ -122,9 +123,7 @@ class GPTJConfig(PreTrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
         self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 

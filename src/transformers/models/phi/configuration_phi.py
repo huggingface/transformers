@@ -82,6 +82,8 @@ class PhiConfig(PreTrainedConfig):
             Denotes beginning of sequences token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             Denotes end of sequences token id.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
 
     Example:
 
@@ -136,6 +138,7 @@ class PhiConfig(PreTrainedConfig):
         qk_layernorm: bool | None = False,
         bos_token_id: int | None = 1,
         eos_token_id: int | None = 2,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -162,6 +165,7 @@ class PhiConfig(PreTrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
         self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 

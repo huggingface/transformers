@@ -314,10 +314,10 @@ class AnyToAnyPipeline(Pipeline):
             A list or a list of list of `dict`: Each result comes as a dictionary with the following key (cannot
             return a combination of both `generated_text` and `generated_token_ids`):
 
-            - **generated_text** (`str`, present when `return_text=True` and `generation_mode="text") -- The generated text.
-            - **generated_audio** (`np.ndarray`, present when `generation_mode="audio") -- The generated audio.
-            - **generated_image** (`PIL.Image.Image`, present when `generation_mode="image") -- The generated image.
-            - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True` and `generation_mode="text") -- The token
+            - **generated_text** (`str`, present when `return_text=True` and `generation_mode="text"`) -- The generated text.
+            - **generated_audio** (`np.ndarray`, present when `generation_mode="audio"`) -- The generated audio.
+            - **generated_image** (`PIL.Image.Image`, present when `generation_mode="image"`) -- The generated image.
+            - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True` and `generation_mode="text"`) -- The token
                 ids of the generated text.
             - **input_text** (`str`) -- The input text.
         """
@@ -386,7 +386,7 @@ class AnyToAnyPipeline(Pipeline):
             text = inputs.pop("text")
 
             # Feature extractor do not load audio files and expect a decode array
-            if "audio" in inputs and hasattr(self.processor, "feature_extractor"):
+            if inputs.get("audio", None) is not None and hasattr(self.processor, "feature_extractor"):
                 inputs["audio"] = self.processor.feature_extractor.fetch_audio(inputs["audio"])
 
         # If batched text inputs, we set padding to True unless specified otherwise

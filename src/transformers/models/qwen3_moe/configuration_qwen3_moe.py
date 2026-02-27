@@ -118,15 +118,18 @@ class Qwen3MoeConfig(PreTrainedConfig):
     model_type = "qwen3_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
 
+    attribute_map = {
+        "num_experts": "num_local_experts",
+    }
+
     # Default tensor parallel plan for base model `Qwen3Moe`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
-        "layers.*.mlp.experts.down_proj": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",

@@ -36,13 +36,13 @@ class GptOssConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.self_attn.sinks": "local_rowwise",
-        "layers.*.mlp.experts": "gather",
+        "layers.*.self_attn.sinks": "colwise",
         "layers.*.mlp.router": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
 
     def __init__(
@@ -117,23 +117,6 @@ class GptOssConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         super().__init__(**kwargs)
-
-    def __setattr__(self, key, value):
-        """
-        Overwritten to allow checking for the proper attention implementation to be used.
-
-        Due to `set_attn_implementation` which internally assigns `_attn_implementation_internal = "..."`, simply overwriting
-        the specific attention setter is not enough. Using a property/setter for `_attn_implementation_internal` would result in
-        a recursive dependency (as `_attn_implementation` acts as a wrapper around `_attn_implementation_internal`) - hence, this
-        workaround.
-        """
-        if key in ("_attn_implementation", "_attn_implementation_internal"):
-            if value and "flash" in value and value.removeprefix("paged|") != "kernels-community/vllm-flash-attn3":
-                raise ValueError(
-                    f"GPT-OSS model does not support the specified flash attention implementation: {value}. "
-                    "Only `kernels-community/vllm-flash-attn3` is supported."
-                )
-        super().__setattr__(key, value)
 
 
 __all__ = ["GptOssConfig"]

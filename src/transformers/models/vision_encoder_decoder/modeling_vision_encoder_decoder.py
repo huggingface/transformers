@@ -345,7 +345,8 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
         ```python
         >>> from transformers import AutoProcessor, VisionEncoderDecoderModel
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
 
@@ -354,7 +355,8 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
         >>> # load image from the IAM dataset
         >>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
 
         >>> # training
         >>> model.config.decoder_start_token_id = processor.tokenizer.eos_token_id

@@ -17,7 +17,6 @@ import unittest
 
 import pytest
 import torch
-from packaging import version
 
 from transformers import Cache, is_torch_available
 from transformers.testing_utils import (
@@ -65,7 +64,7 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.7, 0.8]
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Needs to be overridden as GLM-Lite has special MLA cache format (though we don't really use the MLA)"""
+        """Needs to be overridden as GLM-4.7-Flash has special MLA cache format (though we don't really use the MLA)"""
         self.assertIsInstance(past_key_values, Cache)
 
         # (batch, head, seq_length, head_features)
@@ -93,11 +92,6 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
             'hello, world!\'\'\')\nprint(\'hello, world!\')\nprint("hello, world!")\nprint("hello, world!")\nprint("hello, world!")\nprint("hello, world!")\nprint("hello, world!")\n',
@@ -105,9 +99,9 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
         ]
 
         prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
-        tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5")
+        tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.7-Flash")
         model = Glm4MoeLiteForCausalLM.from_pretrained(
-            "zai-org/GLM-Lite", device_map=torch_device, dtype=torch.bfloat16
+            "zai-org/GLM-4.7-Flash", device_map=torch_device, dtype=torch.bfloat16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 

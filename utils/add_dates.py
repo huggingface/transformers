@@ -8,6 +8,11 @@ from urllib.request import Request, urlopen
 
 from huggingface_hub import paper_info
 
+from transformers import logging
+
+
+logger = logging.get_logger(__name__)
+
 
 ROOT = os.getcwd().split("utils")[0]
 DOCS_PATH = os.path.join(ROOT, "docs/source/en/model_doc")
@@ -157,9 +162,9 @@ def get_release_date(link: str) -> str:
         try:
             info = paper_info(link)
             return info.published_at.date().isoformat()
-        except Exception:
+        except Exception as e:
             # Error fetching release date, function returns None (will use placeholder)
-            pass
+            logger.debug(f"Could not fetch paper info for {link}: {e}")
 
     elif link.startswith("https://arxiv.org/abs/") or link.startswith("https://arxiv.org/pdf/"):
         return r"{release_date}"

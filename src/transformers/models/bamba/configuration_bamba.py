@@ -100,6 +100,12 @@ class BambaConfig(PreTrainedConfig):
             Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
         mamba_proj_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
+        time_step_min (`float`, *optional*, defaults to 0.001):
+            Minimum `time_step` used to bound `dt_proj.bias`.
+        time_step_max (`float`, *optional*, defaults to 0.1):
+            Maximum `time_step` used to bound `dt_proj.bias`.
+        time_step_limit (`tuple`, *optional*, defaults to `(0.0, inf)`):
+            Accepted range of time step values for clamping.
         z_loss_coefficient (`float`, *optional*, defaults to 0.0):
             Coefficient for auxiliary z-loss used to control logit growth during training
         rope_parameters (`RopeParameters`, *optional*):
@@ -140,6 +146,9 @@ class BambaConfig(PreTrainedConfig):
         mamba_chunk_size: int | None = 256,
         mamba_conv_bias: bool | None = True,
         mamba_proj_bias: bool | None = False,
+        time_step_min: float | None = 0.001,
+        time_step_max: float | None = 0.1,
+        time_step_limit: tuple[float, float] | None = (0.0, float("inf")),
         z_loss_coefficient: float | None = 0.0,
         rope_parameters: RopeParameters | None = None,
         **kwargs,
@@ -189,6 +198,9 @@ class BambaConfig(PreTrainedConfig):
         self.mamba_chunk_size = mamba_chunk_size
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
+        self.time_step_min = time_step_min
+        self.time_step_max = time_step_max
+        self.time_step_limit = tuple(time_step_limit) if time_step_limit is not None else None
         self.z_loss_coefficient = z_loss_coefficient
         self.rope_parameters = rope_parameters
         kwargs["partial_rotary_factor"] = 0.5  # hardcode for BC

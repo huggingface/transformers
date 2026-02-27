@@ -99,7 +99,8 @@ class BlockManager:
         for _ in range(block_to_uninitialize):
             id_to_uninitialize = self._init_block_ids.popitem()[0]
             block = self._id_to_block[id_to_uninitialize]
-            self._hash_to_id.pop(block.hash)
+            # Since the block is initialized it must have a hash, thus no need to check .hash is not None
+            self._hash_to_id.pop(block.hash)  # ty:ignore[invalid-argument-type]
             self._uninit_block_ids.append(id_to_uninitialize)
         return True
 
@@ -124,7 +125,7 @@ class BlockManager:
 
     def fork_blocks(
         self, parent_blocks: list[int], num_forks: int, shareable: bool, group_id: int
-    ) -> tuple[list[list[int]], list[int], list[int]]:
+    ) -> tuple[list[list[int]] | None, list[int], list[int]]:
         """Fork a given list of (parent_blocks) as many times as (num_forks). If the blocks are (shareable), we use
         reference on the blocks that are complete. Otherwise, we allocate new blocks and keep track of their indices to
         later copy the physical cache. For instance, when forking 4 blocks for 2 children:
@@ -307,10 +308,6 @@ class CacheAllocator(ABC):
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         """Returns the physical indices of where to write request_id's cache in the cache tensor."""
 
-    @abstractmethod
-    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
-        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
-
     def fork_blocks(
         self, parent_request_id: str, children_request_ids: list[str], block_manager: BlockManager
     ) -> tuple[list[int], list[int]]:
@@ -381,13 +378,18 @@ class FullAttentionCacheAllocator(CacheAllocator):
         block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
+        # Compute auxiliary variable so we can perform only two loops
+        total_length = past_length + query_length
+        num_full_blocks = total_length // self.block_size
+        remainder = total_length % self.block_size
         # Compute the physical indices
         physical_indices = []
-        for i in range(past_length + query_length):
-            block_idx = i // self.block_size
-            block_offset = i % self.block_size
-            physical_index = block_table[block_idx] * self.block_size + block_offset
-            physical_indices.append(physical_index)
+        for b in range(num_full_blocks):
+            start = block_table[b] * self.block_size
+            physical_indices.extend(range(start, start + self.block_size))
+        if remainder:
+            start = block_table[num_full_blocks] * self.block_size
+            physical_indices.extend(range(start, start + remainder))
         return physical_indices
 
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
@@ -396,19 +398,20 @@ class FullAttentionCacheAllocator(CacheAllocator):
         block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
+        # Compute auxiliary variables so we can perform only one loop
+        start_block = past_length // self.block_size
+        start_offset = past_length % self.block_size
+        end_pos = past_length + query_length
+        end_block = (end_pos - 1) // self.block_size  # -1 because if end_pos == block_size, we still end on block 0
         # Compute the physical indices
         physical_indices = []
-        for i in range(past_length, past_length + query_length):
-            block_idx = i // self.block_size
-            block_offset = i % self.block_size
-            physical_index = block_table[block_idx] * self.block_size + block_offset
-            physical_indices.append(physical_index)
+        for b in range(start_block, end_block + 1):
+            block_start = block_table[b] * self.block_size
+            # First block may start mid-block, last block may end mid-block
+            local_start = start_offset if b == start_block else 0
+            local_end = (end_pos - 1) % self.block_size + 1 if b == end_block else self.block_size
+            physical_indices.extend(range(block_start + local_start, block_start + local_end))
         return physical_indices
-
-    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
-        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
-        seqlens_k = past_length + query_length
-        return "full_attention", seqlens_k
 
 
 class SlidingAttentionCacheAllocator(CacheAllocator):
@@ -496,8 +499,3 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         if padding_length > 0:
             physical_indices = [-1] * padding_length + physical_indices
         return physical_indices
-
-    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
-        """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
-        seqlens_k = query_length + min(past_length, self.sliding_window - 1)
-        return "sliding_attention", seqlens_k

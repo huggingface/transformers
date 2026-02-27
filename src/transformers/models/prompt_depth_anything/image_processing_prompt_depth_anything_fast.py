@@ -23,7 +23,7 @@ from ...processing_utils import Unpack
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -128,14 +128,14 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
     ) -> "torch.Tensor":
         """
         Resize an image to target size while optionally maintaining aspect ratio and ensuring dimensions are multiples.
         """
         # Set default interpolation to BICUBIC to match the slow processor (causes slight numerical differences otherwise)
         if interpolation is None:
-            interpolation = F.InterpolationMode.BICUBIC
+            interpolation = tvF.InterpolationMode.BICUBIC
 
         # Custom resize with aspect ratio preservation and ensure_multiple_of constraint
         output_size = _get_resize_output_image_size(
@@ -175,11 +175,11 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         pad_size_top, pad_size_bottom = _get_pad(height, size_divisor)
 
         # Use torchvision padding for fast processing
-        # /!\ NB: torchvision F.pad expects (left, top, right, bottom) for the last two dims (W then H)
+        # /!\ NB: torchvision tvF.pad expects (left, top, right, bottom) for the last two dims (W then H)
         # Source: https://docs.pytorch.org/vision/main/generated/torchvision.transforms.Pad.html
         # So: (left=width_pad, top=height_pad, right=width_pad, bottom=height_pad)
         padding = [pad_size_left, pad_size_top, pad_size_right, pad_size_bottom]
-        padded_image = F.pad(image, padding=padding)
+        padded_image = tvF.pad(image, padding=padding)
 
         return padded_image
 
@@ -249,7 +249,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         keep_aspect_ratio: bool | None,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

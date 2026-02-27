@@ -395,8 +395,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Wooden bridge stretches\nInto still waters, mountains gleam\nPeaceful forest scene",
                 # 4-bit
-                ("cuda", 7): "Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene",
-                ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
+                ("cuda", 8): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -474,8 +473,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.",
-                ("cuda", 7): 'Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene',
-                ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
+                ("cuda", 8): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -491,7 +489,6 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ",
-                ("cuda", 7): 'The first image showcases the Statue of Liberty, a monumental sculpture located on Liberty Island in New York Harbor. Standing atop a',
                 ("cuda", 8): 'The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ',
             }
         )  # fmt: skip

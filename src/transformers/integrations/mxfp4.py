@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_torch_available, is_torch_xpu_available, logging
+from ..utils import is_torch_available, logging
 
 
 if is_torch_available():
@@ -125,23 +125,24 @@ class Mxfp4Dequantize(ConversionOps):
         input_dict: dict[str, torch.Tensor],
         model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
-        missing_keys=None,
+        missing_keys: list[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         param_data = {}
-        if "_blocks" in input_dict.keys():
-            if isinstance(input_dict["_blocks"], list):
-                param_data["_blocks"] = input_dict["_blocks"][0]
+        proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
+        if f"{proj}_blocks" in input_dict.keys():
+            if isinstance(input_dict[f"{proj}_blocks"], list):
+                param_data[f"{proj}_blocks"] = input_dict[f"{proj}_blocks"][0]
             else:
-                param_data["_blocks"] = input_dict["_blocks"]
-        if "_scales" in input_dict.keys():
-            if isinstance(input_dict["_scales"], list):
-                param_data["_scales"] = input_dict["_scales"][0]
+                param_data[f"{proj}_blocks"] = input_dict[f"{proj}_blocks"]
+        if f"{proj}_scales" in input_dict.keys():
+            if isinstance(input_dict[f"{proj}_scales"], list):
+                param_data[f"{proj}_scales"] = input_dict[f"{proj}_scales"][0]
             else:
-                param_data["_scales"] = input_dict["_scales"]
+                param_data[f"{proj}_scales"] = input_dict[f"{proj}_scales"]
 
         # Here we are dequantizing the weights
-        dequantized = dequantize_convertops(param_data["_blocks"], param_data["_scales"], param_data["_blocks"].device)
+        dequantized = dequantize_convertops(param_data[f"{proj}_blocks"], param_data[f"{proj}_scales"])
         return {full_layer_name: dequantized}
 
 
@@ -158,26 +159,27 @@ class Mxfp4Deserialize(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         param_data = {}
-        if "_blocks" in input_dict.keys():
-            if isinstance(input_dict["_blocks"], list):
-                param_data["_blocks"] = input_dict["_blocks"][0]
+        proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
+
+        if f"{proj}_blocks" in input_dict.keys():
+            if isinstance(input_dict[f"{proj}_blocks"], list):
+                param_data[f"{proj}_blocks"] = input_dict[f"{proj}_blocks"][0]
             else:
-                param_data["_blocks"] = input_dict["_blocks"]
-        if "_scales" in input_dict.keys():
-            if isinstance(input_dict["_scales"], list):
-                param_data["_scales"] = input_dict["_scales"][0]
+                param_data[f"{proj}_blocks"] = input_dict[f"{proj}_blocks"]
+        if f"{proj}_scales" in input_dict.keys():
+            if isinstance(input_dict[f"{proj}_scales"], list):
+                param_data[f"{proj}_scales"] = input_dict[f"{proj}_scales"][0]
             else:
-                param_data["_scales"] = input_dict["_scales"]
+                param_data[f"{proj}_scales"] = input_dict[f"{proj}_scales"]
 
         # Eagerly set tensors on the module and perform swizzle
         module, _ = get_module_from_name(model, full_layer_name)
-        proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
         swizzle_mxfp4_convertops(
-            param_data["_blocks"],
-            param_data["_scales"],
+            param_data[f"{proj}_blocks"],
+            param_data[f"{proj}_scales"],
             module,
             proj,
-            param_data["_blocks"].device,
+            param_data[f"{proj}_blocks"].device,
             triton_kernels_hub,
         )
         missing_keys.discard(f"{full_layer_name}")
@@ -186,6 +188,61 @@ class Mxfp4Deserialize(ConversionOps):
         # the loader from trying to materialize the original meta-parameter names again.
         # We don't use set_param_for_module since it expects mainly a torch.nn.Parameter or a safetensors pointer
         return {}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Mxfp4ReverseDeserialize(self.hf_quantizer)
+
+
+class Mxfp4ReverseDeserialize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
+        missing_keys: list[str] | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        num_local_experts = getattr(model.config, "num_local_experts", 32)
+        hidden_size = getattr(model.config, "hidden_size", 2880)
+
+        proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
+
+        name = full_layer_name.rsplit("_", 1)[0]
+        module, _ = get_module_from_name(model, full_layer_name)
+        state_dict = {}
+        if isinstance(module, Mxfp4GptOssExperts):
+            if "bias" in full_layer_name:
+                name = full_layer_name.replace("_blocks", "")
+                state_dict[name] = getattr(module, proj + "_bias")
+                return state_dict
+            if "gate_up_proj" in full_layer_name:
+                state_dict[f"{name}_blocks"] = (
+                    module.gate_up_proj.storage.layout.unswizzle_data(module.gate_up_proj.storage.data)
+                    .transpose(-1, -2)
+                    .reshape(num_local_experts, -1, 90, 16)
+                )
+                state_dict[f"{name}_scales"] = (
+                    module.gate_up_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
+                        module.gate_up_proj_precision_config.weight_scale.storage.data
+                    ).transpose(-1, -2)
+                )
+            else:
+                state_dict[f"{name}_blocks"] = (
+                    module.down_proj.storage.layout.unswizzle_data(module.down_proj.storage.data)
+                    .transpose(-1, -2)
+                    .reshape(num_local_experts, hidden_size, 90, -1)
+                )
+                state_dict[f"{name}_scales"] = (
+                    module.down_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
+                        module.down_proj_precision_config.weight_scale.storage.data
+                    ).transpose(-1, -2)
+                )
+
+        return state_dict
 
 
 # Copied from GPT_OSS repo and vllm
@@ -213,9 +270,9 @@ def swizzle_mxfp4(w, w_scale, triton_kernels_hub):
     return w, w_scale
 
 
-# Copied from GPT_OSS repo
+# Mostly copied from GPT_OSS repo
 # TODO: Add absolute link when the repo is public
-def convert_moe_packed_tensors(
+def _convert_moe_packed_tensors(
     blocks,
     scales,
     *,
@@ -229,14 +286,6 @@ def convert_moe_packed_tensors(
     import math
 
     blocks = blocks.to(torch.uint8)
-    # Check if blocks and scales are on CPU, and move to GPU if so
-    if not blocks.is_cuda and torch.cuda.is_available():
-        blocks = blocks.cuda()
-        scales = scales.cuda()
-    elif (blocks.device.type != "xpu") and is_torch_xpu_available():
-        blocks = blocks.to("xpu")
-        scales = scales.to("xpu")
-
     scales = scales.to(torch.int32) - 127  # TODO that's because 128=2**7
 
     assert blocks.shape[:-1] == scales.shape, f"{blocks.shape[:-1]=} does not match {scales.shape=}"
@@ -256,21 +305,50 @@ def convert_moe_packed_tensors(
 
         blk = blocks[r0:r1]
         exp = scales[r0:r1]
-
-        # nibble indices -> int64
-        idx_lo = (blk & 0x0F).to(torch.long)
-        idx_hi = (blk >> 4).to(torch.long)
-
         sub = out[r0:r1]
-        sub[:, 0::2] = lut[idx_lo]
-        sub[:, 1::2] = lut[idx_hi]
 
+        # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
+        idx_lo = (blk & 0x0F).to(torch.int)
+        sub[:, 0::2] = lut[idx_lo]
+        del idx_lo
+
+        # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
+        idx_hi = (blk >> 4).to(torch.int)
+        sub[:, 1::2] = lut[idx_hi]
+        del idx_hi
+
+        # Perform op
         torch.ldexp(sub, exp, out=sub)
-        del idx_lo, idx_hi, blk, exp, sub
+        del blk, exp, sub
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
-    del blocks, scales, lut
+
     return out.transpose(1, 2).contiguous()
+
+
+def convert_moe_packed_tensors(
+    blocks,
+    scales,
+    *,
+    dtype: torch.dtype = torch.bfloat16,
+    rows_per_chunk: int = 32768 * 1024,  # TODO these values are not here by mistake ;)
+) -> torch.Tensor:
+    """
+    Convert the mxfp4 weights again, dequantizing and makes them compatible with the forward
+    pass of GPT_OSS.
+    """
+    # Since the intermediate ops requite A LOT of memory, in very constrained device_map="auto" settings
+    # it may OOM, hence this wrapper and move back to cpu if needed
+    # torch statistics are not accurate enough to estimate if we will have enough memory due to fragmentation and
+    # in-place operation on non-contiguous tensors (may sometimes require more temporary copies)
+    try:
+        return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
+    # In the case of OOM due to very tight device_map, we convert and return on cpu - it will then be put back on correct
+    # devide with the accelerate dispatch (doing it right away may still lead to OOM, but more memory is available later)
+    except torch.OutOfMemoryError:
+        blocks = blocks.to("cpu")
+        scales = scales.to("cpu")
+        return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
 
 
 class Mxfp4GptOssExperts(nn.Module):
@@ -423,7 +501,7 @@ def mlp_forward(self, hidden_states):
     with on_device(router_logits.device):
         routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k)
 
-    routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
+    routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx=scatter_idx)
     routed_out = routed_out.reshape(batch_size, -1, self.router.hidden_dim)
     return routed_out, router_logits
 
@@ -456,21 +534,14 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
             setattr(module, param_name.rsplit(".", 1)[1], param_value)
             if hasattr(module, blocks_attr) and hasattr(module, scales_attr):
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
-                if target_device == "cpu" and torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                elif target_device == "cpu" and is_torch_xpu_available():
-                    torch.xpu.empty_cache()
                 setattr(module, proj, torch.nn.Parameter(dequantized.to(target_device)))
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
 
 
-def dequantize_convertops(blocks, scales, target_device):
+def dequantize_convertops(blocks, scales):
     dequantized = convert_moe_packed_tensors(blocks, scales)
-    if target_device == "cpu" and torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    dequantized = torch.nn.Parameter(dequantized.to(target_device))
-    return dequantized
+    return torch.nn.Parameter(dequantized)
 
 
 def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, triton_kernels_hub, **kwargs):
@@ -511,8 +582,12 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, trito
             blocks = blocks.reshape(local_experts, module.intermediate_size * 2, -1)
         else:
             blocks = blocks.reshape(local_experts, -1, module.intermediate_size // 2)
-        if getattr(target_device, "type", target_device) == "cpu":
-            target_device = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
+        if (
+            getattr(target_device, "type", target_device) == "cpu"
+            and hasattr(torch, "accelerator")
+            and torch.accelerator.current_accelerator() is not None
+        ):
+            target_device = torch.accelerator.current_accelerator().type
         blocks = blocks.to(target_device).contiguous()
         scales = scales.to(target_device).contiguous()
         with on_device(target_device):
@@ -551,8 +626,12 @@ def swizzle_mxfp4_convertops(blocks, scales, module, proj, target_device, triton
     )
 
     local_experts = blocks.size(0)
-    if getattr(target_device, "type", target_device) == "cpu":
-        target_device = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
+    if (
+        getattr(target_device, "type", target_device) == "cpu"
+        and hasattr(torch, "accelerator")
+        and torch.accelerator.current_accelerator() is not None
+    ):
+        target_device = torch.accelerator.current_accelerator().type
 
     blocks = blocks.to(target_device).contiguous()
     scales = scales.to(target_device).contiguous()
@@ -561,8 +640,6 @@ def swizzle_mxfp4_convertops(blocks, scales, module, proj, target_device, triton
         blocks = blocks.reshape(local_experts, module.intermediate_size * 2, -1)
     else:
         blocks = blocks.reshape(local_experts, -1, module.intermediate_size // 2)
-    if getattr(target_device, "type", target_device) == "cpu":
-        target_device = "cuda"
 
     with on_device(target_device):
         triton_weight_tensor, weight_scale = swizzle_mxfp4(
@@ -606,7 +683,7 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
     from .hub_kernels import get_kernel
 
     global triton_kernels_hub
-    triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+    triton_kernels_hub = get_kernel("kernels-community/gpt-oss-triton-kernels")
 
     has_been_replaced = False
     for module_name, module in model.named_modules():

@@ -55,7 +55,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             try:
                 from ..integrations.hub_kernels import get_kernel
 
-                self.triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+                self.triton_kernels_hub = get_kernel("kernels-community/gpt-oss-triton-kernels")
             except ImportError:
                 raise ImportError("kernels package is required for MXFP4 quantization")
         return self.triton_kernels_hub
@@ -70,30 +70,39 @@ class Mxfp4HfQuantizer(HfQuantizer):
         if self.quantization_config.dequantize:
             return
 
-        if not torch.cuda.is_available() and not torch.xpu.is_available():
+        if not is_accelerate_available():
+            raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
+
+        device = torch.accelerator.current_accelerator() or torch.device("cpu")
+        if device.type not in ["cuda", "xpu", "cpu"]:
             if self.pre_quantized:
                 logger.warning_once(
-                    "Using MXFP4 quantized models requires a GPU, we will default to dequantizing the model to bf16"
+                    f"Using MXFP4 quantized models requires model on cuda/xpu/cpu, but found {device}, we will default to dequantizing the model to bf16. To use mxfp4, please disable the current accelerator."
                 )
                 self.quantization_config.dequantize = True
                 return
             else:
-                raise RuntimeError("Quantizing a model using MXFP4 requires a GPU")
-
-        if not is_accelerate_available():
-            raise ImportError("Using mxfp4 requires Accelerate: `pip install accelerate`")
+                raise RuntimeError(
+                    f"Quantizing a model using MXFP4 requires model on cuda/xpu/cpu, but found {device}. To use mxfp4, please disable the current accelerator."
+                )
 
         if torch.xpu.is_available():
-            gpu_is_supported = True
+            is_device_supported_mxfp4 = True
+            kernels_available = is_triton_available("3.5.0") and is_kernels_available()
+        elif torch.cuda.is_available():
+            compute_capability = torch.cuda.get_device_capability()
+            is_device_supported_mxfp4 = compute_capability >= (7, 5)
+            kernels_available = is_triton_available("3.4.0") and is_kernels_available()
+        elif device.type == "cpu":
+            is_device_supported_mxfp4 = True
             kernels_available = is_triton_available("3.5.0") and is_kernels_available()
         else:
-            compute_capability = torch.cuda.get_device_capability()
-            gpu_is_supported = compute_capability >= (7, 5)
-            kernels_available = is_triton_available("3.4.0") and is_kernels_available()
+            is_device_supported_mxfp4 = False
+            kernels_available = False
 
         if self.pre_quantized:
             # On unsupported GPUs or without kernels, we will dequantize the model to bf16
-            if not gpu_is_supported:
+            if not is_device_supported_mxfp4:
                 logger.warning_once(
                     "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200) or XPUs (e.g Intel® Data Center GPU Max Series) "
                     "We will default to dequantizing the model to bf16."
@@ -107,32 +116,27 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 )
                 self.quantization_config.dequantize = True
                 return
-        elif not gpu_is_supported:
+        elif not is_device_supported_mxfp4:
             # we can't quantize the model in this case so we raise an error
             raise ValueError(
-                "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200) or XPUs (e.g Intel® Data Center GPU Max Series) "
+                "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200) or XPUs (e.g Intel® Data Center GPU Max Series) or CPU"
             )
         elif not kernels_available:
             # we can't quantize the model in this case so we raise an error
             raise ValueError(
-                "MXFP4 quantization requires Triton and kernels installed: CUDA requires Triton >= 3.4.0, XPU requires Triton >= 3.5.0"
+                "MXFP4 quantization requires Triton and kernels installed: CUDA requires Triton >= 3.4.0, XPU/CPU requires Triton >= 3.5.0"
             )
 
         if not self.pre_quantized:
             self._lazy_import_kernels()
 
         device_map = kwargs.get("device_map")
-        if device_map is None:
-            logger.warning_once(
-                "You have loaded an FP4 model on CPU and have a CUDA/XPU device available, make sure to set "
-                "your model on a GPU/XPU device in order to run your model. To remove this warning, pass device_map = 'cuda' or device_map = 'xpu'. "
-            )
-        elif isinstance(device_map, dict):
-            if not self.pre_quantized and ("cpu" in device_map.values() or "disk" in device_map.values()):
+        if device_map is not None and isinstance(device_map, dict):
+            if not self.pre_quantized and "disk" in device_map.values():
                 raise ValueError(
-                    "You are attempting to load an FP4 model with a device_map that contains a CPU or disk device."
+                    "You are attempting to load an FP4 model with a device_map that contains a disk device."
                     "This is not supported when the model is quantized on the fly. "
-                    "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
+                    "Please use a quantized checkpoint or remove the disk device from the device_map."
                 )
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
@@ -161,10 +165,19 @@ class Mxfp4HfQuantizer(HfQuantizer):
         from ..integrations import replace_with_mxfp4_linear
 
         # if we are using kernels, we can't use the quantized model, since the forward pass is different and needs special handling
-        if use_kernels:
+        # only CPU kernels can work with pre-quantized models
+        device = torch.accelerator.current_accelerator() or torch.device("cpu")
+        if use_kernels and device.type not in ["cpu"]:
             logger.warning_once(
                 "You are using full precision kernels, we will dequantize the model to bf16. "
                 "To use the quantized model with quantization kernels, please set use_kernels=False"
+            )
+            self.quantization_config.dequantize = True
+
+        if not use_kernels and device.type in ["cpu"]:
+            logger.warning_once(
+                "MXFP4 inference on CPU requires use_kernels=True, but use_kernels is disabled. "
+                "We will dequantize the model to bf16. To run MXFP4 natively on CPU, please set use_kernels=True."
             )
             self.quantization_config.dequantize = True
 
@@ -206,37 +219,33 @@ class Mxfp4HfQuantizer(HfQuantizer):
         from ..integrations import Mxfp4GptOssExperts
 
         state_dict = model.state_dict()
-
-        # Get num_local_experts from model config
         num_local_experts = getattr(model.config, "num_local_experts", 32)
         hidden_size = getattr(model.config, "hidden_size", 2880)
 
         for name, module in model.named_modules():
-            if (
+            if not (
                 isinstance(module, Mxfp4GptOssExperts)
                 and hasattr(module, "gate_up_proj")
                 and hasattr(module, "down_proj")
             ):
-                state_dict[f"{name}.gate_up_proj_blocks"] = (
-                    module.gate_up_proj.storage.layout.unswizzle_data(module.gate_up_proj.storage.data)
-                    .transpose(-1, -2)
-                    .reshape(num_local_experts, -1, 90, 16)
-                )
-                state_dict[f"{name}.gate_up_proj_scales"] = (
-                    module.gate_up_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
-                        module.gate_up_proj_precision_config.weight_scale.storage.data
-                    ).transpose(-1, -2)
-                )
-                state_dict[f"{name}.down_proj_blocks"] = (
-                    module.down_proj.storage.layout.unswizzle_data(module.down_proj.storage.data)
-                    .transpose(-1, -2)
-                    .reshape(num_local_experts, hidden_size, 90, -1)
-                )
-                state_dict[f"{name}.down_proj_scales"] = (
-                    module.down_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
-                        module.down_proj_precision_config.weight_scale.storage.data
-                    ).transpose(-1, -2)
-                )
+                continue
+
+            for proj in ("gate_up_proj", "down_proj"):
+                triton_tensor = getattr(module, proj)
+                precision_config = getattr(module, f"{proj}_precision_config")
+
+                blocks = triton_tensor.storage.layout.unswizzle_data(triton_tensor.storage.data).transpose(-1, -2)
+                if proj == "gate_up_proj":
+                    blocks = blocks.reshape(num_local_experts, -1, 90, 16)
+                else:
+                    blocks = blocks.reshape(num_local_experts, hidden_size, 90, -1)
+
+                scales = precision_config.weight_scale.storage.layout.unswizzle_data(
+                    precision_config.weight_scale.storage.data
+                ).transpose(-1, -2)
+
+                state_dict[f"{name}.{proj}_blocks"] = blocks
+                state_dict[f"{name}.{proj}_scales"] = scales
 
         metadata = {}
         return state_dict, metadata
@@ -259,21 +268,29 @@ class Mxfp4HfQuantizer(HfQuantizer):
     def get_weight_conversions(self):
         from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
 
-        if self.pre_quantized:
-            if self.quantization_config.dequantize:
-                return [
-                    WeightConverter(
-                        source_patterns=["_blocks", "_scales"],
-                        target_patterns="",
-                        operations=[Mxfp4Dequantize(self)],
-                    )
-                ]
-            else:
-                return [
-                    WeightConverter(
-                        source_patterns=["_blocks", "_scales"],
-                        target_patterns="",
-                        operations=[Mxfp4Deserialize(self)],
-                    )
-                ]
-        return []
+        if self.pre_quantized and self.quantization_config.dequantize:
+            return [
+                WeightConverter(
+                    source_patterns=["down_proj_blocks", "down_proj_scales"],
+                    target_patterns=r"down_proj$",
+                    operations=[Mxfp4Dequantize(self)],
+                ),
+                WeightConverter(
+                    source_patterns=["gate_up_proj_blocks", "gate_up_proj_scales"],
+                    target_patterns=["gate_up_proj$"],
+                    operations=[Mxfp4Dequantize(self)],
+                ),
+            ]
+
+        return [
+            WeightConverter(
+                source_patterns=["gate_up_proj_blocks", "gate_up_proj_scales"],
+                target_patterns=r"gate_up_proj$",
+                operations=[Mxfp4Deserialize(self)],
+            ),
+            WeightConverter(
+                source_patterns=["down_proj_blocks", "down_proj_scales"],
+                target_patterns=r"down_proj$",
+                operations=[Mxfp4Deserialize(self)],
+            ),
+        ]

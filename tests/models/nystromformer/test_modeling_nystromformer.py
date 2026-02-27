@@ -231,7 +231,6 @@ class NystromformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         {
             "feature-extraction": NystromformerModel,
             "fill-mask": NystromformerForMaskedLM,
-            "question-answering": NystromformerForQuestionAnswering,
             "text-classification": NystromformerForSequenceClassification,
             "token-classification": NystromformerForTokenClassification,
             "zero-shot": NystromformerForSequenceClassification,

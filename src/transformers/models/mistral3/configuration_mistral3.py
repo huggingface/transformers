@@ -44,6 +44,8 @@ class Mistral3Config(PreTrainedConfig):
             Whether to use bias in the multimodal projector.
         spatial_merge_size (`int`, *optional*, defaults to 2):
             The downsampling factor for the spatial merge operation.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie the input and output embeddings.
 
     Example:
 
@@ -82,6 +84,7 @@ class Mistral3Config(PreTrainedConfig):
         vision_feature_layer=-1,
         multimodal_projector_bias=False,
         spatial_merge_size=2,
+        tie_word_embeddings: bool = True,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -133,6 +136,7 @@ class Mistral3Config(PreTrainedConfig):
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
         self.spatial_merge_size = spatial_merge_size
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

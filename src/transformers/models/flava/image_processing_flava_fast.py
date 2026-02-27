@@ -19,7 +19,7 @@ from functools import lru_cache
 from typing import Any, Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -268,7 +268,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -313,7 +313,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -333,7 +333,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         return_codebook_pixels: bool | None,
         codebook_do_resize: bool | None,
         codebook_size: SizeDict | None,
-        codebook_interpolation: Optional["F.InterpolationMode"],
+        codebook_interpolation: Optional["tvF.InterpolationMode"],
         codebook_do_center_crop: bool | None,
         codebook_crop_size: SizeDict | None,
         codebook_do_rescale: bool | None,

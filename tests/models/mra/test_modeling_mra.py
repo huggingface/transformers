@@ -264,12 +264,12 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     has_attentions = False
+    test_torch_exportable = False  # uses custom kernels by default, not compatible with torch.export
 
     pipeline_model_mapping = (
         {
             "feature-extraction": MraModel,
             "fill-mask": MraForMaskedLM,
-            "question-answering": MraForQuestionAnswering,
             "text-classification": MraForSequenceClassification,
             "token-classification": MraForTokenClassification,
             "zero-shot": MraForSequenceClassification,
