@@ -242,7 +242,7 @@ class SiglipVisionTowerDynamicS2(nn.Module):
         return self.config.hidden_size * len(self.scales)
 
 
-class VILAPretrainedModel(PreTrainedModel):
+class OmniVinciPretrainedModel(PreTrainedModel):
     config_class = OmniVinciConfig
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
@@ -387,7 +387,7 @@ class VILAPretrainedModel(PreTrainedModel):
                 sound_mm_projector.eval()
 
 
-class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
+class OmniVinciForConditionalGeneration(OmniVinciPretrainedModel, GenerationMixin):
     def __init__(self, config: OmniVinciConfig, *args, **kwargs):
         super().__init__(config)
         self._init_omnivinci_components(*args, **kwargs)
@@ -999,8 +999,8 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
         **kwargs,
     ):
         is_first_iteration = bool(kwargs.get("is_first_iteration", False))
-        is_first_step = is_first_iteration or past_key_values is None or (
-            cache_position is not None and cache_position[0] == 0
+        is_first_step = (
+            is_first_iteration or past_key_values is None or (cache_position is not None and cache_position[0] == 0)
         )
 
         # Build multimodal embeddings before delegating, so token/media alignment is preserved.
@@ -1069,3 +1069,6 @@ class OmniVinciForCausalLM(VILAPretrainedModel, GenerationMixin):
             is_encoder_decoder=is_encoder_decoder,
             num_new_tokens=num_new_tokens,
         )
+
+
+__all__ = ["OmniVinciForConditionalGeneration", "OmniVinciPretrainedModel"]

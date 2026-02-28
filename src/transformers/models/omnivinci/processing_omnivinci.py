@@ -31,7 +31,7 @@ from transformers.image_utils import load_image
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.video_utils import load_video
 
-from .configuration_omnivinci import MEDIA_TOKENS, MM_BOS_EOS_TOKENS
+from .configuration_omnivinci import MEDIA_TOKENS, MM_BOS_EOS_TOKENS, OmniVinciConfig
 
 
 _OMNIVINCI_CHAT_TEMPLATE = (
@@ -380,7 +380,11 @@ def _load_audio_hf_with_info(audio_input, config) -> tuple[np.ndarray, dict[str,
             target_samples = min(audio_n_samples_limit, ori_n_samples)
 
         audio_start_sample_id = 0
-        if bool(getattr(config, "random_audio_sample", False)) and not load_max_audio and ori_n_samples > target_samples:
+        if (
+            bool(getattr(config, "random_audio_sample", False))
+            and not load_max_audio
+            and ori_n_samples > target_samples
+        ):
             audio_start_sample_id = random.randint(0, ori_n_samples - target_samples)
         audio_end_sample_id = audio_start_sample_id + target_samples
         return audio_start_sample_id, audio_end_sample_id
@@ -398,7 +402,9 @@ def _load_audio_hf_with_info(audio_input, config) -> tuple[np.ndarray, dict[str,
         ori_n_samples = int(audio_reader.shape[1])
         audio_start_sample_id, audio_end_sample_id = _resolve_window(ori_n_samples)
         ori_audio_duration = ori_n_samples / sampling_rate
-        speech_data = audio_reader[audio_start_sample_id:audio_end_sample_id].asnumpy()[0].astype(np.float32, copy=False)
+        speech_data = (
+            audio_reader[audio_start_sample_id:audio_end_sample_id].asnumpy()[0].astype(np.float32, copy=False)
+        )
     else:
         speech_data = load_audio(audio_input, sampling_rate=sampling_rate).astype(np.float32, copy=False)
         ori_n_samples = int(speech_data.shape[0])
@@ -576,6 +582,8 @@ class OmniVinciProcessor(ProcessorMixin):
         padding_side="left",
         **kwargs,
     ):
+        if isinstance(config, dict):
+            config = OmniVinciConfig(**config)
         if chat_template is None:
             chat_template = _OMNIVINCI_CHAT_TEMPLATE
         self.image_token = MEDIA_TOKENS["image"]

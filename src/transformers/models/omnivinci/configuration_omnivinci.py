@@ -44,12 +44,10 @@ MM_BOS_EOS_TOKENS = {
 class OmniVinciConfig(PretrainedConfig):
     """Configuration class for OmniVinci models.
 
-    Migration note:
-    We intentionally keep `model_type = "vila"` at this stage to preserve
-    compatibility with existing checkpoints and current loading behavior.
+    `model_type` is canonicalized to `"omnivinci"` for native Auto* integration.
     """
 
-    model_type = "vila"
+    model_type = "omnivinci"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(

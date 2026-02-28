@@ -280,6 +280,7 @@ if TYPE_CHECKING:
     from .olmo3 import *
     from .olmoe import *
     from .omdet_turbo import *
+    from .omnivinci import *
     from .oneformer import *
     from .openai import *
     from .opt import *

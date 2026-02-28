@@ -97,11 +97,23 @@ STRING_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bmodeling_vila\.VILAConfig\b"), "configuration_omnivinci.OmniVinciConfig"),
     (
         re.compile(r"\bmodeling_vila\.VILAForCausalLM\b"),
-        "modeling_omnivinci.OmniVinciForCausalLM",
+        "modeling_omnivinci.OmniVinciForConditionalGeneration",
+    ),
+    (
+        re.compile(r"\bmodeling_vila\.VILAForConditionalGeneration\b"),
+        "modeling_omnivinci.OmniVinciForConditionalGeneration",
     ),
     (
         re.compile(r"\bmodeling_omnivinci\.VILAForCausalLM\b"),
-        "modeling_omnivinci.OmniVinciForCausalLM",
+        "modeling_omnivinci.OmniVinciForConditionalGeneration",
+    ),
+    (
+        re.compile(r"\bmodeling_omnivinci\.VILAForConditionalGeneration\b"),
+        "modeling_omnivinci.OmniVinciForConditionalGeneration",
+    ),
+    (
+        re.compile(r"\bmodeling_omnivinci\.OmniVinciForCausalLM\b"),
+        "modeling_omnivinci.OmniVinciForConditionalGeneration",
     ),
     (re.compile(r"\bconfiguration_omnivinci\.VILAConfig\b"), "configuration_omnivinci.OmniVinciConfig"),
     (
@@ -114,7 +126,9 @@ STRING_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = (
     ),
     (re.compile(r"\bVILAProcessorKwargs\b"), "OmniVinciProcessorKwargs"),
     (re.compile(r"\bVILAProcessor\b"), "OmniVinciProcessor"),
-    (re.compile(r"\bVILAForCausalLM\b"), "OmniVinciForCausalLM"),
+    (re.compile(r"\bVILAForCausalLM\b"), "OmniVinciForConditionalGeneration"),
+    (re.compile(r"\bVILAForConditionalGeneration\b"), "OmniVinciForConditionalGeneration"),
+    (re.compile(r"\bOmniVinciForCausalLM\b"), "OmniVinciForConditionalGeneration"),
     (re.compile(r"\bVILAConfig\b"), "OmniVinciConfig"),
 )
 
@@ -249,6 +263,18 @@ def _copy_merged_preprocessor_config(src_root: Path, dst_root: Path) -> None:
     _save_json(target_preprocessor, merged_preprocessor)
 
 
+def _ensure_processor_config(dst_root: Path, config: dict[str, Any] | None = None) -> None:
+    processor_path = dst_root / "processor_config.json"
+    payload = {}
+    if processor_path.exists():
+        payload = _load_json(processor_path)
+
+    payload["processor_class"] = "OmniVinciProcessor"
+    if config is not None:
+        payload["config"] = config
+    _save_json(processor_path, payload)
+
+
 def _resolve_tokenizer_source_dir(src_root: Path, dst_root: Path) -> Path:
     llm_dir = src_root / "llm"
     if (llm_dir / "tokenizer_config.json").exists():
@@ -260,6 +286,65 @@ def _resolve_tokenizer_source_dir(src_root: Path, dst_root: Path) -> Path:
     raise FileNotFoundError(
         "Could not locate tokenizer files in src_root/llm, src_root, or dst_root. Expected tokenizer_config.json."
     )
+
+
+def _collect_encoder_boundary_tokens(config: dict[str, Any]) -> list[str]:
+    token_keys = {"start_tokens", "end_tokens", "sep_tokens"}
+    collected = []
+    seen = set()
+
+    def _maybe_add(token):
+        if not isinstance(token, str) or token == "None" or token in seen:
+            return
+        seen.add(token)
+        collected.append(token)
+
+    def _visit(node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in token_keys:
+                    _maybe_add(value)
+                _visit(value)
+        elif isinstance(node, (list, tuple)):
+            for item in node:
+                _visit(item)
+
+    # Keep parity with processor default.
+    _maybe_add("\n")
+
+    for attr in ("image_encoder", "video_encoder", "sound_encoder"):
+        encoder_config = config.get(attr)
+        if isinstance(encoder_config, str):
+            try:
+                encoder_config = json.loads(encoder_config)
+            except Exception:
+                continue
+        _visit(encoder_config)
+
+    return collected
+
+
+def _populate_token_id_fields(cfg: dict[str, Any], src_root: Path, dst_root: Path) -> None:
+    tokenizer_src = _resolve_tokenizer_source_dir(src_root, dst_root)
+    tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_src), use_fast=True)
+
+    media_tokens = cfg.get("media_tokens") or {"image": "<image>", "video": "<vila/video>", "sound": "<sound>"}
+    cfg["media_tokens"] = media_tokens
+    media_token_ids = {}
+    for name, token in media_tokens.items():
+        token_id = tokenizer.convert_tokens_to_ids(token)
+        if token_id is None or token_id < 0:
+            tokenized = tokenizer(token, add_special_tokens=False).input_ids
+            if len(tokenized) != 1:
+                raise ValueError(f"Media token `{token}` must map to a single tokenizer id.")
+            token_id = tokenized[0]
+        media_token_ids[name] = int(token_id)
+    cfg["media_token_ids"] = media_token_ids
+
+    cfg["encoder_text_token_ids"] = {
+        token_text: [int(token_id) for token_id in tokenizer(token_text).input_ids]
+        for token_text in _collect_encoder_boundary_tokens(cfg)
+    }
 
 
 def _export_effective_generation_config(src_root: Path, dst_root: Path) -> None:
@@ -344,6 +429,7 @@ def _prepare_destination_tree(src_root: Path, dst_root: Path, clean_dst: bool = 
     _copy_top_level_metadata(src_root, dst_root)
     _copy_llm_metadata_to_root(src_root, dst_root)
     _copy_merged_preprocessor_config(src_root, dst_root)
+    _ensure_processor_config(dst_root)
     _export_effective_generation_config(src_root, dst_root)
 
 
@@ -416,20 +502,17 @@ def _normalize_top_level_config(dst_root: Path, src_root: Path) -> None:
         elif field in OPTIONAL_COMPONENT_FIELDS:
             cfg[field] = None
 
-    cfg["architectures"] = ["OmniVinciForCausalLM"]
+    cfg["model_type"] = "omnivinci"
+    cfg["architectures"] = ["OmniVinciForConditionalGeneration"]
     cfg["_name_or_path"] = str(dst_root)
     cfg["resume_path"] = None
+    _populate_token_id_fields(cfg, src_root, dst_root)
 
-    auto_map = cfg.get("auto_map") or {}
-    auto_map.update(
-        {
-            "AutoConfig": "configuration_omnivinci.OmniVinciConfig",
-            "AutoProcessor": "processing_omnivinci.OmniVinciProcessor",
-            "AutoModel": "modeling_omnivinci.OmniVinciForCausalLM",
-            "AutoModelForCausalLM": "modeling_omnivinci.OmniVinciForCausalLM",
-        }
-    )
-    cfg["auto_map"] = auto_map
+    # Native integration is now in-tree via CONFIG/MODEL/PROCESSOR auto mappings.
+    # Keep exported configs clean and avoid remote-code prompts by dropping legacy auto_map entries.
+    cfg.pop("auto_map", None)
+
+    _ensure_processor_config(dst_root, config=cfg)
 
     _save_json(cfg_path, cfg)
     logger.info("Normalized top-level config: %s", cfg_path)

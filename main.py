@@ -1,21 +1,19 @@
 import torch
 
-from transformers.models.omnivinci.modeling_omnivinci import OmniVinciForCausalLM
-from transformers.models.omnivinci.processing_omnivinci import OmniVinciProcessor
+from transformers import AutoModel, AutoProcessor
 
 
 model_path = "/fs/nexus-projects/JSALT_workshop/lasha/Dev/comni"
-dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-model = OmniVinciForCausalLM.from_pretrained(
+model = AutoModel.from_pretrained(
     model_path,
-    dtype=dtype,
+    dtype=torch.bfloat16,
     device_map="auto",
     load_audio_in_video=True,
     num_video_frames=128,
     audio_chunk_length="max_3600",
 ).eval()
-processor = OmniVinciProcessor.from_pretrained(model_path, config=model.config, padding_side="left", use_fast=False)
+processor = AutoProcessor.from_pretrained(model_path, padding_side="left", use_fast=False)
 
 conversation = [
     {
@@ -30,10 +28,12 @@ conversation = [
     }
 ]
 
-inputs = processor.apply_chat_template(conversation, tokenize=True, add_generation_prompt=True, return_dict=True)
-
-inputs["input_ids"] = inputs["input_ids"].to(model.device)
-inputs["attention_mask"] = inputs["attention_mask"].to(model.device)
+inputs = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+).to(model.device)
 
 output_ids = model.generate(
     **inputs,

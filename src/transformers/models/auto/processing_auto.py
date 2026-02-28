@@ -117,6 +117,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("moonshine", "Wav2Vec2Processor"),
         ("moonshine_streaming", "MoonshineStreamingProcessor"),
         ("omdet-turbo", "OmDetTurboProcessor"),
+        ("omnivinci", "OmniVinciProcessor"),
         ("oneformer", "OneFormerProcessor"),
         ("ovis2", "Ovis2Processor"),
         ("owlv2", "Owlv2Processor"),
