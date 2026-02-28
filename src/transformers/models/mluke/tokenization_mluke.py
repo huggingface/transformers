@@ -1016,9 +1016,7 @@ class MLukeTokenizer(TokenizersBackend):
                 first_ids[:entity_token_end] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_end:]
             )
             first_ids = (
-                first_ids[:entity_token_start]
-                + [self.extra_special_tokens_ids[0]]
-                + first_ids[entity_token_start:]
+                first_ids[:entity_token_start] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_start:]
             )
             first_entity_token_spans = [(entity_token_start, entity_token_end + 2)]
 
