@@ -86,7 +86,7 @@ print(tokenizer.decode(outputs[0]))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Write me a poem about Machine Learning. Answer:" | transformers run --task text2text-generation --model google/t5gemma-2b-2b-prefixlm --device 0
+echo -e "Write me a poem about Machine Learning. Answer:" | transformers run text2text-generation --model google/t5gemma-2b-2b-prefixlm --device 0
 ```
 
 </hfoption>

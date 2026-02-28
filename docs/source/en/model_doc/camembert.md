@@ -79,7 +79,7 @@ print(f"The predicted token is: {predicted_token}")
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Le camembert est un délicieux fromage <mask>." | transformers run --task fill-mask --model camembert-base --device 0
+echo -e "Le camembert est un délicieux fromage <mask>." | transformers run fill-mask --model camembert-base --device 0
 ```
 
 </hfoption>

@@ -86,7 +86,7 @@ print(f"Predicted label: {predicted_label}")
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "I love using Hugging Face Transformers!" | transformers run --task text-classification --model distilbert-base-uncased-finetuned-sst-2-english
+echo -e "I love using Hugging Face Transformers!" | transformers run text-classification --model distilbert-base-uncased-finetuned-sst-2-english
 ```
 
 </hfoption>
