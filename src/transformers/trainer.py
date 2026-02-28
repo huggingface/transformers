@@ -2652,9 +2652,13 @@ class Trainer:
         # while ``train`` is running, cast it to the right dtype first and then put on device
         if not self.is_in_train:
             if args.fp16_full_eval:
-                model = model.to(dtype=torch.float16, device=args.device)
+                # Only cast if not already in fp16 to avoid redundant copies
+                if next(model.parameters()).dtype != torch.float16:
+                    model = model.to(dtype=torch.float16, device=args.device)
             elif args.bf16_full_eval:
-                model = model.to(dtype=torch.bfloat16, device=args.device)
+                # Only cast if not already in bf16 to avoid redundant copies
+                if next(model.parameters()).dtype != torch.bfloat16:
+                    model = model.to(dtype=torch.bfloat16, device=args.device)
 
         batch_size = self.args.eval_batch_size
 
