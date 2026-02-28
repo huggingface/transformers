@@ -37,9 +37,9 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
             Number of attention heads for each transformer encoder layer.
         patch_size (`int`, *optional*, defaults to 16):
             Size (height/width) of the image patches extracted from the input image.
-        qkv_bias (`bool`, *optional*, defaults to True):
+        qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to include bias terms in the query, key, value projection layers of self-attention.
-        use_rel_pos (`bool`, *optional*, defaults to True):
+        use_rel_pos (`bool`, *optional*, defaults to `True`):
             Whether to use relative positional embeddings in the self-attention mechanism.
         global_attn_indexes (`Optional[list[int]]`, *optional*, defaults to [2, 5, 8, 11]):
             List of layer indexes where global attention (instead of window attention) is applied.
@@ -52,14 +52,12 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
             Dimensionality of intermediate network channels in the vision backbone.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability applied to the attention weights.
-        **kwargs:
-            Additional keyword arguments passed to the parent `PreTrainedConfig` class.
     """
 
     model_type = "pp_chart2table_vision"
     base_config_key = "vision_config"
 
-    def init(
+    def __init__(
         self,
         depth: int = 12,
         embed_dim: int = 768,
@@ -93,7 +91,7 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
         self.output_channels = output_channels
         self.net_channels = net_channels
         self.attention_dropout = attention_dropout
-        super().init(**kwargs)
+        super().__init__(**kwargs)
 
 
 class PPChart2TableTextConfig(PreTrainedConfig):
@@ -266,11 +264,16 @@ class PPChart2TableConfig(PreTrainedConfig):
     documentation from [PreTrainedConfig] for more information.
 
     Args:
-            vision_config (Optional[Dict], optional, defaults to None, *optional*):
-            text_config (Optional[Dict], optional, defaults to None, *optional*):
-            image_token_index (Optional[int], optional, defaults to 151859, *optional*, defaults to 151859):
-            image_seq_length (Optional[int], optional, defaults to 576, *optional*, defaults to 576):
-            pad_token_id (Optional[int], optional, defaults to -1, *optional*, defaults to -1):
+        vision_config (Optional[Dict], optional, *optional*)::
+            The [PPChart2TableVisionConfig] for the vision sub-model. Defaults to None.
+        text_config (Optional[Dict], optional, *optional*)::
+            The [PPChart2TableTextConfig] for the text sub-model. Defaults to None.
+        image_token_index (Optional[int], optional, *optional*, defaults to 151859)::
+            The index of the image token. Defaults to 151859.
+        image_seq_length (Optional[int], optional, *optional*, defaults to 576)::
+            The sequence length for the image. Defaults to 576.
+        pad_token_id (Optional[int], optional, *optional*, defaults to -1):
+            The index of the padding token. Defaults to -1.
 
     Example:
 
