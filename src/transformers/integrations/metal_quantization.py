@@ -204,17 +204,29 @@ def _get_metal_kernel():
     global _metal_kernel
     if _metal_kernel is None:
         try:
+            import os
+
             from .hub_kernels import get_kernel
 
             hub_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels")
             # Smoke-test: the pre-built metallib may target an MSL version newer
             # than the current OS supports.  A tiny matmul catches this at init
             # time rather than mid-inference.
+            # Suppress Metal runtime stderr noise ("Failed to create Metal library
+            # from embedded header") by temporarily redirecting fd 2 to /dev/null.
             _x = torch.zeros(1, 64, dtype=torch.float32, device="mps")
             _w = torch.zeros(1, 2, dtype=torch.uint32, device="mps")  # K=64 at 8-bit → 2 packed
             _s = torch.ones(1, 1, dtype=torch.float32, device="mps")
             _b = torch.zeros(1, 1, dtype=torch.float32, device="mps")
-            hub_kernel.affine_qmm_t(_x, _w, _s, _b, 64, 8)
+            stderr_fd = os.dup(2)
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            try:
+                os.dup2(devnull, 2)
+                hub_kernel.affine_qmm_t(_x, _w, _s, _b, 64, 8)
+            finally:
+                os.dup2(stderr_fd, 2)
+                os.close(stderr_fd)
+                os.close(devnull)
             _metal_kernel = hub_kernel
         except Exception:
             logger.info(
