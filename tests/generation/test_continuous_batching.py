@@ -100,7 +100,7 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
         config = AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
 
         if layer_types_str is not None:
-            layer_types = [{"f": "full_attention", "s": "sliding_window"}[char] for char in layer_types_str]
+            layer_types = [{"f": "full_attention", "s": "sliding_window", "l": "linear_attention"}[char] for char in layer_types_str]
         else:
             layer_types = None
             config.num_hidden_layers = len(expected_groups)
@@ -137,6 +137,41 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
                     expected_group_type,
                     f"Test failed for: {layer_types_str = }, {sliding_window = }, {group_types = }",
                 )
+
+    @parameterized.expand(
+        [
+            ("lf", None, [[1]]),
+            ("fl", None, [[0]]),
+            ("llf", None, [[2]]),
+            ("fllf", None, [[0, 3]]),
+            ("flsl", 4096, [[0], [2]]),
+            ("llfllf", None, [[2, 5]]),
+            ("lll", None, []),
+        ]
+    )
+    def test_group_layers_with_linear_attention(
+        self,
+        layer_types_str: str,
+        sliding_window: int | None,
+        expected_layer_groups: list[list[int]],
+    ) -> None:
+        """Test that linear_attention layers are filtered out of cache groups."""
+        config = AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
+        layer_types = [
+            {"f": "full_attention", "s": "sliding_window", "l": "linear_attention"}[char] for char in layer_types_str
+        ]
+        config.layer_types = layer_types
+        config.sliding_window = sliding_window
+        config.num_hidden_layers = len(layer_types_str)
+
+        layer_groups, group_types = group_layers_by_attn_type(config)
+        self.assertEqual(
+            sorted(expected_layer_groups),
+            sorted(layer_groups),
+            f"Test failed for: {layer_types_str = }, {expected_layer_groups = }, {layer_groups = }",
+        )
+        # Verify no linear_attention groups remain
+        self.assertNotIn("linear_attention", group_types)
 
     @parameterized.expand(
         [

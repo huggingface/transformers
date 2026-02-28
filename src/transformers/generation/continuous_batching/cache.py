@@ -53,7 +53,15 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
             layer_groups.append(indices[i : i + group_size])
     # And note the layer types
     group_types = [layer_types[lg[0]] for lg in layer_groups]
-    return layer_groups, group_types
+
+    # Filter out linear_attention groups (they use recurrent state, not KV cache)
+    filtered_groups = []
+    filtered_types = []
+    for group, gtype in zip(layer_groups, group_types):
+        if gtype != "linear_attention":
+            filtered_groups.append(group)
+            filtered_types.append(gtype)
+    return filtered_groups, filtered_types
 
 
 @attach_tracer()

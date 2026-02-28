@@ -826,7 +826,7 @@ class Serve:
             self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
-        inputs = processor.apply_chat_template(
+        inputs = tokenizer.apply_chat_template(
             req["messages"], return_tensors="pt", add_generation_prompt=True, return_dict=True
         ).to(model.device)["input_ids"][0]
 
