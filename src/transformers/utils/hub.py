@@ -829,6 +829,69 @@ def convert_file_size_to_int(size: int | str):
     raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
 
 
+def _rebuild_shard_index_from_repo(
+    pretrained_model_name_or_path,
+    cache_dir=None,
+    force_download=False,
+    proxies=None,
+    local_files_only=False,
+    token=None,
+    user_agent=None,
+    revision=None,
+    subfolder="",
+    _commit_hash=None,
+):
+    """
+    When the shard index references files that don't exist (e.g. MLX repos that
+    copied the index from the original model), discover the actual safetensors
+    files on the Hub, download them, and rebuild the weight_map from their headers.
+    """
+    import struct
+
+    from huggingface_hub import HfApi
+
+    api = HfApi()
+    all_files = api.list_repo_files(pretrained_model_name_or_path, revision=revision, token=token)
+    shard_names = sorted(f for f in all_files if f.endswith(".safetensors") and f != "model.safetensors.index.json")
+
+    if not shard_names:
+        raise OSError(
+            f"No .safetensors files found in repo '{pretrained_model_name_or_path}'. "
+            "Cannot rebuild shard index."
+        )
+
+    # Download the actual shard files
+    cached_filenames = cached_files(
+        pretrained_model_name_or_path,
+        shard_names,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        proxies=proxies,
+        local_files_only=local_files_only,
+        token=token,
+        user_agent=user_agent,
+        revision=revision,
+        subfolder=subfolder,
+        _commit_hash=_commit_hash,
+    )
+
+    # Rebuild weight_map by reading safetensors headers
+    weight_map = {}
+    all_keys = []
+    for cached_path, shard_name in zip(cached_filenames, shard_names):
+        with open(cached_path, "rb") as f:
+            header_size = struct.unpack("<Q", f.read(8))[0]
+            header = json.loads(f.read(header_size))
+        for key in header:
+            if key == "__metadata__":
+                continue
+            weight_map[key] = shard_name
+            all_keys.append(key)
+
+    sharded_metadata = {"all_checkpoint_keys": all_keys, "weight_map": weight_map}
+    return cached_filenames, sharded_metadata
+
+
 def get_checkpoint_shard_files(
     pretrained_model_name_or_path,
     index_filename,
@@ -871,19 +934,36 @@ def get_checkpoint_shard_files(
 
     # At this stage pretrained_model_name_or_path is a model identifier on the Hub. Try to get everything from cache,
     # or download the files
-    cached_filenames = cached_files(
-        pretrained_model_name_or_path,
-        shard_filenames,
-        cache_dir=cache_dir,
-        force_download=force_download,
-        proxies=proxies,
-        local_files_only=local_files_only,
-        token=token,
-        user_agent=user_agent,
-        revision=revision,
-        subfolder=subfolder,
-        _commit_hash=_commit_hash,
-    )
+    try:
+        cached_filenames = cached_files(
+            pretrained_model_name_or_path,
+            shard_filenames,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            proxies=proxies,
+            local_files_only=local_files_only,
+            token=token,
+            user_agent=user_agent,
+            revision=revision,
+            subfolder=subfolder,
+            _commit_hash=_commit_hash,
+        )
+    except OSError:
+        # The shard index may reference files that don't exist in this repo
+        # (e.g. MLX repos that copy the index from the original model).
+        # Fall back to discovering the actual safetensors files on the Hub.
+        cached_filenames, sharded_metadata = _rebuild_shard_index_from_repo(
+            pretrained_model_name_or_path,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            proxies=proxies,
+            local_files_only=local_files_only,
+            token=token,
+            user_agent=user_agent,
+            revision=revision,
+            subfolder=subfolder,
+            _commit_hash=_commit_hash,
+        )
 
     return cached_filenames, sharded_metadata
 

@@ -90,8 +90,15 @@ class MetalHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations.metal_quantization import replace_with_metal_linear
 
+        skip_modules = self.quantization_config.modules_to_not_convert
+        if self.pre_quantized and skip_modules is None:
+            # Pre-quantized checkpoints (e.g. MLX) may have quantized the lm_head /
+            # output embedding too.  Don't auto-skip them; only honour explicit user
+            # overrides via modules_to_not_convert.
+            skip_modules = []
+
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+            model, skip_modules, model._keep_in_fp32_modules
         )
 
         model = replace_with_metal_linear(
@@ -114,7 +121,7 @@ class MetalHfQuantizer(HfQuantizer):
         return MetalQuantize(self)
 
     def get_weight_conversions(self):
-        from ..core_model_loading import WeightConverter
+        from ..core_model_loading import WeightConverter, WeightRenaming
         from ..integrations.metal_quantization import MetalDequantize
 
         if self.pre_quantized and self.quantization_config.dequantize:
@@ -125,4 +132,18 @@ class MetalHfQuantizer(HfQuantizer):
                     operations=[MetalDequantize(self)],
                 )
             ]
+
+        if self.pre_quantized:
+            return [
+                # MLX uses "biases", MetalLinear expects "qbiases"
+                WeightRenaming(source_patterns="biases", target_patterns="qbiases"),
+                # MLX quantizes embed_tokens but transformers keeps it as nn.Embedding (float);
+                # dequantize the embedding back to float so the standard Embedding layer can load it
+                WeightConverter(
+                    source_patterns=[r"embed_tokens\.weight$", r"embed_tokens\.scales", r"embed_tokens\.qbiases"],
+                    target_patterns="embed_tokens.weight",
+                    operations=[MetalDequantize(self)],
+                ),
+            ]
+
         return []

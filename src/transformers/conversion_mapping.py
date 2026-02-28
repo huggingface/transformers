@@ -79,6 +79,11 @@ def _build_checkpoint_conversion_mapping():
         "qwen3_5_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
         ],
+        "qwen3_vl": [
+            WeightRenaming(source_patterns=r"^language_model\.model\.", target_patterns="model.language_model."),
+            WeightRenaming(source_patterns=r"^language_model\.lm_head\.", target_patterns="lm_head."),
+            WeightRenaming(source_patterns=r"^vision_tower\.", target_patterns="model.visual."),
+        ],
         "t5gemma2": [
             WeightRenaming(r"(?<!vision_model\.)encoder.embed_tokens.", "encoder.text_model.embed_tokens."),
             WeightRenaming(r"(?<!vision_model\.)encoder.norm.", "encoder.text_model.norm."),
