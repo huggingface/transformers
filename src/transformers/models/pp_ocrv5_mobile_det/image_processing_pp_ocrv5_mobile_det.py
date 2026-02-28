@@ -306,12 +306,12 @@ def get_box_score(bitmap: np.ndarray, _box: np.ndarray) -> float:
     Returns:
         float: Mean score within the bounding box region.
     """
-    h, w = bitmap.shape[:2]
+    height, width = bitmap.shape[:2]
     box = _box.copy()
-    xmin = max(0, min(math.floor(box[:, 0].min()), w - 1))
-    xmax = max(0, min(math.ceil(box[:, 0].max()), w - 1))
-    ymin = max(0, min(math.floor(box[:, 1].min()), h - 1))
-    ymax = max(0, min(math.ceil(box[:, 1].max()), h - 1))
+    xmin = max(0, min(math.floor(box[:, 0].min()), width - 1))
+    xmax = max(0, min(math.ceil(box[:, 0].max()), width - 1))
+    ymin = max(0, min(math.floor(box[:, 1].min()), height - 1))
+    ymax = max(0, min(math.ceil(box[:, 1].max()), height - 1))
 
     mask = np.zeros((ymax - ymin + 1, xmax - xmin + 1), dtype=np.uint8)
     box[:, 0] = box[:, 0] - xmin
@@ -414,9 +414,11 @@ def process(
             - boxes (list or np.ndarray): Extracted text boxes.
             - scores (list): Corresponding confidence scores.
     """
-    src_h, src_w = size
+    src_height, src_width = size
     mask = logit > threshold
-    boxes, scores = boxes_from_bitmap(logit, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates)
+    boxes, scores = boxes_from_bitmap(
+        logit, mask, src_width, src_height, box_thresh, unclip_ratio, min_size, max_candidates
+    )
     return boxes, scores
 
 
@@ -639,45 +641,45 @@ class PPOCRV5MobileDetImageProcessor(BaseImageProcessor):
         """
         limit_side_len = limit_side_len or self.limit_side_len
         limit_type = limit_type or self.limit_type
-        h, w, _ = image.shape
+        height, width, _ = image.shape
 
         if limit_type == "max":
-            if max(h, w) > limit_side_len:
-                if h > w:
-                    ratio = float(limit_side_len) / h
+            if max(height, width) > limit_side_len:
+                if height > width:
+                    ratio = float(limit_side_len) / height
                 else:
-                    ratio = float(limit_side_len) / w
+                    ratio = float(limit_side_len) / width
             else:
                 ratio = 1.0
         elif limit_type == "min":
-            if min(h, w) < limit_side_len:
-                if h < w:
-                    ratio = float(limit_side_len) / h
+            if min(height, width) < limit_side_len:
+                if height < width:
+                    ratio = float(limit_side_len) / height
                 else:
-                    ratio = float(limit_side_len) / w
+                    ratio = float(limit_side_len) / width
             else:
                 ratio = 1.0
         elif limit_type == "resize_long":
-            ratio = float(limit_side_len) / max(h, w)
+            ratio = float(limit_side_len) / max(height, width)
         else:
             raise Exception("not support limit type, image ")
-        resize_h = int(h * ratio)
-        resize_w = int(w * ratio)
+        resize_height = int(height * ratio)
+        resize_width = int(width * ratio)
 
-        if max(resize_h, resize_w) > max_side_limit:
-            ratio = float(max_side_limit) / max(resize_h, resize_w)
-            resize_h, resize_w = int(resize_h * ratio), int(resize_w * ratio)
+        if max(resize_height, resize_width) > max_side_limit:
+            ratio = float(max_side_limit) / max(resize_height, resize_width)
+            resize_height, resize_width = int(resize_height * ratio), int(resize_width * ratio)
 
-        resize_h = max(int(round(resize_h / 32) * 32), 32)
-        resize_w = max(int(round(resize_w / 32) * 32), 32)
+        resize_height = max(int(round(resize_height / 32) * 32), 32)
+        resize_width = max(int(round(resize_width / 32) * 32), 32)
 
-        if resize_h == h and resize_w == w:
-            return {"height": resize_h, "width": resize_w}, np.array([h, w])
+        if resize_height == height and resize_width == width:
+            return {"height": resize_height, "width": resize_width}, np.array([height, width])
 
-        if int(resize_w) <= 0 or int(resize_h) <= 0:
+        if int(resize_width) <= 0 or int(resize_height) <= 0:
             return None, (None, None)
 
-        return {"height": resize_h, "width": resize_w}, np.array([h, w])
+        return {"height": resize_height, "width": resize_width}, np.array([height, width])
 
 
 __all__ = ["PPOCRV5MobileDetImageProcessor"]

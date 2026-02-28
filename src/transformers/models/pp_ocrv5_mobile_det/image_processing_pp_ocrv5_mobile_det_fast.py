@@ -297,12 +297,12 @@ def get_box_score(bitmap: np.ndarray, _box: np.ndarray) -> float:
     Returns:
         float: Mean score within the bounding box region.
     """
-    h, w = bitmap.shape[:2]
+    height, width = bitmap.shape[:2]
     box = _box.copy()
-    xmin = max(0, min(math.floor(box[:, 0].min()), w - 1))
-    xmax = max(0, min(math.ceil(box[:, 0].max()), w - 1))
-    ymin = max(0, min(math.floor(box[:, 1].min()), h - 1))
-    ymax = max(0, min(math.ceil(box[:, 1].max()), h - 1))
+    xmin = max(0, min(math.floor(box[:, 0].min()), width - 1))
+    xmax = max(0, min(math.ceil(box[:, 0].max()), width - 1))
+    ymin = max(0, min(math.floor(box[:, 1].min()), height - 1))
+    ymax = max(0, min(math.ceil(box[:, 1].max()), height - 1))
 
     mask = np.zeros((ymax - ymin + 1, xmax - xmin + 1), dtype=np.uint8)
     box[:, 0] = box[:, 0] - xmin
@@ -405,9 +405,11 @@ def process(
             - boxes (list or np.ndarray): Extracted text boxes.
             - scores (list): Corresponding confidence scores.
     """
-    src_h, src_w = size
+    src_height, src_width = size
     mask = logit > threshold
-    boxes, scores = boxes_from_bitmap(logit, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates)
+    boxes, scores = boxes_from_bitmap(
+        logit, mask, src_width, src_height, box_thresh, unclip_ratio, min_size, max_candidates
+    )
     return boxes, scores
 
 
@@ -538,42 +540,44 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         """
         limit_side_len = limit_side_len or self.limit_side_len
         limit_type = limit_type or self.limit_type
-        _, h, w = image.shape
-        h, w = int(h), int(w)
+        _, height, width = image.shape
+        height, width = int(height), int(width)
 
         if limit_type == "max":
-            if max(h, w) > limit_side_len:
-                ratio = float(limit_side_len) / max(h, w)
+            if max(height, width) > limit_side_len:
+                ratio = float(limit_side_len) / max(height, width)
             else:
                 ratio = 1.0
         elif limit_type == "min":
-            if min(h, w) < limit_side_len:
-                ratio = float(limit_side_len) / min(h, w)
+            if min(height, width) < limit_side_len:
+                ratio = float(limit_side_len) / min(height, width)
             else:
                 ratio = 1.0
         elif limit_type == "resize_long":
-            ratio = float(limit_side_len) / max(h, w)
+            ratio = float(limit_side_len) / max(height, width)
         else:
             raise Exception(f"not support limit type: {limit_type}")
 
-        resize_h = int(h * ratio)
-        resize_w = int(w * ratio)
+        resize_height = int(height * ratio)
+        resize_width = int(width * ratio)
 
-        if max_side_limit is not None and max(resize_h, resize_w) > max_side_limit:
-            ratio = float(max_side_limit) / max(resize_h, resize_w)
-            resize_h = int(resize_h * ratio)
-            resize_w = int(resize_w * ratio)
+        if max_side_limit is not None and max(resize_height, resize_width) > max_side_limit:
+            ratio = float(max_side_limit) / max(resize_height, resize_width)
+            resize_height = int(resize_height * ratio)
+            resize_width = int(resize_width * ratio)
 
-        resize_h = max(int(round(resize_h / 32) * 32), 32)
-        resize_w = max(int(round(resize_w / 32) * 32), 32)
+        resize_height = max(int(round(resize_height / 32) * 32), 32)
+        resize_width = max(int(round(resize_width / 32) * 32), 32)
 
-        if resize_h == h and resize_w == w:
-            return SizeDict(height=resize_h, width=resize_w), torch.tensor([h, w], dtype=torch.float32)
+        if resize_height == height and resize_width == width:
+            return SizeDict(height=resize_height, width=resize_width), torch.tensor(
+                [height, width], dtype=torch.float32
+            )
 
-        if resize_w <= 0 or resize_h <= 0:
+        if resize_width <= 0 or resize_height <= 0:
             return None, (None, None)
 
-        return SizeDict(height=resize_h, width=resize_w), torch.tensor([h, w], dtype=torch.float32)
+        return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32)
 
 
 __all__ = ["PPOCRV5MobileDetImageProcessorFast"]

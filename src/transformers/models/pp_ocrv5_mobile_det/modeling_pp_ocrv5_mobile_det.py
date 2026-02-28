@@ -36,18 +36,18 @@ class PPOCRV5MobileDetAct(nn.Module):
     Supports two activation functions: Hardswish (hswish) for mobile-efficient inference and ReLU.
     """
 
-    def __init__(self, act="hswish"):
+    def __init__(self, hidden_act="hswish"):
         """
         Initialize the activation block with the specified non-linear activation.
 
         Args:
-            act (str, optional): Type of activation function to use. Options are "hswish" and "relu".
+            hidden_act (str, optional): Type of activation function to use. Options are "hswish" and "relu".
                 Defaults to "hswish".
         """
         super().__init__()
-        if act == "hswish":
+        if hidden_act == "hswish":
             self.act = nn.Hardswish()
-        elif act == "relu":
+        elif hidden_act == "relu":
             self.act = nn.ReLU()
         else:
             raise ValueError("Act must be hswish or relu.")
@@ -107,7 +107,7 @@ class PPOCRV5MobileDetLearnableRepLayer(nn.Module):
         in_channels: int,
         out_channels: int,
         kernel_size: int,
-        act: str,
+        hidden_act: str,
         stride: int,
         num_conv_branches: int,
         groups: int = 1,
@@ -119,7 +119,7 @@ class PPOCRV5MobileDetLearnableRepLayer(nn.Module):
             in_channels (int): Number of input channels.
             out_channels (int): Number of output channels.
             kernel_size (int): Size of the kxk convolution kernel.
-            act (str): Activation function type (passed to PPOCRV5MobileDetAct block).
+            hidden_act (str): Activation function type (passed to PPOCRV5MobileDetAct block).
             stride (int): Stride of the convolution operations.
             num_conv_branches (int): Number of kxk convolution branches to stack.
             groups (int, optional): Number of groups for grouped convolution. Defaults to 1.
@@ -158,7 +158,7 @@ class PPOCRV5MobileDetLearnableRepLayer(nn.Module):
         )
 
         self.lab = PPOCRV5MobileDetLearnableAffineBlock()
-        self.act = PPOCRV5MobileDetAct(act=act)
+        self.act = PPOCRV5MobileDetAct(hidden_act=hidden_act)
 
     def forward(self, hidden_state: torch.Tensor):
         """
@@ -249,15 +249,15 @@ class PPOCRV5MobileDetLCNetV3Block(nn.Module):
     Optimized for mobile devices with low computational complexity and high efficiency.
     """
 
-    def __init__(self, in_channels, out_channels, act, dw_size, stride, use_se, conv_kxk_num, reduction):
+    def __init__(self, in_channels, out_channels, hidden_act, kernel_size, stride, use_se, conv_kxk_num, reduction):
         """
         Initialize the PPOCRV5MobileDetLCNetV3Block with specified parameters for depthwise and pointwise layers.
 
         Args:
             in_channels (int): Number of input channels.
             out_channels (int): Number of output channels.
-            act (str): Activation function type (passed to PPOCRV5MobileDetAct block).
-            dw_size (int): Kernel size for the depthwise convolution.
+            hidden_act (str): Activation function type (passed to PPOCRV5MobileDetAct block).
+            kernel_size (int): Kernel size for the depthwise convolution.
             stride (int): Stride of the depthwise convolution.
             use_se (bool): Whether to enable the SE Layer for channel recalibration.
             conv_kxk_num (int): Number of kxk convolution branches in PPOCRV5MobileDetLearnableRepLayer.
@@ -268,8 +268,8 @@ class PPOCRV5MobileDetLCNetV3Block(nn.Module):
         self.dw_conv = PPOCRV5MobileDetLearnableRepLayer(
             in_channels=in_channels,
             out_channels=in_channels,
-            kernel_size=dw_size,
-            act=act,
+            kernel_size=kernel_size,
+            hidden_act=hidden_act,
             stride=stride,
             groups=in_channels,
             num_conv_branches=conv_kxk_num,
@@ -280,7 +280,7 @@ class PPOCRV5MobileDetLCNetV3Block(nn.Module):
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=1,
-            act=act,
+            hidden_act=hidden_act,
             stride=1,
             num_conv_branches=conv_kxk_num,
         )
@@ -325,8 +325,8 @@ class PPOCRV5MobileDetBlock(nn.Module):
             block = PPOCRV5MobileDetLCNetV3Block(
                 in_channels=make_divisible(in_channels * config.scale, config.divisor),
                 out_channels=make_divisible(out_channels * config.scale, config.divisor),
-                act=config.hidden_act,
-                dw_size=kernel_size,
+                hidden_act=config.hidden_act,
+                kernel_size=kernel_size,
                 stride=stride,
                 use_se=squeeze_excitation,
                 conv_kxk_num=config.conv_kxk_num,
@@ -456,7 +456,7 @@ class PPOCRV5MobileDetSEModule(nn.Module):
         """
         super().__init__()
 
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
         self.conv1 = nn.Conv2d(
             in_channels=in_channels,
             out_channels=in_channels // reduction,
@@ -636,7 +636,7 @@ class PPOCRV5MobileDetHead(nn.Module):
             padding=int(kernel_list[0] // 2),
             bias=False,
         )
-        self.conv_bn1 = nn.BatchNorm2d(in_channels // 4)
+        self.bn1 = nn.BatchNorm2d(in_channels // 4)
         self.relu1 = nn.ReLU()
 
         self.conv2 = nn.ConvTranspose2d(
@@ -645,7 +645,7 @@ class PPOCRV5MobileDetHead(nn.Module):
             kernel_size=kernel_list[1],
             stride=2,
         )
-        self.conv_bn2 = nn.BatchNorm2d(in_channels // 4)
+        self.bn2 = nn.BatchNorm2d(in_channels // 4)
         self.relu2 = nn.ReLU()
 
         self.conv3 = nn.ConvTranspose2d(
@@ -666,10 +666,10 @@ class PPOCRV5MobileDetHead(nn.Module):
             torch.Tensor: Binary segmentation logits of shape (B, 1, H', W') (original image scale).
         """
         hidden_state = self.conv1(hidden_state)
-        hidden_state = self.conv_bn1(hidden_state)
+        hidden_state = self.bn1(hidden_state)
         hidden_state = self.relu1(hidden_state)
         hidden_state = self.conv2(hidden_state)
-        hidden_state = self.conv_bn2(hidden_state)
+        hidden_state = self.bn2(hidden_state)
         hidden_state = self.relu2(hidden_state)
         hidden_state = self.conv3(hidden_state)
         hidden_state = torch.sigmoid(hidden_state)
@@ -745,10 +745,10 @@ class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
             nn.init.kaiming_normal_(module.convolution.weight)
 
         if isinstance(module, PPOCRV5MobileDetHead):
-            nn.init.constant_(module.conv_bn1.weight, 1.0)
-            nn.init.constant_(module.conv_bn1.bias, 1e-4)
-            nn.init.constant_(module.conv_bn2.weight, 1.0)
-            nn.init.constant_(module.conv_bn2.bias, 1e-4)
+            nn.init.constant_(module.bn1.weight, 1.0)
+            nn.init.constant_(module.bn1.bias, 1e-4)
+            nn.init.constant_(module.bn2.weight, 1.0)
+            nn.init.constant_(module.bn2.bias, 1e-4)
             nn.init.kaiming_uniform_(module.conv2.weight)
             nn.init.kaiming_uniform_(module.conv3.weight)
 
