@@ -134,9 +134,7 @@ class PPOCRV5MobileDetLearnableRepLayer(nn.Module):
         self.padding = (kernel_size - 1) // 2
 
         self.identity = (
-            nn.BatchNorm2d(num_features=in_channels, momentum=0.9)
-            if out_channels == in_channels and stride == 1
-            else None
+            nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
         )
 
         self.conv_kxk = nn.ModuleList(
@@ -336,10 +334,10 @@ class PPOCRV5MobileDetBlock(nn.Module):
             )
             self.layers.append(block)
 
-    def forward(self, x):
+    def forward(self, hidden_state):
         for layer in self.layers:
-            x = layer(x)
-        return x
+            hidden_state = layer(hidden_state)
+        return hidden_state
 
 
 class PPOCRV5MobileDetBackbone(nn.Module):
@@ -638,7 +636,7 @@ class PPOCRV5MobileDetHead(nn.Module):
             padding=int(kernel_list[0] // 2),
             bias=False,
         )
-        self.conv_bn1 = nn.BatchNorm2d(in_channels // 4, momentum=0.9)
+        self.conv_bn1 = nn.BatchNorm2d(in_channels // 4)
         self.relu1 = nn.ReLU()
 
         self.conv2 = nn.ConvTranspose2d(
@@ -647,7 +645,7 @@ class PPOCRV5MobileDetHead(nn.Module):
             kernel_size=kernel_list[1],
             stride=2,
         )
-        self.conv_bn2 = nn.BatchNorm2d(in_channels // 4, momentum=0.9)
+        self.conv_bn2 = nn.BatchNorm2d(in_channels // 4)
         self.relu2 = nn.ReLU()
 
         self.conv3 = nn.ConvTranspose2d(

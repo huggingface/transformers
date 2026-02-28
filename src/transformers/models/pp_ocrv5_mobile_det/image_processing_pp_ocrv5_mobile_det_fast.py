@@ -380,7 +380,7 @@ def boxes_from_bitmap(
 
 
 def process(
-    pred: np.ndarray,
+    logit: np.ndarray,
     size: np.ndarray,
     threshold: float,
     box_thresh: float,
@@ -392,7 +392,7 @@ def process(
     Main post-processing function to convert model predictions into text boxes.
 
     Args:
-        pred (torch.Tensor): Model output of shape (1, H, W).
+        logit (torch.Tensor): Model output of shape (1, H, W).
         size (torch.Tensor): Original image size (height, width).
         threshold (float): Threshold for binarizing the prediction map.
         box_thresh (float): Score threshold for filtering boxes.
@@ -406,8 +406,8 @@ def process(
             - scores (list): Corresponding confidence scores.
     """
     src_h, src_w = size
-    mask = pred > threshold
-    boxes, scores = boxes_from_bitmap(pred, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates)
+    mask = logit > threshold
+    boxes, scores = boxes_from_bitmap(logit, mask, src_w, src_h, box_thresh, unclip_ratio, min_size, max_candidates)
     return boxes, scores
 
 
@@ -451,8 +451,8 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         if do_resize:
             for image in images:
                 size, shape = self.get_image_size(image, self.limit_side_len, self.limit_type, self.max_side_limit)
-                img = self.resize(image, size=size, interpolation=interpolation)
-                resize_imgs.append(img)
+                image = self.resize(image, size=size, interpolation=interpolation)
+                resize_imgs.append(image)
                 target_sizes.append(shape)
             images = resize_imgs
 
@@ -471,7 +471,7 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
 
     def post_process_object_detection(
         self,
-        preds,
+        outputs,
         threshold: float = 0.3,
         target_sizes: Optional[Union[list[tuple[int, int]], torch.Tensor]] = None,
         box_thresh: float = 0.6,
@@ -496,9 +496,9 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         """
 
         results = []
-        for pred, size in zip(preds.logits, target_sizes):
+        for logit, size in zip(outputs.logits, target_sizes):
             box, score = process(
-                pred=pred[0, :, :].cpu().detach().numpy(),
+                logit=logit[0, :, :].cpu().detach().numpy(),
                 size=size.cpu().detach().numpy(),
                 threshold=threshold,
                 box_thresh=box_thresh,
@@ -517,7 +517,7 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
 
     def get_image_size(
         self,
-        img: np.ndarray,
+        image: np.ndarray,
         limit_side_len: int,
         limit_type: str,
         max_side_limit: int = 4000,
@@ -526,7 +526,7 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         Computes the target size for resizing an image while preserving aspect ratio.
 
         Args:
-            img (torch.Tensor): Input image.
+            image (torch.Tensor): Input image.
             limit_side_len (int): Maximum or minimum side length.
             limit_type (str): Resizing strategy: "max", "min", or "resize_long".
             max_side_limit (int): Maximum allowed side length.
@@ -538,7 +538,7 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         """
         limit_side_len = limit_side_len or self.limit_side_len
         limit_type = limit_type or self.limit_type
-        _, h, w = img.shape
+        _, h, w = image.shape
         h, w = int(h), int(w)
 
         if limit_type == "max":
