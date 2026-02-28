@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Convert legacy OmniVinci/VILA checkpoints to a flat HF-loadable layout.
+"""Convert legacy OmniVinci/VILA checkpoints to native HF OmniVinci artifacts.
 
 This conversion script:
 1) rewrites legacy VILA class strings to canonical OmniVinci names,
 2) normalizes a single top-level config for local HF loading,
-3) merges component safetensors into a top-level `model.safetensors`.
+3) loads the native HF model/processor and saves with `save_pretrained`.
 
 The destination is treated as an export directory and contains only root-level
 artifacts (weights/config/tokenizer/processor/chat-template). Python source files
@@ -35,9 +35,13 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from safetensors.torch import safe_open, save_file
+import torch
+from safetensors.torch import safe_open
 
-from transformers import AutoTokenizer, GenerationConfig
+from transformers import AutoImageProcessor, AutoTokenizer, GenerationConfig, WhisperFeatureExtractor
+from transformers.models.omnivinci.configuration_omnivinci import OmniVinciConfig
+from transformers.models.omnivinci.modeling_omnivinci import OmniVinciForConditionalGeneration
+from transformers.models.omnivinci.processing_omnivinci import OmniVinciProcessor
 
 
 logger = logging.getLogger(__name__)
@@ -288,6 +292,24 @@ def _resolve_tokenizer_source_dir(src_root: Path, dst_root: Path) -> Path:
     )
 
 
+def _resolve_image_processor_source_dir(src_root: Path, dst_root: Path) -> Path:
+    candidates = (src_root / "vision_tower", dst_root, src_root)
+    for candidate in candidates:
+        if (candidate / "preprocessor_config.json").exists():
+            return candidate
+    raise FileNotFoundError(
+        "Could not locate image processor files in src_root/vision_tower, dst_root, or src_root."
+    )
+
+
+def _resolve_feature_extractor_source_dir(src_root: Path, dst_root: Path) -> Path:
+    candidates = (dst_root, src_root)
+    for candidate in candidates:
+        if (candidate / "preprocessor_config.json").exists():
+            return candidate
+    raise FileNotFoundError("Could not locate preprocessor_config.json for WhisperFeatureExtractor loading.")
+
+
 def _collect_encoder_boundary_tokens(config: dict[str, Any]) -> list[str]:
     token_keys = {"start_tokens", "end_tokens", "sep_tokens"}
     collected = []
@@ -487,7 +509,7 @@ def _collect_component_state(src_root: Path) -> dict[str, Any]:
     return state
 
 
-def _normalize_top_level_config(dst_root: Path, src_root: Path) -> None:
+def _normalize_top_level_config(dst_root: Path, src_root: Path) -> dict[str, Any]:
     cfg_path = dst_root / "config.json"
     if not cfg_path.exists():
         raise FileNotFoundError(f"Missing required top-level config: {cfg_path}")
@@ -516,6 +538,7 @@ def _normalize_top_level_config(dst_root: Path, src_root: Path) -> None:
 
     _save_json(cfg_path, cfg)
     logger.info("Normalized top-level config: %s", cfg_path)
+    return cfg
 
 
 def _rewrite_metadata_jsons(dst_root: Path) -> tuple[list[Path], list[Path]]:
@@ -531,6 +554,68 @@ def _rewrite_metadata_jsons(dst_root: Path) -> tuple[list[Path], list[Path]]:
             touched.append(path)
 
     return touched, missing
+
+
+def _save_processor(
+    src_root: Path,
+    dst_root: Path,
+    config_payload: dict[str, Any],
+) -> OmniVinciProcessor:
+    tokenizer_src = _resolve_tokenizer_source_dir(src_root, dst_root)
+    image_processor_src = _resolve_image_processor_source_dir(src_root, dst_root)
+    feature_extractor_src = _resolve_feature_extractor_source_dir(src_root, dst_root)
+
+    tokenizer = AutoTokenizer.from_pretrained(str(tokenizer_src), use_fast=True)
+    image_processor = AutoImageProcessor.from_pretrained(str(image_processor_src), use_fast=False)
+    feature_extractor = WhisperFeatureExtractor.from_pretrained(str(feature_extractor_src))
+
+    config = OmniVinciConfig(**config_payload)
+    processor = OmniVinciProcessor(
+        image_processor=image_processor,
+        feature_extractor=feature_extractor,
+        tokenizer=tokenizer,
+        chat_template=tokenizer.chat_template,
+        config=config,
+    )
+    processor.save_pretrained(str(dst_root))
+    logger.info("Saved processor via save_pretrained: %s", dst_root)
+    return processor
+
+
+def _infer_checkpoint_dtype(state_dict: dict[str, Any]) -> torch.dtype | None:
+    for tensor in state_dict.values():
+        if isinstance(tensor, torch.Tensor) and tensor.is_floating_point():
+            return tensor.dtype
+    return None
+
+
+def _save_model_from_state(
+    dst_root: Path,
+    config_payload: dict[str, Any],
+    state_dict: dict[str, Any],
+) -> OmniVinciForConditionalGeneration:
+    config = OmniVinciConfig(**config_payload)
+    model = OmniVinciForConditionalGeneration(config)
+
+    checkpoint_dtype = _infer_checkpoint_dtype(state_dict)
+    if checkpoint_dtype is not None:
+        model = model.to(dtype=checkpoint_dtype)
+
+    load_res = model.load_state_dict(state_dict, strict=True)
+    if load_res.missing_keys:
+        missing = load_res.missing_keys
+        raise ValueError(f"Missing keys when loading converted OmniVinci checkpoint: {missing[:10]}")
+    if load_res.unexpected_keys:
+        unexpected = load_res.unexpected_keys
+        raise ValueError(f"Unexpected keys when loading converted OmniVinci checkpoint: {unexpected[:10]}")
+
+    generation_config_path = dst_root / "generation_config.json"
+    if generation_config_path.exists():
+        model.generation_config = GenerationConfig.from_pretrained(str(dst_root))
+
+    model.save_pretrained(str(dst_root), safe_serialization=True)
+    logger.info("Saved model via save_pretrained: %s", dst_root)
+    return model
 
 
 def parse_args() -> argparse.Namespace:
@@ -565,6 +650,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Allow dst_path == src_path (modifies source). Disabled by default.",
     )
+    parser.add_argument(
+        "--push_to_hub",
+        type=str,
+        default=None,
+        help="Optional Hub repo id to push converted assets, e.g. `username/omnivinci`.",
+    )
     return parser.parse_args()
 
 
@@ -573,6 +664,7 @@ def convert_omnivinci_to_hf(
     output_dir: Path | None = None,
     skip_weights: bool = False,
     clean_dst: bool = True,
+    push_to_hub: str | None = None,
 ) -> Path:
     src_root = model_dir.expanduser().resolve()
     dst_root = output_dir.expanduser().resolve() if output_dir else src_root
@@ -585,16 +677,15 @@ def convert_omnivinci_to_hf(
         _prepare_destination_tree(src_root, dst_root, clean_dst=clean_dst)
 
     touched, missing = _rewrite_metadata_jsons(dst_root)
-    _normalize_top_level_config(dst_root, src_root)
+    config_payload = _normalize_top_level_config(dst_root, src_root)
+    processor = _save_processor(src_root, dst_root, config_payload)
+    model = None
 
     if not skip_weights:
         state = _collect_component_state(src_root)
         if not state:
             raise FileNotFoundError("No component safetensors found under legacy component directories.")
-
-        weights_out = dst_root / "model.safetensors"
-        save_file(state, str(weights_out))
-        logger.info("Wrote merged top-level weights: %s", weights_out)
+        model = _save_model_from_state(dst_root, config_payload, state)
 
     if touched:
         logger.info("Converted %d metadata file(s).", len(touched))
@@ -605,6 +696,13 @@ def convert_omnivinci_to_hf(
         logger.info("Skipped %d missing metadata file(s).", len(missing))
         for path in missing:
             logger.info("  - %s", path)
+
+    if push_to_hub:
+        logger.info("Pushing processor to the Hub: %s", push_to_hub)
+        processor.push_to_hub(push_to_hub)
+        if model is not None:
+            logger.info("Pushing model to the Hub: %s", push_to_hub)
+            model.push_to_hub(push_to_hub)
 
     return dst_root
 
@@ -626,6 +724,7 @@ def main() -> None:
         output_dir=dst_path,
         skip_weights=args.skip_weights,
         clean_dst=not args.keep_dst,
+        push_to_hub=args.push_to_hub,
     )
 
 
