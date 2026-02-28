@@ -18,6 +18,7 @@
 from copy import deepcopy
 
 from transformers import PretrainedConfig
+from transformers.models.auto import CONFIG_MAPPING
 
 
 # Core token/config constants migrated from constants.py.
@@ -94,6 +95,12 @@ class OmniVinciConfig(PretrainedConfig):
         mm_bos_eos_tokens=None,
         **kwargs,
     ):
+        text_config = kwargs.pop("text_config", None)
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config.get("model_type", "qwen2")
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        self.text_config = text_config
+
         self.architectures = architectures
         self.llm_cfg = llm_cfg
         self.vision_tower_cfg = vision_tower_cfg

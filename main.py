@@ -1,13 +1,10 @@
-import torch
-
 from transformers import AutoModel, AutoProcessor
 
 
-model_path = "/fs/nexus-projects/JSALT_workshop/lasha/Dev/comni"
+model_path = "SreyanG-NVIDIA/omnivinci-hf"
 
 model = AutoModel.from_pretrained(
     model_path,
-    dtype=torch.bfloat16,
     device_map="auto",
     load_audio_in_video=True,
     num_video_frames=128,

@@ -20,7 +20,6 @@ from typing import Any, Literal
 
 import numpy as np
 import torch
-from beartype import beartype
 from einops import rearrange, repeat
 from torch import Tensor, broadcast_tensors, einsum, nn
 from torch.nn import Module
@@ -146,7 +145,6 @@ class MaxTimeContinuousTimeRotaryEmbedding(nn.Module):
 
 
 class RotaryEmbedding(Module):
-    @beartype
     def __init__(
         self,
         dim,
@@ -297,7 +295,6 @@ class RotaryEmbedding(Module):
 
         return rotated_q, rotated_k
 
-    @beartype
     def get_scale(self, t: Tensor, seq_len: int | None = None, offset=0):
         assert self.use_xpos
 

@@ -21,7 +21,6 @@ from collections import defaultdict
 import numpy as np
 import PIL.Image
 import torch
-import whisper
 from torch.nn.utils.rnn import pad_sequence
 
 from transformers import WhisperFeatureExtractor
@@ -263,6 +262,15 @@ def _pad_fn(input_ids_list: list[torch.Tensor], padding_value=0, target_len=None
     return padded
 
 
+def _pad_or_trim_audio(audio: np.ndarray, length: int) -> np.ndarray:
+    current_length = int(audio.shape[0])
+    if current_length > length:
+        return audio[:length]
+    if current_length < length:
+        return np.pad(audio, (0, length - current_length), mode="constant")
+    return audio
+
+
 def _resolve_sound_feature_size(config) -> int:
     sound_tower_cfg = getattr(config, "sound_tower_cfg", None)
     if isinstance(sound_tower_cfg, dict):
@@ -335,7 +343,7 @@ def _extract_sound_features(
                     sampling_rate=sampling_rate,
                     hop_length=hop_length,
                 )
-            audio = whisper.pad_or_trim(audio, length=cur_audio_n_samples)
+            audio = _pad_or_trim_audio(audio, length=cur_audio_n_samples)
             stft_features = whisper_feature_extractor(
                 audio,
                 sampling_rate=sampling_rate,
@@ -413,7 +421,7 @@ def _load_audio_hf_with_info(audio_input, config) -> tuple[np.ndarray, dict[str,
         speech_data = speech_data[audio_start_sample_id:audio_end_sample_id]
 
     audio_n_samples = int(np.ceil(speech_data.shape[0] / (sampling_rate * 30)) * (sampling_rate * 30))
-    speech_data = whisper.pad_or_trim(speech_data, length=audio_n_samples)
+    speech_data = _pad_or_trim_audio(speech_data, length=audio_n_samples)
 
     audio_info = {
         "new_audio_chunk_length": int(audio_n_samples // sampling_rate),

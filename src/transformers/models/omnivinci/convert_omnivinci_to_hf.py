@@ -36,12 +36,18 @@ from pathlib import Path
 from typing import Any
 
 import torch
+from huggingface_hub import HfApi, create_repo
 from safetensors.torch import safe_open
 
-from transformers import AutoImageProcessor, AutoTokenizer, GenerationConfig, WhisperFeatureExtractor
-from transformers.models.omnivinci.configuration_omnivinci import OmniVinciConfig
-from transformers.models.omnivinci.modeling_omnivinci import OmniVinciForConditionalGeneration
-from transformers.models.omnivinci.processing_omnivinci import OmniVinciProcessor
+from transformers import (
+    AutoImageProcessor,
+    AutoTokenizer,
+    GenerationConfig,
+    OmniVinciConfig,
+    OmniVinciForConditionalGeneration,
+    OmniVinciProcessor,
+    WhisperFeatureExtractor,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -297,9 +303,7 @@ def _resolve_image_processor_source_dir(src_root: Path, dst_root: Path) -> Path:
     for candidate in candidates:
         if (candidate / "preprocessor_config.json").exists():
             return candidate
-    raise FileNotFoundError(
-        "Could not locate image processor files in src_root/vision_tower, dst_root, or src_root."
-    )
+    raise FileNotFoundError("Could not locate image processor files in src_root/vision_tower, dst_root, or src_root.")
 
 
 def _resolve_feature_extractor_source_dir(src_root: Path, dst_root: Path) -> Path:
@@ -371,12 +375,10 @@ def _populate_token_id_fields(cfg: dict[str, Any], src_root: Path, dst_root: Pat
 
 def _export_effective_generation_config(src_root: Path, dst_root: Path) -> None:
     """
-    Export the *effective* legacy OmniVinci generation config.
+    Export a minimal generation config for OmniVinci.
 
-    Important behavior from legacy `modeling_vila.py`:
-    - It does not consume `llm/generation_config.json` for top-level generation.
-    - It starts from runtime defaults and then patches tokenizer-derived ids/max length
-      in `default_generation_config`.
+    Keep this intentionally small and rely on HF `GenerationConfig` defaults
+    (greedy decoding unless users override sampling/beam settings).
     """
 
     tokenizer_src = _resolve_tokenizer_source_dir(src_root, dst_root)
@@ -389,56 +391,14 @@ def _export_effective_generation_config(src_root: Path, dst_root: Path) -> None:
     pad_token_id = tokenizer.pad_token_id or eos_token_id
     bos_token_id = tokenizer.bos_token_id or eos_token_id
 
-    # Mirror legacy behavior: GenerationConfig defaults + tokenizer/runtime overrides.
-    # We pin commonly-used legacy defaults explicitly so behavior is stable across HF versions.
     generation_config = GenerationConfig(
-        do_sample=False,
-        num_beams=1,
-        num_beam_groups=1,
-        num_return_sequences=1,
-        repetition_penalty=1.0,
-        length_penalty=1.0,
-        no_repeat_ngram_size=0,
-        top_k=50,
-        top_p=1.0,
-        temperature=1.0,
-        early_stopping=False,
-        use_cache=True,
-        return_dict_in_generate=False,
-        max_length=tokenizer.model_max_length,
-        min_length=0,
         bos_token_id=bos_token_id,
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
     )
 
-    src_transformers_version = _load_json(src_root / "config.json").get("transformers_version")
-    generation_payload = {
-        "bos_token_id": generation_config.bos_token_id,
-        "do_sample": generation_config.do_sample,
-        "early_stopping": generation_config.early_stopping,
-        "eos_token_id": generation_config.eos_token_id,
-        "length_penalty": generation_config.length_penalty,
-        "max_length": generation_config.max_length,
-        "min_length": generation_config.min_length,
-        "no_repeat_ngram_size": generation_config.no_repeat_ngram_size,
-        "num_beam_groups": generation_config.num_beam_groups,
-        "num_beams": generation_config.num_beams,
-        "num_return_sequences": generation_config.num_return_sequences,
-        "pad_token_id": generation_config.pad_token_id,
-        "repetition_penalty": generation_config.repetition_penalty,
-        "return_dict_in_generate": generation_config.return_dict_in_generate,
-        "temperature": generation_config.temperature,
-        "top_k": generation_config.top_k,
-        "top_p": generation_config.top_p,
-        "use_cache": generation_config.use_cache,
-    }
-    if src_transformers_version:
-        generation_payload["transformers_version"] = src_transformers_version
-
-    generation_path = dst_root / "generation_config.json"
-    _save_json(generation_path, generation_payload)
-    logger.info("Exported effective generation config (runtime-derived) to %s", generation_path)
+    generation_config.save_pretrained(str(dst_root))
+    logger.info("Exported generation config via GenerationConfig.save_pretrained to %s", dst_root)
 
 
 def _prepare_destination_tree(src_root: Path, dst_root: Path, clean_dst: bool = True) -> None:
@@ -574,19 +534,11 @@ def _save_processor(
         image_processor=image_processor,
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,
-        chat_template=tokenizer.chat_template,
         config=config,
     )
     processor.save_pretrained(str(dst_root))
     logger.info("Saved processor via save_pretrained: %s", dst_root)
     return processor
-
-
-def _infer_checkpoint_dtype(state_dict: dict[str, Any]) -> torch.dtype | None:
-    for tensor in state_dict.values():
-        if isinstance(tensor, torch.Tensor) and tensor.is_floating_point():
-            return tensor.dtype
-    return None
 
 
 def _save_model_from_state(
@@ -595,11 +547,7 @@ def _save_model_from_state(
     state_dict: dict[str, Any],
 ) -> OmniVinciForConditionalGeneration:
     config = OmniVinciConfig(**config_payload)
-    model = OmniVinciForConditionalGeneration(config)
-
-    checkpoint_dtype = _infer_checkpoint_dtype(state_dict)
-    if checkpoint_dtype is not None:
-        model = model.to(dtype=checkpoint_dtype)
+    model = OmniVinciForConditionalGeneration(config).to(dtype=torch.bfloat16)
 
     load_res = model.load_state_dict(state_dict, strict=True)
     if load_res.missing_keys:
@@ -678,14 +626,13 @@ def convert_omnivinci_to_hf(
 
     touched, missing = _rewrite_metadata_jsons(dst_root)
     config_payload = _normalize_top_level_config(dst_root, src_root)
-    processor = _save_processor(src_root, dst_root, config_payload)
-    model = None
+    _save_processor(src_root, dst_root, config_payload)
 
     if not skip_weights:
         state = _collect_component_state(src_root)
         if not state:
             raise FileNotFoundError("No component safetensors found under legacy component directories.")
-        model = _save_model_from_state(dst_root, config_payload, state)
+        _save_model_from_state(dst_root, config_payload, state)
 
     if touched:
         logger.info("Converted %d metadata file(s).", len(touched))
@@ -698,11 +645,13 @@ def convert_omnivinci_to_hf(
             logger.info("  - %s", path)
 
     if push_to_hub:
-        logger.info("Pushing processor to the Hub: %s", push_to_hub)
-        processor.push_to_hub(push_to_hub)
-        if model is not None:
-            logger.info("Pushing model to the Hub: %s", push_to_hub)
-            model.push_to_hub(push_to_hub)
+        logger.info("Pushing converted artifacts to the Hub: %s", push_to_hub)
+        repo_id = create_repo(push_to_hub, repo_type="model", exist_ok=True).repo_id
+        HfApi().upload_folder(
+            repo_id=repo_id,
+            repo_type="model",
+            folder_path=str(dst_root),
+        )
 
     return dst_root
 
