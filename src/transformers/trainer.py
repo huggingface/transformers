@@ -1572,7 +1572,9 @@ class Trainer:
         if not delay_optimizer_creation:
             self.create_optimizer()
 
-        model = self._wrap_model(self.model)
+        # Pass `self.model_wrapped` so that `_wrap_model` can detect if the model is already
+        # wrapped (e.g. in DataParallel) on subsequent `train()` calls and avoid double wrapping.
+        model = self._wrap_model(self.model_wrapped)
 
         # If the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases in accelerate such as FSDP-XLA, SageMaker MP/DP, DataParallel
