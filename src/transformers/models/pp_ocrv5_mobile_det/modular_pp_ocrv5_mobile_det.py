@@ -1039,9 +1039,7 @@ class PPOCRV5MobileDetLearnableRepLayer(nn.Module):
         self.padding = (kernel_size - 1) // 2
 
         self.identity = (
-            nn.BatchNorm2d(num_features=in_channels)
-            if out_channels == in_channels and stride == 1
-            else None
+            nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
         )
 
         self.conv_kxk = nn.ModuleList(
