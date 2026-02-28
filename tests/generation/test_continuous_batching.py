@@ -100,7 +100,10 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
         config = AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
 
         if layer_types_str is not None:
-            layer_types = [{"f": "full_attention", "s": "sliding_window", "l": "linear_attention"}[char] for char in layer_types_str]
+            layer_types = [
+                {"f": "full_attention", "s": "sliding_window", "l": "linear_attention"}[char]
+                for char in layer_types_str
+            ]
         else:
             layer_types = None
             config.num_hidden_layers = len(expected_groups)
