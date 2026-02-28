@@ -138,6 +138,40 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
                     f"Test failed for: {layer_types_str = }, {sliding_window = }, {group_types = }",
                 )
 
+    def test_group_layers_composite_config(self):
+        """Test that group_layers_by_attn_type works with composite (e.g. vision-language) configs
+        where model attributes like num_hidden_layers are nested under text_config."""
+        from transformers import AutoConfig
+
+        config = AutoConfig.from_pretrained("Qwen/Qwen3.5-VL-3B")
+        # Qwen3_5Config is a composite config: num_hidden_layers lives under text_config
+        self.assertFalse(
+            hasattr(config, "num_hidden_layers") and not hasattr(config, "text_config"),
+            "This test expects a composite config with text_config",
+        )
+        # Should not raise AttributeError
+        layer_groups, group_types = group_layers_by_attn_type(config)
+        self.assertGreater(len(layer_groups), 0)
+
+    def test_paged_attention_cache_composite_config(self):
+        """Test that PagedAttentionCache can be initialized with a composite config
+        like Qwen3_5Config where num_attention_heads is in text_config, not top-level.
+        Regression test for https://github.com/huggingface/transformers/issues/44322"""
+        from transformers import AutoConfig, GenerationConfig
+
+        config = AutoConfig.from_pretrained("Qwen/Qwen3.5-VL-3B")
+        gen_config = GenerationConfig()
+
+        # Should not raise AttributeError about num_attention_heads
+        cache = PagedAttentionCache(
+            config=config,
+            generation_config=gen_config,
+            device="cpu",
+            dtype=torch.float16,
+        )
+        text_config = config.get_text_config()
+        self.assertEqual(cache.head_dim, text_config.head_dim)
+
     @parameterized.expand(
         [
             ([0, 4], [0, 4], 1, ["1000", "1100", "1110", "1111"]),

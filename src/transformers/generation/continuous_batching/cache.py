@@ -32,6 +32,9 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
     For a model with the following layer types: ["sliding", "full", "full", "sliding", "full", "full", "full", "full"]
     We would get four groups: [0, 3], [1, 2], [4,5] and [6,7].
     """
+    # For composite models (e.g. vision-language), resolve to the text sub-config
+    config = config.get_text_config()
+
     # If the config has no layer_type attribute, it means all layers are the same attention type
     layer_types = getattr(config, "layer_types", None)
     if layer_types is None:
@@ -139,11 +142,15 @@ class PagedAttentionCache:
         self.dtype = dtype
         self.device = device
 
+        # For composite models (e.g. vision-language), resolve to the text sub-config
+        # so that attributes like num_attention_heads and num_key_value_heads are found
+        text_config = config.get_text_config()
+
         # Extract model dimensions
-        kv_heads = getattr(config, "num_key_value_heads", None)
-        self.num_key_value_heads: int = kv_heads if kv_heads is not None else config.num_attention_heads
-        head_dim = getattr(config, "head_dim", None)
-        self.head_dim: int = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
+        kv_heads = getattr(text_config, "num_key_value_heads", None)
+        self.num_key_value_heads: int = kv_heads if kv_heads is not None else text_config.num_attention_heads
+        head_dim = getattr(text_config, "head_dim", None)
+        self.head_dim: int = head_dim if head_dim is not None else text_config.hidden_size // text_config.num_attention_heads
 
         # Extract cache dimensions
         self.block_size = getattr(generation_config, "block_size", 32)
@@ -156,7 +163,7 @@ class PagedAttentionCache:
         self.sliding_windows = {}
         self.layer_index_to_group_indices = {}
         for i, group in enumerate(layer_groups):
-            sliding_window = config.sliding_window if group_types[i] == "sliding_attention" else 1
+            sliding_window = text_config.sliding_window if group_types[i] == "sliding_attention" else 1
             for j, layer in enumerate(group):
                 self.layer_index_to_group_indices[layer] = (i, j)
                 self.sliding_windows[layer] = sliding_window
@@ -186,7 +193,7 @@ class PagedAttentionCache:
             page_size=page_size,
             num_groups=self.num_groups,
             group_size=group_size,
-            peak_activation_per_token=(config.hidden_size + config.vocab_size),
+            peak_activation_per_token=(text_config.hidden_size + text_config.vocab_size),
             num_attention_masks=num_attention_masks,
         )
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
@@ -233,7 +240,7 @@ class PagedAttentionCache:
                 cm = FullAttentionCacheAllocator(i, self.block_size, allow_block_sharing=allow_block_sharing)
                 self.num_full_attention_groups += 1
             elif group_type == "sliding_attention":
-                cm = SlidingAttentionCacheAllocator(i, self.block_size, config.sliding_window)
+                cm = SlidingAttentionCacheAllocator(i, self.block_size, text_config.sliding_window)
                 self.num_sliding_attention_groups += 1
                 self.max_sliding_window_blocks_per_request = cm._max_blocks_per_request
             else:
@@ -316,7 +323,7 @@ class PagedAttentionCache:
         if self.num_full_attention_groups > 0:
             seqlens_k["full_attention"] = past_length + query_length
         if self.num_sliding_attention_groups > 0:
-            seqlens_k["sliding_attention"] = query_length + min(past_length, self.config.sliding_window - 1)
+            seqlens_k["sliding_attention"] = query_length + min(past_length, self.config.get_text_config().sliding_window - 1)
         # NOTE: when we add more attention types / different sliding windows, we can go back to looping over CMs
         return seqlens_k
 
