@@ -125,7 +125,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
     # @slow
     def test_fixture_single_matches(self):
         """
-        reproducer (creates JSON directly in repo): https://gist.github.com/TODO
+        reproducer (creates JSON directly in repo): https://gist.github.com/mbtariq82/5722952e97d4f84bb415c77bfde18240#file-reproducer-py
         """
         path = Path(__file__).parent.parent.parent / "fixtures/qwen3_asr/expected_results_single.json"
         with open(path, "r", encoding="utf-8") as f:
@@ -147,7 +147,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = Qwen3ASRForConditionalGeneration.from_pretrained(
-            self.checkpoint, device_map=torch_device, dtype=torch.bfloat16
+            self.checkpoint, device_map=None, dtype=torch.bfloat16
         ).eval()
 
         batch = self.processor.apply_chat_template(
