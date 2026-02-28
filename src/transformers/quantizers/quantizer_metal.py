@@ -152,7 +152,9 @@ class MetalHfQuantizer(HfQuantizer):
             if model_type == "qwen3_vl":
                 conversions.extend(
                     [
-                        WeightRenaming(source_patterns="language_model.model.", target_patterns="model.language_model."),
+                        WeightRenaming(
+                            source_patterns="language_model.model.", target_patterns="model.language_model."
+                        ),
                         WeightRenaming(source_patterns="language_model.lm_head.", target_patterns="lm_head."),
                         WeightRenaming(source_patterns="vision_tower.", target_patterns="model.visual."),
                     ]
