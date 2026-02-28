@@ -90,6 +90,8 @@ class MetalHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations.metal_quantization import replace_with_metal_linear
 
+        self._model_type = getattr(model.config, "model_type", None)
+
         skip_modules = self.quantization_config.modules_to_not_convert
         if self.pre_quantized and skip_modules is None:
             # Pre-quantized checkpoints (e.g. MLX) may have quantized the lm_head /
@@ -97,9 +99,7 @@ class MetalHfQuantizer(HfQuantizer):
             # overrides via modules_to_not_convert.
             skip_modules = []
 
-        self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, skip_modules, model._keep_in_fp32_modules
-        )
+        self.modules_to_not_convert = self.get_modules_to_not_convert(model, skip_modules, model._keep_in_fp32_modules)
 
         model = replace_with_metal_linear(
             model,
@@ -134,7 +134,7 @@ class MetalHfQuantizer(HfQuantizer):
             ]
 
         if self.pre_quantized:
-            return [
+            conversions = [
                 # MLX uses "biases", MetalLinear expects "qbiases"
                 WeightRenaming(source_patterns="biases", target_patterns="qbiases"),
                 # MLX quantizes embed_tokens but transformers keeps it as nn.Embedding (float);
@@ -145,5 +145,19 @@ class MetalHfQuantizer(HfQuantizer):
                     operations=[MetalDequantize(self)],
                 ),
             ]
+
+            # MLX checkpoints may use different key prefixes than the model expects.
+            # These renamings are model-specific and only needed for pre-quantized MLX loads.
+            model_type = getattr(self, "_model_type", None)
+            if model_type == "qwen3_vl":
+                conversions.extend(
+                    [
+                        WeightRenaming(source_patterns="language_model.model.", target_patterns="model.language_model."),
+                        WeightRenaming(source_patterns="language_model.lm_head.", target_patterns="lm_head."),
+                        WeightRenaming(source_patterns="vision_tower.", target_patterns="model.visual."),
+                    ]
+                )
+
+            return conversions
 
         return []

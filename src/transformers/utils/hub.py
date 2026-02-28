@@ -856,8 +856,7 @@ def _rebuild_shard_index_from_repo(
 
     if not shard_names:
         raise OSError(
-            f"No .safetensors files found in repo '{pretrained_model_name_or_path}'. "
-            "Cannot rebuild shard index."
+            f"No .safetensors files found in repo '{pretrained_model_name_or_path}'. Cannot rebuild shard index."
         )
 
     # Download the actual shard files
