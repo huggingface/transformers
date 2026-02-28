@@ -27,7 +27,8 @@ from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_dinov2 import Dinov2Config
 
 
@@ -166,7 +167,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -449,7 +449,8 @@ class Dinov2Model(Dinov2PreTrainedModel):
     def get_input_embeddings(self) -> Dinov2PatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -560,7 +561,8 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
     def get_input_embeddings(self) -> Dinov2PatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, output_hidden_states: bool | None = None, **kwargs

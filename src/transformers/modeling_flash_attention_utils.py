@@ -119,7 +119,7 @@ def _lazy_imports(implementation: str | None, attention_wrapper: Callable | None
             if flash_attn_func is None:
                 logger.warning(
                     f"The loaded flash attention implementation at `{implementation}` only supports varlen, i.e. "
-                    "it can only be used with continous batching and does not support the full functionality for "
+                    "it can only be used with continuous batching and does not support the full functionality for "
                     "the base transformers generation methods."
                 )
 
@@ -369,7 +369,7 @@ def prepare_fa_kwargs_from_position_ids(position_ids):
     """
     tensor_kwargs = {"dtype": torch.int32, "device": position_ids.device}
 
-    position_ids = position_ids.view(-1)
+    position_ids = position_ids.reshape(-1)
     indices_q = (position_ids == 0).nonzero().view(-1)
 
     cu_seq_lens_q = torch.cat(

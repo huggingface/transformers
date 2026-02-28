@@ -453,7 +453,7 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
-    @unittest.skip(reason="FLAVA does not use input_embeds")
+    @unittest.skip(reason="FLAVA does not use inputs_embeds")
     def test_inputs_embeds(self):
         # FLAVA does not use inputs_embeds
         pass
@@ -604,7 +604,7 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
-    @unittest.skip(reason="FLAVA does not use input_embeds")
+    @unittest.skip(reason="FLAVA does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -721,7 +721,7 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="FLAVA does not use input_embeds")
+    @unittest.skip(reason="FLAVA does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 

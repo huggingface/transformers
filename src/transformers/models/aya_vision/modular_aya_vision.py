@@ -29,7 +29,7 @@ from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from .configuration_aya_vision import AyaVisionConfig
 
 
@@ -104,7 +104,8 @@ class AyaVisionModelOutputWithPast(LlavaModelOutputWithPast):
 
 class AyaVisionModel(LlavaModel):
     # Unlike LLaVA, the model doesn't have to deal with Pixtral-style image states
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
+    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -142,7 +143,7 @@ class AyaVisionModel(LlavaModel):
 
         return image_outputs
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

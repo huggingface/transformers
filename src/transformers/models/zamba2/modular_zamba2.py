@@ -21,15 +21,14 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...integrations.hub_kernels import lazy_load_kernel
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import is_torchdynamo_compiling, logging
-from ...utils.import_utils import (
-    is_causal_conv1d_available,
-    is_mamba_ssm_available,
-)
+from ...utils.import_utils import resolve_internal_import
 from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
 from ..mamba2.modeling_mamba2 import pad_tensor_by_size, reshape_into_chunks, segment_sum
 from ..zamba.modeling_zamba import (
@@ -45,20 +44,6 @@ from ..zamba.modeling_zamba import (
     eager_attention_forward,
 )
 from .configuration_zamba2 import Zamba2Config
-
-
-if is_mamba_ssm_available():
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
-else:
-    selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined = None, None, None
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
-
-is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
 
 
 _CONFIG_FOR_DOC = "Zyphra/Zamba2-2.7B"
@@ -160,6 +145,13 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
         if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx].numel() == 0:
             return 0
         return self.key_cache[layer_idx].shape[-2]
+
+    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+        """Return the length and offset of the cache, used to generate the mask"""
+        kv_offset = 0
+        query_length = cache_position.shape[0]
+        kv_length = self.get_seq_length(layer_idx) + query_length
+        return kv_length, kv_offset
 
 
 class Zamba2RotaryEmbedding(LlamaRotaryEmbedding):
@@ -338,6 +330,34 @@ class Zamba2MambaMixer(nn.Module):
         self.D = nn.Parameter(torch.ones(self.num_heads))
 
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
+
+        global causal_conv1d_update, causal_conv1d_fn
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+
+        global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
+        mamba_ssm = lazy_load_kernel("mamba-ssm")
+        selective_state_update = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
+        )
+        mamba_chunk_scan_combined = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.ssd_combined.mamba_chunk_scan_combined"
+        )
+        mamba_split_conv1d_scan_combined = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.ssd_combined.mamba_split_conv1d_scan_combined"
+        )
+
+        global is_fast_path_available
+        is_fast_path_available = all(
+            (
+                selective_state_update,
+                mamba_chunk_scan_combined,
+                mamba_split_conv1d_scan_combined,
+                causal_conv1d_fn,
+                causal_conv1d_update,
+            )
+        )
 
         if not is_fast_path_available:
             logger.warning_once(
@@ -1042,7 +1062,14 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         all_hidden_states = () if output_hidden_states else None

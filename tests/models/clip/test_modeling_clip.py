@@ -636,7 +636,6 @@ class CLIPForImageClassificationModelTest(CLIPModelTesterMixin, PipelineTesterMi
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = CLIPForImageClassificationModelTester(self)
