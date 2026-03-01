@@ -14,6 +14,7 @@
 
 import math
 from dataclasses import dataclass
+from typing import Container
 
 import torch
 import torch.nn.functional as F
@@ -309,30 +310,27 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_hidden_states: bool | None = None,
+        returned_hidden_states: Container[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         hidden_states = self.input_linear(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = [hidden_states]
-        else:
-            all_hidden_states = None
+        exported_hidden_states = []
+        if returned_hidden_states is None:
+            returned_hidden_states = []
+        if 0 in returned_hidden_states:
+            exported_hidden_states.append(hidden_states)
         for idx, layer in enumerate(self.layers, start=1):
             hidden_states = layer(hidden_states, attention_dists=self.attention_dists)
-            if all_hidden_states is not None:
-                all_hidden_states.append(hidden_states)
+            if idx in returned_hidden_states:
+                exported_hidden_states.append(hidden_states)
 
             if idx == self.num_layers // 2:
                 hidden_states_mid = hidden_states.clone()
                 hidden_states_mid = self.out(hidden_states_mid)
                 hidden_states += self.out_mid(nn.Softmax(dim=-1)(hidden_states_mid))
-        if all_hidden_states is not None:
-            all_hidden_states = tuple(all_hidden_states)
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        if len(exported_hidden_states) > 0:
+            hidden_states = torch.cat(exported_hidden_states + [hidden_states], dim=-1)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 @auto_docstring(
@@ -390,11 +388,9 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         )
         if use_hidden_states:
             kwargs["output_hidden_states"] = True
-        audio_outputs = self.encoder(input_features, return_dict=True, **kwargs)
+        audio_outputs = self.encoder(input_features, returned_hidden_states=self.config.encoder_hidden_layers,
+                                     return_dict=True, **kwargs)
         encoder_embeds = audio_outputs.last_hidden_state
-        if use_hidden_states and (audio_outputs.hidden_states is not None):
-            other_embeds = [audio_outputs.hidden_states[l] for l in self.config.encoder_hidden_layers]
-            encoder_embeds = torch.cat(other_embeds + [encoder_embeds], dim=-1)
         projected_embeds = self.projector(encoder_embeds)
         audio_outputs.pooler_output = projected_embeds
 
