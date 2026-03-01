@@ -1061,6 +1061,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("glm_ocr_vqmodel", "glm_ocr"),
         ("glm_ocr_text", "glm_ocr"),
         ("glmasr_encoder", "glmasr"),
+        ("hyperclovax", "hyperclovax_vision"),
         ("grounding-dino", "grounding_dino"),
         ("moonshine_streaming_encoder", "moonshine_streaming"),
         ("mm-grounding-dino", "mm_grounding_dino"),
