@@ -84,18 +84,183 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         ) or self.quantization_config.is_sparsification_compressed:
             self.compressor.decompress_model(model=model)
 
-    # NOTE: TP plan override for compressed tensors removed - unsupported styles were used.
-    # TODO: Implement proper TP support for compressed tensors quantization
     def update_tp_plan(self, config):
-        additional_plan = {
-            "layers.*.feed_forward.experts.*.gate_proj.weight": "colwise",
-            "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "colwise",
-            "layers.*.feed_forward.experts.*.up_proj.weight": "colwise",
-            "layers.*.feed_forward.experts.*.up_proj.weight_scale": "colwise",
-            "layers.*.feed_forward.experts.*.down_proj.weight": "rowwise",
+        """
+        Update the tensor parallelism plan for compressed tensors quantized models.
+
+        This method adds the appropriate TP sharding patterns for both dense and MoE layers,
+        including quantization parameters (scales, zero points) that need to follow the same
+        sharding pattern as their corresponding weights.
+
+        Tensor Parallelism sharding conventions:
+        - Column-wise (colwise): Split the output dimension (first linear layer in MLP, QKV projections)
+        - Row-wise (rowwise): Split the input dimension (second linear layer in MLP, output projection)
+        - Quantization parameters (scales, zero points) follow the same sharding as their weights
+
+        Args:
+            config: The model configuration object
+
+        Returns:
+            config: The updated configuration with TP plan
+        """
+        # Get the actual model config - for encoder-decoder models, use text_config
+        text_config = config.get_text_config()
+        effective_config = text_config if text_config is not None else config
+        model_type = effective_config.__class__.__name__
+
+        # Common TP plan patterns for compressed tensors
+        # Attention layers: q_proj, k_proj, v_proj are colwise; o_proj is rowwise
+        # MLP layers: gate_proj, up_proj are colwise; down_proj is rowwise
+        # For each weight, we also need to shard the corresponding quantization params
+
+        tp_plan = {}
+
+        # Handle MoE models (e.g., Mixtral, Qwen MoE, Grok)
+        if any(moe_keyword in model_type for moe_keyword in ["Mixtral", "Qwen2Moe", "Grok"]):
+            tp_plan.update({
+                # MoE experts - gate and up projections are column-parallel
+                "layers.*.feed_forward.experts.*.gate_proj.weight": "colwise",
+                "layers.*.feed_forward.experts.*.gate_proj.input_scale": "colwise",
+                "layers.*.feed_forward.experts.*.gate_proj.output_scale": "colwise",
+                "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "colwise",
+                "layers.*.feed_forward.experts.*.gate_proj.act_scale": "colwise",
+                "layers.*.feed_forward.experts.*.up_proj.weight": "colwise",
+                "layers.*.feed_forward.experts.*.up_proj.input_scale": "colwise",
+                "layers.*.feed_forward.experts.*.up_proj.output_scale": "colwise",
+                "layers.*.feed_forward.experts.*.up_proj.weight_scale": "colwise",
+                "layers.*.feed_forward.experts.*.up_proj.act_scale": "colwise",
+                # MoE experts - down projection is row-parallel
+                "layers.*.feed_forward.experts.*.down_proj.weight": "rowwise",
+                "layers.*.feed_forward.experts.*.down_proj.input_scale": "rowwise",
+                "layers.*.feed_forward.experts.*.down_proj.output_scale": "rowwise",
+                "layers.*.feed_forward.experts.*.down_proj.weight_scale": "rowwise",
+                "layers.*.feed_forward.experts.*.down_proj.act_scale": "rowwise",
+            })
+
+        # Handle standard dense models (Llama, Mistral, Qwen2, Gemma, Phi3, Grok, etc.)
+        if any(dense_keyword in model_type for dense_keyword in ["Llama", "Mistral", "Qwen2", "Gemma", "Phi3", "Grok"]):
+            tp_plan.update({
+                # Attention projections - QKV are column-parallel
+                "layers.*.self_attn.q_proj.weight": "colwise",
+                "layers.*.self_attn.q_proj.input_scale": "colwise",
+                "layers.*.self_attn.q_proj.output_scale": "colwise",
+                "layers.*.self_attn.q_proj.weight_scale": "colwise",
+                "layers.*.self_attn.q_proj.act_scale": "colwise",
+                "layers.*.self_attn.k_proj.weight": "colwise",
+                "layers.*.self_attn.k_proj.input_scale": "colwise",
+                "layers.*.self_attn.k_proj.output_scale": "colwise",
+                "layers.*.self_attn.k_proj.weight_scale": "colwise",
+                "layers.*.self_attn.k_proj.act_scale": "colwise",
+                "layers.*.self_attn.v_proj.weight": "colwise",
+                "layers.*.self_attn.v_proj.input_scale": "colwise",
+                "layers.*.self_attn.v_proj.output_scale": "colwise",
+                "layers.*.self_attn.v_proj.weight_scale": "colwise",
+                "layers.*.self_attn.v_proj.act_scale": "colwise",
+                # Output projection - row-parallel
+                "layers.*.self_attn.o_proj.weight": "rowwise",
+                "layers.*.self_attn.o_proj.input_scale": "rowwise",
+                "layers.*.self_attn.o_proj.output_scale": "rowwise",
+                "layers.*.self_attn.o_proj.weight_scale": "rowwise",
+                "layers.*.self_attn.o_proj.act_scale": "rowwise",
+                # MLP projections - gate and up are column-parallel
+                "layers.*.mlp.gate_proj.weight": "colwise",
+                "layers.*.mlp.gate_proj.input_scale": "colwise",
+                "layers.*.mlp.gate_proj.output_scale": "colwise",
+                "layers.*.mlp.gate_proj.weight_scale": "colwise",
+                "layers.*.mlp.gate_proj.act_scale": "colwise",
+                "layers.*.mlp.up_proj.weight": "colwise",
+                "layers.*.mlp.up_proj.input_scale": "colwise",
+                "layers.*.mlp.up_proj.output_scale": "colwise",
+                "layers.*.mlp.up_proj.weight_scale": "colwise",
+                "layers.*.mlp.up_proj.act_scale": "colwise",
+                # Down projection - row-parallel
+                "layers.*.mlp.down_proj.weight": "rowwise",
+                "layers.*.mlp.down_proj.input_scale": "rowwise",
+                "layers.*.mlp.down_proj.output_scale": "rowwise",
+                "layers.*.mlp.down_proj.weight_scale": "rowwise",
+                "layers.*.mlp.down_proj.act_scale": "rowwise",
+            })
+
+        # Handle Qwen3 models (uses different naming convention)
+        if "Qwen3" in model_type:
+            tp_plan.update({
+                # Attention projections
+                "layers.*.self_attn.q_proj.weight": "colwise",
+                "layers.*.self_attn.q_proj.weight_scale": "colwise",
+                "layers.*.self_attn.q_proj.input_scale": "colwise",
+                "layers.*.self_attn.k_proj.weight": "colwise",
+                "layers.*.self_attn.k_proj.weight_scale": "colwise",
+                "layers.*.self_attn.k_proj.input_scale": "colwise",
+                "layers.*.self_attn.v_proj.weight": "colwise",
+                "layers.*.self_attn.v_proj.weight_scale": "colwise",
+                "layers.*.self_attn.v_proj.input_scale": "colwise",
+                # Output projection
+                "layers.*.self_attn.o_proj.weight": "rowwise",
+                "layers.*.self_attn.o_proj.weight_scale": "rowwise",
+                "layers.*.self_attn.o_proj.input_scale": "rowwise",
+                # MLP projections
+                "layers.*.mlp.gate_proj.weight": "colwise",
+                "layers.*.mlp.gate_proj.weight_scale": "colwise",
+                "layers.*.mlp.gate_proj.input_scale": "colwise",
+                "layers.*.mlp.up_proj.weight": "colwise",
+                "layers.*.mlp.up_proj.weight_scale": "colwise",
+                "layers.*.mlp.up_proj.input_scale": "colwise",
+                "layers.*.mlp.down_proj.weight": "rowwise",
+                "layers.*.mlp.down_proj.weight_scale": "rowwise",
+                "layers.*.mlp.down_proj.input_scale": "rowwise",
+            })
+
+        # Apply the TP plan to the appropriate config object
+        if tp_plan:
+            if text_config is not None:
+                # Initialize base_model_tp_plan if it doesn't exist
+                if text_config.base_model_tp_plan is None:
+                    text_config.base_model_tp_plan = {}
+                text_config.base_model_tp_plan.update(tp_plan)
+            else:
+                # For models without a separate text config
+                if getattr(config, "base_model_tp_plan", None) is None:
+                    config.base_model_tp_plan = {}
+                config.base_model_tp_plan.update(tp_plan)
+
+        return config
+
+    def update_ep_plan(self, config):
+        """
+        Update the expert parallelism plan for compressed tensors quantized MoE models.
+
+        Expert Parallelism (EP) shards experts across devices. This method sets up the
+        appropriate EP plan for MoE models quantized with compressed tensors.
+
+        Args:
+            config: The model configuration object
+
+        Returns:
+            config: The updated configuration with EP plan
+        """
+        # Get the actual model config - for encoder-decoder models, use text_config
+        text_config = config.get_text_config()
+        effective_config = text_config if text_config is not None else config
+        model_type = effective_config.__class__.__name__
+
+        # Only MoE models need EP plan
+        if not any(moe_keyword in model_type for moe_keyword in ["Mixtral", "Qwen2Moe", "Grok"]):
+            return config
+
+        ep_plan = {
+            # Expert parallelism - shard experts across devices
+            "layers.*.feed_forward.experts": "expert_parallel",
         }
-        if config.get_text_config() is not None and config.get_text_config().base_model_tp_plan is not None:
-            config.get_text_config().base_model_tp_plan.update(additional_plan)
+
+        # Apply the EP plan to the appropriate config object
+        if text_config is not None:
+            if getattr(text_config, "base_model_ep_plan", None) is None:
+                text_config.base_model_ep_plan = {}
+            text_config.base_model_ep_plan.update(ep_plan)
+        else:
+            if getattr(config, "base_model_ep_plan", None) is None:
+                config.base_model_ep_plan = {}
+            config.base_model_ep_plan.update(ep_plan)
 
         return config
 
