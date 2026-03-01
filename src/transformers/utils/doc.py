@@ -29,7 +29,11 @@ def get_docstring_indentation_level(func):
     # We assume classes are always defined in the global scope
     if inspect.isclass(func):
         return 4
-    source = inspect.getsource(func)
+    try:
+        source = inspect.getsource(func)
+    except (OSError, TypeError):
+        # Cython-compiled functions and built-ins don't have source code
+        return 4
     first_line = source.splitlines()[0]
     function_def_level = len(first_line) - len(first_line.lstrip())
     return 4 + function_def_level
