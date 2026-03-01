@@ -45,10 +45,10 @@ The model is pretty heavy (~40GB in half precision) so if you just want to run t
 >>> model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-ul2", quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("google/flan-ul2")
 
->>> inputs = tokenizer("A step by step recipe to make bolognese pasta:", return_tensors="pt")
+>>> inputs = tokenizer("A step by step recipe to make vegetable curry:", return_tensors="pt")
 >>> outputs = model.generate(**inputs)
 >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
-['In a large skillet, brown the ground beef and onion over medium heat. Add the garlic']
+['To make vegetable curry, you can use any type of vegetable except for the steamed type.']
 ```
 
 <Tip>
