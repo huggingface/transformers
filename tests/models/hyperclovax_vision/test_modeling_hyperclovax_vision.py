@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 NAVER Corp. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -254,7 +253,6 @@ class HCXVisionForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         pass
 
 
-@slow
 @require_torch
 class HCXVisionIntegrationTest(unittest.TestCase):
     """
