@@ -761,13 +761,13 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
 
         self.multi_modal_projector = HCXVisionMultiModalProjector(config)
 
-        if "qwen2_5_vl" == config.vision_config.model_type:
+        if config.vision_config.model_type == "qwen2_5_vl":
             vision_model = Qwen2_5_VisionTransformerPretrainedModel(config.vision_config)
         else:
             vision_model = AutoModel.from_config(config.vision_config)
         self.vision_model = vision_model
 
-        if "hyperclovax" == config.text_config.model_type:
+        if config.text_config.model_type == "hyperclovax":
             language_model = HyperClovaXTextModel(config.text_config)
         else:
             language_model = AutoModel.from_config(config.text_config)
