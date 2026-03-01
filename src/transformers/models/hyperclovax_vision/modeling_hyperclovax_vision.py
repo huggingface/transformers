@@ -1115,9 +1115,11 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
+
         if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_videos"] = pixel_values_videos
+            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
+
         return model_inputs
 
 
