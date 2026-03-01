@@ -202,7 +202,6 @@ class Olmo3RMSNorm(Olmo2RMSNorm):
 class Olmo3Attention(Olmo2Attention):
     def __init__(self, config: Olmo3Config, layer_idx: int):
         super().__init__(config, layer_idx=layer_idx)
-        assert config.layer_types is not None
         self.attention_type = config.layer_types[layer_idx]
         self.sliding_window = config.sliding_window if self.attention_type == "sliding_attention" else None
 
@@ -313,7 +312,7 @@ class Olmo3Model(Olmo2Model):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,

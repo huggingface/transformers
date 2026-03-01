@@ -94,6 +94,7 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flute_available,
+    is_fouroversix_available,
     is_fp_quant_available,
     is_fsdp_available,
     is_g2p_en_available,
@@ -1297,6 +1298,13 @@ def require_flute_hadamard(test_case):
     )(test_case)
 
 
+def require_fouroversix(test_case):
+    """
+    Decorator marking a test that requires fouroversix
+    """
+    return unittest.skipUnless(is_fouroversix_available(), "test requires fouroversix")(test_case)
+
+
 def require_fp_quant(test_case):
     """
     Decorator marking a test that requires fp_quant and qutlass
@@ -1468,12 +1476,8 @@ def get_steps_per_epoch(trainer: Trainer) -> int:
     training_args = trainer.args
     train_dataloader = trainer.get_train_dataloader()
 
-    initial_training_values = trainer.set_initial_training_values(
-        args=training_args,
-        dataloader=train_dataloader,
-        total_train_batch_size=training_args.per_device_train_batch_size,
-    )
-    steps_per_epoch = initial_training_values[1]
+    initial_training_values = trainer.set_initial_training_values(args=training_args, dataloader=train_dataloader)
+    steps_per_epoch = initial_training_values[5]
 
     return steps_per_epoch
 
@@ -2795,7 +2799,7 @@ class HfDocTestParser(doctest.DocTestParser):
     # fmt: on
 
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
-    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", "0"))
+    skip_cuda_tests: bool = os.environ.get("SKIP_CUDA_DOCTEST", "0") == "1"
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
 
     def parse(self, string, name="<string>"):
@@ -3114,7 +3118,7 @@ def cleanup(device: str, gc_collect=False):
     if gc_collect:
         gc.collect()
     backend_empty_cache(device)
-    torch._dynamo.reset()
+    torch.compiler.reset()
 
 
 # Type definition of key used in `Expectations` class.
@@ -3394,7 +3398,7 @@ def _get_call_arguments(code_context):
     Analyze the positional and keyword arguments in a call expression.
 
     This will extract the expressions of the positional and kwyword arguments, and associate them to the positions and
-    the keyword arugment names.
+    the keyword argument names.
     """
 
     def get_argument_name(node):
@@ -3522,7 +3526,7 @@ def _patched_tearDown(self, *args, **kwargs):
     # TODO: How could we show several exceptions in a sinigle test on the terminal? (Maybe not a good idea)
     captured_exceptions = captured_failures[0]["exception"]
     captured_traceback = captured_failures[0]["traceback"]
-    # Show the cpatured information on the terminal.
+    # Show the captured information on the terminal.
     capturued_info = [x["info"] for x in captured_failures]
     capturued_info_str = f"\n\n{'=' * 80}\n\n".join(capturued_info)
 
@@ -3735,7 +3739,7 @@ def _format_tensor(t, indent_level=0, sci_mode=None):
     if not isinstance(t, torch.Tensor):
         t = torch.tensor(t)
 
-    # Simply make the processing below simpler (not to hande both case)
+    # Simply make the processing below simpler (not to handle both cases)
     is_scalar = False
     if t.ndim == 0:
         t = torch.tensor([t])
@@ -3774,8 +3778,8 @@ def _format_tensor(t, indent_level=0, sci_mode=None):
 
         return t_str
 
-    # Otherwise, we separte the representations of every elements along an outer dimension by new lines (after a `,`).
-    # The representatioin each element is obtained by calling this function recursively with corrent `indent_level`.
+    # Otherwise, we separate the representations of each element along an outer dimension by new lines (after a `,`).
+    # The representation of each element is obtained by calling this function recursively with current `indent_level`.
     else:
         t_str = str(t)
 
@@ -3988,7 +3992,7 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
 
             # extra conditions for returning one-line representation
             def use_one_line_repr(obj):
-                # interable types
+                # iterable types
                 if type(obj) in (list, tuple, dict):
                     # get all types
                     element_types = []

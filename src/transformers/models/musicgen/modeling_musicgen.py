@@ -36,12 +36,7 @@ from ...generation import (
     LogitsProcessorList,
     StoppingCriteriaList,
 )
-from ...modeling_attn_mask_utils import (
-    _prepare_4d_attention_mask,
-    _prepare_4d_attention_mask_for_sdpa,
-    _prepare_4d_causal_attention_mask,
-    _prepare_4d_causal_attention_mask_for_sdpa,
-)
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import (
     FlashAttentionKwargs,
 )
@@ -55,15 +50,10 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
-from ...utils.generic import is_flash_attention_requested
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig
-
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 if TYPE_CHECKING:
@@ -173,7 +163,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -533,9 +522,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
             # (bsz * codebooks, seq_len) -> (bsz, codebooks, seq_len)
             input = input_ids.reshape(-1, self.num_codebooks, input_ids.shape[-1])
             bsz, num_codebooks, seq_len = input.shape
-            input_shape = (bsz, seq_len)
         elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
             input = inputs_embeds[:, :, -1:]
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
@@ -555,17 +542,24 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = sum(self.embed_tokens[codebook](input[:, codebook]) for codebook in range(num_codebooks))
 
-        attention_mask = self._update_causal_mask(
-            attention_mask,
-            input_shape,
-            inputs_embeds,
-            past_key_values_length,
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position: torch.Tensor = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            )
+
+        attention_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
-        encoder_attention_mask = self._update_cross_attn_mask(
-            encoder_hidden_states,
-            encoder_attention_mask,
-            input_shape,
-            inputs_embeds,
+        encoder_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=encoder_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
         )
 
         # embed positions
@@ -622,75 +616,6 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
-
-    def _update_causal_mask(
-        self,
-        attention_mask: torch.Tensor | None,
-        input_shape: torch.Size,
-        inputs_embeds: torch.Tensor,
-        past_key_values_length: int,
-    ):
-        if is_flash_attention_requested(self.config):
-            # 2d mask is passed through the layers
-            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self.config._attn_implementation == "sdpa":
-            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask,
-                input_shape,
-                inputs_embeds,
-                past_key_values_length,
-            )
-        elif self.config._attn_implementation == "flex_attention":
-            if isinstance(attention_mask, torch.Tensor):
-                attention_mask = make_flex_block_causal_mask(attention_mask)
-            # Other attention flavors support in-built causal (when `mask is None`)
-            # while we need to create our specific block mask regardless
-            elif attention_mask is None:
-                attention_mask = make_flex_block_causal_mask(
-                    torch.ones(
-                        size=(input_shape),
-                        device=inputs_embeds.device,
-                    )
-                )
-        else:
-            # 4d mask is passed through the layers
-            attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask, input_shape, inputs_embeds, past_key_values_length
-            )
-
-        return attention_mask
-
-    def _update_cross_attn_mask(
-        self,
-        encoder_hidden_states: torch.Tensor | None,
-        encoder_attention_mask: torch.Tensor | None,
-        input_shape: torch.Size,
-        inputs_embeds: torch.Tensor,
-    ):
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if is_flash_attention_requested(self.config):
-                encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                    encoder_attention_mask,
-                    inputs_embeds.dtype,
-                    tgt_len=input_shape[-1],
-                )
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(encoder_attention_mask, torch.Tensor):
-                    encoder_attention_mask = make_flex_block_causal_mask(
-                        encoder_attention_mask,
-                        query_length=input_shape[-1],
-                        is_causal=False,
-                    )
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask(
-                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-                )
-
-        return encoder_attention_mask
 
 
 @auto_docstring

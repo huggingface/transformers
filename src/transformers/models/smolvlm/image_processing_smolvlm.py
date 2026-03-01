@@ -867,7 +867,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
         return encoding
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict):
         """
         A utility that returns number of image patches for a given image size.
 
@@ -876,7 +876,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                 Height of the input image.
             width (`int`):
                 Width of the input image.
-            images_kwargs (`dict`, *optional*)
+            images_kwargs (`dict`)
                 Any kwargs to override defaults of the image processor.
         Returns:
             `int`: Number of patches per image.
@@ -885,7 +885,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
         size = images_kwargs.get("size", self.size)
 
-        num_patches = num_rows = num_cols = 1
+        num_patches = num_rows = num_cols = 0
         if do_image_splitting:
             height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=size["longest_edge"])
             height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=4096)

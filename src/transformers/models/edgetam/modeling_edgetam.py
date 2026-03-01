@@ -36,8 +36,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
-from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import TransformersKwargs, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
 from .configuration_edgetam import (
     EdgeTamConfig,
@@ -311,6 +311,7 @@ class EdgeTamPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
+    _keys_to_ignore_on_load_unexpected = None
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -444,7 +445,8 @@ class EdgeTamVisionModel(EdgeTamPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -1024,7 +1026,8 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

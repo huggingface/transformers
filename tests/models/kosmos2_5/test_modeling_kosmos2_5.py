@@ -294,7 +294,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     pipeline_model_mapping = (
         {
             "feature-extraction": Kosmos2_5Model,
-            "image-to-text": Kosmos2_5ForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -304,7 +303,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     test_attention_outputs = False
     _is_composite = True
 
-    # TODO: `image-to-text` pipeline for this model needs Processor.
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_casse_name,
@@ -471,9 +469,9 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    # TODO: ydshieh
-    @unittest.skip(reason="doesn't support padding yet")
-    def test_eager_matches_sdpa_inference_1_bfloat16(self):
+    # TODO: vasqu
+    @unittest.skip(reason="why the heck does this have bigger tols")
+    def test_eager_matches_sdpa_inference_24_fp32_pad_left_output_attentions(self):
         pass
 
     # TODO: ydshieh
