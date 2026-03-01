@@ -1,6 +1,5 @@
 import copy
 import math
-from typing import Dict, List, Optional, Union
 
 import numpy as np
 import torch
@@ -63,7 +62,7 @@ class HCXVisionImageProcessorKwargs(ImagesKwargs, total=False):
     anyres: bool
     unpad: bool
     num_queries_vis_abstractor: int
-    possible_resolutions: List[List[int]]
+    possible_resolutions: list[list[int]]
     patch_size: int
     pad_to_square: bool
 
@@ -104,7 +103,7 @@ def determine_possible_resolutions(anyres: bool, max_num_grids: int, grid_size: 
     return possible_resolutions
 
 
-def divide_to_grids(image: np.array, grid_size: int, input_data_format=None) -> List[np.array]:
+def divide_to_grids(image: np.array, grid_size: int, input_data_format=None) -> list[np.array]:
     """Divides an image into a list of square patches, each of size `grid_size × grid_size` pixels."""
     grids = []
     height, width = get_image_size(image, channel_dim=input_data_format)
@@ -186,8 +185,8 @@ def resize_longside(
     image: np.array,
     size: int,
     resample: PILImageResampling = PILImageResampling.BICUBIC,
-    data_format: Optional[Union[str, ChannelDimension]] = None,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    data_format: str | ChannelDimension | None = None,
+    input_data_format: str | ChannelDimension | None = None,
 ):
     """Resizes `image` so that its longest side equals `size` pixels, preserving the aspect ratio."""
     height, width = get_image_size(image, channel_dim=input_data_format)
@@ -391,21 +390,21 @@ class HyperClovaXVisionImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: dict[str, int] | None = None,
         anyres: bool = False,
         unpad: bool = False,
         num_queries_vis_abstractor: int = 0,
-        possible_resolutions: List = [],
+        possible_resolutions: list = [],
         patch_size: int = 14,
         pad_to_square: bool = True,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: dict[str, int] | None = None,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         do_convert_rgb: bool = True,
         **kwargs,
     ) -> None:
@@ -420,7 +419,7 @@ class HyperClovaXVisionImageProcessor(BaseImageProcessor):
         self.anyres = anyres
         self.unpad = unpad
         self.num_queries_vis_abstractor = num_queries_vis_abstractor
-        self.possible_resolutions = [_resolution for _resolution in possible_resolutions]
+        self.possible_resolutions = list(possible_resolutions)
         self.patch_size = patch_size
         self.pad_to_square = pad_to_square
         self.resample = resample
@@ -436,10 +435,10 @@ class HyperClovaXVisionImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         default_to_square = True
@@ -503,7 +502,7 @@ class HyperClovaXVisionImageProcessor(BaseImageProcessor):
         resample: PILImageResampling,
         data_format: ChannelDimension,
         input_data_format: ChannelDimension,
-    ) -> List[np.array]:
+    ) -> list[np.array]:
         if not isinstance(possible_resolutions, list):
             raise ValueError("possible_resolutions must be a list of possible resolutions.")
 
@@ -526,18 +525,18 @@ class HyperClovaXVisionImageProcessor(BaseImageProcessor):
     def _preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: bool = False,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: int = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_center_crop: bool = False,
+        crop_size: int | None = None,
+        do_rescale: bool = False,
+        rescale_factor: float | None = None,
+        do_normalize: bool = False,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> Image.Image:
         images = make_list_of_images(images)
 
@@ -573,27 +572,27 @@ class HyperClovaXVisionImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        anyres: bool = None,
-        unpad: bool = None,
-        video: bool = None,
-        num_queries_vis_abstractor: int = None,
-        possible_resolutions: List = None,
-        patch_size: int = None,
-        pad_to_square: bool = None,
+        do_resize: bool = False,
+        size: dict[str, int] | None = None,
+        anyres: bool = False,
+        unpad: bool = False,
+        video: bool = False,
+        num_queries_vis_abstractor: int | None = None,
+        possible_resolutions: list = [],
+        patch_size: int | None = None,
+        pad_to_square: bool = False,
         resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: int = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_center_crop: bool = False,
+        crop_size: int | None = None,
+        do_rescale: bool = False,
+        rescale_factor: float | None = None,
+        do_normalize: bool = False,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_convert_rgb: bool = False,
+        return_tensors: str | TensorType | None = None,
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
         return_dummy_image: bool = False,
         num_queries_vis_abstractor_slow: int = 0,
         first_last_frames_slow: bool = False,
