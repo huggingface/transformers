@@ -208,7 +208,7 @@ class GlmMoeDsaIndexer(nn.Module):
         # Reference: index_score = fp8_index(q_fp8, weights, k_cache, k_scale_cache)
         #
         # In bf16 mode (no FP8), q_scale = 1. The fp8_index kernel computes:
-        #   score[b,s,t] = sum_h(weights[b,s,h] * dot(q[b,s,h,:], k[b,t,:]))
+        #   score[b,s,t] = sum_h(weights[b,s,h] * relu(dot(q[b,s,h,:], k[b,t,:])))
         # where weights already absorbs n_heads^(-0.5) and softmax_scale.
 
         # Don't force fp32 inputs here: the checkpoint stores `weights_proj.weight` in bf16.
@@ -218,8 +218,10 @@ class GlmMoeDsaIndexer(nn.Module):
         # q·k^T per head: [B, S, H, D] @ [B, T, D]^T → [B, S, H, T]
         scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
 
+        # ReLU on per-head scores before weighting (matches reference fp8_index kernel:
+        # logits[i3_n, i_h] = T.max(logits[i3_n, i_h], 0) * q_s_frag[i_h])
         # Weight per head and sum across heads → [B, S, T]
-        index_scores = torch.einsum("bsht,bsh->bst", scores, weights)
+        index_scores = torch.einsum("bsht,bsh->bst", scores.relu(), weights)
 
         if attention_mask is not None:
             index_scores = index_scores + attention_mask
