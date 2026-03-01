@@ -21,28 +21,17 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import (
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    floats_tensor,
-    ids_tensor,
-)
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        HCXVisionForConditionalGeneration,
-        HCXVisionModel,
-    )
+    from transformers import HCXVisionForConditionalGeneration, HCXVisionModel
 
 if is_vision_available():
     pass  # PIL imports if needed in future tests
