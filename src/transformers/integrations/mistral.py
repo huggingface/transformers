@@ -7,7 +7,7 @@ from transformers.tokenization_utils_tokenizers import PreTrainedTokenizerFast
 
 class MistralConverter:
     """
-    A general tiktoken converter.
+    Converter for Mistral's Tekken tokenizer format to a feature-complete tokenizers.Tokenizer.
     """
 
     def __init__(
@@ -74,8 +74,11 @@ class MistralConverter:
 
 
 def convert_tekken_tokenizer(tokenizer_file: str):
-    """Convert a "tekken" tokenizer to a fast Tokenizer."""
-    # Tekken format -- need to use the Converter
+    """Convert a Mistral Tekken tokenizer to a PreTrainedTokenizerFast.
+    
+    Tekken is Mistral's proprietary tokenizer format.
+    """
+    # Mistral Tekken format -- converts using the MistralConverter
 
     from mistral_common.tokens.tokenizers.base import SpecialTokens
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
