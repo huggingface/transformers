@@ -61,6 +61,62 @@ INVOICE_URL = (
 )
 
 
+class DecodeSpansTests(unittest.TestCase):
+    def test_decode_spans_topk_equal_to_length(self):
+        """Test that decode_spans handles the boundary case where topk == len(scores_flat).
+
+        Regression test for https://github.com/huggingface/transformers/issues/44327
+        np.argpartition(arr, kth) requires kth < len(arr). When topk == len(scores_flat),
+        the old guard `len(scores_flat) < topk` was False, causing argpartition to be
+        called with kth == len(arr) -> ValueError.
+        """
+        import numpy as np
+
+        from transformers.pipelines.document_question_answering import decode_spans
+
+        np.random.seed(42)
+        # seq_len=10 -> scores_flat has 100 elements (10^2) == topk
+        seq_len = 10
+        topk = seq_len**2
+        start = np.random.rand(1, seq_len)
+        end = np.random.rand(1, seq_len)
+        undesired_tokens = np.ones(seq_len)
+
+        # Should not raise ValueError: kth(=100) out of bounds (100)
+        starts, ends, scores = decode_spans(start, end, topk, max_answer_len=15, undesired_tokens=undesired_tokens)
+        self.assertGreater(len(starts), 0)
+
+    def test_decode_spans_topk_greater_than_length(self):
+        """Test that decode_spans works when topk > len(scores_flat)."""
+        import numpy as np
+
+        from transformers.pipelines.document_question_answering import decode_spans
+
+        np.random.seed(42)
+        seq_len = 10
+        start = np.random.rand(1, seq_len)
+        end = np.random.rand(1, seq_len)
+        undesired_tokens = np.ones(seq_len)
+
+        starts, ends, scores = decode_spans(start, end, topk=200, max_answer_len=15, undesired_tokens=undesired_tokens)
+        self.assertGreater(len(starts), 0)
+
+    def test_decode_spans_topk_less_than_length(self):
+        """Test the normal case where topk < len(scores_flat) (argpartition path)."""
+        import numpy as np
+
+        from transformers.pipelines.document_question_answering import decode_spans
+
+        np.random.seed(42)
+        seq_len = 10
+        start = np.random.rand(1, seq_len)
+        end = np.random.rand(1, seq_len)
+        undesired_tokens = np.ones(seq_len)
+
+        starts, ends, scores = decode_spans(start, end, topk=5, max_answer_len=15, undesired_tokens=undesired_tokens)
+        self.assertGreater(len(starts), 0)
+
+
 @is_pipeline_test
 @require_torch
 @require_vision
