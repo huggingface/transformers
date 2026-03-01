@@ -969,6 +969,11 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width dimensions of the feature grid for each image.
+            Each row contains `[temporal, height, width]` grid counts.
+        """
         return self.model.get_image_features(pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     @auto_docstring
@@ -978,6 +983,11 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        r"""
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width dimensions of the feature grid for each video.
+            Each row contains `[temporal, height, width]` grid counts.
+        """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs)
 
     @can_return_tuple
