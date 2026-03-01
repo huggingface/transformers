@@ -48,30 +48,23 @@ class HyperClovaXProcessor(ProcessorMixin):
         videos: VideoInput | None = None,
         **kwargs: Unpack[HCXVisionV2ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare one or several sequence(s) and image(s)/video(s) for the model. This method
-        forwards the `text` and `kwargs` arguments to the tokenizer's `__call__` if `text` is not `None` to
-        encode the text. It forwards the `images` and `kwargs` arguments to
-        [`HyperClovaXVisionImageProcessor.__call__`] if `images` is not `None` to preprocess the images, and
-        similarly for `videos`.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The video or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
-                tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
+        r"""
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            If set, will return tensors of a particular framework. Acceptable values are:
+            - `'tf'`: Return TensorFlow `tf.constant` objects.
+            - `'pt'`: Return PyTorch `torch.Tensor` objects.
+            - `'np'`: Return NumPy `np.ndarray` objects.
+            - `'jax'`: Return JAX `jnp.ndarray` objects.
+        images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
+            The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+            tensor. Both channels-first and channels-last formats are supported.
+        text (`str`, `list[str]`, `list[list[str]]`):
+            The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+            (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+            `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+        videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
+            The video or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
+            tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

@@ -1010,11 +1010,6 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in
-            `[0, ..., config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices
-            set to `-100` are ignored (masked), the loss is only computed for the tokens with labels
-            in `[0, ..., config.vocab_size]`.
         pixel_values (`torch.FloatTensor`, *optional*):
             Pixel values of input images after preprocessing by [`HyperClovaXVisionImageProcessor`].
             For any-resolution mode, this is a 2D tensor of shape
@@ -1028,6 +1023,11 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
             Each row contains `[temporal, height, width]` grid counts.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width dimensions of the feature grid for each video.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in
+            `[0, ..., config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices
+            set to `-100` are ignored (masked), the loss is only computed for the tokens with labels
+            in `[0, ..., config.vocab_size]`.
         logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
             If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate
             logits for all `input_ids`. Only last token logits are needed for generation, and

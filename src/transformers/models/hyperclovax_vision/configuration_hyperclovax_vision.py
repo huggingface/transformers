@@ -36,102 +36,102 @@ class HyperClovaXConfig(PretrainedConfig):
     model outputs. Read the documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the HyperClovaX model. Defines the number of different tokens
-            that can be represented by the `inputs_ids` passed when calling [`HyperClovaXTextModel`].
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
-            Number of key/value heads for Grouped Query Attention (GQA). If
-            `num_key_value_heads == num_attention_heads`, the model uses Multi-Head Attention (MHA);
-            if `num_key_value_heads == 1`, it uses Multi-Query Attention (MQA); otherwise GQA is used.
-            Defaults to `num_attention_heads` if not specified.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
-            The epsilon used by the RMS normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-            Only relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            End of stream token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Tensor parallelism rank used during pretraining. Please refer to
-            [this document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism)
-            to understand more about it. This value is necessary to ensure exact reproducibility of the
-            pretraining results.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie input/output word embeddings.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply
-            new rope type and you expect the model to work on longer `max_position_embeddings`, we
-            recommend you to update this value accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of `['default', 'linear', 'dynamic', 'yarn',
-                    'longrope', 'llama3']`, with `'default'` being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except `'default'`. The scaling factor to apply to the RoPE
-                    embeddings. In most scaling types, a `factor` of x will enable the model to handle
-                    sequences of length x * original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with `'dynamic'`, `'longrope'` and `'llama3'`. The original max position embeddings
-                    used during pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with `'yarn'` and `'longrope'`. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to the value recommended by the implementation.
-                `beta_fast` (`float`, *optional*):
-                    Only used with `'yarn'`. Parameter to set the boundary for extrapolation (only) in the
-                    linear ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with `'yarn'`. Parameter to set the boundary for interpolation (only) in the
-                    linear ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with `'longrope'`. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`).
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with `'longrope'`. The scaling factor to be applied to long contexts (>=
-                    `original_max_position_embeddings`).
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with `'llama3'`. Scaling factor applied to low frequency components of the RoPE.
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with `'llama3'`. Scaling factor applied to high frequency components of the RoPE.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
-        head_dim (`int`, *optional*):
-            The attention head dimension. Defaults to `hidden_size // num_attention_heads`.
-        embedding_multiplier (`float`, *optional*, defaults to 1.0):
-            Scale factor applied to the input embeddings (Maximal Update Parametrization / MuP).
-            A value of 1.0 disables the scaling.
-        logits_scaling (`float`, *optional*, defaults to 1.0):
-            Scale factor applied to the output logits before softmax (MuP). A value of 1.0 disables scaling.
-        attention_multiplier (`float`, *optional*, defaults to 1.0):
-            Scale factor applied to the attention scores before softmax (MuP). A value of 1.0 disables scaling.
-        residual_multiplier (`float`, *optional*, defaults to 1.0):
-            Scale factor applied to each residual connection output (MuP). A value of 1.0 disables scaling.
-        use_post_norm (`bool`, *optional*, defaults to `False`):
-            If `True`, applies an additional RMS norm after each sub-layer output (dual-norm / post-norm
-            architecture). When `False`, only pre-norm is applied.
+            vocab_size (`int`, *optional*, defaults to 32000):
+                Vocabulary size of the HyperClovaX model. Defines the number of different tokens
+                that can be represented by the `inputs_ids` passed when calling [`HyperClovaXTextModel`].
+            hidden_size (`int`, *optional*, defaults to 4096):
+                Dimension of the hidden representations.
+            intermediate_size (`int`, *optional*, defaults to 11008):
+                Dimension of the MLP representations.
+            num_hidden_layers (`int`, *optional*, defaults to 32):
+                Number of hidden layers in the Transformer decoder.
+            num_attention_heads (`int`, *optional*, defaults to 32):
+                Number of attention heads for each attention layer in the Transformer decoder.
+            num_key_value_heads (`int`, *optional*):
+                Number of key/value heads for Grouped Query Attention (GQA). If
+                `num_key_value_heads == num_attention_heads`, the model uses Multi-Head Attention (MHA);
+                if `num_key_value_heads == 1`, it uses Multi-Query Attention (MQA); otherwise GQA is used.
+                Defaults to `num_attention_heads` if not specified.
+            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+                The non-linear activation function in the decoder.
+            max_position_embeddings (`int`, *optional*, defaults to 2048):
+                The maximum sequence length that this model might ever be used with.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+                The epsilon used by the RMS normalization layers.
+            use_cache (`bool`, *optional*, defaults to `True`):
+                Whether or not the model should return the last key/values attentions (not used by all models).
+                Only relevant if `config.is_decoder=True`.
+            pad_token_id (`int`, *optional*):
+                Padding token id.
+            bos_token_id (`int`, *optional*, defaults to 1):
+                Beginning of stream token id.
+            eos_token_id (`int`, *optional*, defaults to 2):
+                End of stream token id.
+            pretraining_tp (`int`, *optional*, defaults to 1):
+                Tensor parallelism rank used during pretraining. Please refer to
+                [this document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism)
+                to understand more about it. This value is necessary to ensure exact reproducibility of the
+                pretraining results.
+            tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+                Whether to tie input/output word embeddings.
+            rope_theta (`float`, *optional*, defaults to 10000.0):
+                The base period of the RoPE embeddings.
+            rope_scaling (`dict`, *optional*):
+                Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply
+                new rope type and you expect the model to work on longer `max_position_embeddings`, we
+                recommend you to update this value accordingly.
+                Expected contents:
+                    `rope_type` (`str`):
+                        The sub-variant of RoPE to use. Can be one of `['default', 'linear', 'dynamic', 'yarn',
+                        'longrope', 'llama3']`, with `'default'` being the original RoPE implementation.
+                    `factor` (`float`, *optional*):
+                        Used with all rope types except `'default'`. The scaling factor to apply to the RoPE
+                        embeddings. In most scaling types, a `factor` of x will enable the model to handle
+                        sequences of length x * original maximum pre-trained length.
+                    `original_max_position_embeddings` (`int`, *optional*):
+                        Used with `'dynamic'`, `'longrope'` and `'llama3'`. The original max position embeddings
+                        used during pretraining.
+                    `attention_factor` (`float`, *optional*):
+                        Used with `'yarn'` and `'longrope'`. The scaling factor to be applied on the attention
+                        computation. If unspecified, it defaults to the value recommended by the implementation.
+                    `beta_fast` (`float`, *optional*):
+                        Only used with `'yarn'`. Parameter to set the boundary for extrapolation (only) in the
+                        linear ramp function. If unspecified, it defaults to 32.
+                    `beta_slow` (`float`, *optional*):
+                        Only used with `'yarn'`. Parameter to set the boundary for interpolation (only) in the
+                        linear ramp function. If unspecified, it defaults to 1.
+                    `short_factor` (`list[float]`, *optional*):
+                        Only used with `'longrope'`. The scaling factor to be applied to short contexts (<
+                        `original_max_position_embeddings`).
+                    `long_factor` (`list[float]`, *optional*):
+                        Only used with `'longrope'`. The scaling factor to be applied to long contexts (>=
+                        `original_max_position_embeddings`).
+                    `low_freq_factor` (`float`, *optional*):
+                        Only used with `'llama3'`. Scaling factor applied to low frequency components of the RoPE.
+                    `high_freq_factor` (`float`, *optional*):
+                        Only used with `'llama3'`. Scaling factor applied to high frequency components of the RoPE.
+            attention_bias (`bool`, *optional*, defaults to `False`):
+                Whether to use a bias in the query, key, value and output projection layers during self-attention.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                The dropout ratio for the attention probabilities.
+            mlp_bias (`bool`, *optional*, defaults to `False`):
+                Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+            head_dim (`int`, *optional*):
+                The attention head dimension. Defaults to `hidden_size // num_attention_heads`.
+            embedding_multiplier (`float`, *optional*, defaults to 1.0):
+                Scale factor applied to the input embeddings (Maximal Update Parametrization / MuP).
+                A value of 1.0 disables the scaling.
+            logits_scaling (`float`, *optional*, defaults to 1.0):
+                Scale factor applied to the output logits before softmax (MuP). A value of 1.0 disables scaling.
+            attention_multiplier (`float`, *optional*, defaults to 1.0):
+                Scale factor applied to the attention scores before softmax (MuP). A value of 1.0 disables scaling.
+            residual_multiplier (`float`, *optional*, defaults to 1.0):
+                Scale factor applied to each residual connection output (MuP). A value of 1.0 disables scaling.
+            use_post_norm (`bool`, *optional*, defaults to `False`):
+                If `True`, applies an additional RMS norm after each sub-layer output (dual-norm / post-norm
+                architecture). When `False`, only pre-norm is applied.
 
     Example:
 
