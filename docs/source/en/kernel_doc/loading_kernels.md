@@ -129,11 +129,11 @@ from transformers import AutoModelForCausalLM, KernelConfig
 kernel_config = KernelConfig(
     kernel_mapping={
         "RMSNorm": "kernels-community/liger_kernels:LigerRMSNorm",
-        "LlamaAttention": "kernels-community/flash-attn2:FlashAttention2",
     }
 )
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
+    attn_implementation="kernels-community/flash-attn2:FlashAttention2",
     use_kernels=True,
     kernel_config=kernel_config,
     device_map="cuda"
