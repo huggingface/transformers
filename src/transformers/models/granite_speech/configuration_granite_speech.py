@@ -201,6 +201,12 @@ class GraniteSpeechConfig(PreTrainedConfig):
                     raise ValueError(
                         f"Asking for hidden layer {idx} but number of layers is {encoder_config.num_layers}."
                     )
+            # Verify that the encoder output size matches the projector input
+            num_layers_concat = len(encoder_hidden_layers) + 1 # +1 for final layer
+            if projector_config.encoder_hidden_size != encoder_config.hidden_dim * num_layers_concat:
+                raise ValueError(f"Mismatch in projector input dimension {projector_config.encoder_hidden_size}"
+                                 " and number of layers * encoder dimension "
+                                 f"{encoder_config.hidden_dim * num_layers_concat}.")
         self.encoder_hidden_layers = encoder_hidden_layers
         super().__init__(**kwargs)
 
