@@ -1204,7 +1204,7 @@ def convert_and_load_state_dict_in_model(
 
     try:
         total_entries = len(param_name_to_load)
-        with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
+        with logging.tqdm(total=total_entries, desc="Loading weights", mininterval=2.0) as pbar:
             for first_param_name, mapping in param_name_to_load.items():
                 pbar.set_postfix({"param": first_param_name}, refresh=False)
                 pbar.update(1)
