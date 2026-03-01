@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
 import unittest
 from tempfile import TemporaryDirectory
@@ -76,6 +77,33 @@ class CharacterBertTokenizerTest(unittest.TestCase):
             expected = self.tokenizer("Saving and loading should be stable.")["input_ids"]
             actual = reloaded_tokenizer("Saving and loading should be stable.")["input_ids"]
             self.assertEqual(actual, expected)
+
+    def test_max_characters_per_token_validation(self):
+        with self.assertRaisesRegex(ValueError, "`max_characters_per_token` must be at least 3"):
+            CharacterBertTokenizer(max_characters_per_token=2)
+
+    def test_legacy_tokenizer_config_max_word_length(self):
+        with TemporaryDirectory() as tmp_dir:
+            with open(os.path.join(tmp_dir, "tokenizer_config.json"), "w", encoding="utf-8") as writer:
+                json.dump(
+                    {
+                        "tokenizer_class": "CharacterBertTokenizer",
+                        "do_lower_case": True,
+                        "max_word_length": 12,
+                        "model_max_length": 128,
+                        "unk_token": "[UNK]",
+                        "sep_token": "[SEP]",
+                        "pad_token": "[PAD]",
+                        "cls_token": "[CLS]",
+                        "mask_token": "[MASK]",
+                    },
+                    writer,
+                )
+
+            reloaded_tokenizer = CharacterBertTokenizer.from_pretrained(tmp_dir)
+
+            self.assertEqual(reloaded_tokenizer.max_characters_per_token, 12)
+            self.assertEqual(len(reloaded_tokenizer("hello", add_special_tokens=False)["input_ids"][0]), 12)
 
 
 @slow

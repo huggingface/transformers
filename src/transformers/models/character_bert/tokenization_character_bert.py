@@ -125,7 +125,8 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         strip_accents (`bool`, *optional*):
             Whether or not to strip accents.
         max_characters_per_token (`int`, *optional*, defaults to 50):
-            Maximum number of characters represented for each token.
+            Maximum number of characters represented for each token. Must be at least 3 to encode the
+            begin-word marker, token content, and end-word marker.
         model_max_length (`int`, *optional*, defaults to 512):
             Maximum supported sequence length in tokens.
         unk_token (`str`, *optional*, defaults to `"[UNK]"`):
@@ -157,8 +158,15 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         mask_token: str = "[MASK]",
         **kwargs,
     ):
-        if max_characters_per_token < 8:
-            raise ValueError("`max_characters_per_token` must be at least 8.")
+        legacy_max_word_length = kwargs.pop("max_word_length", None)
+        if legacy_max_word_length is not None and max_characters_per_token == 50:
+            max_characters_per_token = legacy_max_word_length
+
+        if max_characters_per_token < 3:
+            raise ValueError(
+                "`max_characters_per_token` must be at least 3 to encode the begin-word marker, "
+                "token content, and end-word marker."
+            )
 
         cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
         sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token

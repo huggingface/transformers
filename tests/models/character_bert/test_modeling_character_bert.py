@@ -265,6 +265,7 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    model_split_percents = [0.5, 0.999, 0.9995]
     test_mismatched_shapes = False
     test_resize_embeddings = False
 
@@ -329,6 +330,34 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_character_vocab_size_validation(self):
         with self.assertRaisesRegex(ValueError, "`character_vocab_size` must be 262"):
             CharacterBertConfig(character_vocab_size=300)
+
+    def test_max_characters_per_token_validation(self):
+        with self.assertRaisesRegex(ValueError, "`max_characters_per_token` must be at least the width"):
+            CharacterBertConfig(max_characters_per_token=6)
+
+    def test_custom_character_cnn_filters_allow_shorter_tokens(self):
+        config = CharacterBertConfig(
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            intermediate_size=37,
+            type_vocab_size=2,
+            max_characters_per_token=3,
+            character_embedding_dim=8,
+            character_cnn_filters=((1, 8), (2, 8), (3, 16)),
+            num_highway_layers=1,
+        )
+        model = CharacterBertModel(config).to(torch_device)
+        input_ids = ids_tensor(
+            [self.model_tester.batch_size, self.model_tester.seq_length, 3], config.character_vocab_size
+        )
+        outputs = model(input_ids=input_ids)
+
+        self.assertEqual(
+            outputs.last_hidden_state.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.hidden_size),
+        )
 
     def test_legacy_checkpoint_config_fields_for_masked_lm(self):
         legacy_config = {

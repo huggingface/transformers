@@ -73,7 +73,8 @@ class CharacterBertConfig(BertConfig):
             CharacterBERT byte-level tokenization expects exactly 262 character IDs before applying the +1 offset
             for masking and padding (256 byte values + 6 special markers).
         max_characters_per_token (`int`, *optional*, defaults to 50):
-            Maximum number of characters represented for each token.
+            Maximum number of characters represented for each token. Must be at least the width of the widest
+            convolution in `character_cnn_filters`.
         character_cnn_filters (`tuple[tuple[int, int], ...]`, *optional*, defaults to `((1, 32), (2, 32), (3, 64), (4, 128), (5, 256), (6, 512), (7, 1024))`):
             Convolution widths and output channels used in the character CNN.
         num_highway_layers (`int`, *optional*, defaults to 2):
@@ -144,10 +145,21 @@ class CharacterBertConfig(BertConfig):
         if legacy_mlm_vocab_size is not None and vocab_size == 30522:
             vocab_size = legacy_mlm_vocab_size
 
+        character_cnn_filters = tuple((int(width), int(channels)) for width, channels in character_cnn_filters)
+
         if character_vocab_size != 262:
             raise ValueError(
                 "`character_vocab_size` must be 262 for CharacterBERT byte-level tokenization "
                 "(256 bytes + 6 special characters)."
+            )
+        if len(character_cnn_filters) == 0:
+            raise ValueError("`character_cnn_filters` must contain at least one convolution specification.")
+
+        widest_filter = max(width for width, _ in character_cnn_filters)
+        if max_characters_per_token < widest_filter:
+            raise ValueError(
+                "`max_characters_per_token` must be at least the width of the widest character CNN filter "
+                f"({widest_filter})."
             )
 
         super().__init__(
@@ -177,7 +189,7 @@ class CharacterBertConfig(BertConfig):
         self.character_embedding_dim = character_embedding_dim
         self.character_vocab_size = character_vocab_size
         self.max_characters_per_token = max_characters_per_token
-        self.character_cnn_filters = tuple((int(width), int(channels)) for width, channels in character_cnn_filters)
+        self.character_cnn_filters = character_cnn_filters
         self.num_highway_layers = num_highway_layers
 
     @property
