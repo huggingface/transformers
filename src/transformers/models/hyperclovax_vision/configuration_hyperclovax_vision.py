@@ -37,101 +37,66 @@ class HyperClovaXConfig(PretrainedConfig):
 
     Args:
             vocab_size (`int`, *optional*, defaults to 32000):
-                Vocabulary size of the HyperClovaX model. Defines the number of different tokens
-                that can be represented by the `inputs_ids` passed when calling [`HyperClovaXTextModel`].
+                Vocabulary size of the model. Defines the number of different tokens that can be represented by
+                `input_ids`.
             hidden_size (`int`, *optional*, defaults to 4096):
                 Dimension of the hidden representations.
             intermediate_size (`int`, *optional*, defaults to 11008):
-                Dimension of the MLP representations.
+                Dimension of the MLP feed-forward representations.
             num_hidden_layers (`int`, *optional*, defaults to 32):
                 Number of hidden layers in the Transformer decoder.
             num_attention_heads (`int`, *optional*, defaults to 32):
                 Number of attention heads for each attention layer in the Transformer decoder.
             num_key_value_heads (`int`, *optional*):
-                Number of key/value heads for Grouped Query Attention (GQA). If
-                `num_key_value_heads == num_attention_heads`, the model uses Multi-Head Attention (MHA);
-                if `num_key_value_heads == 1`, it uses Multi-Query Attention (MQA); otherwise GQA is used.
-                Defaults to `num_attention_heads` if not specified.
-            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-                The non-linear activation function in the decoder.
+                Number of key-value heads used for Grouped Query Attention (GQA). If `None`, defaults to
+                `num_attention_heads` (standard multi-head attention).
+            hidden_act (`str`, *optional*, defaults to `"silu"`):
+                The non-linear activation function applied in the MLP layers.
             max_position_embeddings (`int`, *optional*, defaults to 2048):
-                The maximum sequence length that this model might ever be used with.
+                The maximum sequence length that this model can be used with.
             initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+                Standard deviation of the truncated normal distribution used to initialise all weight matrices.
             rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-                The epsilon used by the RMS normalization layers.
+                Epsilon value added to the denominator of RMSNorm layers for numerical stability.
             use_cache (`bool`, *optional*, defaults to `True`):
-                Whether or not the model should return the last key/values attentions (not used by all models).
-                Only relevant if `config.is_decoder=True`.
+                Whether the model should cache past key-value states to speed up decoding. Disable when training.
             pad_token_id (`int`, *optional*):
-                Padding token id.
+                Token ID used for padding sequences to equal length in a batch.
             bos_token_id (`int`, *optional*, defaults to 1):
-                Beginning of stream token id.
+                Token ID representing the beginning of a sequence.
             eos_token_id (`int`, *optional*, defaults to 2):
-                End of stream token id.
+                Token ID representing the end of a sequence.
             pretraining_tp (`int`, *optional*, defaults to 1):
-                Tensor parallelism rank used during pretraining. Please refer to
-                [this document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism)
-                to understand more about it. This value is necessary to ensure exact reproducibility of the
-                pretraining results.
+                Tensor parallelism degree used during pretraining. Values greater than 1 activate the Megatron-style
+                tensor parallel linear layers for reproducibility.
             tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-                Whether to tie input/output word embeddings.
+                Whether to tie the input token embedding weights to the output projection (lm_head) weights.
             rope_theta (`float`, *optional*, defaults to 10000.0):
-                The base period of the RoPE embeddings.
+                Base period of the Rotary Position Embedding (RoPE).
             rope_scaling (`dict`, *optional*):
-                Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply
-                new rope type and you expect the model to work on longer `max_position_embeddings`, we
-                recommend you to update this value accordingly.
-                Expected contents:
-                    `rope_type` (`str`):
-                        The sub-variant of RoPE to use. Can be one of `['default', 'linear', 'dynamic', 'yarn',
-                        'longrope', 'llama3']`, with `'default'` being the original RoPE implementation.
-                    `factor` (`float`, *optional*):
-                        Used with all rope types except `'default'`. The scaling factor to apply to the RoPE
-                        embeddings. In most scaling types, a `factor` of x will enable the model to handle
-                        sequences of length x * original maximum pre-trained length.
-                    `original_max_position_embeddings` (`int`, *optional*):
-                        Used with `'dynamic'`, `'longrope'` and `'llama3'`. The original max position embeddings
-                        used during pretraining.
-                    `attention_factor` (`float`, *optional*):
-                        Used with `'yarn'` and `'longrope'`. The scaling factor to be applied on the attention
-                        computation. If unspecified, it defaults to the value recommended by the implementation.
-                    `beta_fast` (`float`, *optional*):
-                        Only used with `'yarn'`. Parameter to set the boundary for extrapolation (only) in the
-                        linear ramp function. If unspecified, it defaults to 32.
-                    `beta_slow` (`float`, *optional*):
-                        Only used with `'yarn'`. Parameter to set the boundary for interpolation (only) in the
-                        linear ramp function. If unspecified, it defaults to 1.
-                    `short_factor` (`list[float]`, *optional*):
-                        Only used with `'longrope'`. The scaling factor to be applied to short contexts (<
-                        `original_max_position_embeddings`).
-                    `long_factor` (`list[float]`, *optional*):
-                        Only used with `'longrope'`. The scaling factor to be applied to long contexts (>=
-                        `original_max_position_embeddings`).
-                    `low_freq_factor` (`float`, *optional*):
-                        Only used with `'llama3'`. Scaling factor applied to low frequency components of the RoPE.
-                    `high_freq_factor` (`float`, *optional*):
-                        Only used with `'llama3'`. Scaling factor applied to high frequency components of the RoPE.
+                Dictionary containing RoPE scaling configuration. Supports keys `"rope_type"` (e.g. `"linear"`,
+                `"dynamic"`, `"yarn"`) and scaling-specific hyperparameters. If `None`, no scaling is applied.
             attention_bias (`bool`, *optional*, defaults to `False`):
-                Whether to use a bias in the query, key, value and output projection layers during self-attention.
+                Whether to include a learnable bias term in the query, key, value, and output projection layers.
             attention_dropout (`float`, *optional*, defaults to 0.0):
-                The dropout ratio for the attention probabilities.
+                Dropout probability applied to attention weights.
             mlp_bias (`bool`, *optional*, defaults to `False`):
-                Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+                Whether to include a learnable bias term in the MLP up-projection, gate-projection, and
+                down-projection layers.
             head_dim (`int`, *optional*):
-                The attention head dimension. Defaults to `hidden_size // num_attention_heads`.
+                Dimension of each attention head. Defaults to `hidden_size // num_attention_heads`.
             embedding_multiplier (`float`, *optional*, defaults to 1.0):
-                Scale factor applied to the input embeddings (Maximal Update Parametrization / MuP).
-                A value of 1.0 disables the scaling.
+                Scalar multiplier applied to the token embeddings. Used for Maximal Update Parametrisation (MuP)
+                to keep activation scale stable across model widths.
             logits_scaling (`float`, *optional*, defaults to 1.0):
-                Scale factor applied to the output logits before softmax (MuP). A value of 1.0 disables scaling.
+                Scalar multiplier applied to the final logits before softmax. Used for MuP.
             attention_multiplier (`float`, *optional*, defaults to 1.0):
-                Scale factor applied to the attention scores before softmax (MuP). A value of 1.0 disables scaling.
+                Scalar multiplier applied to the attention scores (QK dot-products). Used for MuP.
             residual_multiplier (`float`, *optional*, defaults to 1.0):
-                Scale factor applied to each residual connection output (MuP). A value of 1.0 disables scaling.
+                Scalar multiplier applied to each residual branch output before addition. Used for MuP.
             use_post_norm (`bool`, *optional*, defaults to `False`):
-                If `True`, applies an additional RMS norm after each sub-layer output (dual-norm / post-norm
-                architecture). When `False`, only pre-norm is applied.
+                Whether to apply an additional layer normalisation after each sub-layer output (dual-norm /
+                post-norm). When `False`, only standard pre-norm is used.
 
     Example:
 
@@ -154,35 +119,35 @@ class HyperClovaXConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        head_dim=None,
+        vocab_size: int = 32000,
+        hidden_size: int = 4096,
+        intermediate_size: int = 11008,
+        num_hidden_layers: int = 32,
+        num_attention_heads: int = 32,
+        num_key_value_heads: int | None = None,
+        hidden_act: str = "silu",
+        max_position_embeddings: int = 2048,
+        initializer_range: float = 0.02,
+        rms_norm_eps: float = 1e-6,
+        use_cache: bool = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int = 1,
+        eos_token_id: int = 2,
+        pretraining_tp: int = 1,
+        tie_word_embeddings: bool = False,
+        rope_theta: float = 10000.0,
+        rope_scaling: dict | None = None,
+        attention_bias: bool = False,
+        attention_dropout: float = 0.0,
+        mlp_bias: bool = False,
+        head_dim: int | None = None,
         # MuP parameters
-        embedding_multiplier=1.0,
-        logits_scaling=1.0,
-        attention_multiplier=1.0,
-        residual_multiplier=1.0,
+        embedding_multiplier: float = 1.0,
+        logits_scaling: float = 1.0,
+        attention_multiplier: float = 1.0,
+        residual_multiplier: float = 1.0,
         # Post-norm (dual-norm)
-        use_post_norm=False,
+        use_post_norm: bool = False,
         **kwargs,
     ):
         # Strip legacy trust_remote_code auto_map if coming from old hub checkpoint
@@ -340,28 +305,28 @@ class HyperClovaXVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        text_config=None,
-        vision_config=None,
-        mm_projector_type="mlp",
-        use_nth_layer=-2,
-        img_start_id=128060,
-        video_start_id=128061,
-        freeze_encoder=False,
-        freeze_decoder=False,
-        freeze_mm_projector=False,
-        anyres=False,
-        unpad=False,
-        max_num_grids=-1,
-        num_queries_vis_abstractor=-1,
-        video_num_queries_fast=None,
-        video_num_queries_slow=None,
-        video_first_last_frames_slows=None,
-        video_max_num_frames=None,
-        ignore_index=-100,
-        proj_pos_emb=True,
-        proj_prenorm=False,
-        use_1x1_grid=False,
-        possible_resolutions=None,
+        text_config: HyperClovaXConfig | dict | None = None,
+        vision_config: Qwen2_5_VLVisionConfig | dict | None = None,
+        mm_projector_type: str = "mlp",
+        use_nth_layer: int = -2,
+        img_start_id: int = 128060,
+        video_start_id: int = 128061,
+        freeze_encoder: bool = False,
+        freeze_decoder: bool = False,
+        freeze_mm_projector: bool = False,
+        anyres: bool = False,
+        unpad: bool = False,
+        max_num_grids: int = -1,
+        num_queries_vis_abstractor: int = -1,
+        video_num_queries_fast: int | None = None,
+        video_num_queries_slow: int | None = None,
+        video_first_last_frames_slows: bool | None = None,
+        video_max_num_frames: int | None = None,
+        ignore_index: int = -100,
+        proj_pos_emb: bool = True,
+        proj_prenorm: bool = False,
+        use_1x1_grid: bool = False,
+        possible_resolutions: list | None = None,
         **kwargs,
     ):
         # ------------------------------------------------------------------ #
