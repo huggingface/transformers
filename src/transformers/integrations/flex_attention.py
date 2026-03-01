@@ -115,11 +115,10 @@ def make_flex_block_causal_mask(
     is_causal: bool | None = True,
 ) -> "BlockMask":
     """
-    IMPORTANT NOTICE: This function is deprecated in favor of using the mask primitives in `masking_utils.py`,
-    and will be removed in a future version without warnings. New code should not use it. It is only kept here
-    for BC for now, while models using it are being patched accordingly.
+    Create a block mask for a batch of sequences, both packed and unpacked.
 
-    Create a block (causal) document mask for a batch of sequences, both packed and unpacked.
+    Note: This function will be renamed to `make_flex_block_mask` in a future version for clarity,
+    as it supports both causal and non-causal masking patterns, not just causal masking.
     Create Block (causal) logic and passing it into :func:`torch.nn.attention.flex_attention.create_block_mask`.
     The resultant BlockMask is a compressed representation of the full (causal) block
     mask. BlockMask is essential for performant computation of flex attention.
