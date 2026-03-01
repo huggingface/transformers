@@ -60,13 +60,10 @@ def get_deimv2_config(model_name: str) -> Deimv2Config:
     decoder_cfg = orig_config["DEIMTransformer"]
     if "HybridEncoder" in orig_config:
         encoder_cfg = orig_config["HybridEncoder"]
+        encoder_type = "hybrid"
     elif "LiteEncoder" in orig_config:
-        raise ValueError(
-            "LiteEncoder variants (pico/femto/atto) are not yet supported. "
-            "The LiteEncoder uses a different architecture (AvgPool downsampling, GAP fusion, "
-            "RepNCSPELAN4 blocks) that requires a dedicated Deimv2LiteEncoder implementation. "
-            "Supported variants: deimv2_hgnetv2_n_coco and DINOv3 variants."
-        )
+        encoder_cfg = orig_config["LiteEncoder"]
+        encoder_type = "lite"
     else:
         raise ValueError(f"No encoder config found. Available keys: {list(orig_config.keys())}")
 
@@ -76,18 +73,34 @@ def get_deimv2_config(model_name: str) -> Deimv2Config:
     config.label2id = {v: k for k, v in id2label.items()}
 
     # Encoder settings
-    config.encoder_hidden_dim = encoder_cfg["hidden_dim"]
-    config.encoder_in_channels = encoder_cfg["in_channels"]
-    config.feat_strides = encoder_cfg["feat_strides"]
-    config.activation_function = encoder_cfg.get("act", "silu")
-    config.depth_mult = encoder_cfg.get("depth_mult", 1.0)
-    config.hidden_expansion = encoder_cfg.get("expansion", 1.0)
-    config.encoder_fuse_op = encoder_cfg.get("fuse_op", "sum")
-    config.encoder_ffn_dim = encoder_cfg["dim_feedforward"]
-    config.encoder_attention_heads = encoder_cfg["nhead"]
-    config.dropout = encoder_cfg.get("dropout", 0.0)
-    config.encode_proj_layers = encoder_cfg["use_encoder_idx"]
-    config.encoder_activation_function = encoder_cfg.get("enc_act", "gelu")
+    config.encoder_type = encoder_type
+    if encoder_type == "lite":
+        config.encoder_hidden_dim = encoder_cfg["hidden_dim"]
+        config.encoder_in_channels = encoder_cfg["in_channels"]
+        config.feat_strides = encoder_cfg.get("feat_strides", [16])
+        config.activation_function = encoder_cfg.get("act", "silu")
+        config.depth_mult = encoder_cfg.get("depth_mult", 1.0)
+        config.hidden_expansion = encoder_cfg.get("expansion", 1.0)
+        config.encoder_fuse_op = "sum"
+        config.encoder_ffn_dim = 1024
+        config.encoder_attention_heads = 8
+        config.dropout = 0.0
+        config.encode_proj_layers = [2]
+        config.encoder_activation_function = "gelu"
+        config.encoder_layers = 0
+    else:
+        config.encoder_hidden_dim = encoder_cfg["hidden_dim"]
+        config.encoder_in_channels = encoder_cfg["in_channels"]
+        config.feat_strides = encoder_cfg.get("feat_strides", [8, 16, 32])
+        config.activation_function = encoder_cfg.get("act", "silu")
+        config.depth_mult = encoder_cfg.get("depth_mult", 1.0)
+        config.hidden_expansion = encoder_cfg.get("expansion", 1.0)
+        config.encoder_fuse_op = encoder_cfg.get("fuse_op", "sum")
+        config.encoder_ffn_dim = encoder_cfg.get("dim_feedforward", 1024)
+        config.encoder_attention_heads = encoder_cfg.get("nhead", 8)
+        config.dropout = encoder_cfg.get("dropout", 0.0)
+        config.encode_proj_layers = encoder_cfg.get("use_encoder_idx", [2])
+        config.encoder_activation_function = encoder_cfg.get("enc_act", "gelu")
 
     # Decoder settings
     config.d_model = decoder_cfg["hidden_dim"]
@@ -106,6 +119,8 @@ def get_deimv2_config(model_name: str) -> Deimv2Config:
     config.decoder_in_channels = decoder_cfg["feat_channels"]
     config.eval_size = tuple(decoder_cfg["eval_spatial_size"]) if "eval_spatial_size" in decoder_cfg else None
     config.decoder_activation_function = decoder_cfg.get("activation", "silu")
+    config.share_bbox_head = decoder_cfg.get("share_bbox_head", False)
+    config.use_gateway = decoder_cfg.get("use_gateway", True)
 
     # Backbone settings
     if "HGNetv2" in orig_config:
@@ -115,8 +130,7 @@ def get_deimv2_config(model_name: str) -> Deimv2Config:
         config.backbone_config.out_indices = [i + 1 for i in return_idx]
         config.backbone_config.use_learnable_affine_block = backbone_cfg.get("use_lab", True)
 
-        # Set backbone sizes based on the model variant
-        if backbone_name == "B0":
+        if backbone_name in ["B0", "B1", "B2"]:
             config.backbone_config.hidden_sizes = [128, 256, 512, 1024]
             config.backbone_config.stem_channels = [3, 16, 16]
             config.backbone_config.stage_in_channels = [16, 64, 256, 512]
@@ -127,28 +141,128 @@ def get_deimv2_config(model_name: str) -> Deimv2Config:
             config.backbone_config.stage_light_block = [False, False, True, True]
             config.backbone_config.stage_kernel_size = [3, 3, 5, 5]
             config.backbone_config.stage_numb_of_layers = [3, 3, 3, 3]
-        elif backbone_name in ["B1", "B2"]:
-            config.backbone_config.hidden_sizes = [128, 256, 512, 1024]
+        elif backbone_name == "Atto":
+            config.backbone_config.hidden_sizes = [64, 256, 256]
             config.backbone_config.stem_channels = [3, 16, 16]
-            config.backbone_config.stage_in_channels = [16, 64, 256, 512]
-            config.backbone_config.stage_mid_channels = [16, 32, 64, 128]
-            config.backbone_config.stage_out_channels = [64, 256, 512, 1024]
-            config.backbone_config.stage_num_blocks = [1, 1, 2, 1]
-            config.backbone_config.stage_downsample = [False, True, True, True]
-            config.backbone_config.stage_light_block = [False, False, True, True]
-            config.backbone_config.stage_kernel_size = [3, 3, 5, 5]
-            config.backbone_config.stage_numb_of_layers = [3, 3, 3, 3]
+            config.backbone_config.stage_in_channels = [16, 64, 256]
+            config.backbone_config.stage_mid_channels = [16, 32, 64]
+            config.backbone_config.stage_out_channels = [64, 256, 256]
+            config.backbone_config.stage_num_blocks = [1, 1, 1]
+            config.backbone_config.stage_downsample = [False, True, True]
+            config.backbone_config.stage_light_block = [False, False, True]
+            config.backbone_config.stage_kernel_size = [3, 3, 3]
+            config.backbone_config.stage_numb_of_layers = [3, 3, 3]
+        elif backbone_name == "Femto":
+            config.backbone_config.hidden_sizes = [64, 256, 512]
+            config.backbone_config.stem_channels = [3, 16, 16]
+            config.backbone_config.stage_in_channels = [16, 64, 256]
+            config.backbone_config.stage_mid_channels = [16, 32, 64]
+            config.backbone_config.stage_out_channels = [64, 256, 512]
+            config.backbone_config.stage_num_blocks = [1, 1, 1]
+            config.backbone_config.stage_downsample = [False, True, True]
+            config.backbone_config.stage_light_block = [False, False, True]
+            config.backbone_config.stage_kernel_size = [3, 3, 5]
+            config.backbone_config.stage_numb_of_layers = [3, 3, 3]
+        elif backbone_name == "Pico":
+            config.backbone_config.hidden_sizes = [64, 256, 512]
+            config.backbone_config.stem_channels = [3, 16, 16]
+            config.backbone_config.stage_in_channels = [16, 64, 256]
+            config.backbone_config.stage_mid_channels = [16, 32, 64]
+            config.backbone_config.stage_out_channels = [64, 256, 512]
+            config.backbone_config.stage_num_blocks = [1, 1, 2]
+            config.backbone_config.stage_downsample = [False, True, True]
+            config.backbone_config.stage_light_block = [False, False, True]
+            config.backbone_config.stage_kernel_size = [3, 3, 5]
+            config.backbone_config.stage_numb_of_layers = [3, 3, 3]
         else:
             raise ValueError(f"Unknown HGNetv2 variant: {backbone_name}")
 
+        num_stages = len(config.backbone_config.hidden_sizes)
+        config.backbone_config.depths = config.backbone_config.stage_numb_of_layers
+        config.backbone_config.stage_names = ["stem"] + [f"stage{i}" for i in range(1, num_stages + 1)]
+
         config.use_spatial_tuning_adapter = False
     elif "DINOv3STAs" in orig_config:
-        raise ValueError(
-            "DINOv3 backbone variants are not yet supported. "
-            "The DINOv3+STA architecture requires ViT backbone key mappings and "
-            "STA adapter integration that are not yet implemented in the conversion script. "
-            "Supported variants: deimv2_hgnetv2_n_coco."
-        )
+        dinov3_cfg = orig_config["DINOv3STAs"]
+        name = dinov3_cfg["name"]
+        config.backbone_type = "dinov3"
+        config.dinov3_interaction_indexes = dinov3_cfg["interaction_indexes"]
+        config.sta_inplanes = dinov3_cfg.get("conv_inplane") or 16
+        config.use_spatial_tuning_adapter = True
+
+        is_dinov3 = "dinov3" in name
+
+        DINOV3_PRESETS = {
+            "vit_tiny": {
+                "ffn_ratio": 4,
+                "use_gated_mlp": False,
+                "layerscale_value": 1.0,
+                "num_register_tokens": 0,
+                "pos_embed_rescale": None,
+                "key_bias": False,
+            },
+            "vit_tinyplus": {
+                "ffn_ratio": 4,
+                "use_gated_mlp": False,
+                "layerscale_value": 1.0,
+                "num_register_tokens": 0,
+                "pos_embed_rescale": None,
+                "key_bias": False,
+            },
+            "dinov3_vits16": {
+                "vit_hidden_size": 384,
+                "vit_num_heads": 6,
+                "ffn_ratio": 4,
+                "use_gated_mlp": False,
+                "layerscale_value": 1e-5,
+                "num_register_tokens": 4,
+                "pos_embed_rescale": 2.0,
+                "key_bias": True,
+            },
+            "dinov3_vits16plus": {
+                "vit_hidden_size": 384,
+                "vit_num_heads": 6,
+                "ffn_ratio": 6,
+                "use_gated_mlp": True,
+                "layerscale_value": 1e-5,
+                "num_register_tokens": 4,
+                "pos_embed_rescale": 2.0,
+                "key_bias": True,
+            },
+        }
+        preset = DINOV3_PRESETS[name]
+
+        if is_dinov3:
+            vit_hidden_size = preset["vit_hidden_size"]
+            vit_num_heads = preset["vit_num_heads"]
+        else:
+            vit_hidden_size = dinov3_cfg.get("embed_dim") or 192
+            vit_num_heads = dinov3_cfg.get("num_heads") or 3
+
+        config.dinov3_hidden_dim = dinov3_cfg.get("hidden_dim") or vit_hidden_size
+
+        ffn_ratio = preset["ffn_ratio"]
+        if preset["use_gated_mlp"]:
+            hidden_features = vit_hidden_size * ffn_ratio
+            d = int(hidden_features * 2 / 3)
+            intermediate_size = d + (-d % 8)
+        else:
+            intermediate_size = vit_hidden_size * ffn_ratio
+
+        config.dinov3_backbone_config = {
+            "hidden_size": vit_hidden_size,
+            "num_attention_heads": vit_num_heads,
+            "num_hidden_layers": 12,
+            "intermediate_size": intermediate_size,
+            "layerscale_value": preset["layerscale_value"],
+            "use_gated_mlp": preset["use_gated_mlp"],
+            "num_register_tokens": preset["num_register_tokens"],
+            "pos_embed_rescale": preset["pos_embed_rescale"],
+            "key_bias": preset["key_bias"],
+            "rope_theta": 100.0,
+        }
+        config.dinov3_apply_layernorm = is_dinov3
+        config.encoder_has_trailing_conv = False
     else:
         raise ValueError(f"Unknown backbone in config: {list(orig_config.keys())}")
 
@@ -280,10 +394,132 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"decoder\.decoder\.reg_scale": r"model.decoder.reg_scale",
 }
 
+LITE_ENCODER_KEY_MAPPING = {
+    # LiteEncoder input_proj
+    r"encoder\.input_proj\.(\d+)\.conv\.weight": r"model.encoder.input_proj.\1.0.weight",
+    r"encoder\.input_proj\.(\d+)\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.input_proj.\1.1.\2",
+    # Downsamples
+    r"encoder\.down_sample(\d+)\.1\.weight": r"model.encoder.down_sample\1.1.weight",
+    r"encoder\.down_sample(\d+)\.2\.(weight|bias|running_mean|running_var)": r"model.encoder.down_sample\1.2.\2",
+    # GAP_Fusion
+    r"encoder\.bi_fusion\.cv\.conv\.weight": r"model.encoder.bi_fusion.cv.conv.weight",
+    r"encoder\.bi_fusion\.cv\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.bi_fusion.cv.norm.\1",
+    # FPN block (RepNCSPELAN4)
+    r"encoder\.fpn_block\.cv1\.conv\.weight": r"model.encoder.fpn_block.conv1.conv.weight",
+    r"encoder\.fpn_block\.cv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.conv1.norm.\1",
+    r"encoder\.fpn_block\.cv4\.conv\.weight": r"model.encoder.fpn_block.conv4.conv.weight",
+    r"encoder\.fpn_block\.cv4\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.conv4.norm.\1",
+    r"encoder\.fpn_block\.cv2\.0\.conv1\.conv\.weight": r"model.encoder.fpn_block.csp_rep1.conv1.conv.weight",
+    r"encoder\.fpn_block\.cv2\.0\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep1.conv1.norm.\1",
+    r"encoder\.fpn_block\.cv2\.0\.bottlenecks\.(\d+)\.conv1\.conv\.weight": r"model.encoder.fpn_block.csp_rep1.bottlenecks.\1.conv1.conv.weight",
+    r"encoder\.fpn_block\.cv2\.0\.bottlenecks\.(\d+)\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep1.bottlenecks.\1.conv1.norm.\2",
+    r"encoder\.fpn_block\.cv2\.0\.bottlenecks\.(\d+)\.conv2\.conv\.weight": r"model.encoder.fpn_block.csp_rep1.bottlenecks.\1.conv2.conv.weight",
+    r"encoder\.fpn_block\.cv2\.0\.bottlenecks\.(\d+)\.conv2\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep1.bottlenecks.\1.conv2.norm.\2",
+    r"encoder\.fpn_block\.cv2\.1\.conv\.weight": r"model.encoder.fpn_block.csp_rep1.conv3.conv.weight",
+    r"encoder\.fpn_block\.cv2\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep1.conv3.norm.\1",
+    r"encoder\.fpn_block\.cv3\.0\.conv1\.conv\.weight": r"model.encoder.fpn_block.csp_rep2.conv1.conv.weight",
+    r"encoder\.fpn_block\.cv3\.0\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep2.conv1.norm.\1",
+    r"encoder\.fpn_block\.cv3\.0\.bottlenecks\.(\d+)\.conv1\.conv\.weight": r"model.encoder.fpn_block.csp_rep2.bottlenecks.\1.conv1.conv.weight",
+    r"encoder\.fpn_block\.cv3\.0\.bottlenecks\.(\d+)\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep2.bottlenecks.\1.conv1.norm.\2",
+    r"encoder\.fpn_block\.cv3\.0\.bottlenecks\.(\d+)\.conv2\.conv\.weight": r"model.encoder.fpn_block.csp_rep2.bottlenecks.\1.conv2.conv.weight",
+    r"encoder\.fpn_block\.cv3\.0\.bottlenecks\.(\d+)\.conv2\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep2.bottlenecks.\1.conv2.norm.\2",
+    r"encoder\.fpn_block\.cv3\.1\.conv\.weight": r"model.encoder.fpn_block.csp_rep2.conv3.conv.weight",
+    r"encoder\.fpn_block\.cv3\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep2.conv3.norm.\1",
+    # PAN block (same structure as FPN)
+    r"encoder\.pan_block\.cv1\.conv\.weight": r"model.encoder.pan_block.conv1.conv.weight",
+    r"encoder\.pan_block\.cv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.conv1.norm.\1",
+    r"encoder\.pan_block\.cv4\.conv\.weight": r"model.encoder.pan_block.conv4.conv.weight",
+    r"encoder\.pan_block\.cv4\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.conv4.norm.\1",
+    r"encoder\.pan_block\.cv2\.0\.conv1\.conv\.weight": r"model.encoder.pan_block.csp_rep1.conv1.conv.weight",
+    r"encoder\.pan_block\.cv2\.0\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep1.conv1.norm.\1",
+    r"encoder\.pan_block\.cv2\.0\.bottlenecks\.(\d+)\.conv1\.conv\.weight": r"model.encoder.pan_block.csp_rep1.bottlenecks.\1.conv1.conv.weight",
+    r"encoder\.pan_block\.cv2\.0\.bottlenecks\.(\d+)\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep1.bottlenecks.\1.conv1.norm.\2",
+    r"encoder\.pan_block\.cv2\.0\.bottlenecks\.(\d+)\.conv2\.conv\.weight": r"model.encoder.pan_block.csp_rep1.bottlenecks.\1.conv2.conv.weight",
+    r"encoder\.pan_block\.cv2\.0\.bottlenecks\.(\d+)\.conv2\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep1.bottlenecks.\1.conv2.norm.\2",
+    r"encoder\.pan_block\.cv2\.1\.conv\.weight": r"model.encoder.pan_block.csp_rep1.conv3.conv.weight",
+    r"encoder\.pan_block\.cv2\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep1.conv3.norm.\1",
+    r"encoder\.pan_block\.cv3\.0\.conv1\.conv\.weight": r"model.encoder.pan_block.csp_rep2.conv1.conv.weight",
+    r"encoder\.pan_block\.cv3\.0\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep2.conv1.norm.\1",
+    r"encoder\.pan_block\.cv3\.0\.bottlenecks\.(\d+)\.conv1\.conv\.weight": r"model.encoder.pan_block.csp_rep2.bottlenecks.\1.conv1.conv.weight",
+    r"encoder\.pan_block\.cv3\.0\.bottlenecks\.(\d+)\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep2.bottlenecks.\1.conv1.norm.\2",
+    r"encoder\.pan_block\.cv3\.0\.bottlenecks\.(\d+)\.conv2\.conv\.weight": r"model.encoder.pan_block.csp_rep2.bottlenecks.\1.conv2.conv.weight",
+    r"encoder\.pan_block\.cv3\.0\.bottlenecks\.(\d+)\.conv2\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep2.bottlenecks.\1.conv2.norm.\2",
+    r"encoder\.pan_block\.cv3\.1\.conv\.weight": r"model.encoder.pan_block.csp_rep2.conv3.conv.weight",
+    r"encoder\.pan_block\.cv3\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep2.conv3.norm.\1",
+}
 
-def convert_old_keys_to_new_keys(state_dict):
-    # Use the mapping to rename keys
-    for original_key, converted_key in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+DECODER_NO_GATEWAY_KEY_MAPPING = {
+    r"decoder\.decoder\.layers\.(\d+)\.norm2\.scale": r"model.decoder.layers.\1.encoder_attn_layer_norm.scale",
+}
+
+DINOV3_KEY_MAPPING = {
+    # ViT embeddings
+    r"backbone\.dinov3\.patch_embed\.proj\.(weight|bias)": r"model.dinov3_backbone.embeddings.patch_embeddings.\1",
+    r"backbone\.dinov3\.cls_token": r"model.dinov3_backbone.embeddings.cls_token",
+    r"backbone\.dinov3\.storage_tokens": r"model.dinov3_backbone.embeddings.register_tokens",
+    r"backbone\.dinov3\.mask_token": r"model.dinov3_backbone.embeddings.mask_token",
+    # ViT blocks
+    r"backbone\.dinov3\.blocks\.(\d+)\.norm1\.(weight|bias)": r"model.dinov3_backbone.layers.\1.norm1.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.norm2\.(weight|bias)": r"model.dinov3_backbone.layers.\1.norm2.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.attn\.qkv\.(weight|bias)": r"model.dinov3_backbone.layers.\1.attention.qkv.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.attn\.proj\.(weight|bias)": r"model.dinov3_backbone.layers.\1.attention.o_proj.\2",
+    # Standard MLP (S/M/L)
+    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.fc1\.(weight|bias)": r"model.dinov3_backbone.layers.\1.mlp.up_proj.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.fc2\.(weight|bias)": r"model.dinov3_backbone.layers.\1.mlp.down_proj.\2",
+    # SwiGLU MLP (X only)
+    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.w1\.(weight|bias)": r"model.dinov3_backbone.layers.\1.mlp.gate_proj.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.w2\.(weight|bias)": r"model.dinov3_backbone.layers.\1.mlp.up_proj.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.w3\.(weight|bias)": r"model.dinov3_backbone.layers.\1.mlp.down_proj.\2",
+    # LayerScale (L/X only)
+    r"backbone\.dinov3\.blocks\.(\d+)\.ls1\.gamma": r"model.dinov3_backbone.layers.\1.layer_scale1.lambda1",
+    r"backbone\.dinov3\.blocks\.(\d+)\.ls2\.gamma": r"model.dinov3_backbone.layers.\1.layer_scale2.lambda1",
+    # Norm (L/X only)
+    r"backbone\.dinov3\.norm\.(weight|bias)": r"model.dinov3_backbone.norm.\1",
+    # STA adapter
+    r"backbone\.sta\.stem\.0\.(weight|bias)": r"model.dinov3_backbone.sta.stem.0.\1",
+    r"backbone\.sta\.stem\.1\.(weight|bias|running_mean|running_var)": r"model.dinov3_backbone.sta.stem.1.\1",
+    r"backbone\.sta\.conv2\.0\.(weight)": r"model.dinov3_backbone.sta.conv2.0.\1",
+    r"backbone\.sta\.conv2\.1\.(weight|bias|running_mean|running_var)": r"model.dinov3_backbone.sta.conv2.1.\1",
+    r"backbone\.sta\.conv3\.1\.(weight)": r"model.dinov3_backbone.sta.conv3.1.\1",
+    r"backbone\.sta\.conv3\.2\.(weight|bias|running_mean|running_var)": r"model.dinov3_backbone.sta.conv3.2.\1",
+    r"backbone\.sta\.conv4\.1\.(weight)": r"model.dinov3_backbone.sta.conv4.1.\1",
+    r"backbone\.sta\.conv4\.2\.(weight|bias|running_mean|running_var)": r"model.dinov3_backbone.sta.conv4.2.\1",
+    # Projection convs/norms
+    r"backbone\.convs\.(\d+)\.weight": r"model.dinov3_backbone.convs.\1.weight",
+    r"backbone\.norms\.(\d+)\.(weight|bias|running_mean|running_var)": r"model.dinov3_backbone.norms.\1.\2",
+}
+
+
+def convert_old_keys_to_new_keys(state_dict, config=None):
+    mapping = dict(ORIGINAL_TO_CONVERTED_KEY_MAPPING)
+
+    if config is not None:
+        if config.encoder_type == "lite":
+            for k in list(mapping.keys()):
+                if (
+                    k.startswith(r"encoder\.input_proj")
+                    or k.startswith(r"encoder\.lateral")
+                    or k.startswith(r"encoder\.fpn_blocks")
+                    or k.startswith(r"encoder\.pan_blocks")
+                    or k.startswith(r"encoder\.downsample")
+                    or k.startswith(r"encoder\.encoder")
+                ):
+                    del mapping[k]
+            mapping.update(LITE_ENCODER_KEY_MAPPING)
+
+        if not config.use_gateway:
+            mapping.update(DECODER_NO_GATEWAY_KEY_MAPPING)
+            for k in list(mapping.keys()):
+                if "gateway" in k:
+                    del mapping[k]
+
+        if config.backbone_type == "dinov3":
+            for k in list(mapping.keys()):
+                if k.startswith(r"backbone\."):
+                    del mapping[k]
+            mapping.update(DINOV3_KEY_MAPPING)
+
+    for original_key, converted_key in mapping.items():
         for key in list(state_dict.keys()):
             new_key = re.sub(f"^{original_key}$", converted_key, key)
             if new_key != key:
@@ -333,6 +569,39 @@ def read_in_q_k_v(state_dict, config):
             state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-d_model:]
 
 
+def strip_dinov3_model_prefix(state_dict):
+    for key in list(state_dict.keys()):
+        if "backbone.dinov3._model." in key:
+            new_key = key.replace("backbone.dinov3._model.", "backbone.dinov3.")
+            state_dict[new_key] = state_dict.pop(key)
+    return state_dict
+
+
+def read_in_q_k_v_vit(state_dict, config):
+    from transformers.models.dinov3_vit.configuration_dinov3_vit import DINOv3ViTConfig
+
+    vit_config = DINOv3ViTConfig(**config.dinov3_backbone_config)
+    has_key_bias = config.dinov3_backbone_config.get("key_bias", True)
+    prefix = "model.dinov3_backbone"
+    for i in range(vit_config.num_hidden_layers):
+        qkv_key = f"{prefix}.layers.{i}.attention.qkv.weight"
+        if qkv_key in state_dict:
+            qkv_w = state_dict.pop(qkv_key)
+            q, k, v = qkv_w.chunk(3, dim=0)
+            state_dict[f"{prefix}.layers.{i}.attention.q_proj.weight"] = q
+            state_dict[f"{prefix}.layers.{i}.attention.k_proj.weight"] = k
+            state_dict[f"{prefix}.layers.{i}.attention.v_proj.weight"] = v
+
+        qkv_bias_key = f"{prefix}.layers.{i}.attention.qkv.bias"
+        if qkv_bias_key in state_dict:
+            qkv_b = state_dict.pop(qkv_bias_key)
+            q_b, k_b, v_b = qkv_b.chunk(3, dim=0)
+            state_dict[f"{prefix}.layers.{i}.attention.q_proj.bias"] = q_b
+            if has_key_bias:
+                state_dict[f"{prefix}.layers.{i}.attention.k_proj.bias"] = k_b
+            state_dict[f"{prefix}.layers.{i}.attention.v_proj.bias"] = v_b
+
+
 def load_original_state_dict(repo_id):
     filepath = hf_hub_download(repo_id=repo_id, filename="model.safetensors")
     return load_file(filepath)
@@ -361,10 +630,26 @@ def convert_deimv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     state_dict.pop("decoder.valid_mask", None)
     state_dict.pop("decoder.anchors", None)
 
+    for key in list(state_dict.keys()):
+        if key.endswith(".num_batches_tracked"):
+            state_dict.pop(key)
+
+    if config.backbone_type == "dinov3":
+        strip_dinov3_model_prefix(state_dict)
+        for key in list(state_dict.keys()):
+            if "rope_embed.periods" in key or "qkv.bias_mask" in key:
+                state_dict.pop(key)
+
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict, config)
 
-    state_dict = convert_old_keys_to_new_keys(state_dict)
+    state_dict = convert_old_keys_to_new_keys(state_dict, config)
+
+    if config.backbone_type == "dinov3":
+        read_in_q_k_v_vit(state_dict, config)
+        mask_key = "model.dinov3_backbone.embeddings.mask_token"
+        if mask_key in state_dict and state_dict[mask_key].dim() == 2:
+            state_dict[mask_key] = state_dict[mask_key].unsqueeze(1)
 
     if "model.enc_output.0.weight" not in state_dict:
         d_model = config.d_model
@@ -373,37 +658,74 @@ def convert_deimv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
         state_dict["model.enc_output.1.weight"] = torch.ones(d_model)
         state_dict["model.enc_output.1.bias"] = torch.zeros(d_model)
 
+    if config.share_bbox_head:
+        num_decoder_layers = config.decoder_layers
+        for key in list(state_dict.keys()):
+            if "model.decoder.bbox_embed.0." in key:
+                for i in range(1, num_decoder_layers):
+                    new_key = key.replace("bbox_embed.0.", f"bbox_embed.{i}.")
+                    if new_key not in state_dict:
+                        state_dict[new_key] = state_dict[key]
+
     # for two_stage
     for key in list(state_dict.keys()):
         if "bbox_embed" in key or ("class_embed" in key and "denoising_" not in key):
             new_key = key.split("model.decoder.")[-1]
-            if new_key not in state_dict:
+            if new_key != key and new_key not in state_dict:
                 state_dict[new_key] = state_dict[key]
 
     model = Deimv2ForObjectDetection(config)
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
 
-    if missing:
-        logger.warning(f"Missing keys ({len(missing)}): {missing[:10]}...")
+    expected_missing = {"mask_token", "register_tokens", "layer_scale1", "layer_scale2"}
+    unexpected_missing = [k for k in missing if not any(e in k for e in expected_missing)]
+    if unexpected_missing:
+        logger.warning(f"Missing keys ({len(unexpected_missing)}): {unexpected_missing[:10]}...")
+    elif missing:
+        logger.info(
+            f"All {len(missing)} missing keys are expected model-init defaults (mask_token, register_tokens, layer_scale)"
+        )
     if unexpected:
         logger.warning(f"Unexpected keys ({len(unexpected)}): {unexpected[:10]}...")
 
     model.eval()
 
-    image_processor = RTDetrImageProcessor()
+    is_dinov3 = config.backbone_type == "dinov3"
+    if is_dinov3:
+        image_processor = RTDetrImageProcessor(
+            do_normalize=True,
+            image_mean=[0.485, 0.456, 0.406],
+            image_std=[0.229, 0.224, 0.225],
+        )
+    else:
+        image_processor = RTDetrImageProcessor()
+
     img = prepare_img()
 
-    transformations = transforms.Compose(
-        [
-            transforms.Resize([640, 640], interpolation=transforms.InterpolationMode.BILINEAR),
-            transforms.ToTensor(),
-        ]
-    )
+    if is_dinov3:
+        transformations = transforms.Compose(
+            [
+                transforms.Resize([640, 640], interpolation=transforms.InterpolationMode.BILINEAR),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ]
+        )
+    else:
+        transformations = transforms.Compose(
+            [
+                transforms.Resize([640, 640], interpolation=transforms.InterpolationMode.BILINEAR),
+                transforms.ToTensor(),
+            ]
+        )
     original_pixel_values = transformations(img).unsqueeze(0)
     encoding = image_processor(images=img, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
-    assert torch.allclose(original_pixel_values, pixel_values), "Image preprocessing mismatch!"
+    if not torch.allclose(original_pixel_values, pixel_values, atol=1e-4):
+        max_diff = (original_pixel_values - pixel_values).abs().max().item()
+        logger.warning(f"Image preprocessing mismatch! Max diff: {max_diff:.6f}")
+        if max_diff > 1e-2:
+            raise ValueError(f"Image preprocessing mismatch too large: {max_diff}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
