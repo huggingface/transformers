@@ -2485,7 +2485,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # Both are already present -> it means the config is wrong and do not reflect the actual
                 # checkpoint -> let's raise a warning and NOT tie them
                 if source_is_there and target_is_there:
-                    logger.warning(
+                    logger.warning_once(
                         f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
                         f"{target_param_name}, but both are present in the checkpoints, so we will NOT tie them. "
                         "You should update the config with `tie_word_embeddings=False` to silence this warning"
