@@ -1,4 +1,4 @@
-import numpy as np
+from PIL import Image as PILImage
 from typing_extensions import Unpack
 
 from transformers.image_processing_utils import BatchFeature
@@ -13,9 +13,10 @@ class HCXVisionV2ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
-            "return_mm_token_type_ids": False,
+            "return_token_type_ids": False,
+            # "return_mm_token_type_ids": True,
         },
-        "videos_kwargs": {"return_metadata": True},
+        "videos_kwargs": {"return_metadata": False},
     }
 
 
@@ -122,15 +123,33 @@ class HyperClovaXProcessor(ProcessorMixin):
 
         text = text.copy()  # below lines change text in-place
         if images is not None:
+            # Normalize images to a flat list so we can index by global image counter
+            if isinstance(images, (list, tuple)):
+                images_list = []
+                for img in images:
+                    if isinstance(img, (list, tuple)):
+                        images_list.extend(img)
+                    else:
+                        images_list.append(img)
+            else:
+                images_list = [images]
+
             merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
                 while self.image_token in text[i]:
                     num_image_tokens = image_grid_thw[index].prod() // merge_length
                     text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-                    text[i] = text[i].replace(
-                        '{"resolution": [w, h]}', '{"resolution": ' + str(list(images[i].size)) + "}"
-                    )
+                    # Replace resolution placeholder with actual image size (PIL images only)
+                    if index < len(images_list):
+                        current_image = images_list[index]
+                        from PIL import Image as PILImage
+
+                        if isinstance(current_image, PILImage.Image):
+                            text[i] = text[i].replace(
+                                '{"resolution": [w, h]}',
+                                '{"resolution": ' + str(list(current_image.size)) + "}",
+                            )
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
@@ -145,17 +164,47 @@ class HyperClovaXProcessor(ProcessorMixin):
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
-        if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[tuple[int, int]]`, *optional*):
+                Image sizes as `(height, width)` pairs.
+
+        Returns:
+            `dict`: A dict with `num_image_tokens` and `num_image_patches` lists.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            # Create dummy images of the requested sizes and run them through the image processor
+            # to let it determine the exact number of patches (handles dynamic resizing, merging, etc.)
+            dummy_images = [PILImage.new("RGB", (w, h)) for h, w in image_sizes]
+            image_inputs = self.image_processor(images=dummy_images)
+
+            if "image_grid_thw" in image_inputs:
+                merge_size = getattr(self.image_processor, "merge_size", 1)
+                num_image_patches = [int(thw.prod()) for thw in image_inputs["image_grid_thw"]]
+                num_image_tokens = [p // merge_size**2 for p in num_image_patches]
+            else:
+                # Fallback for CLIP-style processors without grid_thw output
+                patch_size = self.image_processor.patch_size
+                crop_h = self.image_processor.crop_size.get("height", 336)
+                crop_w = self.image_processor.crop_size.get("width", 336)
+                n = (crop_h // patch_size) * (crop_w // patch_size)
+                num_image_patches = [n] * len(image_sizes)
+                num_image_tokens = num_image_patches
+
+            vision_data["num_image_tokens"] = num_image_tokens
+            vision_data["num_image_patches"] = num_image_patches
+
+        return vision_data
 
     def post_process_image_text_to_text(
         self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
