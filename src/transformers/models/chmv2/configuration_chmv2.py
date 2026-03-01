@@ -122,13 +122,13 @@ class CHMv2Config(PreTrainedConfig):
                 "num_attention_heads": 16,
                 "num_hidden_layers": 24,
                 "out_indices": [5, 11, 17, 23],
-                "reshape_hidden_states": False,
+                "reshape_hidden_states": True,
                 "apply_layernorm": True,
             }
 
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            default_config_type=backbone_type,
+            default_config_type="dinov3_vit",
             default_config_kwargs=default_config_kwargs,
             **kwargs,
         )

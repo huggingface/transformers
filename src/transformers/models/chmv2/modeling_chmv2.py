@@ -25,7 +25,7 @@ from torch import nn
 from ...backbone_utils import load_backbone
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import logging
 from .configuration_chmv2 import CHMv2Config
 
 
@@ -540,8 +540,8 @@ class CHMv2FeaturesToDepth(nn.Module):
         return output
 
 
-@auto_docstring
 class CHMv2PreTrainedModel(PreTrainedModel):
+    """CHMv2 pretrained model base class."""
     config_class = CHMv2Config
     base_model_prefix = "chmv2"
     main_input_name = "pixel_values"
@@ -549,12 +549,10 @@ class CHMv2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
 
 
-@auto_docstring(
-    custom_intro="""
+class CHMv2ForCanopyHeightEstimation(CHMv2PreTrainedModel):
+    """
     CHMv2 Model with a depth estimation head on top (consisting of convolutional layers) e.g. for canopy height estimation.
     """
-)
-class CHMv2ForCanopyHeightEstimation(CHMv2PreTrainedModel):
     _no_split_modules = ["DINOv3ViTEmbeddings"]
 
     def __init__(self, config: CHMv2Config):
@@ -566,7 +564,6 @@ class CHMv2ForCanopyHeightEstimation(CHMv2PreTrainedModel):
 
         self.post_init()
 
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,

@@ -156,19 +156,24 @@ def create_rename_keys_backbone(config: CHMv2Config) -> list[tuple[str, str]]:
     return rename_keys
 
 
-def create_rename_keys_head(config: CHMv2Config) -> list[tuple[str, str]]:
+def create_rename_keys_head(config: CHMv2Config, head_only: bool = False) -> list[tuple[str, str]]:
     """
     Create rename keys for CHMv2 head weights.
 
-    Original structure (dinov3-private):
-        head.reassemble_blocks.projects.{i}.conv
-        head.reassemble_blocks.resize_layers.{i}
-        head.reassemble_blocks.batchnorm_layers.{i}
-        head.reassemble_blocks.readout_projects.{i}
-        head.convs.{i}.conv
-        head.fusion_blocks.{i}.res_conv_unit1.conv1.conv / conv2.conv
-        head.fusion_blocks.{i}.res_conv_unit2.conv1.conv / conv2.conv
-        head.conv_depth.head.{0,2,4}
+    Args:
+        config: CHMv2 configuration
+        head_only: If True, source keys have no prefix (decoder-only checkpoint).
+                   If False, source keys have 'head.' prefix (full model checkpoint).
+
+    Original structure (dinov3-private decoder/head):
+        [prefix.]reassemble_blocks.projects.{i}.conv
+        [prefix.]reassemble_blocks.resize_layers.{i}
+        [prefix.]reassemble_blocks.batchnorm_layers.{i}
+        [prefix.]reassemble_blocks.readout_projects.{i}
+        [prefix.]convs.{i}.conv
+        [prefix.]fusion_blocks.{i}.res_conv_unit1.conv1.conv / conv2.conv
+        [prefix.]fusion_blocks.{i}.res_conv_unit2.conv1.conv / conv2.conv
+        [prefix.]conv_depth.head.{0,2,4}
 
     HF structure (transformers-private):
         head.reassemble_stage.layers.{i}.projection.conv
@@ -181,64 +186,64 @@ def create_rename_keys_head(config: CHMv2Config) -> list[tuple[str, str]]:
         head.conv_depth.head.{0,2,4}
 
     Note: CHMv2 fusion blocks have NO projection layer (unlike DPT).
-    Note: Fusion layers order is reversed in HF (idx 0 is first, processes features[-1]).
     """
     rename_keys = []
+
+    # Source prefix: empty for head-only checkpoint, "head." for full model
+    src_prefix = "" if head_only else "head."
 
     # Reassemble stage
     for i in range(4):
         # Projection conv
         rename_keys.append(
-            (f"head.reassemble_blocks.projects.{i}.conv.weight", f"head.reassemble_stage.layers.{i}.projection.conv.weight")
+            (f"{src_prefix}reassemble_blocks.projects.{i}.conv.weight", f"head.reassemble_stage.layers.{i}.projection.conv.weight")
         )
         rename_keys.append(
-            (f"head.reassemble_blocks.projects.{i}.conv.bias", f"head.reassemble_stage.layers.{i}.projection.conv.bias")
+            (f"{src_prefix}reassemble_blocks.projects.{i}.conv.bias", f"head.reassemble_stage.layers.{i}.projection.conv.bias")
         )
 
         # Resize layers (layer 2 is Identity, so it has no weights)
         if i != 2:
             rename_keys.append(
-                (f"head.reassemble_blocks.resize_layers.{i}.weight", f"head.reassemble_stage.layers.{i}.resize.weight")
+                (f"{src_prefix}reassemble_blocks.resize_layers.{i}.weight", f"head.reassemble_stage.layers.{i}.resize.weight")
             )
             rename_keys.append(
-                (f"head.reassemble_blocks.resize_layers.{i}.bias", f"head.reassemble_stage.layers.{i}.resize.bias")
+                (f"{src_prefix}reassemble_blocks.resize_layers.{i}.bias", f"head.reassemble_stage.layers.{i}.resize.bias")
             )
 
         # Batchnorm (if present - may be Identity)
         rename_keys.append(
-            (f"head.reassemble_blocks.batchnorm_layers.{i}.weight", f"head.reassemble_stage.layers.{i}.batchnorm.weight")
+            (f"{src_prefix}reassemble_blocks.batchnorm_layers.{i}.weight", f"head.reassemble_stage.layers.{i}.batchnorm.weight")
         )
         rename_keys.append(
-            (f"head.reassemble_blocks.batchnorm_layers.{i}.bias", f"head.reassemble_stage.layers.{i}.batchnorm.bias")
+            (f"{src_prefix}reassemble_blocks.batchnorm_layers.{i}.bias", f"head.reassemble_stage.layers.{i}.batchnorm.bias")
         )
         rename_keys.append(
-            (f"head.reassemble_blocks.batchnorm_layers.{i}.running_mean", f"head.reassemble_stage.layers.{i}.batchnorm.running_mean")
+            (f"{src_prefix}reassemble_blocks.batchnorm_layers.{i}.running_mean", f"head.reassemble_stage.layers.{i}.batchnorm.running_mean")
         )
         rename_keys.append(
-            (f"head.reassemble_blocks.batchnorm_layers.{i}.running_var", f"head.reassemble_stage.layers.{i}.batchnorm.running_var")
+            (f"{src_prefix}reassemble_blocks.batchnorm_layers.{i}.running_var", f"head.reassemble_stage.layers.{i}.batchnorm.running_var")
         )
         rename_keys.append(
-            (f"head.reassemble_blocks.batchnorm_layers.{i}.num_batches_tracked", f"head.reassemble_stage.layers.{i}.batchnorm.num_batches_tracked")
+            (f"{src_prefix}reassemble_blocks.batchnorm_layers.{i}.num_batches_tracked", f"head.reassemble_stage.layers.{i}.batchnorm.num_batches_tracked")
         )
 
         # Readout projects (if present)
         rename_keys.append(
-            (f"head.reassemble_blocks.readout_projects.{i}.0.weight", f"head.reassemble_stage.readout_projects.{i}.0.weight")
+            (f"{src_prefix}reassemble_blocks.readout_projects.{i}.0.weight", f"head.reassemble_stage.readout_projects.{i}.0.weight")
         )
         rename_keys.append(
-            (f"head.reassemble_blocks.readout_projects.{i}.0.bias", f"head.reassemble_stage.readout_projects.{i}.0.bias")
+            (f"{src_prefix}reassemble_blocks.readout_projects.{i}.0.bias", f"head.reassemble_stage.readout_projects.{i}.0.bias")
         )
 
     # Convs (original has ConvModule with .conv, HF has plain Conv2d)
     for i in range(4):
-        rename_keys.append((f"head.convs.{i}.conv.weight", f"head.convs.{i}.weight"))
+        rename_keys.append((f"{src_prefix}convs.{i}.conv.weight", f"head.convs.{i}.weight"))
         # Note: HF convs have bias=False, so no bias key
 
     # Fusion blocks -> fusion_layers
     # Original fusion_blocks order: [0, 1, 2, 3] where 0 has no res_conv_unit1
     # HF fusion_layers order: [0, 1, 2, 3] where 0 (is_first_layer=True) has no residual_layer1
-    # Original processes features in reverse: fusion_blocks[0](features[-1]), then fusion_blocks[i](out, features[-(i+1)])
-    # HF processes similarly: fusion_layers[0](features[0] after reverse), then fusion_layers[i](out, features[i])
     # So the mapping is direct: original i -> HF i
 
     for i in range(4):
@@ -247,30 +252,30 @@ def create_rename_keys_head(config: CHMv2Config) -> list[tuple[str, str]]:
         # res_conv_unit1 -> residual_layer1 (only for i > 0, since fusion_blocks[0].res_conv_unit1 = None)
         if i > 0:
             rename_keys.append(
-                (f"head.fusion_blocks.{i}.res_conv_unit1.conv1.conv.weight", f"head.fusion_layers.{i}.residual_layer1.convolution1.weight")
+                (f"{src_prefix}fusion_blocks.{i}.res_conv_unit1.conv1.conv.weight", f"head.fusion_layers.{i}.residual_layer1.convolution1.weight")
             )
             rename_keys.append(
-                (f"head.fusion_blocks.{i}.res_conv_unit1.conv1.conv.bias", f"head.fusion_layers.{i}.residual_layer1.convolution1.bias")
+                (f"{src_prefix}fusion_blocks.{i}.res_conv_unit1.conv1.conv.bias", f"head.fusion_layers.{i}.residual_layer1.convolution1.bias")
             )
             rename_keys.append(
-                (f"head.fusion_blocks.{i}.res_conv_unit1.conv2.conv.weight", f"head.fusion_layers.{i}.residual_layer1.convolution2.weight")
+                (f"{src_prefix}fusion_blocks.{i}.res_conv_unit1.conv2.conv.weight", f"head.fusion_layers.{i}.residual_layer1.convolution2.weight")
             )
             rename_keys.append(
-                (f"head.fusion_blocks.{i}.res_conv_unit1.conv2.conv.bias", f"head.fusion_layers.{i}.residual_layer1.convolution2.bias")
+                (f"{src_prefix}fusion_blocks.{i}.res_conv_unit1.conv2.conv.bias", f"head.fusion_layers.{i}.residual_layer1.convolution2.bias")
             )
 
         # res_conv_unit2 -> residual_layer2 (all layers have this)
         rename_keys.append(
-            (f"head.fusion_blocks.{i}.res_conv_unit2.conv1.conv.weight", f"head.fusion_layers.{i}.residual_layer2.convolution1.weight")
+            (f"{src_prefix}fusion_blocks.{i}.res_conv_unit2.conv1.conv.weight", f"head.fusion_layers.{i}.residual_layer2.convolution1.weight")
         )
         rename_keys.append(
-            (f"head.fusion_blocks.{i}.res_conv_unit2.conv1.conv.bias", f"head.fusion_layers.{i}.residual_layer2.convolution1.bias")
+            (f"{src_prefix}fusion_blocks.{i}.res_conv_unit2.conv1.conv.bias", f"head.fusion_layers.{i}.residual_layer2.convolution1.bias")
         )
         rename_keys.append(
-            (f"head.fusion_blocks.{i}.res_conv_unit2.conv2.conv.weight", f"head.fusion_layers.{i}.residual_layer2.convolution2.weight")
+            (f"{src_prefix}fusion_blocks.{i}.res_conv_unit2.conv2.conv.weight", f"head.fusion_layers.{i}.residual_layer2.convolution2.weight")
         )
         rename_keys.append(
-            (f"head.fusion_blocks.{i}.res_conv_unit2.conv2.conv.bias", f"head.fusion_layers.{i}.residual_layer2.convolution2.bias")
+            (f"{src_prefix}fusion_blocks.{i}.res_conv_unit2.conv2.conv.bias", f"head.fusion_layers.{i}.residual_layer2.convolution2.bias")
         )
 
     # UpConvHead (conv_depth) - both use nn.Sequential with same indices
@@ -279,12 +284,12 @@ def create_rename_keys_head(config: CHMv2Config) -> list[tuple[str, str]]:
     # head[2]: Conv2d(features // 2, n_hidden_channels, kernel_size=3)
     # head[3]: ReLU (no weights)
     # head[4]: Conv2d(n_hidden_channels, n_output_channels, kernel_size=1)
-    rename_keys.append(("head.conv_depth.head.0.weight", "head.conv_depth.head.0.weight"))
-    rename_keys.append(("head.conv_depth.head.0.bias", "head.conv_depth.head.0.bias"))
-    rename_keys.append(("head.conv_depth.head.2.weight", "head.conv_depth.head.2.weight"))
-    rename_keys.append(("head.conv_depth.head.2.bias", "head.conv_depth.head.2.bias"))
-    rename_keys.append(("head.conv_depth.head.4.weight", "head.conv_depth.head.4.weight"))
-    rename_keys.append(("head.conv_depth.head.4.bias", "head.conv_depth.head.4.bias"))
+    rename_keys.append((f"{src_prefix}conv_depth.head.0.weight", "head.conv_depth.head.0.weight"))
+    rename_keys.append((f"{src_prefix}conv_depth.head.0.bias", "head.conv_depth.head.0.bias"))
+    rename_keys.append((f"{src_prefix}conv_depth.head.2.weight", "head.conv_depth.head.2.weight"))
+    rename_keys.append((f"{src_prefix}conv_depth.head.2.bias", "head.conv_depth.head.2.bias"))
+    rename_keys.append((f"{src_prefix}conv_depth.head.4.weight", "head.conv_depth.head.4.weight"))
+    rename_keys.append((f"{src_prefix}conv_depth.head.4.bias", "head.conv_depth.head.4.bias"))
 
     return rename_keys
 
@@ -348,6 +353,11 @@ def convert_chmv2_checkpoint(
 ) -> None:
     """
     Convert CHMv2 checkpoint to HuggingFace format.
+
+    Supports two checkpoint formats:
+    1. Head-only checkpoint (from dinov3-private release): Keys like 'reassemble_blocks.projects.0...'
+       Use with --backbone_repo_id to load backbone from HuggingFace.
+    2. Full model checkpoint: Keys like 'backbone...' and 'head...'
     """
     # Create config
     config = get_chmv2_config(
@@ -368,18 +378,27 @@ def convert_chmv2_checkpoint(
     elif "state_dict" in state_dict:
         state_dict = state_dict["state_dict"]
 
-    # Rename backbone keys
-    rename_keys = create_rename_keys_backbone(config)
-    for src, dest in rename_keys:
-        rename_key(state_dict, src, dest)
+    # Auto-detect checkpoint type
+    has_backbone_keys = any(k.startswith("backbone.") for k in state_dict.keys())
+    has_head_prefix = any(k.startswith("head.") for k in state_dict.keys())
+    head_only = not has_head_prefix and any(k.startswith("reassemble_blocks.") for k in state_dict.keys())
+
+    logger.info(f"Checkpoint type detected: backbone_keys={has_backbone_keys}, head_prefix={has_head_prefix}, head_only={head_only}")
+
+    # Rename backbone keys (if present)
+    if has_backbone_keys:
+        logger.info("Converting backbone weights...")
+        rename_keys = create_rename_keys_backbone(config)
+        for src, dest in rename_keys:
+            rename_key(state_dict, src, dest)
+        # Split QKV matrices
+        read_in_q_k_v(state_dict, config)
 
     # Rename head keys
-    rename_keys = create_rename_keys_head(config)
+    logger.info(f"Converting head weights (head_only={head_only})...")
+    rename_keys = create_rename_keys_head(config, head_only=head_only)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
-
-    # Split QKV matrices
-    read_in_q_k_v(state_dict, config)
 
     # Load HuggingFace model
     model = CHMv2ForCanopyHeightEstimation(config)
