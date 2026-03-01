@@ -198,7 +198,9 @@ class GraniteSpeechConfig(PreTrainedConfig):
             # Verify that all the required hidden layers are in the encoder's range
             for idx in encoder_hidden_layers:
                 if (idx < 0) or (idx >= encoder_config.num_layers):
-                    raise ValueError(f"Asking for hidden layer {idx} but number of layers is {encoder_config.num_layers}.")
+                    raise ValueError(
+                        f"Asking for hidden layer {idx} but number of layers is {encoder_config.num_layers}."
+                    )
         self.encoder_hidden_layers = encoder_hidden_layers
         super().__init__(**kwargs)
 
