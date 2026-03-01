@@ -1092,9 +1092,31 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
 
     shard_files = list(set(index["weight_map"].values()))
 
+    # Build the conversion mapping for models with _checkpoint_conversion_mapping (e.g. VLMs).
+    # Checkpoints are saved in original format via revert_weight_conversion, so we need to
+    # rename keys back to model format before loading.
+    _rename_fn = None
+    from .modeling_utils import PreTrainedModel
+
+    if isinstance(model, PreTrainedModel):
+        from .conversion_mapping import get_model_conversion_mapping
+        from .core_model_loading import WeightConverter, WeightRenaming, rename_source_key
+
+        weight_conversions = get_model_conversion_mapping(model, add_legacy=False)
+        if weight_conversions:
+            renamings = [e for e in weight_conversions if isinstance(e, WeightRenaming)]
+            converters = [e for e in weight_conversions if isinstance(e, WeightConverter)]
+            meta_state_dict = dict.fromkeys(model.state_dict().keys())
+            prefix = model.base_model_prefix
+
+            def _rename_fn(key):
+                new_key, _ = rename_source_key(key, renamings, converters, prefix, meta_state_dict)
+                return new_key
+
     # If strict=True, error before loading any of the state dicts.
-    # TODO: Here, update the weight map with the config.dynamic_weight_conversion
     loaded_keys = index["weight_map"].keys()
+    if _rename_fn is not None:
+        loaded_keys = {_rename_fn(k) for k in loaded_keys}
     model_keys = model.state_dict().keys()
     missing_keys = [key for key in model_keys if key not in loaded_keys]
     unexpected_keys = [key for key in loaded_keys if key not in model_keys]
@@ -1116,6 +1138,8 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
 
     for shard_file in shard_files:
         state_dict = loader(os.path.join(folder, shard_file))
+        if _rename_fn is not None:
+            state_dict = {_rename_fn(k): v for k, v in state_dict.items()}
         model.load_state_dict(state_dict, strict=False)
 
         # Make sure memory is freed before we load the next state dict.

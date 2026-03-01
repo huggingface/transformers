@@ -610,6 +610,118 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(parameters, parameters1)
         self.check_trainer_state_are_the_same(state, state1)
 
+    @require_torch_non_multi_accelerator
+    def test_resume_training_with_conversion_mapping(self):
+        """Test that resume_from_checkpoint works for models with _checkpoint_conversion_mapping.
+
+        Models with _checkpoint_conversion_mapping (e.g. VLMs like Qwen2.5VL) save
+        checkpoints in original format via revert_weight_conversion, but load_state_dict
+        expects keys in the model's own format. This test verifies that the Trainer
+        correctly applies the conversion mapping when resuming from checkpoint.
+
+        Regression test for https://github.com/huggingface/transformers/issues/43701
+        """
+        from transformers.conversion_mapping import register_checkpoint_conversion_mapping
+        from transformers.core_model_loading import WeightRenaming
+
+        # Create a model whose checkpoint conversion mapping renames "lm.*" -> "model.*"
+        # In the model, parameters are named "model.param_a" and "model.param_b" (via the inner Module).
+        # In saved checkpoints, they'll be renamed to "lm.param_a" and "lm.param_b".
+        class InnerModule(nn.Module):
+            def __init__(self, a, b):
+                super().__init__()
+                self.param_a = nn.Parameter(torch.tensor(a).float())
+                self.param_b = nn.Parameter(torch.tensor(b).float())
+
+        class ConversionMappingConfig(RegressionModelConfig):
+            model_type = "conversion_mapping_test"
+
+        class ConversionMappingModel(RegressionPreTrainedModel):
+            config_class = ConversionMappingConfig
+            base_model_prefix = "model"
+
+            def __init__(self, config):
+                # Skip RegressionPreTrainedModel.__init__ to avoid its param setup
+                super(RegressionPreTrainedModel, self).__init__(config)
+                self.model = InnerModule(config.a, config.b)
+                self.double_output = config.double_output
+                self.post_init()
+
+            def forward(self, input_x, labels=None, **kwargs):
+                y = input_x * self.model.param_a + self.model.param_b
+                if labels is None:
+                    return (y,)
+                loss = nn.functional.mse_loss(y, labels)
+                return (loss, y)
+
+        # Register the conversion mapping: checkpoint "lm." -> model "model."
+        register_checkpoint_conversion_mapping(
+            "conversion_mapping_test",
+            [WeightRenaming("lm.", "model.")],
+            overwrite=True,
+        )
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        config = ConversionMappingConfig(a=0, b=0)
+        model = ConversionMappingModel(config)
+
+        train_dataset = RegressionDataset(length=128)
+        eval_dataset = RegressionDataset(length=64)
+
+        kwargs = {
+            "output_dir": tmp_dir,
+            "save_steps": 5,
+            "learning_rate": 0.1,
+            "logging_steps": 5,
+            "max_steps": 10,
+        }
+        args = TrainingArguments(**kwargs)
+
+        trainer = Trainer(
+            model=model,
+            args=args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+        )
+        trainer.model_accepts_loss_kwargs = False
+        trainer.train()
+
+        # Verify checkpoint was saved with converted (original-format) keys
+        checkpoint_dir = os.path.join(tmp_dir, "checkpoint-5")
+        saved_state = safetensors.torch.load_file(os.path.join(checkpoint_dir, SAFE_WEIGHTS_NAME))
+        saved_keys = set(saved_state.keys())
+        # Keys should be in checkpoint format: "lm.param_a", "lm.param_b"
+        self.assertIn("lm.param_a", saved_keys, f"Expected 'lm.param_a' in saved keys, got {saved_keys}")
+        self.assertIn("lm.param_b", saved_keys, f"Expected 'lm.param_b' in saved keys, got {saved_keys}")
+        self.assertNotIn("model.param_a", saved_keys, "model-format keys should NOT be in checkpoint")
+
+        # Now resume from checkpoint — this is where the bug manifested (key mismatch)
+        model2 = ConversionMappingModel(config)
+        trainer2 = Trainer(
+            model=model2,
+            args=args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+        )
+        trainer2.model_accepts_loss_kwargs = False
+
+        # This should not raise a key mismatch error
+        trainer2.train(resume_from_checkpoint=checkpoint_dir)
+
+        # Verify model parameters are loaded correctly
+        self.assertAlmostEqual(
+            model2.model.param_a.item(),
+            model.model.param_a.item(),
+            places=4,
+            msg="param_a should match after resume",
+        )
+        self.assertAlmostEqual(
+            model2.model.param_b.item(),
+            model.model.param_b.item(),
+            places=4,
+            msg="param_b should match after resume",
+        )
+
 
 # ---------------------------------------------------------------------------
 # Auto batch size finder tests

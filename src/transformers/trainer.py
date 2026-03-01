@@ -3270,6 +3270,36 @@ class Trainer:
 
     # ---- Checkpoint Resuming ----
 
+    @staticmethod
+    def _apply_conversion_mapping_to_state_dict(model: nn.Module, state_dict: dict) -> dict:
+        """Apply checkpoint conversion mapping to rename state dict keys.
+
+        Models with ``_checkpoint_conversion_mapping`` (e.g. VLMs like Qwen2.5VL) save
+        checkpoints in original format via ``revert_weight_conversion``, but
+        ``model.load_state_dict`` expects keys in the model's own format.  This helper
+        bridges the gap by applying the same renaming that ``from_pretrained`` uses.
+        """
+        if not isinstance(model, PreTrainedModel):
+            return state_dict
+
+        from .conversion_mapping import get_model_conversion_mapping
+        from .core_model_loading import WeightConverter, WeightRenaming, rename_source_key
+
+        weight_conversions = get_model_conversion_mapping(model, add_legacy=False)
+        if not weight_conversions:
+            return state_dict
+
+        renamings = [e for e in weight_conversions if isinstance(e, WeightRenaming)]
+        converters = [e for e in weight_conversions if isinstance(e, WeightConverter)]
+        meta_state_dict = dict.fromkeys(model.state_dict().keys())
+        prefix = model.base_model_prefix
+
+        renamed = {}
+        for key, value in state_dict.items():
+            new_key, _ = rename_source_key(key, renamings, converters, prefix, meta_state_dict)
+            renamed[new_key] = value
+        return renamed
+
     def _load_from_checkpoint(self, resume_from_checkpoint: str, model: nn.Module | None = None) -> None:
         """Load model weights from a checkpoint directory."""
         if model is None:
@@ -3361,6 +3391,8 @@ class Trainer:
                     check_torch_load_is_safe()
                     state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
 
+                # Apply checkpoint conversion mapping for models that save in original format
+                state_dict = self._apply_conversion_mapping_to_state_dict(model, state_dict)
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                 # which takes *args instead of **kwargs
                 load_result = model.load_state_dict(state_dict, False)
@@ -3485,6 +3517,8 @@ class Trainer:
                         check_torch_load_is_safe()
                         state_dict = torch.load(best_model_path, map_location="cpu", weights_only=True)
 
+                    # Apply checkpoint conversion mapping for models that save in original format
+                    state_dict = self._apply_conversion_mapping_to_state_dict(model, state_dict)
                     # If the model is on the GPU, it still works!
                     # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                     # which takes *args instead of **kwargs
