@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-02-21.*
+*This model was released on 2020-10-20 and added to Hugging Face Transformers on 2026-03-01.*
 
 # CharacterBERT
 
