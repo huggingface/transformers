@@ -93,26 +93,19 @@ experts.1.w3.weight  ─┘
 
 The system is built around several key components defined in `src/transformers/core_model_loading.py`:
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     convert_and_load_state_dict_in_model        │
-│                                                                 │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────┐  │
-│  │ WeightRenaming│    │WeightConverter│    │ ConversionOps   │  │
-│  │              │    │              │    │                  │  │
-│  │ Simple key   │    │ Multi-step   │    │ - Chunk          │  │
-│  │ renaming     │    │ transforms   │    │ - Concatenate    │  │
-│  │              │    │              │    │ - MergeModulelist│  │
-│  └──────────────┘    └──────────────┘    │ - Transpose      │  │
-│                                          │ - etc.           │  │
-│                                          └──────────────────┘  │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │                  ThreadPoolExecutor                       │  │
-│  │           (Async tensor materialization)                  │  │
-│  └──────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-```
+**Phase 1 — Per-key processing** (iterates over checkpoint keys):
+
+1. **Rename key** via `WeightRenaming` (e.g. `block_sparse_moe` -> `mlp`)
+2. **Match pattern** via `WeightConverter` (e.g. `experts.*.w1.weight`)
+3. **Shard (TP) and send to device** asynchronously via `ThreadPoolExecutor`
+4. **Collect** tensors with the same `source_pattern` together (e.g. all MoE expert weights, gate + up projections)
+
+**Phase 2 — Per-mapping processing** (iterates over collected mappings):
+
+1. **Dequantize/deserialize** (pre-quantized checkpoints only)
+2. **Apply `ConversionOps` chain**: `Chunk`, `Concatenate`, `MergeModulelist`, `Transpose`, etc.
+3. **Quantize** on-the-fly (if not pre-quantized)
+4. **Set parameter** on model
 
 ### WeightTransform
 
