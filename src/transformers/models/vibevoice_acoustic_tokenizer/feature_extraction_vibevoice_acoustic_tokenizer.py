@@ -12,18 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import torch
-
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, logging
+from ...utils.import_utils import is_torch_available, requires
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch",))
 class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a VibeVoiceAcousticTokenizer feature extractor.

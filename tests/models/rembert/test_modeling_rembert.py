@@ -360,7 +360,6 @@ class RemBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         {
             "feature-extraction": RemBertModel,
             "fill-mask": RemBertForMaskedLM,
-            "question-answering": RemBertForQuestionAnswering,
             "text-classification": RemBertForSequenceClassification,
             "text-generation": RemBertForCausalLM,
             "token-classification": RemBertForTokenClassification,

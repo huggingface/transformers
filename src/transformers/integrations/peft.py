@@ -242,7 +242,7 @@ def _build_peft_weight_mapping(
                         peft_weight_operations.append(op)
 
                 # TODO: this assumption may not hold for models != mixtral
-                # For source, we capture the orignal weights + the lora weights
+                # For source, we capture the original weights + the lora weights
                 new_source_patterns = []
                 for pat in list(orig_conversion.source_patterns):
                     # we replace the weight pattern to colllect loras
@@ -261,7 +261,7 @@ def _build_peft_weight_mapping(
                     source_patterns=new_source_patterns,
                     target_patterns=new_target_patterns,
                     distributed_operation=orig_conversion.distributed_operation,
-                    quantization_operation=orig_conversion.quantization_operations,
+                    quantization_operation=orig_conversion.quantization_operation,
                     operations=new_weight_conversions,
                 )
                 new_weight_conversions.append(new_conversion)
@@ -281,7 +281,7 @@ def _build_peft_weight_mapping(
                             peft_weight_operations.append(Transpose(dim0=0, dim1=1))
 
                 # TODO: this assumption may not hold for models != mixtral
-                # For source, we capture the orignal weights + the lora weights
+                # For source, we capture the original weights + the lora weights
                 new_source_patterns = []
                 for pat in list(orig_conversion.source_patterns):
                     # we replace the weight pattern to colllect loras
@@ -300,7 +300,7 @@ def _build_peft_weight_mapping(
                     source_patterns=new_source_patterns,
                     target_patterns=new_target_patterns,
                     distributed_operation=orig_conversion.distributed_operation,
-                    quantization_operation=orig_conversion.quantization_operations,
+                    quantization_operation=orig_conversion.quantization_operation,
                     operations=new_weight_conversions,
                 )
                 new_weight_conversions.append(new_conversion)

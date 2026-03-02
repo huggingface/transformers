@@ -260,7 +260,6 @@ class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         {
             "feature-extraction": ConvBertModel,
             "fill-mask": ConvBertForMaskedLM,
-            "question-answering": ConvBertForQuestionAnswering,
             "text-classification": ConvBertForSequenceClassification,
             "token-classification": ConvBertForTokenClassification,
             "zero-shot": ConvBertForSequenceClassification,

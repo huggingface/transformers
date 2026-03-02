@@ -33,11 +33,22 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
+from ...utils.import_utils import (
+    is_mambapy_available,
+    is_torch_greater_or_equal,
+    is_tracing,
+    resolve_internal_import,
+)
 from .configuration_mamba import MambaConfig
 
 
 logger = logging.get_logger(__name__)
+
+if is_torch_greater_or_equal("2.9.0"):
+    from torch._higher_order_ops.associative_scan import associative_scan
+else:
+    associative_scan = None
+
 
 if is_mambapy_available():
     from mambapy.pscan import pscan
@@ -119,7 +130,6 @@ class MambaCache:
             self.conv_states.append(conv_state)
             self.ssm_states.append(ssm_state)
 
-    @torch.no_grad()
     def update_conv_state(
         self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
     ) -> torch.Tensor:
@@ -137,7 +147,6 @@ class MambaCache:
         self.conv_states[layer_idx] += conv_state
         return self.conv_states[layer_idx]
 
-    @torch.no_grad()
     def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
         self.ssm_states[layer_idx].zero_()
         self.ssm_states[layer_idx] += new_ssm_state.to(self.ssm_states[layer_idx].device)
@@ -158,7 +167,7 @@ class MambaMixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
-    def __init__(self, config: MambaConfig, layer_idx: int):
+    def __init__(self, config: MambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -181,6 +190,7 @@ class MambaMixer(nn.Module):
         self.act = ACT2FN[config.hidden_act]
 
         self.use_mambapy = config.use_mambapy
+        self.use_associative_scan = config.use_associative_scan
 
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
@@ -191,30 +201,49 @@ class MambaMixer(nn.Module):
 
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
-        A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32)[None, :]
-        A = A.expand(self.intermediate_size, -1).contiguous()
-
-        self.A_log = nn.Parameter(torch.log(A))
-        self.D = nn.Parameter(torch.ones(self.intermediate_size))
+        self.A_log = nn.Parameter(torch.empty(self.intermediate_size, self.ssm_state_size))
+        self.D = nn.Parameter(torch.empty(self.intermediate_size))
+        if initialize_mixer_weights and self.dt_proj.weight.device.type != "meta":
+            self.init_mamba_weights()
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
 
         global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
         causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update, causal_conv1d_fn = (
-            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-            if causal_conv1d is not None
-            else (None, None)
-        )
+        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+
         global mamba_ssm, selective_state_update, selective_scan_fn, mamba_inner_fn
         mamba_ssm = lazy_load_kernel("mamba-ssm")
-        selective_state_update, selective_scan_fn, mamba_inner_fn = (
-            (mamba_ssm.selective_state_update, mamba_ssm.selective_scan_fn, mamba_ssm.mamba_inner_fn)
-            if mamba_ssm is not None
-            else (None, None, None)
+        selective_state_update = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
         )
+        selective_scan_fn = getattr(mamba_ssm, "selective_scan_fn", None)
+        mamba_inner_fn = getattr(mamba_ssm, "mamba_inner_fn", None)
 
         self.warn_slow_implementation()
+
+    @torch.no_grad()
+    def init_mamba_weights(self):
+        A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32, device=self.A_log.device)[None, :]
+        A = A.expand(self.intermediate_size, -1).contiguous()
+        init.copy_(self.A_log, torch.log(A))
+        init.ones_(self.D)
+
+        dt_init_std = self.config.time_step_rank**-0.5 * self.config.time_step_scale
+        if self.config.time_step_init_scheme == "constant":
+            init.constant_(self.dt_proj.weight, dt_init_std)
+        elif self.config.time_step_init_scheme == "random":
+            init.uniform_(self.dt_proj.weight, -dt_init_std, dt_init_std)
+
+        dt = torch.exp(
+            torch.rand(self.intermediate_size, device=self.dt_proj.bias.device, dtype=torch.float32)
+            * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
+            + math.log(self.config.time_step_min)
+        ).clamp(min=self.config.time_step_floor)
+        # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
+        inv_dt = dt + torch.log(-torch.expm1(-dt))
+        init.copy_(self.dt_proj.bias, inv_dt)
 
     def warn_slow_implementation(self):
         is_fast_path_available = all(
@@ -406,12 +435,27 @@ class MambaMixer(nn.Module):
             scan_output = scan_output + hidden_states * self.D[None, :, None]
             scan_output = scan_output * self.act(gate)
         else:
-            scan_outputs = []
-            for i in range(seq_len):
-                ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediate_size, ssm_state]
-                scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediate_size, 1]
-                scan_outputs.append(scan_output[:, :, 0])
-            scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, intermediate_size, seq_len]
+            # Use associative_scan for parallel computation when available
+            if self.use_associative_scan and associative_scan is not None and is_tracing(hidden_states) and cache_params is None:
+                def combine_fn(left, right):
+                    a_left, b_left = left
+                    a_right, b_right = right
+                    return (a_left * a_right, a_right * b_left + b_right)
+
+                combine_mode = "pointwise" if discrete_A.device.type in ("cuda", "xpu") else "generic"
+                _, all_h = associative_scan(combine_fn, (discrete_A, deltaB_u), dim=2, combine_mode=combine_mode)
+                # all_h: [B, D, S, N] -> output: [B, D, S]
+                scan_output = torch.matmul(all_h.permute(0, 2, 1, 3).to(dtype), C.unsqueeze(-1)).squeeze(-1).permute(0, 2, 1)
+                ssm_state = all_h[:, :, -1, :]
+            else:
+                # Sequential loop for decoding or when associative_scan unavailable
+                scan_outputs = []
+                for i in range(seq_len):
+                    ssm_state = discrete_A[:, :, i, :] * ssm_state + deltaB_u[:, :, i, :]      # [batch, intermediate_size, ssm_state]
+                    scan_output = torch.matmul(ssm_state.to(dtype), C[:, i, :].unsqueeze(-1))  # [batch, intermediate_size, 1]
+                    scan_outputs.append(scan_output[:, :, 0])
+                scan_output = torch.stack(scan_outputs, dim=-1)                                # [batch, intermediate_size, seq_len]
+
             scan_output = scan_output + (hidden_states * self.D[None, :, None])
             scan_output = (scan_output * self.act(gate))
 
@@ -433,7 +477,7 @@ class MambaMixer(nn.Module):
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
-        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_torchdynamo_compiling():
+        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_tracing(hidden_states):
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
 
@@ -465,7 +509,7 @@ class MambaBlock(GradientCheckpointingLayer):
         self.layer_idx = layer_idx
         self.residual_in_fp32 = config.residual_in_fp32
         self.norm = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        self.mixer = MambaMixer(config, layer_idx=layer_idx)
+        self.mixer = MambaMixer(config, layer_idx=layer_idx, initialize_mixer_weights=False)
 
     def forward(
         self,
@@ -501,25 +545,7 @@ class MambaPreTrainedModel(PreTrainedModel):
         if isinstance(module, MambaMixer):
             # S4D real initialization. These are not discretized!
             # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
-            A = torch.arange(1, module.ssm_state_size + 1, dtype=torch.float32)[None, :]
-            A = A.expand(module.intermediate_size, -1).contiguous()
-            init.copy_(module.A_log, torch.log(A))
-            init.ones_(module.D)
-
-            dt_init_std = self.config.time_step_rank**-0.5 * self.config.time_step_scale
-            if self.config.time_step_init_scheme == "constant":
-                init.constant_(module.dt_proj.weight, dt_init_std)
-            elif self.config.time_step_init_scheme == "random":
-                init.uniform_(module.dt_proj.weight, -dt_init_std, dt_init_std)
-
-            dt = torch.exp(
-                torch.rand(self.config.intermediate_size)
-                * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
-                + math.log(self.config.time_step_min)
-            ).clamp(min=self.config.time_step_floor)
-            # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
-            inv_dt = dt + torch.log(-torch.expm1(-dt))
-            init.copy_(module.dt_proj.bias, inv_dt)
+            module.init_mamba_weights()
 
             init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
             if module.conv1d.bias is not None:

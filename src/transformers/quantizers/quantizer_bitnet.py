@@ -103,3 +103,20 @@ class BitNetHfQuantizer(HfQuantizer):
             self.quantization_config.linear_class == "autobitlinear"
             and self.quantization_config.quantization_mode == "online"
         )
+
+    def get_weight_conversions(self):
+        from ..core_model_loading import WeightConverter
+        from ..integrations.bitnet import BitNetDeserialize
+
+        if (
+            self.quantization_config.linear_class == "autobitlinear"
+            and self.quantization_config.quantization_mode == "offline"
+        ):
+            return [
+                WeightConverter(
+                    source_patterns=["weight"],
+                    target_patterns=["weight"],
+                    operations=[BitNetDeserialize(self)],
+                )
+            ]
+        return []

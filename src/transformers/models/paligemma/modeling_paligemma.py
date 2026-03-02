@@ -577,10 +577,11 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
         # position_ids in Paligemma are 1-indexed
         if model_inputs.get("position_ids") is not None:
-            model_inputs["position_ids"] += 1
+            # NOTE: we need this op out-of-place, otherwise it modifies the `model_kwargs` dict used in `generate` in-place!
+            model_inputs["position_ids"] = model_inputs["position_ids"] + 1
 
         # Pixel values are used only in the first iteration if available
-        # In subsquent iterations, they are already merged with text and cached
+        # In subsequent iterations, they are already merged with text and cached
         # NOTE: first iteration doesn't have to be prefill, it can be the first
         # iteration with a question and cached system prompt (continue generate from cache). NOTE: use_cache=False needs pixel_values always
         if is_first_iteration or not use_cache:
