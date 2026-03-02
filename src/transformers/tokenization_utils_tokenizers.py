@@ -122,8 +122,32 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             local_kwargs["post_processor"] = tok_from_file.post_processor
             local_kwargs["tokenizer_padding"] = tok_from_file.padding
             local_kwargs["tokenizer_truncation"] = tok_from_file.truncation
+            # Preserve truncation and padding baked into tokenizer.json so that classes
+            # with a custom __init__ that rebuild the backend tokenizer from scratch
+            # can still access these settings.
+            if tok_from_file.truncation is not None:
+                local_kwargs["_json_truncation"] = tok_from_file.truncation
+            if tok_from_file.padding is not None:
+                local_kwargs["_json_padding"] = tok_from_file.padding
+
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
+
+            # Extract precompiled SentencePiece charsmap from tokenizer.json normalizer
+            # when present (e.g. T5 tokenizers converted with SentencePiece >= 2.x).
+            normalizer_config = tokenizer_json.get("normalizer")
+            if normalizer_config:
+                if not isinstance(normalizer_config, list):
+                    normalizer_config = [normalizer_config]
+                for normalizer in normalizer_config:
+                    if normalizer.get("type") == "Precompiled" and "precompiled_charsmap" in normalizer:
+                        import base64
+
+                        local_kwargs["_spm_precompiled_charsmap"] = base64.b64decode(
+                            normalizer["precompiled_charsmap"]
+                        )
+                        break
+
             vocab = tokenizer_json.get("model", {}).get("vocab", None)
             if cls.model is None:
                 if isinstance(vocab, list):
@@ -264,6 +288,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return local_kwargs
 
     def __init__(self, *args, **kwargs):
+        # Truncation/padding dicts extracted from tokenizer.json by convert_to_native_format
+        # when a class with a custom __init__ rebuilds the backend tokenizer from scratch.
+        _json_truncation = kwargs.pop("_json_truncation", None)
+        _json_padding = kwargs.pop("_json_padding", None)
+
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         gguf_file = kwargs.pop("gguf_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
@@ -321,7 +350,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._tokenizer is None:
             raise ValueError("The backend tokenizer is not correctly initialized.")
 
-        _truncation = kwargs.pop("tokenizer_truncation", None) or self._tokenizer.truncation
+        _truncation = kwargs.pop("tokenizer_truncation", None) or self._tokenizer.truncation or _json_truncation
         if _truncation is not None:
             self._tokenizer.enable_truncation(**_truncation)
             kwargs.setdefault("max_length", _truncation["max_length"])
@@ -331,7 +360,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         else:
             self._tokenizer.no_truncation()
 
-        _padding = kwargs.pop("tokenizer_padding", None) or self._tokenizer.padding
+        _padding = kwargs.pop("tokenizer_padding", None) or self._tokenizer.padding or _json_padding
         if _padding is not None:
             self._tokenizer.enable_padding(**_padding)
             kwargs.setdefault("pad_token", _padding["pad_token"])

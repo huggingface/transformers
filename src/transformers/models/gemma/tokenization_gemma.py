@@ -67,14 +67,13 @@ class GemmaTokenizer(TokenizersBackend):
         mask_token: str = "<mask>",
         **kwargs,
     ):
-        mask_token = None
-
         if vocab is None:
             vocab = {
                 str(pad_token): 0,
                 str(eos_token): 1,
                 str(bos_token): 2,
                 str(unk_token): 3,
+                str(mask_token): 4,
             }
         self._vocab = vocab
         self._merges = merges or []
@@ -89,13 +88,14 @@ class GemmaTokenizer(TokenizersBackend):
                 byte_fallback=True,
             )
         )
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Split(
+            pattern=" ", behavior="merged_with_previous", invert=False
+        )
 
         self._tokenizer.decoder = decoders.Sequence(
             [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
         )
         self._tokenizer.normalizer = normalizers.Replace(" ", "▁")
-
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Split(" ", "merged_with_previous", invert=False)
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -104,10 +104,6 @@ class GemmaTokenizer(TokenizersBackend):
             mask_token=mask_token,
             **kwargs,
         )
-
-    def _unk_id(self) -> int:
-        # Align with historical Gemma convention: pad, eos, bos, unk
-        return 3
 
 
 __all__ = ["GemmaTokenizer"]
