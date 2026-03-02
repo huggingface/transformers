@@ -290,10 +290,21 @@ _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
 
 def is_kernel(attn_implementation: str | None) -> bool:
     """Check whether `attn_implementation` matches a kernel pattern from the hub."""
-    return (
-        attn_implementation is not None
-        and re.search(r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", attn_implementation) is not None
-    )
+    if attn_implementation is None:
+        return False
+    match_object = re.search(r"^(?:paged\|)?([^/:]+)/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", attn_implementation)
+    if match_object is not None:
+        # Due to security reason, we only allow kernels from the `kernels-community` repo, as otherwise loading
+        # random kernels will lead to arbitrary code execution
+        repo_id = match_object.group(1)
+        if repo_id != "kernels-community":
+            logger.warning_once(
+                "For security reasons, we currently only accept kernels from the `kernels-community` repository. We "
+                f"will skip kernel from `{repo_id}`"
+            )
+            return False
+        return True
+    return False
 
 
 def load_and_register_attn_kernel(
