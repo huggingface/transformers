@@ -34,7 +34,6 @@ from threading import Thread
 from typing import Optional, TypeVar, get_type_hints
 from zipfile import is_zipfile
 
-import integrations.hub_kernels
 import torch
 from huggingface_hub import create_repo, is_offline_mode, split_torch_state_dict_into_shards
 from packaging import version
@@ -56,7 +55,7 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
-from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
+from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import (
     _get_device_map,
     accelerate_disk_offload,
@@ -1261,8 +1260,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
             self.config._attn_implementation,
             is_init_check=True,
-            # We need to use this constant set through context manager as it cannot be forwarded in the model's __init__
-            trust_remote_code=integrations.hub_kernels.TRUST_REMOTE_KERNELS,
+            # We need to use this constant that is set through context manager as it cannot be forwarded in the model's __init__
+            trust_remote_code=hub_kernels.TRUST_REMOTE_KERNELS,
         )
         # Check the experts implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
