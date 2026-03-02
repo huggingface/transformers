@@ -23,6 +23,13 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="microsoft/deberta-base")
 class DebertaConfig(PreTrainedConfig):
     r"""
+    max_relative_positions (`int`, *optional*, defaults to -1):
+        The range of relative positions `[-max_position_embeddings, max_position_embeddings]`. Use the same value
+        as `max_position_embeddings`.
+    pooler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+        Activation function used in the dropout module.
+    pooler_dropout (`float`, *optional*, defaults to `0`):
+        Dropout rate in the pooler module.
     relative_attention (`bool`, *optional*, defaults to `False`):
         Whether use relative position encoding.
     position_biased_input (`bool`, *optional*, defaults to `True`):

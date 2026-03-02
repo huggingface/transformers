@@ -57,6 +57,14 @@ class DPTConfig(PreTrainedConfig):
        Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
     pooler_act (`str`, *optional*, defaults to `"tanh"`):
        The activation function to be used by the pooler.
+    readout_type (`str`, *optional*, defaults to `"project"`):
+        The readout type to use when processing the readout token (CLS token) of the intermediate hidden states of
+        the ViT backbone. Can be one of [`"ignore"`, `"add"`, `"project"`].
+        - "ignore" simply ignores the CLS token.
+        - "add" passes the information from the CLS token to all other tokens by adding the representations.
+        - "project" passes information to the other tokens by concatenating the readout to all other tokens before
+          projecting the
+        representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
 
     Example:
 

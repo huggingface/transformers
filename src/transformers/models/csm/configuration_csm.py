@@ -121,7 +121,8 @@ class CsmConfig(PreTrainedConfig):
          Whether to tie the codebook tokens embeddings of the backbone model to the codebook tokens embeddings of the depth decoder.
     depth_decoder_config (`CsmDepthDecoderConfig`, *optional*):
          Configuration for the depth decoder.
-
+    codec_config (`PreTrainedConfig`, *optional*):
+        Configuration for the codec.
 
      ```python
      >>> from transformers import CsmForConditionalGeneration, CsmConfig

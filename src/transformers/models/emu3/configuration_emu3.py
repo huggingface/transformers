@@ -22,6 +22,16 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="Emu3-community/Emu3-Chat-hf")
 class Emu3VQVAEConfig(PreTrainedConfig):
     r"""
+    out_channels (`int`, *optional*, defaults to 3):
+        Output channel of decoder.
+    temporal_downsample_factor (`int`, *optional*, defaults to 4):
+        Temporal downsample factor.
+    base_channels (`int`, *optional*, defaults to 256):
+        Basic channel number of the intermediate blocks.
+    channel_multiplier (`list[int]`, *optional*, defaults to `[1, 2, 2, 4]`):
+        Channel scaling factor of the intermediate blocks.
+    num_res_blocks (`int`, *optional*, defaults to 2):
+        Residual block number in each stage.
     embed_dim (`int`, *optional*, defaults to 4):
         Dimension of the quantized vector in codebook.
     attn_resolutions (`list[int]`, *optional*, defaults to `[3]`):

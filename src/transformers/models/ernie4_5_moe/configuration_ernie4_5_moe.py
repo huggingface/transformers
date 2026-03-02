@@ -24,6 +24,10 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-21B-A3B-PT")
 class Ernie4_5_MoeConfig(PreTrainedConfig):
     r"""
+    use_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use a bias in any of the projections including mlp and attention for example.
+    moe_k (`int`, *optional*, defaults to 6):
+        Number of selected experts.
     moe_num_experts (`int`, *optional*, defaults to 64):
         Number of routed experts.
     moe_num_shared_experts (`int`, *optional*, defaults to 2):

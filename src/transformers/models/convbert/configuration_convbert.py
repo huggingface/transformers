@@ -23,6 +23,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="YituTech/conv-bert-base")
 class ConvBertConfig(PreTrainedConfig):
     r"""
+    head_ratio (`int`, *optional*, defaults to 2):
+        Ratio gamma to reduce the number of attention heads.
     num_groups (`int`, *optional*, defaults to 1):
         The number of groups for grouped linear layers for ConvBert model
 

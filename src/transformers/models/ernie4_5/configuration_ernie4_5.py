@@ -21,6 +21,9 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-0.3B-PT")
 class Ernie4_5Config(PreTrainedConfig):
     r"""
+    use_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use a bias in any of the projections including mlp and attention for example.
+
     Example:
 
     ```python

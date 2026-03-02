@@ -23,6 +23,10 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="google/distilbert-base-uncased")
 class DistilBertConfig(PreTrainedConfig):
     r"""
+    sinusoidal_pos_embds (`boolean`, *optional*, defaults to `False`):
+        Whether to use sinusoidal positional embeddings.
+    dim (`int`, *optional*, defaults to 768):
+        Dimensionality of the encoder layers and the pooler layer.
     qa_dropout (`float`, *optional*, defaults to 0.1):
         The dropout probabilities used in the question answering model [`DistilBertForQuestionAnswering`].
     seq_classif_dropout (`float`, *optional*, defaults to 0.2):

@@ -1702,11 +1702,23 @@ class ConfigArgs:
     mask_feature_prob = {
         "description": """
     Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
-        masking procedure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
-        the axis. If reasoning from the probability of each feature vector to be chosen as the start of the vector
-        span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
-        may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
-        True`.
+    masking procedure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
+    the axis. If reasoning from the probability of each feature vector to be chosen as the start of the vector
+    span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
+    may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
+    True`.
+    """,
+    }
+
+    eos_coefficient = {
+        "description": """
+    Relative classification weight of the 'no-object' class in the object detection loss.
+    """,
+    }
+
+    num_labels = {
+        "description": """
+    Number of labels to use in the last layer added to the model, typically for a classification task.
     """,
     }
 
@@ -1847,6 +1859,9 @@ class ConfigArgs:
     text_vocab_size = vocab_size
     embedding_dimension = embed_dim
     n_codebooks = num_codebooks
+    dim_ff = ffn_dim
+    dropout_p = dropout
+    eps = layer_norm_eps
 
 
 class ModelArgs:

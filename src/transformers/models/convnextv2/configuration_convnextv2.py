@@ -24,6 +24,9 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="facebook/convnextv2-tiny-1k-224")
 class ConvNextV2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
+    num_stages (`int`, *optional*, defaults to 4):
+        The number of stages in the model.
+
     Example:
     ```python
     >>> from transformers import ConvNeXTV2Config, ConvNextV2Model

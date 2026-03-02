@@ -23,6 +23,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="naver-clova-ix/donut-base")
 class DonutSwinConfig(PreTrainedConfig):
     r"""
+    window_size (`int`, *optional*, defaults to 7): Size of windows.
+
     Example:
 
     ```python

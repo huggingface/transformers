@@ -48,6 +48,9 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="CohereForAI/c4ai-command-r-v01")
 class Cohere2Config(PreTrainedConfig):
     r"""
+    logit_scale (`float`, *optional*, defaults to 0.0625):
+        The scaling factor for the output logits.
+
     ```python
     >>> from transformers import Cohere2Model, Cohere2Config
 

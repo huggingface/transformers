@@ -23,6 +23,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="facebook/levit-128S")
 class LevitConfig(PreTrainedConfig):
     r"""
+    stride (`int`, *optional*, defaults to 2):
+        The stride size for the initial convolution layers of patch embedding.
     padding (`int`, *optional*, defaults to 1):
         The padding size for the initial convolution layers of patch embedding.
     key_dim (`list[int]`, *optional*, defaults to `[16, 16, 16]`):

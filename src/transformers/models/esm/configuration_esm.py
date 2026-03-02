@@ -180,6 +180,10 @@ class EsmConfig(PreTrainedConfig):
         Whether to apply layer normalization after embeddings but before the main stem of the network.
     token_dropout (`bool`, defaults to `False`):
         When this is enabled, masked tokens are treated as if they had been dropped out by input dropout.
+    vocab_list (`list`, *optional*):
+        List of the vocabulary items.
+    esmfold_config (`dict`, *optional*):
+        Configuration to initiate the ESMFold module.
 
     Examples:
 

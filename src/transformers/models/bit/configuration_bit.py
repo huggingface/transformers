@@ -24,6 +24,17 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="google/bit-50")
 class BitConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
+    layer_type (`str`, *optional*, defaults to `"preactivation"`):
+        The layer to use, it can be either `"preactivation"` or `"bottleneck"`.
+    embedding_dynamic_padding (`bool`, *optional*, defaults to `False`):
+        Whether or not to make use of dynamic padding for the embedding layer.
+    width_factor (`int`, *optional*, defaults to 1):
+        The width factor for the model.
+    global_padding (`str`, *optional*):
+        Padding strategy to use for the convolutional layers. Can be either `"valid"`, `"same"`, or `None`.
+    num_groups (`int`, *optional*, defaults to 32):
+        Number of groups used for the `BitGroupNormActivation` layers.
+
     Example:
     ```python
     >>> from transformers import BitConfig, BitModel

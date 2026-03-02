@@ -24,6 +24,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="facebook/dinov3-vits16-pretrain-lvd1689m")
 class DINOv3ViTConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
+    rope_theta (`float`, *optional*, defaults to 100.0):
+        The base period of the RoPE embeddings.
     query_bias (`bool`, *optional*, defaults to `True`):
         Whether to add a bias to the query projection.
     key_bias (`bool`, *optional*, defaults to `False`):

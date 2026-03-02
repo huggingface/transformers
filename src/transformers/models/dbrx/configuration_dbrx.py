@@ -119,6 +119,8 @@ class DbrxFFNConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="transformers-community/dbrx-instruct")
 class DbrxConfig(PreTrainedConfig):
     r"""
+    max_seq_len (`int`, *optional*, defaults to 2048):
+        The maximum sequence length of the model.
     attn_config (`dict`, *optional*):
         A dictionary used to configure the model's attention module.
     ffn_config (`dict`, *optional*):

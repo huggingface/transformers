@@ -46,6 +46,8 @@ class CvtConfig(PreTrainedConfig):
         The dropout ratio for the attention probabilities.
     drop_rate (`list[float]`, *optional*, defaults to `[0.0, 0.0, 0.0]`):
         The dropout ratio for the patch embeddings probabilities.
+    patch_stride (`list[int]`, *optional*, defaults to `[4, 2, 2]`):
+        The stride size of each encoder's patch embedding.
 
     Example:
 

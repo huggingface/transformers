@@ -20,6 +20,8 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @auto_docstring(checkpoint="CohereLabs/command-a-vision-07-2025")
 class Cohere2VisionConfig(PreTrainedConfig):
     r"""
+    downsample_factor (`int`, *optional*, defaults to 2):
+        The factor by which to downsample the input image.
     alignment_intermediate_size (`int`, *optional*, defaults to 36864):
         The size of the intermediate layer for alignment.
     """

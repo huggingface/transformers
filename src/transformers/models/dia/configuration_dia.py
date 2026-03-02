@@ -59,6 +59,17 @@ class DiaEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
 class DiaDecoderConfig(PreTrainedConfig):
+    r"""
+    cross_num_attention_heads (`int`, *optional*, defaults to 16):
+        Number of attention heads for each cross-attention layer in the Transformer decoder.
+    cross_head_dim (`int`, *optional*, defaults to 128):
+        Dimensionality of the cross-attention head.
+    cross_num_key_value_heads (`int`, *optional*, defaults to 16):
+        Number of key and value heads for each cross-attention layer in the Transformer decoder.
+    cross_hidden_size (`int`, *optional*, defaults to 1024):
+        Dimensionality of the cross-attention layers.
+    """
+
     model_type = "dia_decoder"
 
     def __init__(
@@ -115,6 +126,9 @@ class DiaDecoderConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
 class DiaConfig(PreTrainedConfig):
     r"""
+    delay_pattern (`list[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):
+        The delay pattern for the decoder. The length of this list must match `decoder_config.num_channels`.
+
     Example:
 
     ```python

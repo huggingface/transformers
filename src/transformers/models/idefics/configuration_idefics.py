@@ -116,7 +116,7 @@ class IdeficsConfig(PreTrainedConfig):
     additional_vocab_size (`int`, *optional*, defaults to 0):
         Additional vocabulary size of the model, typically for the special "<img>" token. Additional vocab tokens
         are always trainable whereas regular vocab tokens can be frozen or not.
-    cross_layer_interval (`int`, *optional*, default to 1)
+    cross_layer_interval (`int`, *optional*, default to 1):
         Interval for cross attention (from text to image) layers.
     qk_layer_norms (`bool`, *optional*, defaults to `False`): Whether to add layer norm after q and k
     freeze_text_layers (`bool`, *optional*, defaults to `True`): Whether to freeze text layers

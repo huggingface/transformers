@@ -23,16 +23,20 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="rednote-hilab/dots.llm1.base")
 class Dots1Config(PreTrainedConfig):
     r"""
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
+    first_k_dense_replace (`int`, *optional*, defaults to 0):
+        Number of dense layers at the beginning of the model before the first MoE layer.
+
     Examples:
-        ```python
-        >>> from transformers import Dots1Model, Dots1Config
 
-        >>> # Initializing a Dots1 style configuration
-        >>> configuration = Dots1Config()
-
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
+    ```python
+    >>> from transformers import Dots1Model, Dots1Config
+    >>> # Initializing a Dots1 style configuration
+    >>> configuration = Dots1Config()
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "dots1"

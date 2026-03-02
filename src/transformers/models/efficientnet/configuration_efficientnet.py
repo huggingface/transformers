@@ -27,7 +27,7 @@ class EfficientNetConfig(PreTrainedConfig):
         Scaling coefficient for network width at each stage.
     depth_coefficient (`float`, *optional*, defaults to 3.1):
         Scaling coefficient for network depth at each stage.
-    depth_divisor `int`, *optional*, defaults to 8):
+    depth_divisor (`int`, *optional*, defaults to 8):
         A unit of network width.
     num_block_repeats (`list[int]`, *optional*, defaults to `[1, 2, 2, 3, 3, 4, 1]`):
         List of the number of times each block is to repeated.
@@ -46,6 +46,8 @@ class EfficientNetConfig(PreTrainedConfig):
         List of output channel sizes to be used in each block for convolutional layers.
     depthwise_padding (`list[int]`, *optional*, defaults to `[]`):
         List of block indices with square padding.
+    batch_norm_momentum (`float`, *optional*, defaults to 0.99):
+        The momentum used by the batch normalization layers.
 
     Example:
     ```python

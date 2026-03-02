@@ -48,6 +48,9 @@ class DeformableDetrConfig(PreTrainedConfig):
     disable_custom_kernels (`bool`, *optional*, defaults to `False`):
         Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
         kernels are not supported by PyTorch ONNX export.
+    with_box_refine (`bool`, *optional*, defaults to `False`):
+        Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
+        based on the predictions from the previous layer.
 
     Examples:
 
@@ -92,7 +95,6 @@ class DeformableDetrConfig(PreTrainedConfig):
         activation_dropout=0.0,
         init_std=0.02,
         init_xavier_std=1.0,
-        return_intermediate=True,
         auxiliary_loss=False,
         position_embedding_type="sine",
         dilation=False,
