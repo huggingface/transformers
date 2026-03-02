@@ -372,6 +372,7 @@ class FSMTHeadTests(unittest.TestCase):
             num_beams=2,
             no_repeat_ngram_size=3,
             max_length=max_length,
+            min_length=max_length,
         )
         self.assertEqual(new_input_ids.shape, (input_ids.shape[0], max_length))
 
