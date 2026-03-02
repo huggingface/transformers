@@ -924,8 +924,13 @@ def main():
             console.print(f"  [bold red]--- AutoTokenizer[/]   [bold green]+++ TokenizersBackend[/]")
             for i, (canonical, model_ids) in enumerate(sorted_canonicals, 1):
                 converters_str = ", ".join(sorted(diff_group_converters.get(canonical, set())))
-                models_str = ", ".join(f"[cyan]{m}[/]" for m in sorted(model_ids))
-                console.print(f"\n[bold yellow]Pattern #{i}[/] — {len(model_ids)} model(s)  [yellow]{converters_str}[/]  {models_str}")
+                # Only show model list if some models for these converters belong to other patterns
+                total_for_converters = sum(
+                    len(all_mismatches.get(c, set()))
+                    for c in diff_group_converters.get(canonical, set())
+                )
+                models_str = "" if len(model_ids) == total_for_converters else "  " + ", ".join(f"[cyan]{m}[/]" for m in sorted(model_ids))
+                console.print(f"\n[bold yellow]Pattern #{i}[/] — {len(model_ids)} model(s)  [yellow]{converters_str}[/]{models_str}")
                 console.print(f"  [bold red]--- AutoTokenizer[/]   [bold green]+++ TokenizersBackend[/]")
                 for line in _format_diff(canonical.splitlines()):
                     console.print(line)
