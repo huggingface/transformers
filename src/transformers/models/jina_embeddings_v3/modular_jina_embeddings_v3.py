@@ -102,8 +102,6 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
             Scaling factor for LoRA adaptations.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        load_trained_adapters (`bool`, *optional*, defaults to `True`):
-            Whether to load trained adapter weights.
         matryoshka_dimensions (`list[int]`, *optional*):
             List of supported dimensions for matryoshka representation learning.
         truncate_dim (`int`, *optional*):
@@ -152,8 +150,6 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
         lora_dropout_p: float | None = 0.0,
         lora_alpha: int | None = 1,
         tie_word_embeddings=True,
-        load_trained_adapters: bool | None = True,
-        emb_pooler: str | None = None,
         matryoshka_dimensions: list[int] | None = None,
         truncate_dim: int | None = None,
         **kwargs,
@@ -205,10 +201,8 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
         self.lora_alpha = lora_alpha
         self.lora_dropout_p = lora_dropout_p
         self.tie_word_embeddings = tie_word_embeddings
-        self.load_trained_adapters = load_trained_adapters
         self.matryoshka_dimensions = matryoshka_dimensions
         self.task_instructions = task_instructions
-        self.emb_pooler = emb_pooler
         self.truncate_dim = truncate_dim
 
         super().__init__(**kwargs)
