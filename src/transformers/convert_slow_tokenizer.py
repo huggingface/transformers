@@ -636,10 +636,9 @@ class SpmConverter(Converter):
     special_tokens = {}
 
     @staticmethod
-    def converted_from_proto(proto, vocab, merges=None):
+    def build_tokenizer_from_spm_proto(proto, vocab, merges=None):
         """
-        Similar to convert_from_spm method, but used when converting directly from proto and vocab/merges.
-        (convert_from_spm requires some class attrs like byte_fallback, unk_piece, precompiled_charsmap, etc.)
+        Similar to convert_from_spm method, but used only when there is no `model_type` class, i.e. there is no matching class in `TOKENIZERS_MAPPING` and we just create a tokenizer instead of extracting stuff from the sentencepiece file
         """
         byte_fallback = proto.trainer_spec.byte_fallback
         unk_piece = proto.trainer_spec.unk_piece

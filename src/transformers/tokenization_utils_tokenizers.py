@@ -165,8 +165,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             try:
                 from .convert_slow_tokenizer import SentencePieceExtractor
 
+                # 1. Extract vocab, merges, and spm_precompiled from the .model proto
                 extractor = SentencePieceExtractor(vocab_file)
                 local_kwargs = extractor.extract(cls.model, **local_kwargs)
+
+                # 2. If a model-specific converter exists, use it.
                 try:
                     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
 
@@ -177,25 +180,25 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     logger.warning(
                         f"Could not reorder vocab using converter for {cls.__name__} due to {e}. Falling back to raw SentencePiece extraction."
                     )
-                # what used to be in `convert_slow`
                 if hasattr(cls, "convert_from_spm_model"):
                     local_kwargs = cls.convert_from_spm_model(**local_kwargs)
 
-                # Generic spm fallback to build tokenizer_object from spm proto
-                # Only for TokenizersBackend itself (e.g. MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS);
-                # subclasses with their own __init__ build their own tokenizer with proper config.
+                # 3. For classes without a custom __init__ (e.g. TokenizersBackend used
+                #    for MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS), build a tokenizer_object
+                #    from the proto so normalizer/decoder are configured correctly.
+                #    Tokenizer subclasses with their own __init__ build tokenizer from vocab/merges.
                 if "tokenizer_object" not in local_kwargs and (
                     cls is TokenizersBackend or "__init__" not in cls.__dict__
                 ):
-                    tokenizer_object = SpmConverter.converted_from_proto(
+                    vocab = local_kwargs.pop("vocab", None)
+                    merges = local_kwargs.pop("merges", None)
+                    tokenizer_object = SpmConverter.build_tokenizer_from_spm_proto(
                         proto=extractor.proto,
-                        vocab=local_kwargs.get("vocab"),
-                        merges=local_kwargs.get("merges"),
+                        vocab=vocab,
+                        merges=merges,
                     )
                     if tokenizer_object is not None:
                         local_kwargs["tokenizer_object"] = tokenizer_object
-                        local_kwargs.pop("vocab", None)
-                        local_kwargs.pop("merges", None)
 
             except Exception as e:  # TODO only catch deserialization error here!
                 logger.warning(
@@ -208,9 +211,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     vocab_file=vocab_file, extra_special_tokens=local_kwargs.get("extra_special_tokens")
                 )
                 local_kwargs["tokenizer_object"] = converter.converted()
-                local_kwargs.pop("vocab", None)
-                local_kwargs.pop("merges", None)
-
             return local_kwargs
 
         # Fallback to standard vocab/merges files if they existed!
