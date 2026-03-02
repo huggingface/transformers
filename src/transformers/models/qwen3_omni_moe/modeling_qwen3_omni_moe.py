@@ -1046,6 +1046,7 @@ class Qwen3OmniMoeVisionPatchEmbed(nn.Module):
 
 class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
     config: Qwen3OmniMoeVisionEncoderConfig
+    input_modalities = ("image", "video")
     _no_split_modules = ["Qwen3OmniMoeVisionBlock"]
     _can_record_outputs = {
         "router_logits": OutputRecorder(Qwen3OmniMoeTextTopKRouter, layer_name="mlp.gate", index=0),
@@ -1674,6 +1675,7 @@ class Qwen3OmniMoeTextRMSNorm(nn.Module):
 )
 class Qwen3OmniMoeThinkerTextModel(Qwen3OmniMoePreTrainedModel):
     config: Qwen3OmniMoeTextConfig
+    input_modalities = ("text",)
     _no_split_modules = ["Qwen3OmniMoeThinkerTextDecoderLayer"]
     config_class = Qwen3OmniMoeTextConfig
     _can_record_outputs = {
@@ -2934,6 +2936,7 @@ class Qwen3OmniMoeTalkerDecoderLayer(GradientCheckpointingLayer):
 )
 class Qwen3OmniMoeTalkerModel(Qwen3OmniMoePreTrainedModel):
     config: Qwen3OmniMoeTextConfig
+    input_modalities = ("audio",)
     _no_split_modules = ["Qwen3OmniMoeTalkerDecoderLayer"]
     config_class = Qwen3OmniMoeTalkerTextConfig
     base_model_prefix = "talker.model"

@@ -480,6 +480,7 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
     config: Speech2TextConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
+    input_modalities = ("text", "audio")
     supports_gradient_checkpointing = True
     # TODO: tests would need a rewrite to check for correct implementation
     # Current tests always assume certain inputs to be passed

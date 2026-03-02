@@ -559,6 +559,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         "hidden_states": WhisperEncoderLayer,
         "attentions": WhisperAttention,
     }
+    input_modalities = ("audio",)
 
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
@@ -669,6 +670,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
     }
 
     main_input_name = "input_ids"
+    input_modalities = ("text",)
 
     def __init__(self, config: WhisperConfig):
         super().__init__(config)

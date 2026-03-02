@@ -19,7 +19,6 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Union
 
 import numpy as np
 import torch
@@ -866,7 +865,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         pixel_values: torch.FloatTensor,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, "LightGlueKeypointMatchingOutput"]:
+    ) -> tuple | LightGlueKeypointMatchingOutput:
         loss = None
         if labels is not None:
             raise ValueError("LightGlue is not trainable, no labels should be provided.")
