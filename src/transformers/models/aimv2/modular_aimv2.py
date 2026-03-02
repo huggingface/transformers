@@ -42,6 +42,11 @@ from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipOutpu
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 class Aimv2VisionConfig(SiglipVisionConfig):
     r"""
+    use_head (`str`, *optional*, defaults to `True`):
+        Whether to use Attention Pooling Head or Not.
+    is_native (`str`, *optional*, defaults to `False`):
+        Whether to use ckpt trained for image native resolution or not.
+
     Example:
 
     ```python

@@ -45,6 +45,13 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V2-Lite")
 class DeepseekV2Config(LlamaConfig):
     r"""
+    first_k_dense_replace (`int`, *optional*, defaults to 0):
+        Number of dense layers in the shallow layers before switching to MoE layers.
+    n_group (`int`, *optional*):
+        Number of groups for routed experts.
+    topk_method (`str`, *optional*, defaults to `"greedy"`):
+        The method used for selecting top-k experts in the routed gate mechanism.
+
     Example:
 
     ```python

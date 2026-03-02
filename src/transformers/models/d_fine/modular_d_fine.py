@@ -52,6 +52,34 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="ustc-community/dfine-xlarge-coco")
 class DFineConfig(PreTrainedConfig):
     """
+    initializer_bias_prior_prob (`float`, *optional*):
+        The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
+        If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
+    freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
+        Whether to freeze the batch normalization layers in the backbone.
+    encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
+        Multi level features input for encoder.
+    encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    eval_size (`tuple[int, int]`, *optional*):
+        Height and width used to computes the effective height and width of the position embeddings after taking
+        into account the stride.
+    decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
+        Multi level features dimension for decoder
+    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    use_focal_loss (`bool`, *optional*, defaults to `True`):
+        Parameter informing if focal focal should be used.
+    focal_loss_alpha (`float`, *optional*, defaults to 0.75):
+        Parameter alpha used to compute the focal loss.
+    focal_loss_gamma (`float`, *optional*, defaults to 2.0):
+        Parameter gamma used to compute the focal loss.
+    eval_idx (`int`, *optional*, defaults to -1):
+        Index of the decoder layer to use for evaluation. If negative, counts from the end
+        (e.g., -1 means use the last layer). This allows for early prediction in the decoder
+        stack while still training later layers.
     batch_norm_eps (`float`, *optional*, defaults to 1e-05):
         The epsilon used by the batch normalization layers.
     feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):

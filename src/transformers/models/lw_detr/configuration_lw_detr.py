@@ -21,70 +21,24 @@ import math
 
 from ...backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
+@auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
 class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LwDetrViTModel`]. It is used to instantiate an
-    LW-DETR ViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the LW-DETR ViT
-    [AnnaZhang/lwdetr_small_60e_coco](https://huggingface.co/AnnaZhang/lwdetr_small_60e_coco) architecture.
-
-    LW-DETR ViT is the Vision Transformer backbone used in the LW-DETR model for real-time object detection. It features
-    interleaved window and global attention mechanisms to reduce computational complexity while maintaining high performance.
-    The model uses a window-major feature map organization for efficient attention computation.
-
-    Configuration objects inherit from [`VitDetConfig`] and can be used to control the model outputs. Read the
-    documentation from [`VitDetConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        mlp_ratio (`int`, *optional*, defaults to 4):
-            Ratio of mlp hidden dim to embedding dim.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 256):
-            The size (resolution) of each image.
-        pretrain_image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image during pretraining.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        window_block_indices (`list[int]`, *optional*, defaults to `[]`):
-            List of indices of blocks that should have window attention instead of regular global self-attention.
-        use_absolute_position_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to add absolute position embeddings to the patch embeddings.
-        out_features (`list[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        out_indices (`list[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        cae_init_values (`float`, *optional*, defaults to 0.1):
-            Initialization value for CAE parameters when `use_cae` is enabled.
-        num_windows (`int`, *optional*, defaults to 16):
-            Number of windows for window-based attention. Must be a perfect square and the image size must be
-            divisible by the square root of this value. This enables efficient window-major feature map organization.
+    pretrain_image_size (`int`, *optional*, defaults to 224):
+        The size (resolution) of each image during pretraining.
+    window_block_indices (`list[int]`, *optional*, defaults to `[]`):
+        List of indices of blocks that should have window attention instead of regular global self-attention.
+    use_absolute_position_embeddings (`bool`, *optional*, defaults to `True`):
+        Whether to add absolute position embeddings to the patch embeddings.
+    cae_init_values (`float`, *optional*, defaults to 0.1):
+        Initialization value for CAE parameters when `use_cae` is enabled.
+    num_windows (`int`, *optional*, defaults to 16):
+        Number of windows for window-based attention. Must be a perfect square and the image size must be
+        divisible by the square root of this value. This enables efficient window-major feature map organization.
 
     Example:
 

@@ -354,6 +354,14 @@ class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
 
 
 class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
+    r"""
+    max_window_layers (`int`, *optional*, defaults to 28):
+        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
+        additional layer afterwards will use SWA (Sliding Window Attention).
+    num_code_groups (`int`, *optional*, defaults to 32):
+        Number of codebook groups used in the predicted acoustic token sequence, corresponding to multi-codebook VQ representation.
+    """
+
     def __init__(
         self,
         vocab_size: int | None = 2048,
@@ -682,6 +690,14 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
     talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
     code2wav_config (`dict`, *optional*): Configuration of the underlying code2wav sub-model.
     enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enable audio output and load talker and code2wav module.
+    im_start_token_id (`int`, *optional*, defaults to 151644): Token id for the start of image
+    im_end_token_id (`int`, *optional*, defaults to 151645): Token id for the end of image
+    tts_pad_token_id (`int`, *optional*, defaults to 151671): Token id for the padding in TTS
+    tts_bos_token_id (`int`, *optional*, defaults to 151672): Token id for the start of sequence in TTS
+    tts_eos_token_id (`int`, *optional*, defaults to 151673): Token id for the end of sequence in TTS of image
+    system_token_id (`int`, *optional*, defaults to 8948): Token id for the system prompt
+    user_token_id (`int`, *optional*, defaults to 872): Token id for the user prompt
+    assistant_token_id (`int`, *optional*, defaults to 77091): Token id for the assistant prompt
 
     Example:
 

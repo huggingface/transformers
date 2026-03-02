@@ -68,6 +68,13 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 class Qwen2_5OmniVisionEncoderConfig(Qwen2_5_VLVisionConfig):
     r"""
+    fullatt_block_indexes (`int`, *optional*, defaults to `[7, 15, 23, 31]`):
+        Indices of layers with full attention
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    window_size (`int`, *optional*, defaults to 11):
+        Size of windows.
+
     Example:
 
     ```python

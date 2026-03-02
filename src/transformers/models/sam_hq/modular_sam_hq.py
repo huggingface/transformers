@@ -55,6 +55,16 @@ class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
     r"""
     vit_dim (`int`, *optional*, defaults to 768):
         Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
+    mlp_dim (`int`, *optional*, defaults to 2048):
+        Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+    attention_downsample_rate (`int`, *optional*, defaults to 2):
+        The downsampling rate of the attention layer.
+    num_multimask_outputs (`int`, *optional*, defaults to 3):
+        The number of outputs from the `SamMaskDecoder` module. In the Segment Anything paper, this is set to 3.
+    iou_head_depth (`int`, *optional*, defaults to 3):
+        The number of layers in the IoU head module.
+    iou_head_hidden_dim (`int`, *optional*, defaults to 256):
+        The dimensionality of the hidden states in the IoU head module.
     """
 
     def __init__(

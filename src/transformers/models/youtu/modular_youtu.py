@@ -43,6 +43,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="tencent/Youtu-LLM-2B")
 class YoutuConfig(DeepseekV3Config):
     r"""
+    embedding_initializer_range (`float`, *optional*):
+        The standard deviation of the truncated_normal_initializer for initializing all embedding matrices.
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to interleave the rotary position embeddings.
 

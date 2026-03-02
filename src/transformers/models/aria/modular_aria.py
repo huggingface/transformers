@@ -97,6 +97,15 @@ def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
 
 @auto_docstring(checkpoint="rhymes-ai/Aria")
 class AriaTextConfig(LlamaConfig):
+    r"""
+    moe_num_experts (`int`, *optional*, defaults to 8):
+        The number of experts in the MoE layer.
+    moe_topk (`int`, *optional*, defaults to 2):
+        The number of top experts to route to for each token.
+    moe_num_shared_experts (`int`, *optional*, defaults to 2):
+        The number of shared experts.
+    """
+
     model_type = "aria_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
@@ -127,6 +136,11 @@ class AriaTextConfig(LlamaConfig):
 
 @auto_docstring(checkpoint="rhymes-ai/Aria")
 class AriaConfig(PreTrainedConfig):
+    r"""
+    projector_patch_to_query_dict (`dict`, *optional*):
+        Mapping of patch sizes to query dimensions.
+    """
+
     model_type = "aria"
     attribute_map = {
         "image_token_id": "image_token_index",

@@ -1099,13 +1099,7 @@ class ConfigArgs:
     """,
     }
 
-    hidden_dropout_prob = {
-        "description": """
-    Sequence length of one video embedding.
-    """,
-    }
-
-    classifier_dropout_prob = {
+    hidden_dropout = {
         "description": """
     Sequence length of one video embedding.
     """,
@@ -1830,7 +1824,9 @@ class ConfigArgs:
     emb_pdrop = embd_pdrop
     embed_dropout = embd_pdrop
     embedding_dropout = embd_pdrop
-    hidden_dropout = hidden_dropout_prob
+    hidden_dropout_prob = hidden_dropout
+    classifier_dropout_prob = classifier_dropout
+    classifier_dropout_rate = classifier_dropout
     dropout_prob = dropout
     audio_token_index = audio_token_id
     layer_scale_initial_scale = layer_scale_init_value
