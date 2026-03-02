@@ -6,10 +6,8 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
 
 
-@auto_docstring(custom_intro="Configuration for the PPLCNet model.")
 class PPLCNetConfig(PreTrainedConfig):
     model_type = "pp_lcnet"
 
