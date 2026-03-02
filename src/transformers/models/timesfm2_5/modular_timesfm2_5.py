@@ -706,13 +706,13 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
         loss = None
         if future_values is not None:
             target_len = future_values.shape[1]
-            valid_mean_predicitions = mean_predictions[:, :target_len]
+            valid_mean_predictions = mean_predictions[:, :target_len]
             valid_full_predictions = full_predictions[:, :target_len]
-            mse_loss = F.mse_loss(mean_preds, future_values)
-            quantile_indices = [i for i in range(full_preds.shape[-1]) if i != decode_index]
+            mse_loss = F.mse_loss(valid_mean_predictions, future_values)
+            quantile_indices = [i for i in range(valid_full_predictions.shape[-1]) if i != decode_index]
             if quantile_indices:
-                index_tensor = torch.tensor(quantile_indices, device=full_preds.device, dtype=torch.long)
-                quantile_tensor = torch.index_select(full_preds, dim=-1, index=index_tensor)
+                index_tensor = torch.tensor(quantile_indices, device=valid_full_predictions.device, dtype=torch.long)
+                quantile_tensor = torch.index_select(valid_full_predictions, dim=-1, index=index_tensor)
                 quantile_loss = self._quantile_loss(quantile_tensor, future_values)
                 loss = mse_loss + quantile_loss
             else:
