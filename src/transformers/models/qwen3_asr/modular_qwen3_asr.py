@@ -21,13 +21,14 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.tokenization_utils_base import TextInput
 from transformers.utils import auto_docstring, can_return_tuple
+from transformers.utils.deprecation import deprecate_kwarg
 from transformers.utils.generic import TransformersKwargs, check_model_inputs
 
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
+from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig
 from ..qwen3_omni_moe.configuration_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderConfig,
     Qwen3OmniMoeConfig,
-    Qwen3OmniMoeTextConfig,
     Qwen3OmniMoeThinkerConfig,
 )
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
@@ -36,21 +37,22 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderLayer,
     Qwen3OmniMoePreTrainedModelForConditionalGeneration,
     Qwen3OmniMoeThinkerForConditionalGeneration,
-    Qwen3OmniMoeThinkerTextAttention,
     Qwen3OmniMoeThinkerTextDecoderLayer,
+    Qwen3OmniMoeThinkerTextAttention,
     Qwen3OmniMoeThinkerTextMLP,
     Qwen3OmniMoeThinkerTextModel,
     Qwen3OmniMoeThinkerTextRMSNorm,
     Qwen3OmniMoeThinkerTextRotaryEmbedding,
     _get_feat_extract_output_lengths,
 )
-
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeAttention
+from ..qwen3.modeling_qwen3 import Qwen3DecoderLayer
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     pass
 
 
-class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
+class Qwen3ASRTextConfig(Qwen3VLTextConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRTextModel`]. It is used to instantiate a
     Qwen3-ASR model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -130,20 +132,26 @@ class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
         num_hidden_layers=32,
         num_attention_heads=32,
         num_key_value_heads=32,
+        head_dim=128,
         hidden_act="silu",
         max_position_embeddings=128000,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
-        rope_parameters=None,
+        tie_word_embeddings=False,   # need to pass this into PreTrainedConfig.__init__
+        rope_theta=5000000.0,
+        rope_scaling=None,
         attention_bias=False,
-        sliding_window=None,
         attention_dropout=0.0,
-        pad_token_id=None,
-        bos_token_id=None,
-        eos_token_id=None,
         **kwargs,
     ):
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
+        # Validate the correctness of rotary position embeddings parameters
+        # BC: if there is a 'type' field, move it to 'rope_type'.
+        if self.rope_scaling is not None and "type" in self.rope_scaling:
+            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -151,28 +159,20 @@ class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
             num_hidden_layers=num_hidden_layers,
             num_attention_heads=num_attention_heads,
             num_key_value_heads=num_key_value_heads,
+            head_dim=head_dim,
             hidden_act=hidden_act,
             max_position_embeddings=max_position_embeddings,
             initializer_range=initializer_range,
             rms_norm_eps=rms_norm_eps,
             use_cache=use_cache,
-            rope_parameters=rope_parameters,
+            #rope_parameters=RopeParameters(({"rope_theta": self.rope_theta}))
             attention_bias=attention_bias,
-            sliding_window=sliding_window,
             attention_dropout=attention_dropout,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             **kwargs,
         )
-        del self.decoder_sparse_step
-        del self.moe_intermediate_size
-        del self.num_experts_per_tok
-        del self.num_experts
-        del self.norm_topk_prob
-        del self.output_router_logits
-        del self.router_aux_loss_coef
-        del self.mlp_only_layers
+
+        del self.rope_parameters
+        del self.pad_token_id
 
 
 class Qwen3ASRThinkerConfig(PretrainedConfig):
@@ -495,23 +495,64 @@ class Qwen3ASRTextRMSNorm(Qwen3OmniMoeThinkerTextRMSNorm):
     pass
 
 
-class Qwen3ASRTextAttention(Qwen3OmniMoeThinkerTextAttention):
-    pass
+class Qwen3ASRTextAttention(Qwen3MoeAttention):
+    def __init__(self, config: Qwen3ASRConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        del self.sliding_window 
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_values is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class Qwen3ASRTextMLP(Qwen3OmniMoeThinkerTextMLP):
     pass
 
 
-class Qwen3ASRThinkerTextDecoderLayer(Qwen3OmniMoeThinkerTextDecoderLayer):
+class Qwen3ASRThinkerTextDecoderLayer(Qwen3DecoderLayer):
     def __init__(self, config: Qwen3ASRConfig, layer_idx: int):
-        GradientCheckpointingLayer.__init__()
-        self.hidden_size = config.hidden_size
-        self.self_attn = Qwen3ASRTextAttention(config=config, layer_idx=layer_idx)
-        self.mlp = Qwen3ASRTextMLP(config)
-        self.input_layernorm = Qwen3ASRTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Qwen3ASRTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
+        super().__init__(config=config, layer_idx=layer_idx)
+        del self.attention_type
 
 @auto_docstring
 class Qwen3ASRPreTrainedModel(PreTrainedModel):
@@ -542,6 +583,8 @@ class Qwen3ASRThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
 
 
 class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedModelForConditionalGeneration):
+    input_modalities = ("audio", "text")
+
     def _prepare_4d_causal_attention_mask_with_cache_position(
         self,
         attention_mask: torch.Tensor,
@@ -603,6 +646,17 @@ class Qwen3ASRPreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedMode
 
         return causal_mask
 
+    def get_llm_pos_ids_for_vision(
+        self,
+        start_idx: int,
+        vision_idx: int,
+        spatial_merge_size: int,
+        t_index: list[torch.Tensor],
+        grid_hs: list[torch.Tensor],
+        grid_ws: list[torch.Tensor],
+    ):
+        raise ValueError("Not needed.")
+
     def get_rope_index(
         self,
         attention_mask: torch.Tensor | None = None,
@@ -655,7 +709,8 @@ class Qwen3ASRAudioEncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
     """
 )
 class Qwen3ASRAudioEncoder(Qwen3OmniMoeAudioEncoder):
-    pass
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
+        raise ValueError("Not needed.")
 
 
 class Qwen3ASRThinkerTextRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding):
