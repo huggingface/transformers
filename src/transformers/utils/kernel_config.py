@@ -182,7 +182,7 @@ class KernelConfig(PushToHubMixin):
         for layer_name, kernel in self.kernel_mapping.items():
             if layer_name not in self.registered_layer_names.values():
                 raise ValueError(
-                    f"Layer {layer_name} is not registered in the model, please register it first using register_kernel_forward_from_hub"
+                    f"Layer {layer_name} is not registered in the model, please register it first using use_kernel_forward_from_hub"
                 )
 
             if isinstance(kernel, str):

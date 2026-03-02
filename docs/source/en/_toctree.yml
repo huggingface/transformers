@@ -16,6 +16,8 @@
       title: Loading models
     - local: custom_models
       title: Customizing models
+    - local: monkey_patching
+      title: Monkey patching
     - local: how_to_hack_models
       title: Customizing model components
     - local: model_sharing
