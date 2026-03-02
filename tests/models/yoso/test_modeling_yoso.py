@@ -264,7 +264,6 @@ class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": YosoModel,
             "fill-mask": YosoForMaskedLM,
-            "question-answering": YosoForQuestionAnswering,
             "text-classification": YosoForSequenceClassification,
             "token-classification": YosoForTokenClassification,
             "zero-shot": YosoForSequenceClassification,

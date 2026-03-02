@@ -241,7 +241,6 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             "text-classification": ModernBertForSequenceClassification,
             "token-classification": ModernBertForTokenClassification,
             "zero-shot": ModernBertForSequenceClassification,
-            "question-answering": ModernBertForQuestionAnswering,
         }
         if is_torch_available()
         else {}

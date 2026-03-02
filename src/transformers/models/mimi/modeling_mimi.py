@@ -24,7 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
@@ -1108,7 +1108,7 @@ class MimiTransformerModel(nn.Module):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
+        causal_mask = create_sliding_window_causal_mask(
             config=self.config,
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
@@ -1476,6 +1476,7 @@ class MimiModel(MimiPreTrainedModel):
         padding_mask: int,
         past_key_values: Cache | None = None,
         padding_cache: MimiConv1dPaddingCache | None = None,
+        use_streaming: bool | None = None,
         return_dict: bool | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
@@ -1487,7 +1488,10 @@ class MimiModel(MimiPreTrainedModel):
 
         # TODO: @eustlb, convert the padding mask to attention mask.
         encoder_outputs = self.encoder_transformer(
-            embeddings.transpose(1, 2), past_key_values=past_key_values, return_dict=return_dict
+            embeddings.transpose(1, 2),
+            past_key_values=past_key_values,
+            use_cache=use_streaming,
+            return_dict=return_dict,
         )
         if return_dict:
             past_key_values = encoder_outputs.get("past_key_values")
@@ -1610,6 +1614,7 @@ class MimiModel(MimiPreTrainedModel):
             padding_mask.bool(),
             past_key_values=encoder_past_key_values,
             padding_cache=padding_cache,
+            use_streaming=use_streaming,
             return_dict=return_dict,
         )
 

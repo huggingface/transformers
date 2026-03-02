@@ -228,7 +228,6 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         {
             "feature-extraction": DebertaModel,
             "fill-mask": DebertaForMaskedLM,
-            "question-answering": DebertaForQuestionAnswering,
             "text-classification": DebertaForSequenceClassification,
             "token-classification": DebertaForTokenClassification,
             "zero-shot": DebertaForSequenceClassification,

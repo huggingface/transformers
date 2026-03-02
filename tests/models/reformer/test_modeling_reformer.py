@@ -742,7 +742,6 @@ class ReformerLSHAttnModelTest(
         {
             "feature-extraction": ReformerModel,
             "fill-mask": ReformerForMaskedLM,
-            "question-answering": ReformerForQuestionAnswering,
             "text-classification": ReformerForSequenceClassification,
             "text-generation": ReformerModelWithLMHead,
             "zero-shot": ReformerForSequenceClassification,

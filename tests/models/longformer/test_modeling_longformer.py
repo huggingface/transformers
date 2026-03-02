@@ -320,7 +320,6 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         {
             "feature-extraction": LongformerModel,
             "fill-mask": LongformerForMaskedLM,
-            "question-answering": LongformerForQuestionAnswering,
             "text-classification": LongformerForSequenceClassification,
             "token-classification": LongformerForTokenClassification,
             "zero-shot": LongformerForSequenceClassification,

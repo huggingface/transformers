@@ -18,18 +18,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dataclasses import dataclass
+from ...utils import logging
 
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 
+logger = logging.get_logger(__name__)
+
 
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-class Ernie4_5_VL_MoeVisionConfig(PreTrainedConfig):
+class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of the [`Ernie4_5_VL_MoeVisionTransformerPretrainedModel`].
+    This is the configuration class to store the configuration of the [`Ernie4_5_VLMoeVisionTransformerPretrainedModel`].
     It is used to instantiate the vision models portion of the complete Ernie4.5-VL Moe model according to the specified
     arguments, defining the model architecture.
 
@@ -87,9 +90,9 @@ class Ernie4_5_VL_MoeVisionConfig(PreTrainedConfig):
 
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig):
+class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Ernie4_5_VL_MoeTextModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Ernie4_5_VLMoeTextModel`]. It is used to instantiate a
     the text model portion of the complete Ernie4.5-VL Moe model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -98,7 +101,7 @@ class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 103424):
             Vocabulary size of the Ernie 4.5 VL model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Ernie4_5_VL_MoeTextModel`]
+            `inputs_ids` passed when calling [`Ernie4_5_VLMoeTextModel`]
         hidden_size (`int`, *optional*, defaults to 2560):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 12288):
@@ -225,9 +228,9 @@ class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig):
 
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
+class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Ernie4_5_VL_MoeModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Ernie4_5_VLMoeModel`]. It is used to instantiate a
     Ernie4.5-VL MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     Ernie 4.5 VL 28B A3B [baidu/ERNIE-4.5-VL-28B-A3B-PT](https://huggingface.co/baidu/ERNIE-4.5-VL-28B-A3B-PT).
@@ -236,9 +239,9 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Ernie4_5_VL_MoeTextConfig`):
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Ernie4_5_VLMoeTextConfig`):
             The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Ernie4_5_VL_MoeVisionConfig`):
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Ernie4_5_VLMoeVisionConfig`):
             The config object or dictionary of the vision backbone.
         image_start_token_id (`int`, *optional*, defaults to 101304):
             The image token index to encode the start of image.
@@ -256,20 +259,20 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
             Whether the model's input and output word embeddings should be tied.
 
     ```python
-    >>> from transformers import Ernie4_5_VL_MoeForConditionalGeneration, Ernie4_5_VL_MoeConfig
+    >>> from transformers import Ernie4_5_VLMoeForConditionalGeneration, Ernie4_5_VLMoeConfig
 
-    >>> # Initializing a Ernie4_5_VL_Moe style configuration
-    >>> configuration = Ernie4_5_VL_MoeConfig()
+    >>> # Initializing a Ernie4_5_VLMoe style configuration
+    >>> configuration = Ernie4_5_VLMoeConfig()
 
     >>> # Initializing a model from the Ernie 4.5 VL 28B A3B configuration
-    >>> model = Ernie4_5_VL_MoeForConditionalGeneration(configuration)
+    >>> model = Ernie4_5_VLMoeForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
     model_type = "ernie4_5_vl_moe"
-    sub_configs = {"vision_config": Ernie4_5_VL_MoeVisionConfig, "text_config": Ernie4_5_VL_MoeTextConfig}
+    sub_configs = {"vision_config": Ernie4_5_VLMoeVisionConfig, "text_config": Ernie4_5_VLMoeTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -296,4 +299,35 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Ernie4_5_VL_MoeConfig", "Ernie4_5_VL_MoeTextConfig", "Ernie4_5_VL_MoeVisionConfig"]
+class Ernie4_5_VL_MoeConfig(Ernie4_5_VLMoeConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeConfig` is deprecated; please use `Ernie4_5_VLMoeConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeTextConfig(Ernie4_5_VLMoeTextConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeTextConfig` is deprecated; please use `Ernie4_5_VLMoeTextConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeVisionConfig` is deprecated; please use `Ernie4_5_VLMoeVisionConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+__all__ = [
+    "Ernie4_5_VL_MoeConfig",
+    "Ernie4_5_VL_MoeTextConfig",
+    "Ernie4_5_VL_MoeVisionConfig",
+    "Ernie4_5_VLMoeConfig",
+    "Ernie4_5_VLMoeTextConfig",
+    "Ernie4_5_VLMoeVisionConfig",
+]

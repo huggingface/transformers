@@ -473,6 +473,7 @@ class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": True,
         },
     }
 
@@ -495,6 +496,7 @@ class PaddleOCRVLProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
+        self.image_token_id = tokenizer.image_token_id
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -565,9 +567,17 @@ class PaddleOCRVLProcessor(ProcessorMixin):
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
 
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
 
 @strict(accept_kwargs=True)
@@ -1204,6 +1214,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs,
@@ -1230,6 +1241,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
+                mm_token_type_ids=mm_token_type_ids,
             )
 
         outputs = self.language_model(
@@ -1279,6 +1291,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -1339,6 +1352,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             use_cache=use_cache,
             pixel_values=pixel_values,
             rope_deltas=rope_deltas,
+            mm_token_type_ids=mm_token_type_ids,
             cache_position=cache_position,
             **kwargs,
         )

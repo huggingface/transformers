@@ -90,7 +90,7 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
     @torch.no_grad()
     def forward(self, position_ids: torch.Tensor | None = None, past_key_values_length: int = 0):
         bsz, seq_len = position_ids.size()
-        position_ids += self.offset
+        position_ids = position_ids + self.offset
 
         max_pos = 2 + seq_len + past_key_values_length
         if max_pos > self.weights.size(0):

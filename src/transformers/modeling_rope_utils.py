@@ -646,6 +646,10 @@ class RotaryEmbeddingConfigMixin:
         partial_rotary_factor = kwargs.get("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
         if partial_rotary_factor is not None:
             self.rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
+            ignore_keys_at_rope_validation = (
+                set() if ignore_keys_at_rope_validation is None else set(ignore_keys_at_rope_validation)
+            )
+            ignore_keys_at_rope_validation = ignore_keys_at_rope_validation | {"partial_rotary_factor"}
 
         self.standardize_rope_params()
         return kwargs

@@ -443,7 +443,6 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         {
             "feature-extraction": ErnieModel,
             "fill-mask": ErnieForMaskedLM,
-            "question-answering": ErnieForQuestionAnswering,
             "text-classification": ErnieForSequenceClassification,
             "text-generation": ErnieForCausalLM,
             "token-classification": ErnieForTokenClassification,

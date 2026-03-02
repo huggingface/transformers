@@ -577,7 +577,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
         # position_ids in Paligemma are 1-indexed
         if model_inputs.get("position_ids") is not None:
-            model_inputs["position_ids"] += 1
+            # NOTE: we need this op out-of-place, otherwise it modifies the `model_kwargs` dict used in `generate` in-place!
+            model_inputs["position_ids"] = model_inputs["position_ids"] + 1
 
         # Pixel values are used only in the first iteration if available
         # In subsequent iterations, they are already merged with text and cached

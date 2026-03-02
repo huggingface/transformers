@@ -22,10 +22,7 @@ from huggingface_hub.dataclasses import strict
 from transformers import AutoConfig, DacConfig, HubertConfig
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @strict(accept_kwargs=True)
@@ -84,7 +81,7 @@ class XcodecConfig(PreTrainedConfig):
     model_type = "xcodec"
 
     sub_configs = {
-        "acoustic_model_config": DacConfig,
+        "acoustic_model_config": AutoConfig,
         "semantic_model_config": AutoConfig,
     }
 
@@ -103,7 +100,7 @@ class XcodecConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if self.acoustic_model_config is None:
-            self.acoustic_model_config = DacConfig(
+            self.acoustic_model_config = CONFIG_MAPPING["dac"](
                 encoder_hidden_size=64,
                 # NOTE: original DAC uses [2, 4, 8, 8] `downsampling ratios`, namely reverse of `upsampling_ratios`
                 # (not sure if intentional by Xcodec but we keep it)
@@ -113,20 +110,18 @@ class XcodecConfig(PreTrainedConfig):
                 hidden_size=256,
             )
         elif isinstance(self.acoustic_model_config, dict):
-            self.acoustic_model_config = DacConfig(**self.acoustic_model_config)
+            self.acoustic_model_config["model_type"] = self.acoustic_model_config.get("model_type", "dac")
+            self.acoustic_model_config = CONFIG_MAPPING[self.acoustic_model_config["model_type"]](
+                **{**self._default_acoustic_model_config_kwargs, **self.acoustic_model_config}
+            )
 
         if self.semantic_model_config is None:
-            self.semantic_model_config = HubertConfig()
+            self.semantic_model_config = CONFIG_MAPPING["hubert"]()
         elif isinstance(self.semantic_model_config, dict):
-            if "_name_or_path" in self.semantic_model_config:
-                # If the config is a path, load it using AutoConfig
-                self.semantic_model_config = AutoConfig.from_pretrained(self.semantic_model_config["_name_or_path"])
-            else:
-                # assume HubertConfig as probably created from scratch
-                logger.warning(
-                    "Could not determine semantic model type from config architecture. Defaulting to `HubertConfig`."
-                )
-                self.semantic_model_config = HubertConfig(**self.semantic_model_config)
+            self.semantic_model_config["model_type"] = self.semantic_model_config.get("model_type", "hubert")
+            self.semantic_model_config = CONFIG_MAPPING[self.semantic_model_config["model_type"]](
+                **{**self._default_semantic_model_config_kwargs, **self.semantic_model_config}
+            )
 
         self.target_bandwidths = self.target_bandwidths or [0.5, 1, 1.5, 2, 4]
         if self.codebook_dim is None:

@@ -80,6 +80,11 @@ class MambaConfig(PreTrainedConfig):
             Whether or not the cache should be used.
         use_mambapy (`bool`, *optional*, defaults to `False`):
             Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not available. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
+        use_associative_scan (`bool`, *optional*, defaults to `True`):
+            Whether to use PyTorch's `torch._higher_order_ops.associative_scan` for the parallel scan instead of the naive
+            sequential implementation. The associative scan is only active during `torch.compile` tracing and
+            requires torch >= 2.9.0. Both paths are tested to produce numerically identical results (see
+            `test_associative_scan_matches_sequential`). Set to `False` to fall back to the sequential loop.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
 
@@ -124,6 +129,7 @@ class MambaConfig(PreTrainedConfig):
     rescale_prenorm_residual: bool = False
     use_cache: bool = True
     use_mambapy: bool = False
+    use_associative_scan: bool = True
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):

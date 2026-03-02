@@ -85,6 +85,7 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         w_init_variance_scale (`float`, *optional*, defaults to 0.01): weight initialization variance.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
+
     ```python
     >>> from transformers import RecurrentGemmaModel, RecurrentGemmaConfig
 

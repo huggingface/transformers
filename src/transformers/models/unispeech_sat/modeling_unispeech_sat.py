@@ -476,7 +476,7 @@ class UniSpeechSatEncoder(nn.Module):
         )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
+        hidden_states = hidden_states + position_embeddings.to(hidden_states.device)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 

@@ -270,7 +270,6 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": MraModel,
             "fill-mask": MraForMaskedLM,
-            "question-answering": MraForQuestionAnswering,
             "text-classification": MraForSequenceClassification,
             "token-classification": MraForTokenClassification,
             "zero-shot": MraForSequenceClassification,

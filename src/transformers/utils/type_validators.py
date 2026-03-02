@@ -1,6 +1,6 @@
 from collections.abc import Callable, Sequence
 from functools import partial
-from typing import Union
+from typing import Any, Union, cast
 
 from huggingface_hub.dataclasses import as_validated_field
 
@@ -99,7 +99,7 @@ def video_metadata_validator(value: VideoMetadataType | None = None):
 
     valid_keys = ["total_num_frames", "fps", "width", "height", "duration", "video_backend", "frames_indices"]
 
-    def check_dict_keys(d: dict) -> bool:
+    def check_dict_keys(d: dict[str, Any]) -> bool:
         return all(key in valid_keys for key in d.keys())
 
     if isinstance(value, Sequence) and isinstance(value[0], Sequence) and isinstance(value[0][0], dict):
@@ -114,7 +114,7 @@ def video_metadata_validator(value: VideoMetadataType | None = None):
         for item in value:
             if not check_dict_keys(item):
                 raise ValueError(
-                    f"Invalid keys found in video metadata. Valid keys: {valid_keys} got: {list(item.keys())}"
+                    f"Invalid keys found in video metadata. Valid keys: {valid_keys} got: {list(cast(dict, item).keys())}"
                 )
 
     elif isinstance(value, dict):

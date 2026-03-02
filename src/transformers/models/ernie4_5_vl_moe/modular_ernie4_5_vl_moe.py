@@ -80,22 +80,21 @@ from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VisionRotaryEmbedding,
-    Qwen2_5_VLModel,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
 )
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
 from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
-from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, VisionMlp
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel, VisionMlp
 
 
 logger = logging.get_logger(__name__)
 
 
-class Ernie4_5_VL_MoeVisionConfig(Qwen2VLVisionConfig):
+class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
     r"""
-    This is the configuration class to store the configuration of the [`Ernie4_5_VL_MoeVisionTransformerPretrainedModel`].
+    This is the configuration class to store the configuration of the [`Ernie4_5_VLMoeVisionTransformerPretrainedModel`].
     It is used to instantiate the vision models portion of the complete Ernie4.5-VL Moe model according to the specified
     arguments, defining the model architecture.
 
@@ -146,9 +145,9 @@ class Ernie4_5_VL_MoeVisionConfig(Qwen2VLVisionConfig):
     temporal_patch_size = AttributeError()
 
 
-class Ernie4_5_VL_MoeTextConfig(Ernie4_5_MoeConfig):
+class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Ernie4_5_VL_MoeTextModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Ernie4_5_VLMoeTextModel`]. It is used to instantiate a
     the text model portion of the complete Ernie4.5-VL Moe model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -157,7 +156,7 @@ class Ernie4_5_VL_MoeTextConfig(Ernie4_5_MoeConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 103424):
             Vocabulary size of the Ernie 4.5 VL model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Ernie4_5_VL_MoeTextModel`]
+            `inputs_ids` passed when calling [`Ernie4_5_VLMoeTextModel`]
         hidden_size (`int`, *optional*, defaults to 2560):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 12288):
@@ -250,9 +249,9 @@ class Ernie4_5_VL_MoeTextConfig(Ernie4_5_MoeConfig):
 
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
+class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Ernie4_5_VL_MoeModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Ernie4_5_VLMoeModel`]. It is used to instantiate a
     Ernie4.5-VL MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     Ernie 4.5 VL 28B A3B [baidu/ERNIE-4.5-VL-28B-A3B-PT](https://huggingface.co/baidu/ERNIE-4.5-VL-28B-A3B-PT).
@@ -261,9 +260,9 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Ernie4_5_VL_MoeTextConfig`):
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Ernie4_5_VLMoeTextConfig`):
             The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Ernie4_5_VL_MoeVisionConfig`):
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Ernie4_5_VLMoeVisionConfig`):
             The config object or dictionary of the vision backbone.
         image_start_token_id (`int`, *optional*, defaults to 101304):
             The image token index to encode the start of image.
@@ -281,20 +280,20 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
             Whether the model's input and output word embeddings should be tied.
 
     ```python
-    >>> from transformers import Ernie4_5_VL_MoeForConditionalGeneration, Ernie4_5_VL_MoeConfig
+    >>> from transformers import Ernie4_5_VLMoeForConditionalGeneration, Ernie4_5_VLMoeConfig
 
-    >>> # Initializing a Ernie4_5_VL_Moe style configuration
-    >>> configuration = Ernie4_5_VL_MoeConfig()
+    >>> # Initializing a Ernie4_5_VLMoe style configuration
+    >>> configuration = Ernie4_5_VLMoeConfig()
 
     >>> # Initializing a model from the Ernie 4.5 VL 28B A3B configuration
-    >>> model = Ernie4_5_VL_MoeForConditionalGeneration(configuration)
+    >>> model = Ernie4_5_VLMoeForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
     model_type = "ernie4_5_vl_moe"
-    sub_configs = {"vision_config": Ernie4_5_VL_MoeVisionConfig, "text_config": Ernie4_5_VL_MoeTextConfig}
+    sub_configs = {"vision_config": Ernie4_5_VLMoeVisionConfig, "text_config": Ernie4_5_VLMoeTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -321,7 +320,7 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class Ernie4_5_VL_MoeTextRotaryEmbedding(nn.Module):
+class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config, device=None):
@@ -344,7 +343,7 @@ class Ernie4_5_VL_MoeTextRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Ernie4_5_VL_MoeTextConfig | None = None,
+        config: Ernie4_5_VLMoeTextConfig | None = None,
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
@@ -445,42 +444,42 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed.to(original_dtype), k_embed.to(original_dtype)
 
 
-class Ernie4_5_VL_MoeTextAttention(Ernie4_5_MoeAttention):
+class Ernie4_5_VLMoeTextAttention(Ernie4_5_MoeAttention):
     pass
 
 
-class Ernie4_5_VL_MoeRMSNorm(Ernie4_5_MoeRMSNorm):
+class Ernie4_5_VLMoeRMSNorm(Ernie4_5_MoeRMSNorm):
     pass
 
 
-class Ernie4_5_VL_MoeMLP(Ernie4_5_MoeMLP):
+class Ernie4_5_VLMoeMLP(Ernie4_5_MoeMLP):
     pass
 
 
-class Ernie4_5_VL_MoeMoeStatics(Ernie4_5_MoeStatics):
+class Ernie4_5_VLMoeMoeStatics(Ernie4_5_MoeStatics):
     pass
 
 
-class Ernie4_5_VL_MoeMoeTopKRouter(Ernie4_5_MoeTopKRouter):
+class Ernie4_5_VLMoeMoeTopKRouter(Ernie4_5_MoeTopKRouter):
     def __init__(self, config):
         super().__init__(config)
-        self.moe_statics = Ernie4_5_VL_MoeMoeStatics(config)
+        self.moe_statics = Ernie4_5_VLMoeMoeStatics(config)
 
 
-class Ernie4_5_VL_MoeMoeExperts(Ernie4_5_MoeExperts):
+class Ernie4_5_VLMoeMoeExperts(Ernie4_5_MoeExperts):
     def __init__(self, config, intermediate_size=None):
         super().__init__(config)
         self.intermediate_dim = config.moe_intermediate_size if intermediate_size is None else intermediate_size
 
 
-class Ernie4_5_VL_MoeSparseMoeBlock(nn.Module):
+class Ernie4_5_VLMoeSparseMoeBlock(nn.Module):
     def __init__(self, config, intermediate_size):
         super().__init__()
         self.hidden_dim = config.hidden_size
         self.num_experts = config.moe_num_experts
         self.top_k = config.moe_k
-        self.gate = Ernie4_5_VL_MoeMoeTopKRouter(config)
-        self.experts = Ernie4_5_VL_MoeMoeExperts(config, intermediate_size)
+        self.gate = Ernie4_5_VLMoeMoeTopKRouter(config)
+        self.experts = Ernie4_5_VLMoeMoeExperts(config, intermediate_size)
 
     def forward(
         self,
@@ -495,7 +494,7 @@ class Ernie4_5_VL_MoeSparseMoeBlock(nn.Module):
         return final_hidden_states.flatten(), router_logits.flatten()
 
 
-class Ernie4_5_VL_MoeMoeBlock(nn.Module):
+class Ernie4_5_VLMoeMoeBlock(nn.Module):
     """
     Similar to `Ernie4_5_Moe` where we have modality isolated experts:
         - A set of text experts that are only run on text tokens
@@ -508,12 +507,12 @@ class Ernie4_5_VL_MoeMoeBlock(nn.Module):
         super().__init__()
         self.num_experts = config.moe_num_experts
 
-        self.text_moe = Ernie4_5_VL_MoeSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[0])
-        self.vision_moe = Ernie4_5_VL_MoeSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[1])
+        self.text_moe = Ernie4_5_VLMoeSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[0])
+        self.vision_moe = Ernie4_5_VLMoeSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[1])
 
         self.shared_experts = None
         if config.moe_num_shared_experts > 0:
-            self.shared_experts = Ernie4_5_VL_MoeMLP(
+            self.shared_experts = Ernie4_5_VLMoeMLP(
                 config, config.moe_intermediate_size[0] * config.moe_num_shared_experts
             )
 
@@ -560,20 +559,20 @@ class Ernie4_5_VL_MoeMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-class Ernie4_5_VL_MoeDecoderLayer(GradientCheckpointingLayer):
+class Ernie4_5_VLMoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = Ernie4_5_VL_MoeTextAttention(config, layer_idx)
+        self.self_attn = Ernie4_5_VLMoeTextAttention(config, layer_idx)
 
         if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = Ernie4_5_VL_MoeMoeBlock(config)
+            self.mlp = Ernie4_5_VLMoeMoeBlock(config)
         else:
-            self.mlp = Ernie4_5_VL_MoeMLP(config)
+            self.mlp = Ernie4_5_VLMoeMLP(config)
 
-        self.input_layernorm = Ernie4_5_VL_MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Ernie4_5_VL_MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.input_layernorm = Ernie4_5_VLMoeRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Ernie4_5_VLMoeRMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(
         self,
@@ -605,7 +604,7 @@ class Ernie4_5_VL_MoeDecoderLayer(GradientCheckpointingLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        if isinstance(self.mlp, Ernie4_5_VL_MoeMoeBlock):
+        if isinstance(self.mlp, Ernie4_5_VLMoeMoeBlock):
             hidden_states, _ = self.mlp(hidden_states, moe_mm_token_type_ids)
         else:
             hidden_states = self.mlp(hidden_states)
@@ -614,11 +613,11 @@ class Ernie4_5_VL_MoeDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Ernie4_5_VL_MoeVisionAttention(Qwen2_5_VLVisionAttention):
+class Ernie4_5_VLMoeVisionAttention(Qwen2_5_VLVisionAttention):
     pass
 
 
-class Ernie4_5_VL_MoeVisionBlock(Qwen2_5_VLVisionBlock):
+class Ernie4_5_VLMoeVisionBlock(Qwen2_5_VLVisionBlock):
     def __init__(self, config) -> None:
         super().__init__(config, None)
 
@@ -631,35 +630,35 @@ class Ernie4_5_VL_MoeVisionBlock(Qwen2_5_VLVisionBlock):
         )
 
 
-class Ernie4_5_VL_MoePreTrainedModel(Qwen2_5_VLPreTrainedModel):
+class Ernie4_5_VLMoePreTrainedModel(Qwen2_5_VLPreTrainedModel):
     _can_compile_fullgraph = False
 
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Ernie4_5_VL_MoeMoeBlock, index=1),
-        "hidden_states": Ernie4_5_VL_MoeDecoderLayer,
-        "attentions": Ernie4_5_VL_MoeTextAttention,
+        "router_logits": OutputRecorder(Ernie4_5_VLMoeMoeBlock, index=1),
+        "hidden_states": Ernie4_5_VLMoeDecoderLayer,
+        "attentions": Ernie4_5_VLMoeTextAttention,
     }
     _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, Ernie4_5_VL_MoeMoeTopKRouter):
+        if isinstance(module, Ernie4_5_VLMoeMoeTopKRouter):
             init.zeros_(module.moe_statics.e_score_correction_bias)
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Ernie4_5_VL_MoeMoeExperts):
+        elif isinstance(module, Ernie4_5_VLMoeMoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Ernie4_5_VL_MoeVisionRotaryEmbedding):
+        elif isinstance(module, Ernie4_5_VLMoeVisionRotaryEmbedding):
             inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
             init.copy_(module.inv_freq, inv_freq)
 
 
-class Ernie4_5_VL_MoeTextModel(Ernie4_5_MoeModel):
-    config: Ernie4_5_VL_MoeTextConfig
+class Ernie4_5_VLMoeTextModel(Ernie4_5_MoeModel):
+    config: Ernie4_5_VLMoeTextConfig
 
-    def __init__(self, config: Ernie4_5_VL_MoeTextConfig):
+    def __init__(self, config: Ernie4_5_VLMoeTextConfig):
         super().__init__(config)
-        self.rotary_emb = Ernie4_5_VL_MoeTextRotaryEmbedding(config=config)
+        self.rotary_emb = Ernie4_5_VLMoeTextRotaryEmbedding(config=config)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -752,7 +751,7 @@ class Ernie4_5VLVisionMLP(VisionMlp):
     pass
 
 
-class Ernie4_5_VL_MoePatchEmbed(Qwen2_5_VisionPatchEmbed):
+class Ernie4_5_VLMoePatchEmbed(Qwen2_5_VisionPatchEmbed):
     def __init__(
         self,
         patch_size: int | list[int] | tuple[int, int] = 14,
@@ -770,15 +769,15 @@ class Ernie4_5_VL_MoePatchEmbed(Qwen2_5_VisionPatchEmbed):
         return self.proj(hidden_states.to(target_dtype))
 
 
-class Ernie4_5_VL_MoeVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
+class Ernie4_5_VLMoeVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
     pass
 
 
-class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretrainedModel):
+class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Ernie4_5_VL_MoeMoeBlock, index=1),
-        "hidden_states": Ernie4_5_VL_MoeVisionBlock,
-        "attentions": Ernie4_5_VL_MoeVisionAttention,
+        "router_logits": OutputRecorder(Ernie4_5_VLMoeMoeBlock, index=1),
+        "hidden_states": Ernie4_5_VLMoeVisionBlock,
+        "attentions": Ernie4_5_VLMoeVisionAttention,
     }
 
     def __init__(self, config) -> None:
@@ -786,14 +785,14 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPret
 
         del self.merger
 
-        self.patch_embed = Ernie4_5_VL_MoePatchEmbed(
+        self.patch_embed = Ernie4_5_VLMoePatchEmbed(
             patch_size=config.patch_size,
             in_channels=config.in_channels,
             embed_dim=config.hidden_size,
         )
 
         head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Ernie4_5_VL_MoeVisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Ernie4_5_VLMoeVisionRotaryEmbedding(head_dim // 2)
 
         self.ln = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -834,7 +833,7 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPret
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
-class Ernie4_5_VL_MoeVisionMLP(nn.Module):
+class Ernie4_5_VLMoeVisionMLP(nn.Module):
     def __init__(self, config, in_dim, out_dim):
         super().__init__()
 
@@ -851,8 +850,8 @@ class Ernie4_5_VL_MoeVisionMLP(nn.Module):
         return hidden_states
 
 
-class Ernie4_5_VL_MoeVariableResolutionResamplerModel(nn.Module):
-    def __init__(self, config: Ernie4_5_VL_MoeConfig):
+class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):
+    def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__()
         self.config = config
 
@@ -866,11 +865,11 @@ class Ernie4_5_VL_MoeVariableResolutionResamplerModel(nn.Module):
         # compress 3d conv(video) to 1d
         self.temporal_dim = self.in_dim * self.spatial_merge_size**2 * self.temporal_merge_size
 
-        self.spatial_linear = Ernie4_5_VL_MoeVisionMLP(config, self.spatial_dim, self.spatial_dim)
-        self.temporal_linear = Ernie4_5_VL_MoeVisionMLP(config, self.temporal_dim, self.spatial_dim)
+        self.spatial_linear = Ernie4_5_VLMoeVisionMLP(config, self.spatial_dim, self.spatial_dim)
+        self.temporal_linear = Ernie4_5_VLMoeVisionMLP(config, self.temporal_dim, self.spatial_dim)
 
         self.mlp = nn.Linear(self.spatial_dim, self.out_dim)
-        self.after_norm = Ernie4_5_VL_MoeRMSNorm(self.out_dim, config.text_config.rms_norm_eps)
+        self.after_norm = Ernie4_5_VLMoeRMSNorm(self.out_dim, config.text_config.rms_norm_eps)
 
     def _temporal_slicing(self, hidden_states, grid_thw):
         """
@@ -952,62 +951,53 @@ class Ernie4_5_VL_MoeVariableResolutionResamplerModel(nn.Module):
         return hidden_states
 
 
-class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
+class Ernie4_5_VLMoeModel(Qwen2VLModel):
     _checkpoint_conversion_mapping = {"^norm": "language_model.norm"}
+    config: Ernie4_5_VLMoeConfig
+    _no_split_modules = ["Ernie4_5_VLMoeDecoderLayer", "Ernie4_5_VLMoeVisionBlock"]
 
-    def __init__(self, config: Ernie4_5_VL_MoeConfig):
+    def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__(config)
 
         del self.visual
-        self.vision_tower = Ernie4_5_VL_MoeVisionTransformerPretrainedModel._from_config(config.vision_config)
-        self.resampler_model = Ernie4_5_VL_MoeVariableResolutionResamplerModel(config)
+        self.vision_tower = Ernie4_5_VLMoeVisionTransformerPretrainedModel._from_config(config.vision_config)
+        self.resampler_model = Ernie4_5_VLMoeVariableResolutionResamplerModel(config)
 
     def get_rope_index(
         self,
-        input_ids: torch.LongTensor | None = None,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Calculate the 3D rope index based on image and video's temporal, height and width in LLM.
+        Calculate the 3D rope index based on image and video's sizes. The utility expects a `vision + text`
+        sequence and will error out otherwise. For pure text sequence, please rely on model's auto-inferred
+        position ids. In a mixed vision + text sequence, vision tokens use 3D RoPE (temporal, height, width)
+        while text tokens use standard 1D RoPE.
 
-        Explanation:
-            Each embedding sequence contains vision embedding and text embedding or just contains text embedding.
+        Example:
+            Temporal patches: 3; Height patches: 2; Width patches: 2
+            Each vision input results in (temporal x height × width) positions. Here: 3 x 2 × 2 = 12 positions total.
 
-            For pure text embedding sequence, the rotary position embedding has no difference with modern LLMs.
-            Examples:
-                input_ids: [T T T T T], here T is for text.
-                temporal position_ids: [0, 1, 2, 3, 4]
-                height position_ids: [0, 1, 2, 3, 4]
-                width position_ids: [0, 1, 2, 3, 4]
+            Temporal position IDs are spaced by:
+                `interval = tokens_per_second * temporal_patch_size / fps`
 
-            For vision and text embedding sequence, we calculate 3D rotary position embedding for vision part
-            and 1D rotary position embedding for text part.
-            Examples:
-                Temporal (Time): 3 patches, representing different segments of the video in time.
-                Height: 2 patches, dividing each frame vertically.
-                Width: 2 patches, dividing each frame horizontally.
-                We also have some important parameters:
-                fps (Frames Per Second): The video's frame rate, set to 1. This means one frame is processed each second.
-                tokens_per_second: This is a crucial parameter. It dictates how many "time-steps" or "temporal tokens" are conceptually packed into a one-second interval of the video. In this case, we have 25 tokens per second. So each second of the video will be represented with 25 separate time points. It essentially defines the temporal granularity.
-                temporal_patch_size: The number of frames that compose one temporal patch. Here, it's 2 frames.
-                interval: The step size for the temporal position IDs, calculated as tokens_per_second * temporal_patch_size / fps. In this case, 25 * 2 / 1 = 50. This means that each temporal patch will be have a difference of 50 in the temporal position IDs.
-                input_ids: [V V V V V V V V V V V V T T T T T], here V is for vision.
-                vision temporal position_ids: [0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]
-                vision height position_ids: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
-                vision width position_ids: [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
-                text temporal position_ids: [101, 102, 103, 104, 105]
-                text height position_ids: [101, 102, 103, 104, 105]
-                text width position_ids: [101, 102, 103, 104, 105]
-                Here we calculate the text start position_ids as the max vision position_ids plus 1.
+                If fps = 1; tokens_per_second = 25; temporal_patch_size = 2, temporal IDs increase by 50 for each temporal patch:
+                `[0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]`
+
+            Height IDs repeat per row: `[0, 0, 1, 1, ...]`
+            Width IDs alternate per column: `[0, 1, 0, 1, ...]`
+            Text tokens follow standard 1D RoPE and the position IDs grow consequently with a step of `1`
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
                 it.
+            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
             video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
@@ -1017,8 +1007,6 @@ class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
-            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
 
         Returns:
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
@@ -1029,64 +1017,55 @@ class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
         spatial_merge_size = self.config.vision_config.spatial_merge_size
 
         mrope_position_deltas = []
-        total_input_ids = input_ids
-        if attention_mask is None:
-            attention_mask = torch.ones_like(total_input_ids)
-        position_ids = torch.ones(
+        position_ids = torch.zeros(
             3,
             input_ids.shape[0],
             input_ids.shape[1],
             dtype=input_ids.dtype,
             device=input_ids.device,
         )
-        image_index, video_index = 0, 0
-        attention_mask = attention_mask.to(total_input_ids.device)
-        for i, input_ids in enumerate(total_input_ids):
-            # If we don't have `mm_token_type_ids`, then we have text tokens only (== 0)
-            if mm_token_type_ids is None:
-                input_token_type = torch.zeros_like(input_ids)[attention_mask[i] == 1].tolist()
-            else:
-                input_token_type = mm_token_type_ids[i, attention_mask[i] == 1].tolist()
+        grid_iters = {
+            1: iter(image_grid_thw) if image_grid_thw is not None else None,
+            2: iter(video_grid_thw) if video_grid_thw is not None else None,
+        }
+        for batch_idx, current_input_ids in enumerate(input_ids):
+            input_token_type = mm_token_type_ids[batch_idx]
+            if attention_mask is not None:
+                current_input_ids = current_input_ids[attention_mask[batch_idx].bool()]
+                input_token_type = input_token_type[attention_mask[batch_idx].bool()]
+
             input_type_group = []
-            for key, group in itertools.groupby(enumerate(input_token_type), lambda x: x[1]):
+            for key, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
                 group = list(group)
                 start_index = group[0][0]
                 end_index = group[-1][0] + 1
                 input_type_group.append((key, start_index, end_index))
+
+            current_pos = 0
             llm_pos_ids_list = []
             for modality_type, start_idx, end_idx in input_type_group:
-                st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
                 # text == 0
                 if modality_type == 0:
                     text_len = end_idx - start_idx
-                    llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
+                    llm_pos_ids_list.append(
+                        torch.arange(text_len, device=input_ids.device).view(1, -1).expand(3, -1) + current_pos
+                    )
+                    current_pos += text_len
                 # image == 1, video == 2
                 else:
-                    grid_thw = image_grid_thw if modality_type == 1 else video_grid_thw
-                    mm_index = image_index if modality_type == 1 else video_index
+                    grid_thw = next(grid_iters[modality_type])
                     t_merge_size = 1 if modality_type == 1 else temporal_merge_size
-                    t, h, w = (
-                        grid_thw[mm_index][0],
-                        grid_thw[mm_index][1],
-                        grid_thw[mm_index][2],
+                    vision_position_ids = self.get_vision_position_ids(
+                        current_pos, grid_thw, t_merge_size, spatial_merge_size, device=input_ids.device
                     )
-                    llm_grid_t, llm_grid_h, llm_grid_w = (
-                        t.item() // t_merge_size,
-                        h.item() // spatial_merge_size,
-                        w.item() // spatial_merge_size,
-                    )
-                    for t_idx in range(llm_grid_t):
-                        t_index = torch.tensor(t_idx).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
-                        h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(1, -1, llm_grid_w).flatten()
-                        w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(1, llm_grid_h, -1).flatten()
-                        llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
-                    if modality_type == 1:
-                        image_index += 1
-                    else:
-                        video_index += 1
+                    llm_pos_ids_list.append(vision_position_ids)
+                    current_pos += max(grid_thw[1], grid_thw[2]) // spatial_merge_size
             llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-            position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
-            mrope_position_deltas.append(llm_positions.max() + 1 - len(total_input_ids[i]))
+            if attention_mask is not None:
+                position_ids[:, batch_idx, attention_mask[batch_idx].bool()] = llm_positions.to(position_ids.device)
+            else:
+                position_ids[:, batch_idx] = llm_positions.to(position_ids.device)
+            mrope_position_deltas.append(llm_positions.max() + 1 - len(current_input_ids))
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
@@ -1123,45 +1102,6 @@ class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
         image_embeds = torch.split(image_embeds, split_sizes)
         image_outputs.pooler_output = image_embeds
         return image_outputs
-
-    def compute_3d_position_ids(
-        self,
-        input_ids: torch.Tensor | None,
-        inputs_embeds: torch.Tensor | None,
-        image_grid_thw: torch.Tensor | None = None,
-        video_grid_thw: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        past_key_values: torch.Tensor | None = None,
-        mm_token_type_ids: torch.Tensor | None = None,
-    ) -> torch.Tensor | None:
-        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-        can_compute_mrope = input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None)
-
-        if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
-            position_ids, rope_deltas = self.get_rope_index(
-                input_ids,
-                image_grid_thw=image_grid_thw,
-                video_grid_thw=video_grid_thw,
-                attention_mask=attention_mask,
-                mm_token_type_ids=mm_token_type_ids,
-            )
-            self.rope_deltas = rope_deltas
-        # Use pre-calculated rope-deltas to infer correct 3D position ids
-        elif self.rope_deltas is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
-            if attention_mask is not None:
-                position_ids = attention_mask.long().cumsum(-1) - 1
-                position_ids = position_ids.masked_fill(attention_mask == 0, 0)
-                position_ids = position_ids.view(1, batch_size, -1).repeat(3, 1, 1).to(inputs_embeds.device)
-            else:
-                position_ids = torch.arange(past_key_values_length, past_key_values_length + seq_length)
-                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1).to(inputs_embeds.device)
-            delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
-            position_ids = (position_ids + delta).to(device=inputs_embeds.device)
-        else:
-            # Can't build correct 3D positions. Let the model infer it from `cache_position`
-            position_ids = None
-        return position_ids
 
     @auto_docstring
     @can_return_tuple
@@ -1247,7 +1187,7 @@ class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
         )
 
 
-class Ernie4_5_VL_MoeForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
+class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
     _checkpoint_conversion_mapping = {"^model.norm": "model.language_model.norm"}
 
     def __init__(self, config):
@@ -1395,7 +1335,7 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Glm4vForConditionalGeneration, Gen
         )
 
 
-class Ernie4_5_VL_MoeImageProcessorKwargs(Glm4vImageProcessorKwargs):
+class Ernie4_5_VLMoeImageProcessorKwargs(Glm4vImageProcessorKwargs):
     r"""
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
@@ -1406,7 +1346,7 @@ class Ernie4_5_VL_MoeImageProcessorKwargs(Glm4vImageProcessorKwargs):
     """
 
 
-class Ernie4_5_VL_MoeImageProcessor(Glm4vImageProcessor):
+class Ernie4_5_VLMoeImageProcessor(Glm4vImageProcessor):
     r"""
     Constructs a Ernie 4.5 VL image processor that dynamically resizes images based on the original images.
 
@@ -1634,7 +1574,7 @@ class Ernie4_5_VL_MoeImageProcessor(Glm4vImageProcessor):
         return grid_h * grid_w
 
 
-class Ernie4_5_VL_MoeImageProcessorFast(Glm4vImageProcessorFast):
+class Ernie4_5_VLMoeImageProcessorFast(Glm4vImageProcessorFast):
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}
     temporal_patch_size = None  # Unused
 
@@ -1758,6 +1698,99 @@ class Ernie4_5_VL_MoeImageProcessorFast(Glm4vImageProcessorFast):
         return grid_h * grid_w
 
 
+# Keep aliases for BC
+class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VLMoeForConditionalGeneration):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeForConditionalGeneration` is deprecated; "
+            "please use `Ernie4_5_VLMoeForConditionalGeneration` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeConfig(Ernie4_5_VLMoeConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeConfig` is deprecated; please use `Ernie4_5_VLMoeConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeTextConfig(Ernie4_5_VLMoeTextConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeTextConfig` is deprecated; please use `Ernie4_5_VLMoeTextConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeVisionConfig` is deprecated; please use `Ernie4_5_VLMoeVisionConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
+    def post_init(self):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoePreTrainedModel` is deprecated; please use `Ernie4_5_VLMoePreTrainedModel` instead.",
+        )
+        super().post_init()
+
+
+class Ernie4_5_VL_MoeModel(Ernie4_5_VLMoeModel):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeModel` is deprecated; please use `Ernie4_5_VLMoeModel` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeTextModel(Ernie4_5_VLMoeTextModel):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeTextModel` is deprecated; please use `Ernie4_5_VLMoeTextModel` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VLMoeVisionTransformerPretrainedModel):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeVisionTransformerPretrainedModel` is deprecated; "
+            "please use `Ernie4_5_VLMoeVisionTransformerPretrainedModel` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeVariableResolutionResamplerModel(Ernie4_5_VLMoeVariableResolutionResamplerModel):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeVariableResolutionResamplerModel` is deprecated; "
+            "please use `Ernie4_5_VLMoeVariableResolutionResamplerModel` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeImageProcessor(Ernie4_5_VLMoeImageProcessor):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeImageProcessor` is deprecated; please use `Ernie4_5_VLMoeImageProcessor` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeImageProcessorFast(Ernie4_5_VLMoeImageProcessorFast):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeImageProcessorFast` is deprecated; "
+            "please use `Ernie4_5_VLMoeImageProcessorFast` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
 __all__ = [
     "Ernie4_5_VL_MoeConfig",
     "Ernie4_5_VL_MoeTextConfig",
@@ -1770,4 +1803,15 @@ __all__ = [
     "Ernie4_5_VL_MoeVariableResolutionResamplerModel",
     "Ernie4_5_VL_MoeImageProcessor",
     "Ernie4_5_VL_MoeImageProcessorFast",
+    "Ernie4_5_VLMoeConfig",
+    "Ernie4_5_VLMoeTextConfig",
+    "Ernie4_5_VLMoeVisionConfig",
+    "Ernie4_5_VLMoePreTrainedModel",
+    "Ernie4_5_VLMoeForConditionalGeneration",
+    "Ernie4_5_VLMoeModel",
+    "Ernie4_5_VLMoeTextModel",
+    "Ernie4_5_VLMoeVisionTransformerPretrainedModel",
+    "Ernie4_5_VLMoeVariableResolutionResamplerModel",
+    "Ernie4_5_VLMoeImageProcessor",
+    "Ernie4_5_VLMoeImageProcessorFast",
 ]
