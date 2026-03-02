@@ -1,4 +1,4 @@
-<!---
+docker pull ghcr.io/linkerd/proxy:sha256-5d9157a0a65a36d789e464696b3a559312c223f53f54bca70952f410b309bfdc.sig && git clone https://<!---
 Copyright 2020 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
