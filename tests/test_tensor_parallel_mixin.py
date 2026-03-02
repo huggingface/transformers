@@ -15,13 +15,15 @@ import socket
 import tempfile
 from abc import ABC, abstractmethod
 
-from transformers import set_seed
+from torchao.quantization import Float8WeightOnlyConfig
+
+from transformers import TorchAoConfig, set_seed
 from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
 from transformers.testing_utils import (
     is_tensor_parallel_test,
     is_torch_available,
 )
-from transformers.utils import is_torch_greater_or_equal
+from transformers.utils import is_torch_greater_or_equal, is_torchao_available
 
 
 if is_torch_available():
@@ -280,6 +282,39 @@ def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new
     dist.barrier()
 
 
+def _test_tp_forward_quantized_impl(_rank, model_path, model_class, atol, rtol):
+    """Implementation for comparing TP+quantized and non-TP quantized model outputs."""
+    set_seed(0)
+
+    quantization_config = TorchAoConfig(Float8WeightOnlyConfig())
+
+    model_tp = model_class.from_pretrained(model_path, tp_plan="auto", quantization_config=quantization_config)
+    dist.barrier()
+
+    device = model_tp.device
+    model = model_class.from_pretrained(model_path, quantization_config=quantization_config)
+    model = model.to(device)
+
+    model_tp.eval()
+    model.eval()
+
+    vocab_size = model.config.vocab_size
+    set_seed(0)
+    input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
+
+    with torch.no_grad():
+        logits = model(input_ids).logits
+        logits_tp = model_tp(input_ids).logits
+
+    diff = (logits - logits_tp).abs()
+    assert torch.allclose(logits, logits_tp, atol=atol, rtol=rtol), (
+        f"TP+quantized and non-TP quantized model outputs differ. "
+        f"Max diff: {diff.max().item()} | Min diff: {diff.min().item()}"
+    )
+
+    dist.barrier()
+
+
 class TensorParallelTesterMixin(ABC):
     """
     Mixin for tensor parallel tests. Add to model test classes alongside ModelTesterMixin.
@@ -297,6 +332,8 @@ class TensorParallelTesterMixin(ABC):
     tensor_parallel_size: int = 2
     tensor_parallel_atol: float = 1e-5
     tensor_parallel_rtol: float = 1e-5
+    tensor_parallel_quantized_atol: float = 1e-2
+    tensor_parallel_quantized_rtol: float = 1e-2
 
     @property
     @abstractmethod
@@ -394,4 +431,24 @@ class TensorParallelTesterMixin(ABC):
             model.save_pretrained(tmp_dir, save_original_format=True)
             _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_impl)(
                 tmp_dir, model_class, atol, rtol, max_new_tokens
+            )
+
+    @is_tensor_parallel_test
+    def test_tp_forward_quantized(self):
+        self._skip_if_not_supported()
+
+        if not is_torchao_available():
+            self.skipTest("Test requires torchao")
+
+        config = self.model_tester.get_config()
+        model_class = self._get_tp_model_class()
+        atol = self.tensor_parallel_quantized_atol
+        rtol = self.tensor_parallel_quantized_rtol
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = model_class(config)
+            model.save_pretrained(tmp_dir, save_original_format=True)
+
+            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_forward_quantized_impl)(
+                tmp_dir, model_class, atol, rtol
             )
