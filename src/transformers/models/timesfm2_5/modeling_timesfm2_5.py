@@ -617,7 +617,7 @@ class TimesFm2_5Model(TimesFm2_5PreTrainedModel):
         tokenizer_inputs = torch.cat(
             [normed_inputs, patched_masks_bool.to(dtype=normed_inputs.dtype)],
             dim=-1,
-        ).to(dtype=self.dtype)
+        ).to(dtype=self.input_ff_layer.weight.dtype)
         input_embeddings = self.input_ff_layer(tokenizer_inputs)
 
         patch_padding = patched_masks_bool[..., -1]
