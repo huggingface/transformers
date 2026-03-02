@@ -1851,6 +1851,7 @@ class ConfigArgs:
     num_kv_heads = num_key_value_heads
     text_vocab_size = vocab_size
     embedding_dimension = embed_dim
+    emb_dim = embed_dim
     n_codebooks = num_codebooks
     dim_ff = ffn_dim
     dropout_p = dropout

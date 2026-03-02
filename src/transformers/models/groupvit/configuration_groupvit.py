@@ -78,47 +78,19 @@ class GroupViTTextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
+@auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")
 class GroupViTVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GroupViTVisionModel`]. It is used to instantiate
-    an GroupViT model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GroupViT
-    [nvidia/groupvit-gcc-yfcc](https://huggingface.co/nvidia/groupvit-gcc-yfcc) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 384):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 1536):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        depths (`list[int]`, *optional*, defaults to [6, 3, 3]):
-            The number of layers in each encoder block.
-        num_group_tokens (`list[int]`, *optional*, defaults to [64, 8, 0]):
-            The number of group tokens for each stage.
-        num_output_groups (`list[int]`, *optional*, defaults to [64, 8, 8]):
-            The number of output groups for each stage, 0 means no group.
-        num_attention_heads (`int`, *optional*, defaults to 6):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
+    depths (`list[int]`, *optional*, defaults to [6, 3, 3]):
+        The number of layers in each encoder block.
+    num_group_tokens (`list[int]`, *optional*, defaults to [64, 8, 0]):
+        The number of group tokens for each stage.
+    num_output_groups (`list[int]`, *optional*, defaults to [64, 8, 8]):
+        The number of output groups for each stage, 0 means no group.
+    assign_eps (`float`, *optional*, defaults to `1.0`):
+        Epsilon used in layer norm
+    assign_mlp_ratio (`list[int]`, *optional*, defaults to `[0.5, 4]`):
+        Ratio used to infer hidden size of MLP layers.
 
     Example:
 
