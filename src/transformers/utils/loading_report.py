@@ -126,6 +126,14 @@ def _color(s, color):
         return s
 
 
+def _style(style):
+    """Return format code for given style name in `PALETTE` if `sys.stdout` is interactive, same condition as `_color`."""
+    if sys.stdout.isatty():
+        return PALETTE[style]
+    else:
+        return ""
+
+
 def _get_terminal_width(default=80):
     try:
         return shutil.get_terminal_size().columns
@@ -179,7 +187,7 @@ class LoadStateDictInfo:
         tips = ""
         if self.unexpected_keys:
             tips += (
-                f"\n- {_color('UNEXPECTED', 'orange') + PALETTE['italic']}\t:can be ignored when loading from different "
+                f"\n- {_color('UNEXPECTED', 'orange') + _style('italic')}\t:can be ignored when loading from different "
                 "task/architecture; not ok if you expect identical arch."
             )
             for k in update_key_name(self.unexpected_keys):
@@ -188,7 +196,7 @@ class LoadStateDictInfo:
 
         if self.missing_keys:
             tips += (
-                f"\n- {_color('MISSING', 'red') + PALETTE['italic']}\t:those params were newly initialized because missing "
+                f"\n- {_color('MISSING', 'red') + _style('italic')}\t:those params were newly initialized because missing "
                 "from the checkpoint. Consider training on your downstream task."
             )
             for k in update_key_name(self.missing_keys):
@@ -197,7 +205,7 @@ class LoadStateDictInfo:
 
         if self.mismatched_keys:
             tips += (
-                f"\n- {_color('MISMATCH', 'yellow') + PALETTE['italic']}\t:ckpt weights were loaded, but they did not match "
+                f"\n- {_color('MISMATCH', 'yellow') + _style('italic')}\t:ckpt weights were loaded, but they did not match "
                 "the original empty weight shapes."
             )
             iterator = {a: (b, c) for a, b, c in self.mismatched_keys}
@@ -211,7 +219,7 @@ class LoadStateDictInfo:
                 rows.append(data)
 
         if self.conversion_errors:
-            tips += f"\n- {_color('CONVERSION', 'purple') + PALETTE['italic']}\t:originate from the conversion scheme"
+            tips += f"\n- {_color('CONVERSION', 'purple') + _style('italic')}\t:originate from the conversion scheme"
             for k, v in update_key_name(self.conversion_errors).items():
                 status = _color("CONVERSION", "purple")
                 _details = f"\n\n{v}\n\n"
@@ -227,7 +235,7 @@ class LoadStateDictInfo:
         else:
             headers += ["", ""]
         table = _make_table(rows, headers=headers)
-        tips = f"\n\n{PALETTE['italic']}Notes:{tips}{PALETTE['reset']}"
+        tips = f"\n\n{_style('italic')}Notes:{tips}{_style('reset')}"
         report = table + tips
 
         return report
@@ -263,7 +271,7 @@ def log_state_dict_report(
     if report is None:
         return
 
-    prelude = f"{PALETTE['bold']}{model.__class__.__name__} LOAD REPORT{PALETTE['reset']} from: {pretrained_model_name_or_path}\n"
+    prelude = f"{_style('bold')}{model.__class__.__name__} LOAD REPORT{_style('reset')} from: {pretrained_model_name_or_path}\n"
 
     # Log the report as warning
     logger.warning(prelude + report)
