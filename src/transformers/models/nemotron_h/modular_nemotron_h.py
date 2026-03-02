@@ -313,7 +313,7 @@ MIXER_TYPES = {
 }
 
 
-class NemotronHBlock(nn.Module):
+class NemotronHBlock(GradientCheckpointingLayer):
     """
     A single transformer block in the NemotronH model.
 
@@ -333,7 +333,6 @@ class NemotronHBlock(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.residual_in_fp32 = config.residual_in_fp32
         self.norm = NemotronHRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
         self.block_type = config.layers_block_type[layer_idx]
@@ -347,8 +346,7 @@ class NemotronHBlock(nn.Module):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
-        output_attentions: bool = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         if hidden_states.device.type == "cuda":
             # Use torch.cuda.stream() to avoid NaN issues when using multiple GPUs
@@ -359,8 +357,6 @@ class NemotronHBlock(nn.Module):
         with stream_context:
             residual = hidden_states
             hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
-            if self.residual_in_fp32:
-                residual = residual.to(torch.float32)
 
             if self.block_type == "mamba":
                 hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
@@ -369,7 +365,6 @@ class NemotronHBlock(nn.Module):
                     hidden_states=hidden_states,
                     past_key_values=past_key_values,
                     attention_mask=attention_mask,
-                    output_attentions=output_attentions,
                     position_ids=position_ids,
                     user_cache=use_cache,
                     cache_position=cache_position,
@@ -401,6 +396,8 @@ class NemotronHPreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
     ]
+    _tied_weights_keys = {}
+    _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -464,7 +461,6 @@ class NemotronHModel(NemotronHPreTrainedModel):
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([NemotronHBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
 
-        self.gradient_checkpointing = False
         self.norm_f = NemotronHRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         # Initialize weights and apply final processing
         self.post_init()
@@ -486,7 +482,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
         use_cache: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):  # ^ is python for xor
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -568,13 +564,12 @@ class NemotronHModel(NemotronHPreTrainedModel):
 
 class NemotronHForCausalLM(ZambaForCausalLM):
     _tied_weights_keys = {}
-    _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
     def __init__(self, config):
         super().__init__(config)
         del self._tied_weights_keys
 
-        register_nemotron_h_conversion_mapping()
+        register_nemotron_h_conversion_mapping() # TODO @ArthurZucker should not be here
 
     @can_return_tuple
     @auto_docstring
@@ -591,7 +586,6 @@ class NemotronHForCausalLM(ZambaForCausalLM):
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
