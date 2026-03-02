@@ -409,6 +409,8 @@ class GlmMoeDsaIndexer(nn.Module):
 
         # q·k^T per head: [B, S, H, D] @ [B, T, D]^T → [B, S, H, T]
         scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
+        # Apply ReLU before weighted sum across heads (reference: T.max(logits, 0))
+        scores = torch.relu(scores)
 
         # Weight per head and sum across heads → [B, S, T]
         index_scores = torch.einsum("bsht,bsh->bst", scores, weights)
