@@ -42,12 +42,11 @@ class FourOverSixHfQuantizer(HfQuantizer):
         from fouroversix import QuantizedModule
 
         module, tensor_name = get_module_from_name(model, param_name)
-        element_size = super().param_element_size(model, param_name, param)
 
         if QuantizedModule.is_quantized_module_type(type(module)):
-            return element_size / module.get_packing_factor(tensor_name)
+            return module.get_element_size(tensor_name)
 
-        return element_size
+        return super().param_element_size(model, param_name, param)
 
     def param_needs_quantization(
         self,
