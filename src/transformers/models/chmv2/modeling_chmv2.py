@@ -259,8 +259,6 @@ class CHMv2FeatureFusionLayer(nn.Module):
     """
     Feature fusion layer, merges feature maps from different stages.
 
-    This layer follows the CHMv2 design where there is NO projection layer after fusion.
-
     Args:
         config (`CHMv2Config`):
             Model configuration class defining the model architecture.
@@ -276,6 +274,13 @@ class CHMv2FeatureFusionLayer(nn.Module):
             self.residual_layer1 = CHMv2PreActResidualLayer(config)
 
         self.residual_layer2 = CHMv2PreActResidualLayer(config)
+
+        self.project = nn.Conv2d(
+                    config.fusion_hidden_size,
+                    config.fusion_hidden_size,
+                    kernel_size=1,
+                    bias=True,
+                )
 
     def forward(self, hidden_state, residual=None, size=None):
         if residual is not None and not self.is_first_layer:
@@ -295,6 +300,8 @@ class CHMv2FeatureFusionLayer(nn.Module):
             mode="bilinear",
             align_corners=True,
         )
+
+        hidden_state = self.project(hidden_state)
 
         return hidden_state
 
@@ -564,6 +571,106 @@ class CHMv2ForCanopyHeightEstimation(CHMv2PreTrainedModel):
 
         self.post_init()
 
+    def _center_pad(self, pixel_values: torch.Tensor, multiple: int = 16) -> torch.Tensor:
+        """
+        Pad input tensor so height and width are divisible by `multiple`.
+        This replicates DINOv3's CenterPadding behavior.
+
+        Args:
+            pixel_values: Input tensor of shape (B, C, H, W)
+            multiple: Pad to nearest multiple of this value (default: patch_size=16)
+
+        Returns:
+            Padded tensor with H and W divisible by `multiple`
+        """
+        import math
+        _, _, H, W = pixel_values.shape
+        new_H = math.ceil(H / multiple) * multiple
+        new_W = math.ceil(W / multiple) * multiple
+
+        if new_H == H and new_W == W:
+            return pixel_values
+
+        pad_h = new_H - H
+        pad_w = new_W - W
+        # Padding format for F.pad: (left, right, top, bottom)
+        pad = (pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2)
+        return nn.functional.pad(pixel_values, pad)
+
+    def _get_intermediate_layers_with_cls(
+        self,
+        pixel_values: torch.Tensor,
+        out_indices: list[int],
+        apply_norm: bool = True,
+    ) -> list[tuple[torch.Tensor, torch.Tensor]]:
+        """
+        Manually iterate through backbone layers to extract both patch tokens and CLS tokens
+        at specified layer indices.
+
+        This replicates the behavior of DINOv3's `get_intermediate_layers()` with
+        `reshape=True, return_class_token=True`.
+
+        Args:
+            pixel_values: Input images (B, C, H, W)
+            out_indices: List of layer indices to extract features from (e.g., [5, 11, 17, 23])
+            apply_norm: Whether to apply layer normalization to the outputs
+
+        Returns:
+            List of (feature_map, cls_token) tuples where:
+            - feature_map: (B, hidden_size, H//patch_size, W//patch_size)
+            - cls_token: (B, hidden_size)
+        """
+        # Get backbone components
+        embeddings = self.backbone.embeddings
+        rope_embeddings = self.backbone.rope_embeddings
+        layers = self.backbone.layer
+        norm = self.backbone.norm
+
+        # Get config values
+        num_prefix = 1 + getattr(self.backbone.config, "num_register_tokens", 0)
+        patch_size = self.backbone.config.patch_size
+
+        # Apply center padding to make dimensions divisible by patch_size
+        # This replicates DINOv3's CenterPadding behavior
+        pixel_values = self._center_pad(pixel_values, multiple=patch_size)
+
+        # Compute spatial dimensions (after padding)
+        batch_size, _, image_height, image_width = pixel_values.shape
+        num_patches_h = image_height // patch_size
+        num_patches_w = image_width // patch_size
+
+        # Forward through embeddings
+        pixel_values = pixel_values.to(embeddings.patch_embeddings.weight.dtype)
+        hidden_states = embeddings(pixel_values)
+        position_embeddings = rope_embeddings(pixel_values)
+
+        # Iterate through transformer layers and collect outputs at specified indices
+        outputs = []
+        for idx, layer_module in enumerate(layers):
+            hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings)
+
+            if idx in out_indices:
+                # Apply norm if requested
+                if apply_norm:
+                    normed_hidden_states = norm(hidden_states)
+                else:
+                    normed_hidden_states = hidden_states
+
+                # Extract CLS token (first token)
+                cls_token = normed_hidden_states[:, 0, :]  # (B, hidden_size)
+
+                # Extract patch tokens and reshape to spatial format
+                patch_tokens = normed_hidden_states[:, num_prefix:, :]  # (B, num_patches, hidden_size)
+                feature_map = (
+                    patch_tokens.reshape(batch_size, num_patches_h, num_patches_w, -1)
+                    .permute(0, 3, 1, 2)
+                    .contiguous()
+                )  # (B, hidden_size, H, W)
+
+                outputs.append((feature_map, cls_token))
+
+        return outputs
+
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -621,40 +728,52 @@ class CHMv2ForCanopyHeightEstimation(CHMv2PreTrainedModel):
         )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
-        outputs = self.backbone.forward_with_filtered_kwargs(
-            pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
-        )
-        hidden_states = outputs.feature_maps
-
-        _, _, height, width = pixel_values.shape
+        # Get out_indices from backbone config (e.g., [5, 11, 17, 23])
+        out_indices = self.backbone.config.out_indices
         patch_size = self.config.patch_size
-        patch_height = height // patch_size
-        patch_width = width // patch_size
 
-        head_output = self.head(hidden_states, patch_height, patch_width)
+        # Apply center padding to make dimensions divisible by patch_size
+        # This replicates DINOv3's CenterPadding behavior
+        pixel_values_padded = self._center_pad(pixel_values, multiple=patch_size)
 
+        # Use custom method to extract (feature_map, cls_token) tuples from intermediate layers
+        # This replicates DINOv3's get_intermediate_layers(reshape=True, return_class_token=True)
+        # Note: _get_intermediate_layers_with_cls also applies padding internally, but we need
+        # the padded dimensions here for interpolation
+        hidden_states_with_cls = self._get_intermediate_layers_with_cls(
+            pixel_values,
+            out_indices=out_indices,
+            apply_norm=self.backbone.config.apply_layernorm,
+        )
+
+        # Get spatial dimensions from PADDED input (not original)
+        _, _, padded_height, padded_width = pixel_values_padded.shape
+        patch_height = padded_height // patch_size
+        patch_width = padded_width // patch_size
+
+        # Pass (feature_map, cls_token) tuples to the head
+        head_output = self.head(hidden_states_with_cls, patch_height, patch_width)
+
+        # Interpolate to padded image size (matching DINOv3 behavior)
         depth_logits = nn.functional.interpolate(
             head_output,
-            (int(patch_height * patch_size), int(patch_width * patch_size)),
+            (padded_height, padded_width),
             mode="bilinear",
             align_corners=True,
         )
 
+        # Convert logits to depth values
         predicted_depth = self.features_to_depth(depth_logits)
         predicted_depth = predicted_depth.squeeze(dim=1)
 
         if not return_dict:
-            if output_hidden_states:
-                output = (predicted_depth,) + outputs[1:]
-            else:
-                output = (predicted_depth,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            return (predicted_depth,)
 
         return DepthEstimatorOutput(
             loss=loss,
             predicted_depth=predicted_depth,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
+            hidden_states=None,
+            attentions=None,
         )
 
 

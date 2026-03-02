@@ -114,13 +114,17 @@ class CHMv2Config(PreTrainedConfig):
         **kwargs,
     ):
         self.backbone_type = backbone_type
-        assert backbone_type == "dinov3_vitl16", f"{backbone_type} not supported"
+        supported_types = ["dinov3_vit", "dinov3_vitl16"]
+        assert backbone_type in supported_types, f"{backbone_type} not supported. Choose from {supported_types}"
 
         default_config_kwargs = {
                 "image_size": 416,
                 "hidden_size": 1024,
+                "intermediate_size": 4096,
                 "num_attention_heads": 16,
                 "num_hidden_layers": 24,
+                "num_register_tokens": 4,
+                "key_bias": True,
                 "out_indices": [5, 11, 17, 23],
                 "reshape_hidden_states": True,
                 "apply_layernorm": True,

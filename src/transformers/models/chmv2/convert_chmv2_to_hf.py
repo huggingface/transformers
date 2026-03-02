@@ -37,6 +37,11 @@ from PIL import Image
 
 from transformers import DPTImageProcessor
 from transformers.models.dinov3_vit import DINOv3ViTConfig
+from transformers.models.dinov3_vit.convert_dinov3_vit_to_hf import (
+    convert_old_keys_to_new_keys,
+    get_dinov3_config,
+    split_qkv,
+)
 from transformers.utils import logging
 
 from .configuration_chmv2 import CHMv2Config
@@ -47,13 +52,11 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-# Model configurations
+# Model configurations for CHMv2 head
 MODEL_CONFIGS = {
     "chmv2": {
-        "hidden_size": 1024,
-        "num_hidden_layers": 24,
-        "num_attention_heads": 16,
-        "out_indices": [6, 12, 18, 24],
+        "backbone_model": "vitl16_sat493m",  # DINOv3 backbone variant
+        "out_indices": [5, 11, 17, 23],  # 0-indexed layer indices for feature extraction
         "neck_hidden_sizes": [128, 256, 512, 1024],
         "fusion_hidden_size": 256,
     },
@@ -68,30 +71,29 @@ def get_chmv2_config(
     bins_strategy: str = "chmv2_mixlog",
     norm_strategy: str = "chmv2_mixlog",
 ) -> CHMv2Config:
-    """Create CHMv2 config based on model name."""
+    """Create CHMv2 config based on model name.
+    
+    Reuses get_dinov3_config from dinov3_vit conversion script for backbone config.
+    """
     if model_name not in MODEL_CONFIGS:
         raise ValueError(f"Unknown model name: {model_name}. Choose from {list(MODEL_CONFIGS.keys())}")
 
     model_cfg = MODEL_CONFIGS[model_name]
 
-    # Create backbone config
+    # Create backbone config - reuse from dinov3_vit conversion script
     if backbone_repo_id:
         backbone_config = DINOv3ViTConfig.from_pretrained(
             backbone_repo_id,
             out_indices=model_cfg["out_indices"],
             apply_layernorm=True,
-            reshape_hidden_states=False,
+            reshape_hidden_states=True,
         )
     else:
-        backbone_config = DINOv3ViTConfig(
-            hidden_size=model_cfg["hidden_size"],
-            num_hidden_layers=model_cfg["num_hidden_layers"],
-            num_attention_heads=model_cfg["num_attention_heads"],
-            out_indices=model_cfg["out_indices"],
-            apply_layernorm=True,
-            reshape_hidden_states=False,
-            image_size=518,
-        )
+        # Use get_dinov3_config from dinov3_vit conversion script
+        backbone_config = get_dinov3_config(model_cfg["backbone_model"])
+        backbone_config.out_indices = model_cfg["out_indices"]
+        backbone_config.apply_layernorm = True
+        backbone_config.reshape_hidden_states = True
 
     config = CHMv2Config(
         backbone_config=backbone_config,
@@ -109,51 +111,49 @@ def get_chmv2_config(
     return config
 
 
-def create_rename_keys_backbone(config: CHMv2Config) -> list[tuple[str, str]]:
-    """Create rename keys for backbone weights."""
-    rename_keys = []
-
-    num_layers = config.backbone_config.num_hidden_layers
-
-    # Embeddings
-    rename_keys.append(("backbone.cls_token", "backbone.embeddings.cls_token"))
-    rename_keys.append(("backbone.patch_embed.proj.weight", "backbone.embeddings.patch_embeddings.projection.weight"))
-    rename_keys.append(("backbone.patch_embed.proj.bias", "backbone.embeddings.patch_embeddings.projection.bias"))
-
-    # Register tokens (if present)
-    rename_keys.append(("backbone.register_tokens", "backbone.embeddings.register_tokens"))
-
-    # Encoder layers
-    for i in range(num_layers):
-        # Layer scale
-        rename_keys.append((f"backbone.blocks.{i}.ls1.gamma", f"backbone.encoder.layer.{i}.layer_scale1.lambda1"))
-        rename_keys.append((f"backbone.blocks.{i}.ls2.gamma", f"backbone.encoder.layer.{i}.layer_scale2.lambda1"))
-
-        # Layer norms
-        rename_keys.append((f"backbone.blocks.{i}.norm1.weight", f"backbone.encoder.layer.{i}.norm1.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.norm1.bias", f"backbone.encoder.layer.{i}.norm1.bias"))
-        rename_keys.append((f"backbone.blocks.{i}.norm2.weight", f"backbone.encoder.layer.{i}.norm2.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.norm2.bias", f"backbone.encoder.layer.{i}.norm2.bias"))
-
-        # MLP
-        rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.weight", f"backbone.encoder.layer.{i}.mlp.fc1.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.bias", f"backbone.encoder.layer.{i}.mlp.fc1.bias"))
-        rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.weight", f"backbone.encoder.layer.{i}.mlp.fc2.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.bias", f"backbone.encoder.layer.{i}.mlp.fc2.bias"))
-
-        # Attention output
-        rename_keys.append(
-            (f"backbone.blocks.{i}.attn.proj.weight", f"backbone.encoder.layer.{i}.attention.output.dense.weight")
-        )
-        rename_keys.append(
-            (f"backbone.blocks.{i}.attn.proj.bias", f"backbone.encoder.layer.{i}.attention.output.dense.bias")
-        )
-
-    # Final layer norm
-    rename_keys.append(("backbone.norm.weight", "backbone.layernorm.weight"))
-    rename_keys.append(("backbone.norm.bias", "backbone.layernorm.bias"))
-
-    return rename_keys
+def convert_backbone_keys(state_dict: dict) -> dict:
+    """Convert backbone keys using dinov3_vit conversion functions.
+    
+    This replaces the old create_rename_keys_backbone function by reusing
+    the regex-based conversion from convert_dinov3_vit_to_hf.py.
+    """
+    # Extract backbone keys
+    backbone_keys = [k for k in state_dict.keys() if k.startswith("backbone.")]
+    if not backbone_keys:
+        return state_dict
+    
+    # Strip "backbone." prefix for conversion
+    stripped_state_dict = {}
+    for key in backbone_keys:
+        stripped_key = key[len("backbone."):]
+        stripped_state_dict[stripped_key] = state_dict.pop(key)
+    
+    # Split QKV weights using dinov3_vit function
+    stripped_state_dict = split_qkv(stripped_state_dict)
+    
+    # Get key mapping using dinov3_vit function
+    key_mapping = convert_old_keys_to_new_keys(list(stripped_state_dict.keys()))
+    
+    # Apply key mapping and add "backbone." prefix back
+    for old_key in list(stripped_state_dict.keys()):
+        new_key = key_mapping.get(old_key, old_key)
+        value = stripped_state_dict[old_key]
+        
+        # Skip keys that should be excluded (matching convert_dinov3_vit_to_hf.py)
+        if "bias_mask" in new_key or "k_proj.bias" in new_key or "local_cls_norm" in new_key:
+            continue
+        
+        # Handle mask_token shape: [1, hidden_size] -> [1, 1, hidden_size]
+        if "mask_token" in new_key and value.dim() == 2:
+            value = value.unsqueeze(1)
+        
+        # Skip inv_freq (computed from config)
+        if "inv_freq" in new_key:
+            continue
+            
+        state_dict[f"backbone.{new_key}"] = value
+    
+    return state_dict
 
 
 def create_rename_keys_head(config: CHMv2Config, head_only: bool = False) -> list[tuple[str, str]]:
@@ -277,6 +277,13 @@ def create_rename_keys_head(config: CHMv2Config, head_only: bool = False) -> lis
         rename_keys.append(
             (f"{src_prefix}fusion_blocks.{i}.res_conv_unit2.conv2.conv.bias", f"head.fusion_layers.{i}.residual_layer2.convolution2.bias")
         )
+        # Projection layer in fusion blocks
+        rename_keys.append(
+            (f"{src_prefix}fusion_blocks.{i}.project.conv.weight", f"head.fusion_layers.{i}.project.weight")
+        )
+        rename_keys.append(
+            (f"{src_prefix}fusion_blocks.{i}.project.conv.bias", f"head.fusion_layers.{i}.project.bias")
+        )
 
     # UpConvHead (conv_depth) - both use nn.Sequential with same indices
     # head[0]: Conv2d(features, features // 2, kernel_size=3)
@@ -292,35 +299,6 @@ def create_rename_keys_head(config: CHMv2Config, head_only: bool = False) -> lis
     rename_keys.append((f"{src_prefix}conv_depth.head.4.bias", "head.conv_depth.head.4.bias"))
 
     return rename_keys
-
-
-def read_in_q_k_v(state_dict: dict, config: CHMv2Config) -> None:
-    """Split QKV weights into separate Q, K, V matrices."""
-    hidden_size = config.backbone_config.hidden_size
-    num_layers = config.backbone_config.num_hidden_layers
-
-    for i in range(num_layers):
-        # Read in weights + bias of input projection layer
-        qkv_weight_key = f"backbone.blocks.{i}.attn.qkv.weight"
-        qkv_bias_key = f"backbone.blocks.{i}.attn.qkv.bias"
-
-        if qkv_weight_key in state_dict:
-            in_proj_weight = state_dict.pop(qkv_weight_key)
-            in_proj_bias = state_dict.pop(qkv_bias_key) if qkv_bias_key in state_dict else None
-
-            # Add query, keys and values
-            state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
-            state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-                hidden_size : hidden_size * 2, :
-            ]
-            state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
-
-            if in_proj_bias is not None:
-                state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
-                state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
-                    hidden_size : hidden_size * 2
-                ]
-                state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
 
 
 def rename_key(state_dict: dict, old: str, new: str) -> None:
@@ -358,6 +336,8 @@ def convert_chmv2_checkpoint(
     1. Head-only checkpoint (from dinov3-private release): Keys like 'reassemble_blocks.projects.0...'
        Use with --backbone_repo_id to load backbone from HuggingFace.
     2. Full model checkpoint: Keys like 'backbone...' and 'head...'
+    
+    Backbone conversion reuses functions from convert_dinov3_vit_to_hf.py.
     """
     # Create config
     config = get_chmv2_config(
@@ -385,14 +365,10 @@ def convert_chmv2_checkpoint(
 
     logger.info(f"Checkpoint type detected: backbone_keys={has_backbone_keys}, head_prefix={has_head_prefix}, head_only={head_only}")
 
-    # Rename backbone keys (if present)
+    # Convert backbone keys using dinov3_vit conversion functions
     if has_backbone_keys:
-        logger.info("Converting backbone weights...")
-        rename_keys = create_rename_keys_backbone(config)
-        for src, dest in rename_keys:
-            rename_key(state_dict, src, dest)
-        # Split QKV matrices
-        read_in_q_k_v(state_dict, config)
+        logger.info("Converting backbone weights using dinov3_vit conversion functions...")
+        state_dict = convert_backbone_keys(state_dict)
 
     # Rename head keys
     logger.info(f"Converting head weights (head_only={head_only})...")
