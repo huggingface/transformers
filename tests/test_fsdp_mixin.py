@@ -558,6 +558,13 @@ class FSDPTesterMixin(ABC):
     def _get_config_for_fsdp(self):
         """Get config class and serialized dict for passing to spawned processes."""
         config = self.model_tester.get_config()
+        config.vocab_size = 256
+        config.hidden_size = 64
+        config.intermediate_size = 128
+        if hasattr(config, "num_attention_heads"):
+            config.num_attention_heads = 4
+        if hasattr(config, "num_key_value_heads"):
+            config.num_key_value_heads = 4
         return type(config), config.to_dict()
 
     # =========================================================================
