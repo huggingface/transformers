@@ -89,7 +89,7 @@ class CompileableContextVar:
             return self.context_var.set(value)
 
     def reset(self, token):
-        if self.compiling:
+        if self.compiling or token is None:
             self.global_var = None
             self.compiling = False
         else:
@@ -176,7 +176,7 @@ def install_all_output_capturing_hooks(model: PreTrainedModel, prefix: str | Non
     prefix = prefix if prefix is not None else ""
     recursively_install_hooks(model, prefix, capture_tasks)
     # Mark the model as already hooked
-    model._output_capturing_hooks_installed = True
+    setattr(model, "_output_capturing_hooks_installed", True)
 
 
 # We need this to make sure we don't have race conditions when installing hooks, resulting in them being installed
