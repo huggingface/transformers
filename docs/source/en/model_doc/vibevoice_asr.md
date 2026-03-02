@@ -432,11 +432,6 @@ transcription = pipe.processor.extract_transcription(outputs[0]["generated_text"
 print(transcription)
 ```
 
-
-## VibeVoiceAsrEncoderConfig
-
-[[autodoc]] VibeVoiceAsrEncoderConfig
-
 ## VibeVoiceAsrConfig
 
 [[autodoc]] VibeVoiceAsrConfig
