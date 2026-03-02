@@ -27,16 +27,12 @@ from transformers.testing_utils import Colors, build_cpu_memory_monitor, init_te
 logger = logging.getLogger("transformers.training_test")
 
 
-class TrainingTesterMixin(ABC):
+class TrainingConfigMixin:
     """
-    Mixin for training overfit tests. Add to model test classes alongside ModelTesterMixin.
-
-    The model_tester (e.g., CausalLMModelTester) already provides:
-      - get_config() -> tiny model config
-      - prepare_config_and_inputs_for_common() -> config + input dict
-      - causal_lm_class, base_model_class, etc.
-
-    This mixin adds training-specific tests using that infrastructure.
+    Shared training hyperparameters for training tests.
+    
+    Both TrainingTesterMixin and TrainingDistributedTesterMixin inherit from this
+    to avoid MRO conflicts when a test class inherits from both.
     """
 
     # ============================================================
@@ -48,9 +44,22 @@ class TrainingTesterMixin(ABC):
     training_overfit_seq_length: int = 64
     training_overfit_log_freq: int = 10
 
-    # Loss reduction and grad norm reduction thresholds for passing the test (i.e 95% reduction)
+    # Loss reduction and grad norm reduction thresholds for passing the test (i.e 90% reduction)
     training_loss_reduction_threshold: float = 0.9
     training_grad_norm_reduction_threshold: float = 0.9
+
+
+class TrainingTesterMixin(TrainingConfigMixin, ABC):
+    """
+    Mixin for training overfit tests. Add to model test classes alongside ModelTesterMixin.
+
+    The model_tester (e.g., CausalLMModelTester) already provides:
+      - get_config() -> tiny model config
+      - prepare_config_and_inputs_for_common() -> config + input dict
+      - causal_lm_class, base_model_class, etc.
+
+    This mixin adds training-specific tests using that infrastructure.
+    """
 
     @property
     @abstractmethod
