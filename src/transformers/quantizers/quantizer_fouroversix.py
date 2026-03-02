@@ -43,8 +43,10 @@ class FourOverSixHfQuantizer(HfQuantizer):
 
         module, tensor_name = get_module_from_name(model, param_name)
 
-        if QuantizedModule.is_quantized_module_type(type(module)):
-            return 1 / module.get_packing_factor(tensor_name)
+        if QuantizedModule.is_quantized_module_type(type(module)) and (
+            packing_factor := module.get_packing_factor(tensor_name)
+        ):
+            return 1 / packing_factor
 
         return super().param_element_size(model, param_name, param)
 
