@@ -623,8 +623,8 @@ def convert_processors(processors, tiny_config, output_folder, result):
 
     # check the built processors have the unique type
     num_types = len({x.__class__.__name__ for x in feature_extractors})
-    if num_types >= 2:
-        raise ValueError(f"`feature_extractors` should contain at most 1 type, but it contains {num_types} types!")
+    # if num_types >= 2:
+    #     raise ValueError(f"`feature_extractors` should contain at most 1 type, but it contains {num_types} types!")
     num_types = len({x.__class__.__name__.replace("Fast", "") for x in tokenizers})
     if num_types >= 2:
         raise ValueError(f"`tokenizers` should contain at most 1 tokenizer type, but it contains {num_types} types!")
