@@ -6,14 +6,10 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
 
 
-@auto_docstring(custom_intro="Configuration for the PPOCRV5 Server Det model.")
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
-    model_type = "pp_ocrv5_server_det"
-
-    """
+    r"""
     This is the configuration class to store the configuration of a [`PPOCRV5ServerDet`]. It is used to instantiate a
     PPOCRV5 Server text detection model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Server Det
@@ -86,6 +82,8 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     ```
     """
 
+    model_type = "pp_ocrv5_server_det"
+
     def __init__(
         self,
         interpolate_mode: str = "nearest",
@@ -119,6 +117,7 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
 
         self.mode = mode
         self.interpolate_mode = interpolate_mode
+
         # ---- backbone ----
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(stage_in_channels) + 1)]
         self.stem_channels = stem_channels

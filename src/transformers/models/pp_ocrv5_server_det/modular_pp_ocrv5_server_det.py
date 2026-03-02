@@ -37,7 +37,6 @@ from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
-    auto_docstring,
     filter_out_non_signature_kwargs,
     is_cv2_available,
     logging,
@@ -52,11 +51,8 @@ if is_cv2_available():
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(custom_intro="Configuration for the PPOCRV5 Server Det model.")
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
-    model_type = "pp_ocrv5_server_det"
-
-    """
+    r"""
     This is the configuration class to store the configuration of a [`PPOCRV5ServerDet`]. It is used to instantiate a
     PPOCRV5 Server text detection model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Server Det
@@ -129,6 +125,8 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     ```
     """
 
+    model_type = "pp_ocrv5_server_det"
+
     def __init__(
         self,
         interpolate_mode: str = "nearest",
@@ -162,6 +160,7 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
 
         self.mode = mode
         self.interpolate_mode = interpolate_mode
+        
         # ---- backbone ----
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(stage_in_channels) + 1)]
         self.stem_channels = stem_channels
@@ -444,12 +443,12 @@ def get_box_score(bitmap: np.ndarray, _box: np.ndarray) -> float:
     Returns:
         float: Mean score within the bounding box region.
     """
-    h, w = bitmap.shape[:2]
+    height, width = bitmap.shape[:2]
     box = _box.copy()
-    xmin = max(0, min(math.floor(box[:, 0].min()), w - 1))
-    xmax = max(0, min(math.ceil(box[:, 0].max()), w - 1))
-    ymin = max(0, min(math.floor(box[:, 1].min()), h - 1))
-    ymax = max(0, min(math.ceil(box[:, 1].max()), h - 1))
+    xmin = max(0, min(math.floor(box[:, 0].min()), width - 1))
+    xmax = max(0, min(math.ceil(box[:, 0].max()), width - 1))
+    ymin = max(0, min(math.floor(box[:, 1].min()), height - 1))
+    ymax = max(0, min(math.ceil(box[:, 1].max()), height - 1))
 
     mask = np.zeros((ymax - ymin + 1, xmax - xmin + 1), dtype=np.uint8)
     box[:, 0] = box[:, 0] - xmin
@@ -558,27 +557,11 @@ def process(
     return boxes, scores
 
 
-@auto_docstring(custom_intro="ImageProcessor for the PPOCRV5 Server Det model.")
 class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
-    """
+    r"""
     Image Processor for the PPOCRV5 Server Det text detection model.
 
-    This class handles all image preprocessing (resizing, rescaling, normalization, channel flipping)
-    and post-processing (converting model logits to detected text boxes) required for the PPOCRV5 Server Det model.
-    It ensures input images are formatted correctly for model inference and converts model outputs into human-interpretable
-    text bounding boxes.
-
-    Key features:
-    - Aspect-ratio preserving image resizing with side length limits.
-    - RGB to BGR channel flipping (compatible with PaddlePaddle's original model).
-    - Standard image normalization and rescaling.
-    - Post-processing to extract quadrilateral or polygonal text boxes from segmentation maps.
-
-    Attributes:
-        model_input_names (List[str]): List of input names expected by the model (only "pixel_values" for this processor).
-        limit_side_len (int): Maximum/minimum side length for image resizing (depending on `limit_type`).
-        limit_type (str): Resizing strategy ("max", "min", or "resize_long").
-        max_side_limit (int): Hard maximum limit for the longest image side to prevent excessive memory usage.
+    Args:
         do_resize (bool): Whether to resize input images.
         size (dict[str, int]): Default target size for resizing (height, width).
         resample (PILImageResampling): Resampling mode for image resizing.
@@ -587,15 +570,15 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
         do_normalize (bool): Whether to normalize images using mean and standard deviation.
         image_mean (Union[float, List[float]]): Mean values for image normalization (BGR order, compatible with model).
         image_std (Union[float, List[float]]): Standard deviation values for image normalization (BGR order).
+        limit_side_len (int): Maximum/minimum side length for image resizing (depending on `limit_type`).
+        limit_type (str): Resizing strategy ("max", "min", or "resize_long").
+        max_side_limit (int): Hard maximum limit for the longest image side to prevent excessive memory usage.
     """
 
     model_input_names = ["pixel_values"]
 
     def __init__(
         self,
-        limit_side_len: int = 960,
-        limit_type: str = "max",
-        max_side_limit: int = 4000,
         do_resize: bool = True,
         size: Optional[dict[str, int]] = None,
         resample: Optional[PILImageResampling] = PILImageResampling.BICUBIC,
@@ -604,6 +587,9 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
+        limit_side_len: int = 960,
+        limit_type: str = "max",
+        max_side_limit: int = 4000,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -676,12 +662,12 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         # transformations
-        resize_imgs, target_sizes = [], []
+        resize_images, target_sizes = [], []
         if do_resize:
             for image in images:
                 size, shape = self.get_image_size(image, self.limit_side_len, self.limit_type, max_side_limit)
                 try:
-                    img = resize(
+                    image = resize(
                         image,
                         size=(size["height"], size["width"]),
                         resample=resample,
@@ -691,9 +677,9 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
                     print(size)
                     raise RuntimeError(f"Failed to resize image: {e}") from e
 
-                resize_imgs.append(img)
+                resize_images.append(image)
                 target_sizes.append(shape)
-            images = resize_imgs
+            images = resize_images
 
         if do_rescale:
             images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
@@ -756,7 +742,7 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
 
     def get_image_size(
         self,
-        img: np.ndarray,
+        image: np.ndarray,
         limit_side_len: int,
         limit_type: str,
         max_side_limit: int = 4000,
@@ -765,7 +751,7 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
         Computes the target size for resizing an image while preserving aspect ratio.
 
         Args:
-            img (torch.Tensor): Input image.
+            image (torch.Tensor): Input image.
             limit_side_len (int): Maximum or minimum side length.
             limit_type (str): Resizing strategy: "max", "min", or "resize_long".
             max_side_limit (int): Maximum allowed side length.
@@ -777,48 +763,47 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
         """
         limit_side_len = limit_side_len or self.limit_side_len
         limit_type = limit_type or self.limit_type
-        h, w, c = img.shape
+        height, width, c = image.shape
 
         if limit_type == "max":
-            if max(h, w) > limit_side_len:
-                if h > w:
-                    ratio = float(limit_side_len) / h
+            if max(height, width) > limit_side_len:
+                if height > width:
+                    ratio = float(limit_side_len) / height
                 else:
-                    ratio = float(limit_side_len) / w
+                    ratio = float(limit_side_len) / width
             else:
                 ratio = 1.0
         elif limit_type == "min":
-            if min(h, w) < limit_side_len:
-                if h < w:
-                    ratio = float(limit_side_len) / h
+            if min(height, width) < limit_side_len:
+                if height < width:
+                    ratio = float(limit_side_len) / height
                 else:
-                    ratio = float(limit_side_len) / w
+                    ratio = float(limit_side_len) / width
             else:
                 ratio = 1.0
         elif limit_type == "resize_long":
-            ratio = float(limit_side_len) / max(h, w)
+            ratio = float(limit_side_len) / max(height, width)
         else:
             raise Exception("not support limit type, image ")
-        resize_h = int(h * ratio)
-        resize_w = int(w * ratio)
+        resize_height = int(height * ratio)
+        resize_width = int(width * ratio)
 
-        if max(resize_h, resize_w) > max_side_limit:
-            ratio = float(max_side_limit) / max(resize_h, resize_w)
-            resize_h, resize_w = int(resize_h * ratio), int(resize_w * ratio)
+        if max(resize_height, resize_width) > max_side_limit:
+            ratio = float(max_side_limit) / max(resize_height, resize_width)
+            resize_height, resize_width = int(resize_height * ratio), int(resize_width * ratio)
 
-        resize_h = max(int(round(resize_h / 32) * 32), 32)
-        resize_w = max(int(round(resize_w / 32) * 32), 32)
+        resize_height = max(int(round(resize_height / 32) * 32), 32)
+        resize_width = max(int(round(resize_width / 32) * 32), 32)
 
-        if resize_h == h and resize_w == w:
-            return {"height": resize_h, "width": resize_w}, np.array([h, w])
+        if resize_height == height and resize_width == width:
+            return {"height": resize_height, "width": resize_width}, np.array([height, width])
 
-        if int(resize_w) <= 0 or int(resize_h) <= 0:
+        if int(resize_width) <= 0 or int(resize_height) <= 0:
             return None, (None, None)
 
-        return {"height": resize_h, "width": resize_w}, np.array([h, w])
+        return {"height": resize_height, "width": resize_width}, np.array([height, width])
 
 
-@auto_docstring(custom_intro="ImageProcessorFast for the PPOCRV5 Server Det model.")
 class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     """
     Image processor for PPOCRV5 Server Det model, handling preprocessing (resizing, normalization)
@@ -854,14 +839,14 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> BatchFeature:
         data = {}
-        resize_imgs, target_sizes = [], []
+        resize_images, target_sizes = [], []
         if do_resize:
             for image in images:
                 size, shape = self.get_image_size(image, self.limit_side_len, self.limit_type, self.max_side_limit)
-                img = self.resize(image, size=size, interpolation=interpolation)
-                resize_imgs.append(img)
+                image = self.resize(image, size=size, interpolation=interpolation)
+                resize_images.append(image)
                 target_sizes.append(shape)
-            images = resize_imgs
+            images = resize_images
 
         processed_images = []
         for image in images:
@@ -924,7 +909,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
 
     def get_image_size(
         self,
-        img: np.ndarray,
+        image: np.ndarray,
         limit_side_len: int,
         limit_type: str,
         max_side_limit: int = 4000,
@@ -933,7 +918,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         Computes the target size for resizing an image while preserving aspect ratio.
 
         Args:
-            img (torch.Tensor): Input image.
+            image (torch.Tensor): Input image.
             limit_side_len (int): Maximum or minimum side length.
             limit_type (str): Resizing strategy: "max", "min", or "resize_long".
             max_side_limit (int): Maximum allowed side length.
@@ -945,42 +930,42 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         """
         limit_side_len = limit_side_len or self.limit_side_len
         limit_type = limit_type or self.limit_type
-        _, h, w = img.shape
-        h, w = int(h), int(w)
+        _, height, width = image.shape
+        height, width = int(height), int(width)
 
         if limit_type == "max":
-            if max(h, w) > limit_side_len:
-                ratio = float(limit_side_len) / max(h, w)
+            if max(height, width) > limit_side_len:
+                ratio = float(limit_side_len) / max(height, width)
             else:
                 ratio = 1.0
         elif limit_type == "min":
-            if min(h, w) < limit_side_len:
-                ratio = float(limit_side_len) / min(h, w)
+            if min(height, width) < limit_side_len:
+                ratio = float(limit_side_len) / min(height, width)
             else:
                 ratio = 1.0
         elif limit_type == "resize_long":
-            ratio = float(limit_side_len) / max(h, w)
+            ratio = float(limit_side_len) / max(height, width)
         else:
             raise Exception(f"not support limit type: {limit_type}")
 
-        resize_h = int(h * ratio)
-        resize_w = int(w * ratio)
+        resize_height = int(height * ratio)
+        resize_width = int(width * ratio)
 
-        if max_side_limit is not None and max(resize_h, resize_w) > max_side_limit:
-            ratio = float(max_side_limit) / max(resize_h, resize_w)
-            resize_h = int(resize_h * ratio)
-            resize_w = int(resize_w * ratio)
+        if max_side_limit is not None and max(resize_height, resize_width) > max_side_limit:
+            ratio = float(max_side_limit) / max(resize_height, resize_width)
+            resize_height = int(resize_height * ratio)
+            resize_width = int(resize_width * ratio)
 
-        resize_h = max(int(round(resize_h / 32) * 32), 32)
-        resize_w = max(int(round(resize_w / 32) * 32), 32)
+        resize_height = max(int(round(resize_height / 32) * 32), 32)
+        resize_width = max(int(round(resize_width / 32) * 32), 32)
 
-        if resize_h == h and resize_w == w:
-            return SizeDict(height=resize_h, width=resize_w), torch.tensor([h, w], dtype=torch.float32)
+        if resize_height == height and resize_width == width:
+            return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32)
 
-        if resize_w <= 0 or resize_h <= 0:
+        if resize_width <= 0 or resize_height <= 0:
             return None, (None, None)
 
-        return SizeDict(height=resize_h, width=resize_w), torch.tensor([h, w], dtype=torch.float32)
+        return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32)
 
 
 class PPOCRV5ServerDetLearnableAffineBlock(HGNetV2LearnableAffineBlock):
@@ -1112,9 +1097,7 @@ class PPOCRV5ServerDetDSConv(nn.Module):
             Stride for the spatial downsampling.
         groups (`int`, *optional*):
             Number of blocked connections. Defaults to `in_channels` for depthwise convolution.
-        if_act (`bool`, *optional*, defaults to `True`):
-            Whether to use an activation function in the bottleneck.
-        act (`str`, *optional*, defaults to `"relu"`):
+        hidden_act (`str`, *optional*, defaults to `"relu"`):
             Activation type, supports `"relu"` or `"hardswish"`.
     """
 
@@ -1126,15 +1109,22 @@ class PPOCRV5ServerDetDSConv(nn.Module):
         padding: Union[int, str],
         stride: int = 1,
         groups: Optional[int] = None,
-        if_act: bool = True,
-        act: str = "relu",
+        hidden_act: str = "relu",
         **kwargs,
     ):
         super().__init__()
         if groups is None:
             groups = in_channels
-        self.if_act = if_act
-        self.act = act
+
+        if self.hidden_act == "relu":
+            self.act = nn.ReLU()
+        elif self.hidden_act == "hardswish":
+            self.act = nn.Hardswish()
+        else:
+            print(f"The activation function({self.hidden_act}) is selected incorrectly.")
+            exit()
+        
+        self.hidden_act = hidden_act
         self.conv1 = nn.Conv2d(
             in_channels=in_channels,
             out_channels=in_channels,
@@ -1191,14 +1181,7 @@ class PPOCRV5ServerDetDSConv(nn.Module):
 
         hidden_state = self.conv2(hidden_state)
         hidden_state = self.bn2(hidden_state)
-        if self.if_act:
-            if self.act == "relu":
-                hidden_state = F.relu(hidden_state)
-            elif self.act == "hardswish":
-                hidden_state = F.hardswish(hidden_state)
-            else:
-                print(f"The activation function({self.act}) is selected incorrectly.")
-                exit()
+        hidden_state = self.act(hidden_state)
 
         hidden_state = self.conv3(hidden_state)
         if self._c[0] != self._c[1]:
@@ -1412,7 +1395,7 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         padding (`Union[int, str]`): Padding value or strategy.
         groups (`int`, *optional*, defaults to 1): Grouped convolution parameter.
         if_act (`bool`, *optional*, defaults to `True`): Whether to apply activation.
-        act (`str`, *optional*): Type of activation ("relu" or "hardswish").
+        hidden_act (`str`, *optional*): Type of activation ("relu" or "hardswish").
     """
 
     def __init__(
@@ -1424,11 +1407,11 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         padding: Union[int, str],
         groups: int = 1,
         if_act: bool = True,
-        act: Optional[str] = None,
+        hidden_act: Optional[str] = None,
     ):
         super().__init__()
         self.if_act = if_act
-        self.act = act
+        self.hidden_act = hidden_act
         self.conv = nn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -1455,12 +1438,12 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         hidden_state = self.conv(hidden_state)
         hidden_state = self.bn(hidden_state)
         if self.if_act:
-            if self.act == "relu":
+            if self.hidden_act == "relu":
                 hidden_state = F.relu(hidden_state)
-            elif self.act == "hardswish":
+            elif self.hidden_act == "hardswish":
                 hidden_state = F.hardswish(hidden_state)
             else:
-                print(f"The activation function({self.act}) is selected incorrectly.")
+                print(f"The activation function({self.hidden_act}) is selected incorrectly.")
                 exit()
         return hidden_state
 
@@ -1578,16 +1561,16 @@ class PPOCRV5ServerDetLocalModule(nn.Module):
     concatenating it with higher-resolution features.
 
     Args:
-        in_c (`int`): Number of channels in the feature map `hidden_state`.
-        mid_c (`int`): Hidden channel size for the refinement layers.
-        act (`str`): Activation function name.
+        in_channels (`int`): Number of channels in the feature map `hidden_state`.
+        out_channels (`int`): Hidden channel size for the refinement layers.
+        hidden_act (`str`): Activation function name.
     """
 
-    def __init__(self, in_c: int, mid_c: int, act: str):
+    def __init__(self, in_channels: int, out_channels: int, hidden_act: str):
         super().__init__()
-        self.last_3 = PPOCRV5ServerDetConvBNLayer(in_c + 1, mid_c, 3, 1, 1, act=act)
+        self.last_3 = PPOCRV5ServerDetConvBNLayer(in_channels + 1, out_channels, 3, 1, 1, hidden_act=hidden_act)
         self.last_1 = nn.Conv2d(
-            in_channels=mid_c,
+            in_channels=out_channels,
             out_channels=1,
             kernel_size=1,
             stride=1,
@@ -1626,12 +1609,12 @@ class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
 
         self.up_conv = nn.Upsample(scale_factor=config.scale_factor, mode=config.interpolate_mode)
         if config.mode == "large":
-            mid_ch = config.neck_out_channels // 4
+            out_channels = config.neck_out_channels // 4
         elif config.mode == "small":
-            mid_ch = config.neck_out_channels // 8
+            out_channels = config.neck_out_channels // 8
         else:
             raise ValueError(f"mode must be 'large' or 'small', currently {config.mode}")
-        self.cbn_layer = PPOCRV5ServerDetLocalModule(config.neck_out_channels // 4, mid_ch, config.hidden_act)
+        self.cbn_layer = PPOCRV5ServerDetLocalModule(config.neck_out_channels // 4, out_channels, config.hidden_act)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         """
@@ -1719,7 +1702,6 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
                     nn.init.constant_(m.bias, 0.0)
 
 
-@auto_docstring(custom_intro="The PPOCRV5 Server Det model.")
 class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
     """
     Core PPOCRV5 Server Det model.
@@ -1797,7 +1779,6 @@ class PPOCRV5ServerDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
     shape: Optional[torch.FloatTensor] = None
 
 
-@auto_docstring(custom_intro="ObjectDetection for the PPOCRV5 Server Det model.")
 class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
     """
     PPOCRV5 Server Det model for object (text) detection tasks. Wraps the core PPOCRV5ServerDetModel

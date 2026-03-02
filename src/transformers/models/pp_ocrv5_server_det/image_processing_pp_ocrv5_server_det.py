@@ -23,7 +23,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import auto_docstring, filter_out_non_signature_kwargs, is_cv2_available
+from ...utils import filter_out_non_signature_kwargs, is_cv2_available
 from ...utils.generic import TensorType
 
 
@@ -282,12 +282,12 @@ def get_box_score(bitmap: np.ndarray, _box: np.ndarray) -> float:
     Returns:
         float: Mean score within the bounding box region.
     """
-    h, w = bitmap.shape[:2]
+    height, width = bitmap.shape[:2]
     box = _box.copy()
-    xmin = max(0, min(math.floor(box[:, 0].min()), w - 1))
-    xmax = max(0, min(math.ceil(box[:, 0].max()), w - 1))
-    ymin = max(0, min(math.floor(box[:, 1].min()), h - 1))
-    ymax = max(0, min(math.ceil(box[:, 1].max()), h - 1))
+    xmin = max(0, min(math.floor(box[:, 0].min()), width - 1))
+    xmax = max(0, min(math.ceil(box[:, 0].max()), width - 1))
+    ymin = max(0, min(math.floor(box[:, 1].min()), height - 1))
+    ymax = max(0, min(math.ceil(box[:, 1].max()), height - 1))
 
     mask = np.zeros((ymax - ymin + 1, xmax - xmin + 1), dtype=np.uint8)
     box[:, 0] = box[:, 0] - xmin
@@ -396,27 +396,11 @@ def process(
     return boxes, scores
 
 
-@auto_docstring(custom_intro="ImageProcessor for the PPOCRV5 Server Det model.")
 class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
-    """
+    r"""
     Image Processor for the PPOCRV5 Server Det text detection model.
 
-    This class handles all image preprocessing (resizing, rescaling, normalization, channel flipping)
-    and post-processing (converting model logits to detected text boxes) required for the PPOCRV5 Server Det model.
-    It ensures input images are formatted correctly for model inference and converts model outputs into human-interpretable
-    text bounding boxes.
-
-    Key features:
-    - Aspect-ratio preserving image resizing with side length limits.
-    - RGB to BGR channel flipping (compatible with PaddlePaddle's original model).
-    - Standard image normalization and rescaling.
-    - Post-processing to extract quadrilateral or polygonal text boxes from segmentation maps.
-
-    Attributes:
-        model_input_names (List[str]): List of input names expected by the model (only "pixel_values" for this processor).
-        limit_side_len (int): Maximum/minimum side length for image resizing (depending on `limit_type`).
-        limit_type (str): Resizing strategy ("max", "min", or "resize_long").
-        max_side_limit (int): Hard maximum limit for the longest image side to prevent excessive memory usage.
+    Args:
         do_resize (bool): Whether to resize input images.
         size (dict[str, int]): Default target size for resizing (height, width).
         resample (PILImageResampling): Resampling mode for image resizing.
@@ -425,15 +409,15 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
         do_normalize (bool): Whether to normalize images using mean and standard deviation.
         image_mean (Union[float, List[float]]): Mean values for image normalization (BGR order, compatible with model).
         image_std (Union[float, List[float]]): Standard deviation values for image normalization (BGR order).
+        limit_side_len (int): Maximum/minimum side length for image resizing (depending on `limit_type`).
+        limit_type (str): Resizing strategy ("max", "min", or "resize_long").
+        max_side_limit (int): Hard maximum limit for the longest image side to prevent excessive memory usage.
     """
 
     model_input_names = ["pixel_values"]
 
     def __init__(
         self,
-        limit_side_len: int = 960,
-        limit_type: str = "max",
-        max_side_limit: int = 4000,
         do_resize: bool = True,
         size: Optional[dict[str, int]] = None,
         resample: Optional[PILImageResampling] = PILImageResampling.BICUBIC,
@@ -442,6 +426,9 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
+        limit_side_len: int = 960,
+        limit_type: str = "max",
+        max_side_limit: int = 4000,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -514,12 +501,12 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         # transformations
-        resize_imgs, target_sizes = [], []
+        resize_images, target_sizes = [], []
         if do_resize:
             for image in images:
                 size, shape = self.get_image_size(image, self.limit_side_len, self.limit_type, max_side_limit)
                 try:
-                    img = resize(
+                    image = resize(
                         image,
                         size=(size["height"], size["width"]),
                         resample=resample,
@@ -529,9 +516,9 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
                     print(size)
                     raise RuntimeError(f"Failed to resize image: {e}") from e
 
-                resize_imgs.append(img)
+                resize_images.append(image)
                 target_sizes.append(shape)
-            images = resize_imgs
+            images = resize_images
 
         if do_rescale:
             images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
@@ -594,7 +581,7 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
 
     def get_image_size(
         self,
-        img: np.ndarray,
+        image: np.ndarray,
         limit_side_len: int,
         limit_type: str,
         max_side_limit: int = 4000,
@@ -603,7 +590,7 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
         Computes the target size for resizing an image while preserving aspect ratio.
 
         Args:
-            img (torch.Tensor): Input image.
+            image (torch.Tensor): Input image.
             limit_side_len (int): Maximum or minimum side length.
             limit_type (str): Resizing strategy: "max", "min", or "resize_long".
             max_side_limit (int): Maximum allowed side length.
@@ -615,45 +602,45 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
         """
         limit_side_len = limit_side_len or self.limit_side_len
         limit_type = limit_type or self.limit_type
-        h, w, c = img.shape
+        height, width, c = image.shape
 
         if limit_type == "max":
-            if max(h, w) > limit_side_len:
-                if h > w:
-                    ratio = float(limit_side_len) / h
+            if max(height, width) > limit_side_len:
+                if height > width:
+                    ratio = float(limit_side_len) / height
                 else:
-                    ratio = float(limit_side_len) / w
+                    ratio = float(limit_side_len) / width
             else:
                 ratio = 1.0
         elif limit_type == "min":
-            if min(h, w) < limit_side_len:
-                if h < w:
-                    ratio = float(limit_side_len) / h
+            if min(height, width) < limit_side_len:
+                if height < width:
+                    ratio = float(limit_side_len) / height
                 else:
-                    ratio = float(limit_side_len) / w
+                    ratio = float(limit_side_len) / width
             else:
                 ratio = 1.0
         elif limit_type == "resize_long":
-            ratio = float(limit_side_len) / max(h, w)
+            ratio = float(limit_side_len) / max(height, width)
         else:
             raise Exception("not support limit type, image ")
-        resize_h = int(h * ratio)
-        resize_w = int(w * ratio)
+        resize_height = int(height * ratio)
+        resize_width = int(width * ratio)
 
-        if max(resize_h, resize_w) > max_side_limit:
-            ratio = float(max_side_limit) / max(resize_h, resize_w)
-            resize_h, resize_w = int(resize_h * ratio), int(resize_w * ratio)
+        if max(resize_height, resize_width) > max_side_limit:
+            ratio = float(max_side_limit) / max(resize_height, resize_width)
+            resize_height, resize_width = int(resize_height * ratio), int(resize_width * ratio)
 
-        resize_h = max(int(round(resize_h / 32) * 32), 32)
-        resize_w = max(int(round(resize_w / 32) * 32), 32)
+        resize_height = max(int(round(resize_height / 32) * 32), 32)
+        resize_width = max(int(round(resize_width / 32) * 32), 32)
 
-        if resize_h == h and resize_w == w:
-            return {"height": resize_h, "width": resize_w}, np.array([h, w])
+        if resize_height == height and resize_width == width:
+            return {"height": resize_height, "width": resize_width}, np.array([height, width])
 
-        if int(resize_w) <= 0 or int(resize_h) <= 0:
+        if int(resize_width) <= 0 or int(resize_height) <= 0:
             return None, (None, None)
 
-        return {"height": resize_h, "width": resize_w}, np.array([h, w])
+        return {"height": resize_height, "width": resize_width}, np.array([height, width])
 
 
 __all__ = ["PPOCRV5ServerDetImageProcessor"]

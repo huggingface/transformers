@@ -15,7 +15,7 @@ from torch import Tensor
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring
+from ...utils import ModelOutput
 from .configuration_pp_ocrv5_server_det import PPOCRV5ServerDetConfig
 
 
@@ -511,9 +511,7 @@ class PPOCRV5ServerDetDSConv(nn.Module):
             Stride for the spatial downsampling.
         groups (`int`, *optional*):
             Number of blocked connections. Defaults to `in_channels` for depthwise convolution.
-        if_act (`bool`, *optional*, defaults to `True`):
-            Whether to use an activation function in the bottleneck.
-        act (`str`, *optional*, defaults to `"relu"`):
+        hidden_act (`str`, *optional*, defaults to `"relu"`):
             Activation type, supports `"relu"` or `"hardswish"`.
     """
 
@@ -525,15 +523,22 @@ class PPOCRV5ServerDetDSConv(nn.Module):
         padding: Union[int, str],
         stride: int = 1,
         groups: Optional[int] = None,
-        if_act: bool = True,
-        act: str = "relu",
+        hidden_act: str = "relu",
         **kwargs,
     ):
         super().__init__()
         if groups is None:
             groups = in_channels
-        self.if_act = if_act
-        self.act = act
+
+        if self.hidden_act == "relu":
+            self.act = nn.ReLU()
+        elif self.hidden_act == "hardswish":
+            self.act = nn.Hardswish()
+        else:
+            print(f"The activation function({self.hidden_act}) is selected incorrectly.")
+            exit()
+
+        self.hidden_act = hidden_act
         self.conv1 = nn.Conv2d(
             in_channels=in_channels,
             out_channels=in_channels,
@@ -590,14 +595,7 @@ class PPOCRV5ServerDetDSConv(nn.Module):
 
         hidden_state = self.conv2(hidden_state)
         hidden_state = self.bn2(hidden_state)
-        if self.if_act:
-            if self.act == "relu":
-                hidden_state = F.relu(hidden_state)
-            elif self.act == "hardswish":
-                hidden_state = F.hardswish(hidden_state)
-            else:
-                print(f"The activation function({self.act}) is selected incorrectly.")
-                exit()
+        hidden_state = self.act(hidden_state)
 
         hidden_state = self.conv3(hidden_state)
         if self._c[0] != self._c[1]:
@@ -811,7 +809,7 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         padding (`Union[int, str]`): Padding value or strategy.
         groups (`int`, *optional*, defaults to 1): Grouped convolution parameter.
         if_act (`bool`, *optional*, defaults to `True`): Whether to apply activation.
-        act (`str`, *optional*): Type of activation ("relu" or "hardswish").
+        hidden_act (`str`, *optional*): Type of activation ("relu" or "hardswish").
     """
 
     def __init__(
@@ -823,11 +821,11 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         padding: Union[int, str],
         groups: int = 1,
         if_act: bool = True,
-        act: Optional[str] = None,
+        hidden_act: Optional[str] = None,
     ):
         super().__init__()
         self.if_act = if_act
-        self.act = act
+        self.hidden_act = hidden_act
         self.conv = nn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -854,12 +852,12 @@ class PPOCRV5ServerDetConvBNLayer(nn.Module):
         hidden_state = self.conv(hidden_state)
         hidden_state = self.bn(hidden_state)
         if self.if_act:
-            if self.act == "relu":
+            if self.hidden_act == "relu":
                 hidden_state = F.relu(hidden_state)
-            elif self.act == "hardswish":
+            elif self.hidden_act == "hardswish":
                 hidden_state = F.hardswish(hidden_state)
             else:
-                print(f"The activation function({self.act}) is selected incorrectly.")
+                print(f"The activation function({self.hidden_act}) is selected incorrectly.")
                 exit()
         return hidden_state
 
@@ -977,16 +975,16 @@ class PPOCRV5ServerDetLocalModule(nn.Module):
     concatenating it with higher-resolution features.
 
     Args:
-        in_c (`int`): Number of channels in the feature map `hidden_state`.
-        mid_c (`int`): Hidden channel size for the refinement layers.
-        act (`str`): Activation function name.
+        in_channels (`int`): Number of channels in the feature map `hidden_state`.
+        out_channels (`int`): Hidden channel size for the refinement layers.
+        hidden_act (`str`): Activation function name.
     """
 
-    def __init__(self, in_c: int, mid_c: int, act: str):
+    def __init__(self, in_channels: int, out_channels: int, hidden_act: str):
         super().__init__()
-        self.last_3 = PPOCRV5ServerDetConvBNLayer(in_c + 1, mid_c, 3, 1, 1, act=act)
+        self.last_3 = PPOCRV5ServerDetConvBNLayer(in_channels + 1, out_channels, 3, 1, 1, hidden_act=hidden_act)
         self.last_1 = nn.Conv2d(
-            in_channels=mid_c,
+            in_channels=out_channels,
             out_channels=1,
             kernel_size=1,
             stride=1,
@@ -1025,12 +1023,12 @@ class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
 
         self.up_conv = nn.Upsample(scale_factor=config.scale_factor, mode=config.interpolate_mode)
         if config.mode == "large":
-            mid_ch = config.neck_out_channels // 4
+            out_channels = config.neck_out_channels // 4
         elif config.mode == "small":
-            mid_ch = config.neck_out_channels // 8
+            out_channels = config.neck_out_channels // 8
         else:
             raise ValueError(f"mode must be 'large' or 'small', currently {config.mode}")
-        self.cbn_layer = PPOCRV5ServerDetLocalModule(config.neck_out_channels // 4, mid_ch, config.hidden_act)
+        self.cbn_layer = PPOCRV5ServerDetLocalModule(config.neck_out_channels // 4, out_channels, config.hidden_act)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         """
@@ -1118,7 +1116,6 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
                     nn.init.constant_(m.bias, 0.0)
 
 
-@auto_docstring(custom_intro="The PPOCRV5 Server Det model.")
 class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
     """
     Core PPOCRV5 Server Det model.
@@ -1196,7 +1193,6 @@ class PPOCRV5ServerDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
     shape: Optional[torch.FloatTensor] = None
 
 
-@auto_docstring(custom_intro="ObjectDetection for the PPOCRV5 Server Det model.")
 class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
     """
     PPOCRV5 Server Det model for object (text) detection tasks. Wraps the core PPOCRV5ServerDetModel
