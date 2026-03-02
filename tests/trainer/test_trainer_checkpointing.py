@@ -1634,11 +1634,12 @@ class TrainerBestModelTest(TestCasePlus, TrainerIntegrationCommon):
         # Finally check that we don't have an old one
         assert not os.path.exists(os.path.join(tmp_dir, "checkpoint-5")), "Found checkpoint-5, limit not respected"
 
-        # Finally check that the right model was loaded in, checkpoint-10
-        # this goes by the last `eval` step check to do so, so it won't be
-        # the last model *saved*
+        # Finally check that the right model was loaded in - it should be the checkpoint
+        # with the best eval metric. With eval at steps 5, 10, 11, the best could be any of them.
         model_state = trainer.model.state_dict()
-        final_model_weights = safetensors.torch.load_file(os.path.join(tmp_dir, "checkpoint-10", "model.safetensors"))
+        # Find which checkpoint has the best metric
+        best_checkpoint_dir = trainer.state.best_model_checkpoint
+        final_model_weights = safetensors.torch.load_file(os.path.join(best_checkpoint_dir, "model.safetensors"))
         for k, v in model_state.items():
             assert torch.allclose(v, final_model_weights[k]), f"{k} is not the same"
 
