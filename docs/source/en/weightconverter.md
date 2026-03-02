@@ -482,35 +482,6 @@ model.layers.0.mlp.experts.down_proj     # (8, 14336, 4096)
 ],
 ```
 
-### Qwen2-style MoE
-
-**Checkpoint format:**
-```
-model.layers.0.mlp.experts.0.gate_proj.weight
-model.layers.0.mlp.experts.0.up_proj.weight
-model.layers.0.mlp.experts.0.down_proj.weight
-...
-```
-
-**Conversion mapping:**
-```python
-"qwen2_moe": [
-    WeightConverter(
-        source_patterns=[
-            "mlp.experts.*.gate_proj.weight",
-            "mlp.experts.*.up_proj.weight",
-        ],
-        target_patterns="mlp.experts.gate_up_proj",
-        operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
-    ),
-    WeightConverter(
-        source_patterns="mlp.experts.*.down_proj.weight",
-        target_patterns="mlp.experts.down_proj",
-        operations=[MergeModulelist(dim=0)],
-    ),
-],
-```
-
 ### ERNIE 4.5 VL MoE
 
 This model has text and vision experts that need special handling:
