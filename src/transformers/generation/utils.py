@@ -335,7 +335,16 @@ GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderO
 GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
-class GenerationMixin(ContinuousMixin):
+if TYPE_CHECKING:
+
+    class _GenerationMixinHost(ContinuousMixin, GenerativePreTrainedModel):
+        pass
+
+else:
+    _GenerationMixinHost = ContinuousMixin
+
+
+class GenerationMixin(_GenerationMixinHost):
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in model classes.
     Inheriting from this class causes the model to have special generation-related behavior, such as loading a
@@ -363,28 +372,6 @@ class GenerationMixin(ContinuousMixin):
 
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
-
-    # Type declarations for attributes provided by the host class (PreTrainedModel).
-    # These let the type checker resolve `self.<attr>` accesses inside the mixin.
-    config: Any
-    device: torch.device
-    dtype: torch.dtype
-    main_input_name: str
-    base_model_prefix: str
-    _is_stateful: bool
-    hf_quantizer: Any
-    encoder: Any
-    hf_device_map: dict[str, Any]
-    forward: Callable[..., Any]
-    __call__: Callable[..., Any]
-    can_generate: Callable[..., bool]
-    get_encoder: Callable[..., Any]
-    get_output_embeddings: Callable[..., Any]
-    get_input_embeddings: Callable[..., Any]
-    set_output_embeddings: Callable[..., None]
-    set_input_embeddings: Callable[..., None]
-    get_compiled_call: Callable[..., Any]
-    set_experts_implementation: Callable[..., Any]
 
     # Should be overwritten by models that can generate non-text output
     output_modalities = ("text",)
@@ -2129,7 +2116,7 @@ class GenerationMixin(ContinuousMixin):
         return repo
 
     def _extract_generation_mode_kwargs(
-        self,
+        self: "GenerativePreTrainedModel",
         custom_generate,
         kwargs,
         synced_gpus,
@@ -2586,7 +2573,9 @@ class GenerationMixin(ContinuousMixin):
 
         return result
 
-    def _has_unfinished_sequences(self, this_peer_finished: bool, synced_gpus: bool, device: torch.device) -> bool:
+    def _has_unfinished_sequences(
+        self: "GenerativePreTrainedModel", this_peer_finished: bool, synced_gpus: bool, device: torch.device
+    ) -> bool:
         """
         Returns whether there are still unfinished sequences in the device. The existence of unfinished sequences is
         fed through `this_peer_finished`. ZeRO stage 3-friendly.
