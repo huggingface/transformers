@@ -35,7 +35,6 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 

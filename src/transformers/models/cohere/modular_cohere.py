@@ -34,7 +34,7 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import maybe_autocast
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,

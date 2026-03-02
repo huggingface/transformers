@@ -28,7 +28,6 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import merge_with_config_defaults
 from ..auto import AutoModel
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,

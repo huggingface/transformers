@@ -36,7 +36,6 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
 from ..auto import AutoModel
 from .configuration_paligemma import PaliGemmaConfig
 

@@ -31,7 +31,6 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import merge_with_config_defaults
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..mistral3.modeling_mistral3 import (
     Mistral3ForConditionalGeneration,
