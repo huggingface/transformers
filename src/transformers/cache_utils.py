@@ -293,10 +293,11 @@ class StaticLayer(CacheLayerMixin):
             device=self.device,
         )
         self.cumulative_length = self.cumulative_length.to(self.device)
-        # Note: `mark_static_address` is used to tag the cache as a fixed data pointer, preventing compiled graph
+        # Note: `mark_static_address` is used to tag the tensors as a fixed data pointer, preventing compiled graph
         # breaks or cudagraph skips due to inplace mutations when updating the cache. However, it is not supported when
         # tracing the graph, so we skip it in this case. As prefill should never be compiled, this is not an issue and it
         # will still be run (except when users compile prefill explicitly, but this should be avoided!)
+        # Without this, we cannot use cudagraphs!!
         if not is_torchdynamo_compiling():
             torch._dynamo.mark_static_address(self.keys)
             torch._dynamo.mark_static_address(self.values)
