@@ -524,7 +524,6 @@ class Kosmos2VisionTransformer(Kosmos2PreTrainedModel):
         "attentions": Kosmos2VisionAttention,
     }
 
-    # Copied from transformers.models.altclip.modeling_altclip.AltCLIPVisionTransformer.__init__ with AltCLIPVision->Kosmos2Vision,ALTCLIP_VISION->KOSMOS2_VISION,AltCLIP->Kosmos2Vision
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__(config)
         embed_dim = config.hidden_size
@@ -1018,6 +1017,16 @@ class Kosmos2TextTransformer(Kosmos2PreTrainedModel):
         cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
+        r"""
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
+        image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
+            1]`:
+
+            - 1 for places where to put the image features,
+            - 0 for places that are not for image features (i.e. for text tokens).
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
