@@ -57,15 +57,23 @@ Checkpoint File → from_pretrained() → convert_and_load_state_dict_in_model()
 
 ### Dense models (e.g., Llama)
 
-For dense models, the checkpoint format matches the model format directly, so no conversion mapping is needed. TP sharding still applies.
+For most dense models, the checkpoint format matches the model format directly, so no conversion mapping is needed. Some models may still require renaming (e.g., legacy naming conventions). TP sharding still applies when enabled.
 
 ```
-Checkpoint:                    Model:
-q_proj.weight        →        q_proj.weight
-k_proj.weight        →        k_proj.weight
-v_proj.weight        →        v_proj.weight
-gate_proj.weight     →        gate_proj.weight
-up_proj.weight       →        up_proj.weight
+Checkpoint:                          Model:
+model.layers.0.self_attn.q_proj.weight  →  model.layers.0.self_attn.q_proj.weight
+model.layers.0.self_attn.k_proj.weight  →  model.layers.0.self_attn.k_proj.weight
+model.layers.0.mlp.gate_proj.weight     →  model.layers.0.mlp.gate_proj.weight
+model.layers.0.mlp.up_proj.weight       →  model.layers.0.mlp.up_proj.weight
+model.layers.0.mlp.down_proj.weight     →  model.layers.0.mlp.down_proj.weight
+```x
+
+Legacy checkpoints may use older naming conventions that are handled by built-in renamings applied to all models:
+
+```
+Checkpoint:                          Model:
+LayerNorm.gamma              →       LayerNorm.weight
+LayerNorm.beta               →       LayerNorm.bias
 ```
 
 ### MoE models (e.g., Mixtral)
