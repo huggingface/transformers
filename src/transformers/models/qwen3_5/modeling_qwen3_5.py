@@ -1066,8 +1066,6 @@ class Qwen3_5VisionBlock(GradientCheckpointingLayer):
         self.attn = Qwen3_5VisionAttention(config=config)
         self.mlp = Qwen3_5VisionMLP(config=config)
 
-    @merge_with_config_defaults
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,

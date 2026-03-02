@@ -357,8 +357,6 @@ class Glm4vVisionBlock(GradientCheckpointingLayer):
         self.attn = Glm4vVisionAttention(config)
         self.mlp = Glm4VisionMlp(config, bias=False)
 
-    @merge_with_config_defaults
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,

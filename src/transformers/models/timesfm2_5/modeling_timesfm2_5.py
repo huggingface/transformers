@@ -444,13 +444,13 @@ class TimesFm2_5PreTrainedModel(PreTrainedModel):
     main_input_name = "past_values"
     input_modalities = ("time",)
     _supports_sdpa = True
-    config_class = TimesFm2_5Config
-    _supports_flash_attn = True
-    _supports_flex_attn = True
     _can_record_outputs = {
         "hidden_states": TimesFm2_5DecoderLayer,
         "attentions": TimesFm2_5Attention,
     }
+    config_class = TimesFm2_5Config
+    _supports_flash_attn = True
+    _supports_flex_attn = True
 
     @torch.no_grad()
     def _init_weights(self, module):

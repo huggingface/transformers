@@ -489,8 +489,6 @@ class GlmOcrVisionBlock(GradientCheckpointingLayer):
         self.attn = GlmOcrVisionAttention(config)
         self.mlp = GlmOcrVisionMlp(config, bias=config.attention_bias)
 
-    @merge_with_config_defaults
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,

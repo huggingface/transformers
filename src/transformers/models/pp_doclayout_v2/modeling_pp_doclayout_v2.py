@@ -440,23 +440,17 @@ class PPDocLayoutV2ReadingOrderEncoder(nn.Module):
         hidden_states,
         bbox=None,
         attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
         position_ids=None,
         patch_height=None,
         patch_width=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
+        output_attentions = kwargs.get("output_attentions", getattr(self.config, "output_attentions", False))
 
         rel_pos = self._cal_1d_pos_emb(position_ids) if self.has_relative_attention_bias else None
         rel_2d_pos = self._cal_2d_pos_emb(bbox) if self.has_spatial_attention_bias else None
 
         for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
             layer_outputs = layer_module(
                 hidden_states,
                 attention_mask,
@@ -466,27 +460,7 @@ class PPDocLayoutV2ReadingOrderEncoder(nn.Module):
             )
 
             hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attentions,
-                ]
-                if v is not None
-            )
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class PPDocLayoutV2TextEmbeddings(nn.Module):
@@ -886,12 +860,10 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
             Bounding box coordinates of the detected layout elements **in [0, 1000] scale**.
             Format is `[x_min, y_min, x_max, y_max]`.
             The tensor usually contains sorted valid boxes followed by zero-padding.
-
         labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             The **remapped** class indices for each layout element.
             These are not necessarily the raw detection class IDs, but indices mapped via
             `config.class_order` (e.g., mapping text/title/figure to specific reading-order category IDs).
-
         mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Boolean or Binary mask indicating valid detected elements after threshold filtering.
             - True: Valid layout element.
@@ -950,13 +922,13 @@ class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
         Classification logits (including no-object) for all queries.
-    order_logits (`tuple` of `torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
-        Order logits for all queries. The first dimension of each tensor is the batch size. The second dimension is the number of queries.
     pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
         possible padding). You can use [`~RTDetrImageProcessor.post_process_object_detection`] to retrieve the
         unnormalized (absolute) bounding boxes.
+    order_logits (`tuple` of `torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
+        Order logits for all queries. The first dimension of each tensor is the batch size. The second dimension is the number of queries.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):

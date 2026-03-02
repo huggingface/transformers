@@ -996,8 +996,6 @@ class Qwen3OmniMoeVisionBlock(GradientCheckpointingLayer):
         self.attn = Qwen3OmniMoeVisionAttention(config=config)
         self.mlp = Qwen3OmniMoeVisionMLP(config=config)
 
-    @merge_with_config_defaults
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,

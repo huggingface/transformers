@@ -275,8 +275,6 @@ class GlmImageVisionBlock(GradientCheckpointingLayer):
         self.attn = GlmImageVisionAttention(config)
         self.mlp = GlmImageVisionMLP(config)
 
-    @merge_with_config_defaults
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,

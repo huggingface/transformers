@@ -1159,8 +1159,6 @@ class Qwen3_5MoeVisionBlock(GradientCheckpointingLayer):
         self.attn = Qwen3_5MoeVisionAttention(config=config)
         self.mlp = Qwen3_5MoeVisionMLP(config=config)
 
-    @merge_with_config_defaults
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,

@@ -1033,8 +1033,6 @@ class Qwen2_5OmniVisionBlock(GradientCheckpointingLayer):
         self.attn = Qwen2_5OmniVisionAttention(config=config)
         self.mlp = Qwen2_5OmniMLP(config, bias=True)
 
-    @merge_with_config_defaults
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
