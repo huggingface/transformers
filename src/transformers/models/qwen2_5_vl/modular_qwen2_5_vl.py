@@ -18,8 +18,8 @@
 # limitations under the License.
 """PyTorch Qwen2.5-VL model."""
 
-from dataclasses import dataclass
 import itertools
+from dataclasses import dataclass
 
 import numpy as np
 import torch

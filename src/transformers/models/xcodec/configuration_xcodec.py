@@ -19,8 +19,6 @@ from dataclasses import dataclass
 import numpy as np
 from huggingface_hub.dataclasses import strict
 
-from transformers import AutoConfig, DacConfig, HubertConfig
-
 from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -95,7 +93,7 @@ class XcodecConfig(PreTrainedConfig):
     codebook_size: int = 1024
     codebook_dim: int | None = None
     initializer_range: float = 0.02
-    acoustic_model_config: dict | DacConfig | None = None
+    acoustic_model_config: dict | PreTrainedConfig | None = None
     semantic_model_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
