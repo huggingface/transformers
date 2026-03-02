@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, Union
 
 import numpy as np
 
-from .processing_base import ProcessingMixin
+from .preprocessing_base import PreprocessingMixin
 from .utils import (
     FEATURE_EXTRACTOR_NAME,
     TensorType,
@@ -256,7 +256,7 @@ class BatchFeature(UserDict):
         return self
 
 
-class FeatureExtractionMixin(ProcessingMixin):
+class FeatureExtractionMixin(PreprocessingMixin):
     """
     This is a feature extraction mixin used to provide saving/loading functionality for sequential and audio feature
     extractors.
