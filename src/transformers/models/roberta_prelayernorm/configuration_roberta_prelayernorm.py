@@ -15,12 +15,13 @@
 """RoBERTa-PreLayerNorm configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="andreasmadsen/efficient_mlm_m0.40")
 # Copied from transformers.models.roberta.configuration_roberta.RobertaConfig with FacebookAI/roberta-base->andreasmadsen/efficient_mlm_m0.40,RoBERTa->RoBERTa-PreLayerNorm,Roberta->RobertaPreLayerNorm,roberta->roberta-prelayernorm
 class RobertaPreLayerNormConfig(PreTrainedConfig):
     r"""

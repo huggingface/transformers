@@ -15,8 +15,10 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="ByteDance-Seed/SeedOss-36B")
 class SeedOssConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SeedOssModel`]. It is used to instantiate an SeedOss

@@ -1851,6 +1851,7 @@ class ConfigArgs:
     kernel_size = conv_kernel_size
     conv_kernel = conv_kernel_size
     use_absolute_embeddings = use_absolute_position_embeddings
+    use_abs_pos = use_absolute_position_embeddings
     layers = num_layers
     aux_loss_coef = router_aux_loss_coef
     qk_layernorms = qk_layernorm
