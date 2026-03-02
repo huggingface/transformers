@@ -12,26 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
-import json
 import os
 from typing import Any, TypeVar
 
-import numpy as np
-from huggingface_hub import create_repo, is_offline_mode
-
-from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .image_utils import is_valid_image, load_image
+from .processing_base import ProcessingMixin
 from .utils import (
     IMAGE_PROCESSOR_NAME,
-    PROCESSOR_NAME,
-    PushToHubMixin,
     copy_func,
     logging,
-    safe_load_json_file,
 )
-from .utils.hub import cached_file
 
 
 ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
@@ -58,12 +49,13 @@ class BatchFeature(BaseBatchFeature):
 
 
 # TODO: (Amy) - factor out the common parts of this and the feature extractor
-class ImageProcessingMixin(PushToHubMixin):
+class ImageProcessingMixin(ProcessingMixin):
     """
     This is an image processor mixin used to provide saving/loading functionality for sequential and image feature
     extractors.
     """
 
+<<<<<<< HEAD
     _auto_class = None
 
     def __init__(self, **kwargs):
@@ -227,6 +219,17 @@ class ImageProcessingMixin(PushToHubMixin):
             )
 
         return [output_image_processor_file]
+=======
+    _config_name = IMAGE_PROCESSOR_NAME
+    _type_key = "image_processor_type"
+    _nested_config_keys = ["image_processor"]
+    _auto_class_default = "AutoImageProcessor"
+    _file_type_label = "image processor"
+    _excluded_dict_keys = set()
+    _extra_init_pops = ["feature_extractor_type"]
+    _config_filename_kwarg = "image_processor_filename"
+    _subfolder_default = ""
+>>>>>>> refacto to introduce ProcessingMixin
 
     @classmethod
     def get_image_processor_dict(
@@ -248,104 +251,7 @@ class ImageProcessingMixin(PushToHubMixin):
         Returns:
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the image processor object.
         """
-        cache_dir = kwargs.pop("cache_dir", None)
-        force_download = kwargs.pop("force_download", False)
-        proxies = kwargs.pop("proxies", None)
-        token = kwargs.pop("token", None)
-        local_files_only = kwargs.pop("local_files_only", False)
-        revision = kwargs.pop("revision", None)
-        subfolder = kwargs.pop("subfolder", "")
-        image_processor_filename = kwargs.pop("image_processor_filename", IMAGE_PROCESSOR_NAME)
-
-        from_pipeline = kwargs.pop("_from_pipeline", None)
-        from_auto_class = kwargs.pop("_from_auto", False)
-
-        user_agent = {"file_type": "image processor", "from_auto_class": from_auto_class}
-        if from_pipeline is not None:
-            user_agent["using_pipeline"] = from_pipeline
-
-        if is_offline_mode() and not local_files_only:
-            logger.info("Offline mode: forcing local_files_only=True")
-            local_files_only = True
-
-        pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-        is_local = os.path.isdir(pretrained_model_name_or_path)
-        if os.path.isdir(pretrained_model_name_or_path):
-            image_processor_file = os.path.join(pretrained_model_name_or_path, image_processor_filename)
-        if os.path.isfile(pretrained_model_name_or_path):
-            resolved_image_processor_file = pretrained_model_name_or_path
-            resolved_processor_file = None
-            is_local = True
-        else:
-            image_processor_file = image_processor_filename
-            try:
-                resolved_processor_file = cached_file(
-                    pretrained_model_name_or_path,
-                    filename=PROCESSOR_NAME,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                    _raise_exceptions_for_missing_entries=False,
-                )
-                resolved_image_processor_file = cached_file(
-                    pretrained_model_name_or_path,
-                    filename=image_processor_file,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                    _raise_exceptions_for_missing_entries=False,
-                )
-            except OSError:
-                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
-                # the original exception.
-                raise
-            except Exception:
-                # For any other exception, we throw a generic error.
-                raise OSError(
-                    f"Can't load image processor for '{pretrained_model_name_or_path}'. If you were trying to load"
-                    " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
-                    f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
-                    f" directory containing a {image_processor_filename} file"
-                )
-
-        # Load image_processor dict. Priority goes as (nested config if found -> image processor config)
-        # We are downloading both configs because almost all models have a `processor_config.json` but
-        # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
-        image_processor_dict = None
-        if resolved_processor_file is not None:
-            processor_dict = safe_load_json_file(resolved_processor_file)
-            if "image_processor" in processor_dict:
-                image_processor_dict = processor_dict["image_processor"]
-
-        if resolved_image_processor_file is not None and image_processor_dict is None:
-            image_processor_dict = safe_load_json_file(resolved_image_processor_file)
-
-        if image_processor_dict is None:
-            raise OSError(
-                f"Can't load image processor for '{pretrained_model_name_or_path}'. If you were trying to load"
-                " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
-                f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
-                f" directory containing a {image_processor_filename} file"
-            )
-
-        if is_local:
-            logger.info(f"loading configuration file {resolved_image_processor_file}")
-        else:
-            logger.info(
-                f"loading configuration file {image_processor_file} from cache at {resolved_image_processor_file}"
-            )
-
-        return image_processor_dict, kwargs
+        return cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
 
     @classmethod
     def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
@@ -387,88 +293,6 @@ class ImageProcessingMixin(PushToHubMixin):
             return image_processor, kwargs
         else:
             return image_processor
-
-    def to_dict(self) -> dict[str, Any]:
-        """
-        Serializes this instance to a Python dictionary.
-
-        Returns:
-            `dict[str, Any]`: Dictionary of all the attributes that make up this image processor instance.
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["image_processor_type"] = self.__class__.__name__
-
-        return output
-
-    @classmethod
-    def from_json_file(cls, json_file: str | os.PathLike):
-        """
-        Instantiates a image processor of type [`~image_processing_utils.ImageProcessingMixin`] from the path to a JSON
-        file of parameters.
-
-        Args:
-            json_file (`str` or `os.PathLike`):
-                Path to the JSON file containing the parameters.
-
-        Returns:
-            A image processor of type [`~image_processing_utils.ImageProcessingMixin`]: The image_processor object
-            instantiated from that JSON file.
-        """
-        with open(json_file, encoding="utf-8") as reader:
-            text = reader.read()
-        image_processor_dict = json.loads(text)
-        return cls(**image_processor_dict)
-
-    def to_json_string(self) -> str:
-        """
-        Serializes this instance to a JSON string.
-
-        Returns:
-            `str`: String containing all the attributes that make up this feature_extractor instance in JSON format.
-        """
-        dictionary = self.to_dict()
-
-        for key, value in dictionary.items():
-            if isinstance(value, np.ndarray):
-                dictionary[key] = value.tolist()
-
-        return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
-
-    def to_json_file(self, json_file_path: str | os.PathLike):
-        """
-        Save this instance to a JSON file.
-
-        Args:
-            json_file_path (`str` or `os.PathLike`):
-                Path to the JSON file in which this image_processor instance's parameters will be saved.
-        """
-        with open(json_file_path, "w", encoding="utf-8") as writer:
-            writer.write(self.to_json_string())
-
-    def __repr__(self):
-        return f"{self.__class__.__name__} {self.to_json_string()}"
-
-    @classmethod
-    def register_for_auto_class(cls, auto_class="AutoImageProcessor"):
-        """
-        Register this class with a given auto class. This should only be used for custom image processors as the ones
-        in the library are already mapped with `AutoImageProcessor `.
-
-
-
-        Args:
-            auto_class (`str` or `type`, *optional*, defaults to `"AutoImageProcessor "`):
-                The auto class to register this new image processor with.
-        """
-        if not isinstance(auto_class, str):
-            auto_class = auto_class.__name__
-
-        import transformers.models.auto as auto_module
-
-        if not hasattr(auto_module, auto_class):
-            raise ValueError(f"{auto_class} is not a valid auto class.")
-
-        cls._auto_class = auto_class
 
     def fetch_images(self, image_url_or_urls: str | list[str] | list[list[str]]):
         """
