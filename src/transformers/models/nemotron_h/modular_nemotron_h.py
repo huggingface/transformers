@@ -30,6 +30,7 @@ from ...conversion_mapping import (
     WeightRenaming,
     register_checkpoint_conversion_mapping,
 )
+from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -186,6 +187,7 @@ class NemotronHMLP(NemotronMLP):
         self.act_fn = ACT2FN[config.mlp_hidden_act]
 
 
+@use_experts_implementation(has_gate=False)
 class NemotronHExperts(nn.Module):
     """
     Collection of expert weights stored as 3D tensors.

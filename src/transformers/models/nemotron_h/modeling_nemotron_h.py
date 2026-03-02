@@ -40,6 +40,7 @@ from ...conversion_mapping import (
 from ...generation import GenerationMixin
 from ...integrations import (
     lazy_load_kernel,
+    use_experts_implementation,
     use_kernel_forward_from_hub,
     use_kernel_func_from_hub,
     use_kernelized_func,
@@ -734,6 +735,7 @@ class NemotronHMLP(nn.Module):
         return self.down_proj(self.act_fn(self.up_proj(x)))
 
 
+@use_experts_implementation(has_gate=False)
 class NemotronHExperts(nn.Module):
     """
     Collection of expert weights stored as 3D tensors.
