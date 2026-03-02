@@ -177,7 +177,7 @@ class FalconMambaMixer(nn.Module):
     and is why FalconMamba is called **selective** state spaces)
     """
 
-    def __init__(self, config: FalconMambaConfig, layer_idx: int):
+    def __init__(self, config: FalconMambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -268,6 +268,8 @@ class FalconMambaMixer(nn.Module):
         # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
         inv_dt = dt + torch.log(-torch.expm1(-dt))
         init.copy_(self.dt_proj.bias, inv_dt)
+        init.ones_(self.b_c_rms)
+        init.ones_(self.dt_rms)
 
     def warn_slow_implementation(self):
         is_fast_path_available = all(
@@ -615,9 +617,6 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, std=std)
-        if isinstance(module, FalconMambaMixer):
-            init.ones_(module.b_c_rms)
-            init.ones_(module.dt_rms)
 
 
 @dataclass
