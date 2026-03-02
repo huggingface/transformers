@@ -2139,18 +2139,7 @@ class GenerationMixin(ContinuousMixin):
             "assistant_model": assistant_model,
             "streamer": streamer,
         }
-        get_world_size = getattr(dist, "get_world_size", None)
-        is_available = getattr(dist, "is_available", None)
-        is_initialized = getattr(dist, "is_initialized", None)
-        world_size = (
-            get_world_size()
-            if callable(get_world_size)
-            and callable(is_available)
-            and callable(is_initialized)
-            and is_available()
-            and is_initialized()
-            else 1
-        )
+        world_size = dist.get_world_size() if dist.is_available() and dist.is_initialized() else 1  # type: ignore
         generation_mode_kwargs["synced_gpus"] = (
             (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and world_size > 1
             if synced_gpus is None
@@ -2599,14 +2588,9 @@ class GenerationMixin(ContinuousMixin):
         if synced_gpus:
             # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
             # The following logic allows an early break if all peers finished generating their sequence
-            all_reduce = getattr(dist, "all_reduce", None)
-            reduce_op = getattr(dist, "ReduceOp", None)
-            reduce_op_sum = getattr(reduce_op, "SUM", None)
-            if not callable(all_reduce) or reduce_op_sum is None:
-                return not this_peer_finished
             this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0, device=device)
             # send 0.0 if we finished, 1.0 otherwise
-            all_reduce(this_peer_finished_flag, op=reduce_op_sum)
+            dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)  # type: ignore
             # did all peers finish? the reduced sum will be 0.0 then
             if this_peer_finished_flag.item() == 0.0:
                 return False
