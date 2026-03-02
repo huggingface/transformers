@@ -72,3 +72,4 @@ torchrun --nproc-per-node=8 /path/to/script
 - [NeMo Automodel](https://github.com/NVIDIA-NeMo/Automodel)
 - [NeMo Transformers API](https://docs.nvidia.com/nemo/automodel/latest/guides/huggingface-api-compatibility.html)
 - NeMo Automodel dense models and Mixture-of-Expert (MoE) [benchmarks](https://docs.nvidia.com/nemo/automodel/latest/performance-summary.html)
+- See the NeMo [fine-tuning](./nemo_automodel_finetuning) guide to learn how to use NeMo for fine-tuning
