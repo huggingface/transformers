@@ -175,8 +175,7 @@ class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
         del self.mlp_only_layers
 
 
-# TODO: cannot inherit from Qwen3OmniMoeThinkerConfig due to vision_config block
-class Qwen3ASRThinkerConfig(Qwen3OmniMoeThinkerConfig):
+class Qwen3ASRThinkerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRThinker`]. It is used to instantiate a
     Qwen3-ASR-Thinker model according to the specified arguments, defining the model architecture. Instantiating a
@@ -217,6 +216,9 @@ class Qwen3ASRThinkerConfig(Qwen3OmniMoeThinkerConfig):
     >>> configuration = model.config
     ```"""
 
+    model_type = "qwen3_asr_thinker"
+
+    attribute_map = {}
     sub_configs = {
         "audio_config": Qwen3ASRAudioEncoderConfig,
         "text_config": Qwen3ASRTextConfig,
@@ -230,11 +232,9 @@ class Qwen3ASRThinkerConfig(Qwen3OmniMoeThinkerConfig):
         audio_start_token_id=151647,
         user_token_id=872,
         initializer_range=0.02,
-        attn_implementation=None,
         **kwargs,
     ):
-        PreTrainedConfig.__init__(**kwargs)
-
+        super().__init__(**kwargs)
         self.user_token_id = user_token_id
         self.audio_start_token_id = audio_start_token_id
         self.initializer_range = initializer_range
