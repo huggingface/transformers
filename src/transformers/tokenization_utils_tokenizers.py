@@ -116,8 +116,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
-            # we extract vocab / merges from the tokenizer file to pass them to __init__
-            processor = TokenizerFast.from_file(fast_tokenizer_file).post_processor
+            # we extract vocab/merges and pass decoder/pre_tokenizer/post_processor
+            # from the file so the reconstructed tokenizer matches the tokenizer.json
+            tok_from_file = TokenizerFast.from_file(fast_tokenizer_file)
+            local_kwargs["post_processor"] = tok_from_file.post_processor
+            local_kwargs["tokenizer_padding"] = tok_from_file.padding
+            local_kwargs["tokenizer_truncation"] = tok_from_file.truncation
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
             vocab = tokenizer_json.get("model", {}).get("vocab", None)
@@ -140,8 +144,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 merges = [tuple(merge.split(" ")) if isinstance(merge, str) else tuple(merge) for merge in merges]
                 local_kwargs["merges"] = merges
 
-            if processor is not None:
-                local_kwargs["post_processor"] = processor
             return local_kwargs
 
         vocab_file = local_kwargs.get("vocab_file")
@@ -311,8 +313,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._tokenizer is None:
             raise ValueError("The backend tokenizer is not correctly initialized.")
 
-        _truncation = self._tokenizer.truncation
-
+        _truncation = kwargs.pop("tokenizer_truncation", None) or self._tokenizer.truncation
         if _truncation is not None:
             self._tokenizer.enable_truncation(**_truncation)
             kwargs.setdefault("max_length", _truncation["max_length"])
@@ -322,7 +323,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         else:
             self._tokenizer.no_truncation()
 
-        _padding = self._tokenizer.padding
+        _padding = kwargs.pop("tokenizer_padding", None) or self._tokenizer.padding
         if _padding is not None:
             self._tokenizer.enable_padding(**_padding)
             kwargs.setdefault("pad_token", _padding["pad_token"])
