@@ -67,7 +67,7 @@ if is_mlx_available():
 
 
 # vendored from distutils.util
-def strtobool(val):
+def strtobool(val) -> int:
     """Convert a string representation of truth to true (1) or false (0).
 
     True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values are 'n', 'no', 'f', 'false', 'off', and '0'.
@@ -81,7 +81,7 @@ def strtobool(val):
     raise ValueError(f"invalid truth value {val!r}")
 
 
-def infer_framework_from_repr(x):
+def infer_framework_from_repr(x) -> str | None:
     """
     Tries to guess the framework of an object `x` from its repr (brittle but will help in `is_tensor` to try the
     frameworks in a smart order, without the need to import the frameworks).
@@ -114,7 +114,7 @@ def _get_frameworks_and_test_func(x):
     return {f: framework_to_test[f] for f in frameworks}
 
 
-def is_tensor(x):
+def is_tensor(x) -> bool:
     """
     Tests if `x` is a `torch.Tensor`, `np.ndarray` or `mlx.array` in the order defined by `infer_framework_from_repr`
     """
@@ -131,28 +131,28 @@ def is_tensor(x):
     return False
 
 
-def is_numpy_array(x):
+def is_numpy_array(x) -> bool:
     """
     Tests if `x` is a numpy array or not.
     """
     return isinstance(x, np.ndarray)
 
 
-def is_torch_tensor(x):
+def is_torch_tensor(x) -> bool:
     """
     Tests if `x` is a torch tensor or not. Safe to call even if torch is not installed.
     """
     return _is_torch_available and isinstance(x, torch.Tensor)
 
 
-def is_torch_device(x):
+def is_torch_device(x) -> bool:
     """
     Tests if `x` is a torch device or not. Safe to call even if torch is not installed.
     """
     return _is_torch_available and isinstance(x, torch.device)
 
 
-def is_torch_dtype(x):
+def is_torch_dtype(x) -> bool:
     """
     Tests if `x` is a torch dtype or not. Safe to call even if torch is not installed.
     """
@@ -214,14 +214,14 @@ def _is_mlx(x):
     return isinstance(x, mx.array)
 
 
-def is_mlx_array(x):
+def is_mlx_array(x) -> bool:
     """
     Tests if `x` is a mlx array or not. Safe to call even when mlx is not installed.
     """
     return False if not _is_mlx_available else _is_mlx(x)
 
 
-def is_flash_attention_requested(config=None, requested_attention_implementation: str | None = None):
+def is_flash_attention_requested(config=None, requested_attention_implementation: str | None = None) -> bool:
     """
     Checks whether some flavor of flash attention is requested or not.
 
@@ -390,8 +390,9 @@ class ModelOutput(OrderedDict):
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields
             if first_field_iterator:
-                # reset first field to None
+                # reset first field to None and remove it from the internal dictionary
                 setattr(self, class_fields[0].name, None)
+                super().__delitem__(class_fields[0].name)
                 for idx, element in enumerate(iterator):
                     if not isinstance(element, (list, tuple)) or len(element) != 2 or not isinstance(element[0], str):
                         if idx == 0:
@@ -434,7 +435,8 @@ class ModelOutput(OrderedDict):
             return self.to_tuple()[k]
 
     def __setattr__(self, name, value):
-        if name in self.keys() and value is not None:
+        field_names = {field.name for field in fields(self)}
+        if name in field_names and value is not None:
             # Don't call self.__setitem__ to avoid recursion errors
             super().__setitem__(name, value)
         super().__setattr__(name, value)
@@ -468,7 +470,7 @@ if _is_torch_available:
     def _model_output_unflatten(
         values: Iterable[Any],
         context: _torch_pytree.Context,
-        output_type=None,
+        output_type: type[ModelOutput] | None = None,
     ) -> ModelOutput:
         return output_type(**dict(zip(context, values)))
 

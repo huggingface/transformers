@@ -21,14 +21,12 @@ import torch.nn as nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...audio_utils import mel_filter_bank
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...models.lasr.feature_extraction_lasr import LasrFeatureExtractor
 from ...models.llama.modeling_llama import LlamaRotaryEmbedding
 from ...models.mistral.modeling_mistral import (
     MistralAttention,
@@ -50,63 +48,6 @@ from .configuration_voxtral_realtime import VoxtralRealtimeEncoderConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-class VoxtralRealtimeFeatureExtractor(LasrFeatureExtractor):
-    def __init__(
-        self,
-        feature_size=128,
-        sampling_rate=16000,
-        hop_length=160,
-        n_fft=400,
-        win_length=400,
-        padding_value=0.0,
-        global_log_mel_max=1.5,
-        **kwargs,
-    ):
-        super().__init__(
-            feature_size=feature_size,
-            sampling_rate=sampling_rate,
-            hop_length=hop_length,
-            n_fft=n_fft,
-            win_length=win_length,
-            padding_value=padding_value,
-            **kwargs,
-        )
-        self.mel_filters = mel_filter_bank(
-            num_frequency_bins=1 + n_fft // 2,
-            num_mel_filters=feature_size,
-            min_frequency=0.0,
-            max_frequency=8000.0,
-            sampling_rate=sampling_rate,
-            norm="slaney",
-            mel_scale="slaney",
-        )
-        self.global_log_mel_max = global_log_mel_max
-
-    def _torch_extract_fbank_features(self, waveform, device: str = "cpu", center: bool = True):
-        window = torch.hann_window(self.n_fft, device=device)
-        stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, return_complex=True, center=center)
-        magnitudes = stft[..., :-1].abs() ** 2
-
-        mel_filters = torch.from_numpy(self.mel_filters).to(device, torch.float32)
-        mel_spec = mel_filters.T @ magnitudes
-
-        log_spec = torch.clamp(mel_spec, min=1e-10).log10()
-        if self.global_log_mel_max is not None:
-            log_spec_max = torch.tensor(
-                self.global_log_mel_max,
-                device=log_spec.device,
-                dtype=log_spec.dtype,
-            )
-        else:
-            log_spec_max = log_spec.max()
-
-        log_spec = torch.maximum(log_spec, log_spec_max - 8.0)
-        log_spec = (log_spec + 4.0) / 4.0
-        if device != "cpu":
-            log_spec = log_spec.detach().cpu()
-        return log_spec
 
 
 class VoxtralRealtimeConv1dCacheLayer:
@@ -946,6 +887,5 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralForConditionalGeneration, G
 __all__ = [
     "VoxtralRealtimeForConditionalGeneration",
     "VoxtralRealtimeEncoder",
-    "VoxtralRealtimeFeatureExtractor",
     "VoxtralRealtimePreTrainedModel",
 ]

@@ -974,6 +974,62 @@ class GlmImageModel(GlmImagePreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    def get_vision_position_ids(
+        self,
+        start_position: int,
+        grid_thw: list[int, int, int] | torch.Tensor,
+        temp_merge_size: int = 1,
+        spatial_merge_size: int = 1,
+        time_interval: int = 1,
+        device: str | torch.device | None = None,
+    ):
+        """
+        Compute 3D positional indices for vision tokens derived from a single image or video input.
+
+        The positions are generated from the input grid defined by temporal (T), height (H), and
+        width (W) dimensions. Temporal and spatial dimensions can be downscaled according to the
+        merge sizes used in the vision backbone. The resulting positions are offset by `start_position`.
+
+        Args:
+            start_position (`int`):
+                Offset added to all computed positional indices.
+            grid_thw (`Sequence[int]` or `torch.Tensor` of shape `(3,)`):
+                The (T, H, W) grid representing the feature layout of the current image or video after patch embedding.
+            temp_merge_size (`int`, *optional*):
+                Factor by which the temporal dimension is reduced in the backbone. The temporal grid size is divided
+                by this value. Defaults to 1.
+            spatial_merge_size (`int`, *optional*):
+                Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
+                by this value. Defaults to 1.
+            time_interval (`int`, *optional*):
+                Spacing factor applied between consecutive temporal position indices.Defaults to 1.
+            device (`str` or `torch.device`, *optional*):
+                Device on which the resulting tensor is allocated. If `None`, uses the current default device.
+
+        Returns:
+            torch.LongTensor of shape (3, sequence_length):
+                Positional indices for temporal, height, and width dimensions,
+                flattened into sequence form and offset by `start_position`.
+        """
+        llm_grid_t, llm_grid_h, llm_grid_w = (
+            grid_thw[0].item() // temp_merge_size,
+            grid_thw[1].item() // spatial_merge_size,
+            grid_thw[2].item() // spatial_merge_size,
+        )
+
+        image_seq_length = llm_grid_h * llm_grid_w * llm_grid_t
+        position_width = torch.arange(start_position, start_position + llm_grid_w, device=device).repeat(
+            llm_grid_h * llm_grid_t
+        )
+        position_height = torch.arange(start_position, start_position + llm_grid_h, device=device).repeat_interleave(
+            llm_grid_w * llm_grid_t
+        )
+        position_temporal = torch.full((image_seq_length,), start_position, device=device, dtype=torch.long)
+        position_temporal = position_temporal * time_interval
+        vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
+
+        return vision_position_ids
+
     def get_rope_index(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1050,9 +1106,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
             for img_idx, (start, end) in enumerate(zip(image_start_positions, image_end_positions)):
                 if curr_grids is None or img_idx >= len(curr_grids):
                     break
-                grid = curr_grids[img_idx]
-                # grid format is [temporal, height, width]
-                _, height, width = grid.tolist()
 
                 # Text tokens before this image
                 llm_pos_length = start - prev_image_end
@@ -1063,14 +1116,10 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 # For an image with height H and width W:
                 # - position_width cycles [0, 1, ..., W-1] for each row, repeated H times
                 # - position_height stays constant per row, [0]*W, [1]*W, ..., [H-1]*W
-                image_seq_length = height * width
-                position_width = torch.arange(current_pos, current_pos + width, device=device).repeat(height)
-                position_height = torch.arange(current_pos, current_pos + height, device=device).repeat_interleave(
-                    width
+                vision_position_ids = self.get_vision_position_ids(
+                    start_position=current_pos, grid_thw=curr_grids[img_idx], device=device
                 )
-                position_temporal = torch.full((image_seq_length,), current_pos, device=device, dtype=torch.long)
-                vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
-                current_pos += max(height, width)
+                current_pos += max(curr_grids[img_idx][1], curr_grids[img_idx][2])
 
                 prev_image_end = end
                 curr_position_ids.append(torch.cat([llm_position_ids, vision_position_ids], dim=-1))

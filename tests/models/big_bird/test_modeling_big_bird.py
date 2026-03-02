@@ -431,7 +431,6 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         {
             "feature-extraction": BigBirdModel,
             "fill-mask": BigBirdForMaskedLM,
-            "question-answering": BigBirdForQuestionAnswering,
             "text-classification": BigBirdForSequenceClassification,
             "text-generation": BigBirdForCausalLM,
             "token-classification": BigBirdForTokenClassification,

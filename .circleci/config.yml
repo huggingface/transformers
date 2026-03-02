@@ -156,6 +156,7 @@ jobs:
                   path: ~/transformers/installed.txt
             - run: ruff check examples tests src utils scripts benchmark benchmark_v2 setup.py conftest.py
             - run: ruff format --check examples tests src utils scripts benchmark benchmark_v2 setup.py conftest.py
+            - run: ty check src/transformers/utils/*.py --force-exclude --exclude '**/*_pb2*.py'
             - run: python utils/custom_init_isort.py --check_only
             - run: python utils/sort_auto_mappings.py --check_only
 
