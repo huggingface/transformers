@@ -75,7 +75,7 @@ class DeepseekVLHybridConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 100015
-    tie_word_embeddings: bool | None = True
+    tie_word_embeddings: bool = True
 
     high_res_vision_config: dict | PreTrainedConfig | None = None
 

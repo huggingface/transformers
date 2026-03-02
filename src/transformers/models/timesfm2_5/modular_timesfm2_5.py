@@ -119,74 +119,26 @@ class TimesFm2_5Config(TimesFmConfig):
     ```
     """
 
-    model_type = "timesfm2_5"
+    context_length: int = 16384
+    num_key_value_heads: int = 16
+    num_hidden_layers: int = 20
+    attention_bias: bool = False
+    output_quantile_len: int = 1024
+    decode_index: int = 5
+    use_bias: bool = False
+    activation: str = "swish"
+    use_continuous_quantile_head: bool = True
+    force_flip_invariance: bool = True
+    infer_is_positive: bool = True
+    max_position_embeddings: int = 16384
+    rope_parameters: RopeParameters | dict | None = None
 
-    def __init__(
-        self,
-        patch_length: int = 32,
-        context_length: int = 16384,
-        horizon_length: int = 128,
-        quantiles: list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        hidden_size: int = 1280,
-        intermediate_size: int = 1280,
-        head_dim: int = 80,
-        num_attention_heads: int = 16,
-        num_key_value_heads: int = 16,
-        num_hidden_layers: int = 20,
-        rms_norm_eps: float = 1e-6,
-        attention_dropout: float = 0.0,
-        attention_bias: bool = False,
-        initializer_range: float = 0.02,
-        output_quantile_len: int = 1024,
-        decode_index: int = 5,
-        use_bias: bool = False,
-        activation: str = "swish",
-        use_continuous_quantile_head: bool = True,
-        force_flip_invariance: bool = True,
-        infer_is_positive: bool = True,
-        max_position_embeddings: int = 16384,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        **kwargs,
-    ):
-        self.num_key_value_heads = num_key_value_heads
-        self.attention_bias = attention_bias
-        self.output_quantile_len = output_quantile_len
-        self.decode_index = decode_index
-        self.use_bias = use_bias
-        self.activation = activation
-        self.use_continuous_quantile_head = use_continuous_quantile_head
-        self.force_flip_invariance = force_flip_invariance
-        self.infer_is_positive = infer_is_positive
-        self.max_position_embeddings = max_position_embeddings
-        self.rope_parameters = rope_parameters
-
-        super().__init__(
-            patch_length=patch_length,
-            context_length=context_length,
-            horizon_length=horizon_length,
-            quantiles=quantiles,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            head_dim=head_dim,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            rms_norm_eps=rms_norm_eps,
-            attention_dropout=attention_dropout,
-            attention_bias=attention_bias,
-            initializer_range=initializer_range,
-            num_hidden_layers=num_hidden_layers,
-            use_positional_embedding=False,
-            **kwargs,
-        )
-        # Delete inherited attributes that TimesFM 2.5 does not use
-        del self.freq_size
-        del self.pad_val
-        del self.tolerance
-        del self.normalize_inputs
-        del self.use_positional_embedding
-        del self.use_rotary_embeddings
-        del self.min_timescale
-        del self.max_timescale
+    freq_size = AttributeError()
+    pad_val = AttributeError()
+    tolerance = AttributeError()
+    use_positional_embedding = AttributeError()
+    min_timescale = AttributeError()
+    max_timescale = AttributeError()
 
 
 @dataclass
