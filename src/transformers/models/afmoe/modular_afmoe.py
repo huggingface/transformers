@@ -359,11 +359,12 @@ class AfmoePreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class AfmoeModel(AfmoePreTrainedModel):
-    """
+    r"""
+
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`AfmoeDecoderLayer`]
 
     Args:
-        config: AfmoeConfig
+        config (`AfmoeConfig`): <fill_docstring>
     """
 
     def __init__(self, config: AfmoeConfig):

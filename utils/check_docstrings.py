@@ -82,10 +82,20 @@ class DecoratedItem:
     init_def_line: int | None = None  # 1-based line number of __init__ def (if has_init)
     is_model_output: bool = False  # Whether the class inherits from ModelOutput
     is_processor: bool = False  # Whether the class inherits from ProcessorMixin
+    is_config: bool = False
+
+
+@dataclass
+class Parameter:
+    name: str
+    kind: inspect._ParameterKind
+    annotation: str | None
+    default: str | None
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
 PATH_TO_TRANSFORMERS = Path("src").resolve() / "transformers"
+PATH_TO_MODELS = os.path.join(PATH_TO_TRANSFORMERS, "models")
 
 # This is to make sure the transformers module imported is the one in the repo.
 transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
@@ -271,7 +281,7 @@ OBJECTS_TO_IGNORE = {
     "GPTSanJapaneseConfig",
     "GitConfig",
     "GitVisionConfig",
-    "Glm4vVisionConfig",
+    # "Glm4vVisionConfig",
     "Glm4vMoeVisionConfig",
     "GraphormerConfig",
     "GroupViTTextConfig",
@@ -650,7 +660,7 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
     Returns:
        `str`: The description updated with the new default value.
     """
-    # Lots of docstrings have `optional` or **opational** instead of *optional* so we do this fix here.
+    # Lots of docstrings have `optional` or **optional** instead of *optional* so we do this fix here.
     description = description.replace("`optional`", OPTIONAL_KEYWORD)
     description = description.replace("**optional**", OPTIONAL_KEYWORD)
     if default is inspect._empty:
@@ -747,6 +757,80 @@ def find_source_file(obj: Any) -> Path:
     return obj_file.with_suffix(".py")
 
 
+def extract_class_init_parameters(class_node: ast.ClassDef) -> dict[str, Parameter]:
+    # find __init__ method
+    init_node = None
+    for node in class_node.body:
+        if isinstance(node, ast.FunctionDef) and node.name == "__init__":
+            init_node = node
+            break
+
+    if init_node is None:
+        return {}  # no `__init__` parameters
+
+    args = init_node.args
+    parameters: dict[str, Parameter] = {}
+
+    # positional-only (Python 3.8+)
+    for arg in getattr(args, "posonlyargs", []):
+        parameters[arg.arg] = Parameter(
+            name=arg.arg,
+            kind=inspect._ParameterKind.POSITIONAL_ONLY,
+            annotation=ast.unparse(arg.annotation) if arg.annotation else inspect._empty,
+            default=None,
+        )
+
+    # positional-or-keyword
+    pos_args = args.args[1:]  # skip 'self'
+    defaults = args.defaults
+    offset = len(pos_args) - len(defaults)
+    for i, arg in enumerate(pos_args):
+        default = inspect._empty
+        if i >= offset:
+            default = ast.unparse(defaults[i - offset])
+
+            try:
+                default = eval(default)
+            except NameError:
+                pass
+
+        parameters[arg.arg] = Parameter(
+            name=arg.arg,
+            kind=inspect._ParameterKind.POSITIONAL_OR_KEYWORD,
+            annotation=ast.unparse(arg.annotation) if arg.annotation else inspect._empty,
+            default=default,
+        )
+
+    # *args
+    if args.vararg:
+        parameters[args.vararg.arg] = Parameter(
+            name=args.vararg.arg,
+            kind=inspect._ParameterKind.VAR_POSITIONAL,
+            annotation=ast.unparse(args.vararg.annotation) if args.vararg.annotation else inspect._empty,
+            default=None,
+        )
+
+    # keyword-only
+    for arg, default in zip(args.kwonlyargs, args.kw_defaults):
+        parameters[arg.arg] = Parameter(
+            name=arg.arg,
+            kind=inspect._ParameterKind.KEYWORD_ONLY,
+            annotation=ast.unparse(arg.annotation) if arg.annotation else inspect._empty,
+            default=eval(ast.unparse(default)) if default else None,
+        )
+
+    # **kwargs
+    if args.kwarg:
+        parameters[args.kwarg.arg] = Parameter(
+            name=args.kwarg.arg,
+            kind=inspect._ParameterKind.VAR_KEYWORD,
+            annotation=ast.unparse(args.kwarg.annotation) if args.kwarg.annotation else inspect._empty,
+            default=None,
+        )
+
+    return parameters
+
+
 def match_docstring_with_signature(obj: Any) -> tuple[str, str] | None:
     """
     Matches the docstring of an object with its signature.
@@ -764,10 +848,12 @@ def match_docstring_with_signature(obj: Any) -> tuple[str, str] | None:
         return
 
     # Read the docstring in the source code to see if there is a special command to ignore this object.
-    try:
-        source, _ = inspect.getsourcelines(obj)
-    except OSError:
-        source = []
+    source = []
+    if not isinstance(obj, ast.ClassDef):
+        try:
+            source, _ = inspect.getsourcelines(obj)
+        except OSError:
+            pass
 
     # Find the line where the docstring starts
     idx = 0
@@ -787,12 +873,16 @@ def match_docstring_with_signature(obj: Any) -> tuple[str, str] | None:
 
     # Read the signature. Skip on `TypedDict` objects for now. Inspect cannot
     # parse their signature ("no signature found for builtin type <class 'dict'>")
-    if issubclass(obj, dict) and hasattr(obj, "__annotations__"):
+    if not isinstance(obj, ast.ClassDef) and issubclass(obj, dict) and hasattr(obj, "__annotations__"):
         return
 
-    signature = inspect.signature(obj).parameters
+    if isinstance(obj, ast.ClassDef):
+        signature = extract_class_init_parameters(obj)
+        obj_doc_lines = ast.get_docstring(obj).split("\n")
+    else:
+        signature = inspect.signature(obj).parameters
+        obj_doc_lines = obj.__doc__.split("\n")
 
-    obj_doc_lines = obj.__doc__.split("\n")
     # Get to the line where we start documenting arguments
     idx = 0
     while idx < len(obj_doc_lines) and _re_args.search(obj_doc_lines[idx]) is None:
@@ -873,6 +963,82 @@ def match_docstring_with_signature(obj: Any) -> tuple[str, str] | None:
     return old_doc_arg, new_doc_arg
 
 
+def fix_docstring_node(
+    class_node: ast.ClassDef,
+    old_doc_args: str,
+    new_doc_args: str,
+    file_path: str,
+) -> None:
+    """
+    Fixes the docstring of a class AST node by replacing its arguments section.
+
+    Args:
+        class_node (ast.ClassDef): AST node of the class
+        old_doc_args (str): old args section of the docstring
+        new_doc_args (str): new args section to replace
+    """
+    # Find the docstring Expr node (first statement in the body if it's a string)
+    first = class_node.body[0]
+
+    docstring: str = first.value.value
+    lines = docstring.splitlines()
+
+    # Try to locate the args section
+    try:
+        idx = next(i for i, line in enumerate(lines) if line.strip().startswith("Args:"))
+    except StopIteration:
+        # No Args section, nothing to fix
+        return
+
+    # Find end of args section
+    indent = len(lines[idx]) - len(lines[idx].lstrip())
+    start_idx = idx + 1
+    end_idx = start_idx
+    while end_idx < len(lines):
+        line = lines[end_idx]
+        stripped = line.strip()
+        if stripped == "":
+            end_idx += 1
+            continue
+        if len(line) - len(line.lstrip()) <= indent:
+            break
+        end_idx += 1
+
+    # Replace args section
+    prev_line_indentation = find_indent(lines[start_idx - 1])
+    new_doc_args = "\n".join([f"{' ' * prev_line_indentation}{line}" for line in new_doc_args.split("\n")])
+
+    new_lines = lines[:start_idx] + [new_doc_args] + lines[end_idx:]
+    new_docstring = "\n".join(new_lines)
+    closing_line = f'{" " * prev_line_indentation}"""'
+    opening_line = f'{" " * prev_line_indentation}r"""'
+    new_docstring = f"{opening_line}\n{new_docstring}\n{closing_line}"
+
+    # Update AST node
+    first.value.value = new_docstring
+
+    # read file
+    with open(file_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    # AST line numbers are 1-indexed
+    start_line = first.lineno - 1
+    end_line = first.end_lineno
+
+    # prepare new docstring lines (with quotes)
+    # ast.unparse ensures proper quoting and escapes
+    # new_doc_lines = ast.unparse(first.value).splitlines()
+    # add \n manually because splitlines() strips them
+    # new_doc_lines = [line + "\n" for line in new_doc_lines]
+
+    # replace old docstring lines in file
+    lines[start_line:end_line] = new_docstring
+
+    # write back
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+
 def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
     """
     Fixes the docstring of an object by replacing its arguments documentation by the one matched with the signature.
@@ -937,10 +1103,6 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
 
     # Replace content
     lines = content.split("\n")
-    prev_line_indentation = find_indent(lines[line_number + start_idx - 2])
-    # Now increase the indentation of every line in new_doc_args by prev_line_indentation
-    new_doc_args = "\n".join([f"{' ' * prev_line_indentation}{line}" for line in new_doc_args.split("\n")])
-
     lines = lines[: line_number + start_idx - 1] + [new_doc_args] + lines[line_number + idx - 1 :]
 
     print(f"Fixing the docstring of {obj.__name__} in {obj_file}.")
@@ -1336,6 +1498,7 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
         init_def_line = None
         is_model_output = False
         is_processor = False
+        is_config = False
 
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             # For functions/methods, extract args directly
@@ -1352,6 +1515,8 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
                         is_model_output = True
                     elif "ProcessorMixin" in base.id or "Processor" in base.id:
                         is_processor = True
+                    elif "PreTrainedConfig" in base.id:
+                        is_config = True
             # Look for __init__ method in the class body
             for class_item in node.body:
                 if isinstance(class_item, ast.FunctionDef) and class_item.name == "__init__":
@@ -1374,6 +1539,7 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
                 init_def_line=init_def_line,
                 is_model_output=is_model_output,
                 is_processor=is_processor,
+                is_config=is_config,
             )
         )
 
@@ -1919,6 +2085,122 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
         )
 
 
+def check_modular_docstrings(overwrite: bool = False, check_all: bool = False):
+    """
+    Check docstrings of all public objects that are callables and are documented.
+    Check only objects in modular files that have no dependencies on other classes.
+    By default, only checks the diff.
+
+    Args:
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether to fix inconsistencies or not.
+        check_all (`bool`, *optional*, defaults to `False`):
+            Whether to check all files.
+    """
+
+    failures = []
+    hard_failures = []
+    to_clean = []
+
+    modular_files = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
+    for modular_file_path in modular_files:
+        with open(modular_file_path, "r") as f:
+            content = f.read()
+        modular_tree = ast.parse(content)
+
+        all_file_types = (
+            "modeling",
+            "configuration",
+            "tokenization",
+            "processing",
+            "image_processing.*_fast",
+            "image_processing",
+            "video_processing",
+            "feature_extraction",
+        )
+        all_file_types = "|".join(all_file_types)
+        dependency_imports = []
+        for node in modular_tree.body:
+            if isinstance(node, ast.ImportFrom):
+                module = node.module
+                if module is not None:
+                    for alias in node.names:
+                        if re.search(rf"(\w+)\.({all_file_types})_\1", module):
+                            dependency_imports.append(alias.name)
+
+        for node in modular_tree.body:
+            if isinstance(node, ast.ClassDef):
+                if any(base.id in dependency_imports for base in node.bases if isinstance(base, ast.Name)):
+                    continue
+
+                # Skip objects that are private or not documented.
+                if (
+                    any(node.name.startswith(prefix) for prefix in OBJECT_TO_IGNORE_PREFIXES)
+                    or ignore_undocumented(node.name)
+                    or node.name in OBJECTS_TO_IGNORE
+                ):
+                    continue
+
+                if node.name not in dir(transformers):
+                    continue
+
+                old_docstring = ast.get_docstring(node)
+
+                if old_docstring is None:
+                    continue
+
+                # Check docstring
+                result = match_docstring_with_signature(node)
+                try:
+                    result = match_docstring_with_signature(node)
+                    if result is not None:
+                        old_doc, new_doc = result
+                    else:
+                        old_doc, new_doc = None, None
+                except Exception as e:
+                    print(e)
+                    hard_failures.append(node.name)
+                    continue
+
+                if old_doc != new_doc:
+                    if overwrite:
+                        fix_docstring_node(node, old_doc, new_doc, modular_file_path)
+                    else:
+                        failures.append(node.name)
+                elif (
+                    not overwrite
+                    and new_doc is not None
+                    and ("<fill_type>" in new_doc or "<fill_docstring>" in new_doc)
+                ):
+                    to_clean.append(node.name)
+
+    # Deal with errors
+    error_message = ""
+    if len(hard_failures) > 0:
+        error_message += (
+            "The argument part of the docstrings of the following objects could not be processed, check they are "
+            "properly formatted."
+        )
+        error_message += "\n" + "\n".join([f"- {name}" for name in hard_failures])
+    if len(failures) > 0:
+        error_message += (
+            "The following objects docstrings do not match their signature. Run `make fix-repo` to fix this. "
+            "In some cases, this error may be raised incorrectly by the docstring checker. If you think this is the "
+            "case, you can manually check the docstrings and then add the object name to `OBJECTS_TO_IGNORE` in "
+            "`utils/check_docstrings.py`."
+        )
+        error_message += "\n" + "\n".join([f"- {name}" for name in failures])
+    if len(to_clean) > 0:
+        error_message += (
+            "The following objects docstrings contain templates you need to fix: search for `<fill_type>` or "
+            "`<fill_docstring>`."
+        )
+        error_message += "\n" + "\n".join([f"- {name}" for name in to_clean])
+    if len(error_message) > 0:
+        error_message = "There was at least one problem when checking docstrings of public objects.\n" + error_message
+        raise ValueError(error_message)
+
+
 def check_docstrings(overwrite: bool = False, check_all: bool = False):
     """
     Check docstrings of all public objects that are callables and are documented. By default, only checks the diff.
@@ -2027,4 +2309,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     check_auto_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
+    check_modular_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
     check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
