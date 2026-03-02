@@ -786,6 +786,12 @@ class MlaKvAProjParallel(TensorParallelLayer):
     """
 
     def _prepare_output_fn(self, mod, output, device_mesh):
+        if not hasattr(mod.config, "qk_rope_head_dim"):
+            raise AttributeError(
+                f"Config for {type(mod).__name__} does not have `qk_rope_head_dim`. "
+                "MlaKvAProjParallel requires `qk_rope_head_dim` to be defined in the model config. "
+                "Please add it to the model's config or update the TP plan mapping."
+            )
         rope_dim = mod.config.qk_rope_head_dim
         pass_output, rope_output = output.split([output.shape[-1] - rope_dim, rope_dim], dim=-1)
         rope_output = all_reduce_backward(rope_output, device_mesh)
