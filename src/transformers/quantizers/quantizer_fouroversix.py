@@ -39,9 +39,12 @@ class FourOverSixHfQuantizer(HfQuantizer):
         param_name: str,
         param: "torch.Tensor",
     ) -> float:
-        if self.param_needs_quantization(model, param_name):
-            # 4-bit quantization
-            return 0.5
+        from fouroversix import QuantizedModule
+
+        module, tensor_name = get_module_from_name(model, param_name)
+
+        if QuantizedModule.is_quantized_module_type(type(module)):
+            return 1 / module.get_packing_factor(tensor_name)
 
         return super().param_element_size(model, param_name, param)
 
@@ -57,14 +60,8 @@ class FourOverSixHfQuantizer(HfQuantizer):
 
         return (
             QuantizedModule.is_quantized_module_type(type(module))
-            and hasattr(module, "parameters_to_quantize")
             and tensor_name in module.parameters_to_quantize
         )
-
-    def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
-        # need more space for buffers that are created during quantization
-        max_memory = {key: val * 0.9 for key, val in max_memory.items()}
-        return max_memory
 
     def _process_model_before_weight_loading(
         self,
