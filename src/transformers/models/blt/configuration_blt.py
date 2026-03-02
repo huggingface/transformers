@@ -28,7 +28,7 @@ class BltLocalEncoderConfig(PreTrainedConfig):
         Number of cross-attention heads used in the model.
     cross_attn_all_layers (`bool`, *optional*, defaults to `True`):
         Whether all attention layers have cross attention.
-    hidden_size_global (`int`, *int*, defaults to 2046):
+    hidden_size_global (`int`, *int*, defaults to 2048):
         Hidden size of the global transformer layer.
     """
 
@@ -83,6 +83,8 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         Number of cross-attention heads used in the model.
     cross_attn_all_layers (`bool`, *optional*, defaults to `True`):
         Whether all attention layers have cross attention.
+    hidden_size_global (`int`, *int*, defaults to 2048):
+        Hidden size of the global transformer layer.
     """
 
     model_type = "blt_local_decoder"

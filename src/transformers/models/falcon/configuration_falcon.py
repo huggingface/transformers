@@ -24,6 +24,9 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="tiiuae/falcon-7b")
 class FalconConfig(PreTrainedConfig):
     r"""
+    num_ln_in_parallel_attn (`int`, *optional*):
+        Set to 2 if separate layer norms are to be used for the MLP and the attention output when using parallel
+        attention, otherwise, 1.
     alibi (`bool`, *optional*, defaults to `False`):
         Whether to use ALiBi positional biases during self-attention.
     new_decoder_architecture (`bool`, *optional*, defaults to `False`):

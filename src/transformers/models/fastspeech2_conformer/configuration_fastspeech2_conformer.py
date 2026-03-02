@@ -23,6 +23,10 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="espnet/fastspeech2_conformer")
 class FastSpeech2ConformerConfig(PreTrainedConfig):
     r"""
+    encoder_num_attention_heads (`int`, *optional*, defaults to 2):
+        The number of attention heads in the encoder.
+    encoder_linear_units (`int`, *optional*, defaults to 1536):
+        The number of units in the linear layer of the encoder.
     decoder_linear_units (`int`, *optional*, defaults to 1536):
         The number of units in the linear layer of the decoder.
     speech_decoder_postnet_layers (`int`, *optional*, defaults to 5):

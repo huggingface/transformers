@@ -90,6 +90,10 @@ class GraniteSpeechConfig(PreTrainedConfig):
         be activate when processing audio inputs.
     downsample_rate (`int`, *optional*, defaults to 5):
         Downsample rate for the audio feature extractor.
+    projector_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Blip2QFormerConfig`):
+        The config object or dictionary of the audio projector.
+    window_size (`int`, *optional*, defaults to 15):
+        Window size for the audio feature projector.
 
     Example:
 

@@ -23,6 +23,11 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="studio-ousia/luke-base")
 class LukeConfig(PreTrainedConfig):
     r"""
+    entity_vocab_size (`int`, *optional*, defaults to 500000):
+        Entity vocabulary size of the LUKE model. Defines the number of different entities that can be represented
+        by the `entity_ids` passed when calling [`LukeModel`].
+    entity_emb_size (`int`, *optional*, defaults to 256):
+        The number of dimensions of the entity embedding.
     use_entity_aware_attention (`bool`, *optional*, defaults to `True`):
         Whether or not the model should use the entity-aware self-attention mechanism proposed in [LUKE: Deep
         Contextualized Entity Representations with Entity-aware Self-attention (Yamada et

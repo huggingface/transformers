@@ -27,6 +27,15 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="descript/dac_16khz")
 class DacConfig(PreTrainedConfig):
     r"""
+    downsampling_ratios (`list[int]`, *optional*, defaults to `[2, 4, 8, 8]`):
+        Ratios for downsampling in the encoder. These are used in reverse order for upsampling in the decoder.
+    quantizer_dropout (`bool`, *optional*, defaults to 0):
+        Whether to apply dropout to the quantizer.
+    commitment_loss_weight (float, *optional*, defaults to 0.25):
+        Weight of the commitment loss term in the VQVAE loss function.
+    codebook_loss_weight (float, *optional*, defaults to 1.0):
+        Weight of the codebook loss term in the VQVAE loss function.
+
     Example:
 
     ```python

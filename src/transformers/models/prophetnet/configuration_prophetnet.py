@@ -25,13 +25,13 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="microsoft/prophetnet-large-uncased")
 class ProphetNetConfig(PreTrainedConfig):
     r"""
-    ngram (`int`, *optional*, defaults to 2)
+    ngram (`int`, *optional*, defaults to 2):
         Number of future tokens to predict. Set to 1 to be same as traditional Language model to predict next first
         token.
-    num_buckets (`int`, *optional*, defaults to 32)
+    num_buckets (`int`, *optional*, defaults to 32):
         The number of buckets to use for each attention layer. This is for relative position calculation. See the
         [T5 paper](see https://huggingface.co/papers/1910.10683) for more details.
-    relative_max_distance (`int`, *optional*, defaults to 128)
+    relative_max_distance (`int`, *optional*, defaults to 128):
         Relative distances greater than this number will be put into the last same bucket. This is for relative
         position calculation. See the [T5 paper](see https://huggingface.co/papers/1910.10683) for more details.
     disable_ngram_loss (`bool`, *optional*, defaults to `False`):

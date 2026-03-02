@@ -37,17 +37,17 @@ class RagConfig(PreTrainedConfig):
     dataset (`str`, *optional*, defaults to `"wiki_dpr"`):
         A dataset identifier of the indexed dataset in HuggingFace Datasets (list all available datasets and ids
         using `datasets.list_datasets()`).
-    dataset_split (`str`, *optional*, defaults to `"train"`)
+    dataset_split (`str`, *optional*, defaults to `"train"`):
         Which split of the `dataset` to load.
-    index_name (`str`, *optional*, defaults to `"compressed"`)
+    index_name (`str`, *optional*, defaults to `"compressed"`):
         The index name of the index associated with the `dataset`. One can choose between `"legacy"`, `"exact"` and
         `"compressed"`.
-    index_path (`str`, *optional*)
+    index_path (`str`, *optional*):
         The path to the serialized faiss index on disk.
     passages_path (`str`, *optional*):
         A path to text passages compatible with the faiss index. Required if using
         [`~models.rag.retrieval_rag.LegacyIndex`]
-    use_dummy_dataset (`bool`, *optional*, defaults to `False`)
+    use_dummy_dataset (`bool`, *optional*, defaults to `False`):
         Whether to load a "dummy" variant of the dataset specified by `dataset`.
     label_smoothing (`float`, *optional*, defaults to 0.0):
         Only relevant if `return_loss` is set to `True`. Controls the `epsilon` parameter value for label smoothing

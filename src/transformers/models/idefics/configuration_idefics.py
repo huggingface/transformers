@@ -106,6 +106,13 @@ class IdeficsPerceiverConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="HuggingFaceM4/idefics-9b")
 class IdeficsConfig(PreTrainedConfig):
     r"""
+    alpha_initializer (`str`, *optional*, defaults to `"zeros"`):
+        Initialization type for the alphas.
+    alphas_initializer_range (`float`, *optional*, defaults to 0.0):
+        The standard deviation of the truncated_normal_initializer for initializing the alphas in the Gated Cross
+        Attention.
+    alpha_type (`str`, *optional*, defaults to `"float"`):
+        Whether the gating alphas should be vectors or single floats.
     additional_vocab_size (`int`, *optional*, defaults to 0):
         Additional vocabulary size of the model, typically for the special "<img>" token. Additional vocab tokens
         are always trainable whereas regular vocab tokens can be frozen or not.

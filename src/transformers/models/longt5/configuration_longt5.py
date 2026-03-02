@@ -25,9 +25,9 @@ class LongT5Config(PreTrainedConfig):
     r"""
     d_ff (`int`, *optional*, defaults to 2048):
         Size of the intermediate feed forward layer in each `LongT5Block`.
-    local_radius (`int`, *optional*, defaults to 127)
+    local_radius (`int`, *optional*, defaults to 127):
         Number of tokens to the left/right for each token to locally self-attend in a local attention mechanism.
-    global_block_size (`int`, *optional*, defaults to 16)
+    global_block_size (`int`, *optional*, defaults to 16):
         Length of blocks an input sequence is divided into for a global token representation. Used only for
         `encoder_attention_type = "transient-global"`.
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):

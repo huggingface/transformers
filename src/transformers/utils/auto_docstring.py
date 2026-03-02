@@ -771,7 +771,7 @@ class ConfigArgs:
 
     activation_function = {
         "description": """
-    The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+    The non-linear activation function (function or string). If string, `"gelu"`,
     `"relu"`, `"silu"` and `"gelu_new"` are supported.
     """,
     }
@@ -1276,7 +1276,7 @@ class ConfigArgs:
 
     qk_layernorm = {
         "description": """
-    Sequence length of one video embedding.
+    Whether to use query-key normalization in the attention.
     """,
     }
 
@@ -1522,30 +1522,331 @@ class ConfigArgs:
     """,
     }
 
+    expand_ratio = {
+        "description": """
+    Expand ratio to set the output dimensions for the expansion
+    """,
+    }
+
+    conv_kernel_size = {
+        "description": """
+    The size of the convolutional kernel.
+    """,
+    }
+
+    output_stride = {
+        "description": """
+    The ratio between the spatial resolution of the input and output feature maps.
+    """,
+    }
+
+    depth_multiplier = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    use_absolute_position_embeddings = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    use_relative_position_bias = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    layer_scale_init_value = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    vlm_config = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    init_xavier_std = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    auxiliary_loss = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    encoder_config = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    decoder_config = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    n_inner = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    codebook_size = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    embedding_multiplier = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    logits_scaling = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    residual_multiplier = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    attention_multiplier = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    classifier_activation = {
+        "description": """
+    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    """,
+    }
+
+    num_input_channels = {
+        "description": """
+    Number of input time series channels (variates). Each channel is treated as a separate time series.
+    """,
+    }
+
+    return_dict = {
+        "description": """
+    Whether to return a `ModelOutput` (dataclass) instead of a plain tuple.
+    """,
+    }
+
+    router_z_loss_coef = {
+        "description": """
+    Coefficient for the router z-loss, which penalizes large router logits to improve training stability.
+    """,
+    }
+
+    final_logit_softcapping = {
+        "description": """
+    Soft-capping value applied to the final logits before computing the probability distribution. Logits are
+    scaled by `tanh(logit / cap) * cap`.
+    """,
+    }
+
+    cross_attention_hidden_size = {
+        "description": """
+    Hidden size of the encoder outputs projected into the cross-attention key/value space of the decoder. Used
+    when the encoder and decoder have different hidden sizes.
+    """,
+    }
+
+    input_dim = {
+        "description": """
+    Dimensionality of the input acoustic features (e.g., number of mel-filterbank channels).
+    """,
+    }
+
+    use_auxiliary_loss = {
+        "description": """
+    Whether to calculate loss using intermediate predictions from transformer decoder.
+    """,
+    }
+
+    batch_norm_eps = {
+        "description": """
+    The epsilon used by the batch normalization layers.
+    """,
+    }
+
+    max_window_layers = {
+        "description": """
+    The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
+    additional layer afterwards will use SWA (Sliding Window Attention).
+    """,
+    }
+
+    ctc_loss_reduction = {
+        "description": """
+    Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training.
+    """,
+    }
+
+    mask_feature_prob = {
+        "description": """
+    Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
+        masking procedure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
+        the axis. If reasoning from the probability of each feature vector to be chosen as the start of the vector
+        span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
+        may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
+        True`.
+    """,
+    }
+
+    # ─────────────────────────────────────────────
+    # Qwen2VLVisionConfig / Qwen2VLConfig
+    # ─────────────────────────────────────────────
+
+    depth = {
+        "description": """
+    Number of Transformer layers in the vision encoder.
+    """,
+    }
+
+    temporal_patch_size = {
+        "description": """
+    Temporal patch size used in the 3D patch embedding for video inputs.
+    """,
+    }
+
+    spatial_merge_size = {
+        "description": """
+        The size of the spatial merge window used to reduce the number of visual tokens by merging neighboring patches.
+    """,
+    }
+
+    vision_start_token_id = {
+        "description": """
+    Token ID that marks the start of a visual segment in the multimodal input sequence.
+    """,
+    }
+
+    vision_end_token_id = {
+        "description": """
+    Token ID that marks the end of a visual segment in the multimodal input sequence.
+    """,
+    }
+
+    # ─────────────────────────────────────────────
+    # Mamba2Config / MambaConfig
+    # ─────────────────────────────────────────────
+
+    state_size = {
+        "description": """
+    Size of the SSM state (latent state dimension) in the Mamba layers.
+    """,
+    }
+
+    time_step_rank = {
+        "description": """
+    Rank of the delta (time step) projection. Can be `"auto"` to set it automatically.
+    """,
+    }
+
+    time_step_floor = {
+        "description": """
+    Minimum allowed value for the discrete time step delta after softplus activation.
+    """,
+    }
+
+    time_step_scale = {
+        "description": """
+    Scale applied to the time step delta before discretization.
+    """,
+    }
+
+    time_step_init_scheme = {
+        "description": """
+    Initialization scheme for the time step delta. Can be `"random"` or `"uniform"`.
+    """,
+    }
+
+    mamba_d_ssm = {
+        "description": """
+    Inner state size of the SSM (state-space model) in the Mamba layers of FalconH1.
+    """,
+    }
+
+    mamba_norm_before_gate = {
+        "description": """
+    Whether to apply normalization before the gating mechanism in the Mamba mixer.
+    """,
+    }
+
+    mamba_rms_norm = {
+        "description": """
+    Whether to use RMS normalization in the Mamba layers (as opposed to standard LayerNorm).
+    """,
+    }
+
     layer_norm_epsilon = layer_norm_eps
+    embedding_dim = embed_dim
+    hidden_dim = hidden_size
     n_layer = num_hidden_layers
     n_head = num_attention_heads
+    attention_heads = num_attention_heads
     decoder_intermediate_size = intermediate_size
     decoder_hidden_act = hidden_act
     decoder_attention_dropout = attention_dropout
     decoder_num_attention_heads = num_attention_heads
     decoder_num_heads = num_attention_heads
     decoder_hidden_dim = hidden_size
+    decoder_hidden_size = hidden_size
     decoder_num_layers = num_hidden_layers
     decoder_dropout = dropout
     encoder_hidden_dim = hidden_size
+    encoder_hidden_size = hidden_size
     encoder_num_layers = num_hidden_layers
     encoder_num_heads = num_attention_heads
     encoder_dropout = dropout
     attn_dropout = attention_dropout
     hidden_activation = hidden_act
     rms_norm = rms_norm_eps
+    norm_eps = layer_norm_eps
     activation = hidden_act
     d_head = head_dim
     d_inner = intermediate_size
     initializer_std = init_std
     resid_dropout = resid_pdrop
     dim_head = head_dim
+    ffn_dim = intermediate_size
+    emb_pdrop = embd_pdrop
+    embed_dropout = embd_pdrop
+    audio_token_index = audio_token_id
+    layer_scale_initial_scale = layer_scale_init_value
+    num_encoder_layers = encoder_layers
+    audio_channels = num_input_channels
+    input_channels = num_input_channels
+    multi_modal_projector_bias = projector_bias
+    projector_hidden_size = projection_dim
+    kernel_size = conv_kernel_size
+    conv_kernel = conv_kernel_size
+    use_absolute_embeddings = use_absolute_position_embeddings
+    layers = num_layers
+    aux_loss_coef = router_aux_loss_coef
+    qk_layernorms = qk_layernorm
+    use_qk_norm = qk_layernorm
+    num_kv_heads = num_key_value_heads
+    text_vocab_size = vocab_size
+    embedding_dimension = embed_dim
+    n_codebooks = num_codebooks
 
 
 class ModelArgs:
@@ -2569,6 +2870,9 @@ def get_checkpoint_from_config_class(config_class):
     # source code of `config_class`
     # config_source = inspect.getsource(config_class)
     config_source = config_class.__doc__
+    if not config_source:
+        return None
+
     checkpoints = _re_checkpoint.findall(config_source)
     # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
     # For example, `('google-bert/bert-base-uncased', 'https://huggingface.co/google-bert/bert-base-uncased')`
@@ -3670,12 +3974,19 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
         - Return value documentation is automatically generated for methods that return ModelOutput subclasses.
     """
 
+    if not (obj and obj.__name__.endswith("FlaubertConfig")):
+        pass
+        # import sys
+        # sys.exit(0)
+
     def auto_docstring_decorator(obj):
         if len(obj.__qualname__.split(".")) > 1:
             return auto_method_docstring(
                 obj, custom_args=custom_args, custom_intro=custom_intro, checkpoint=checkpoint
             )
         else:
+            # if obj.__name__.endswith("Config") and obj.__name__ != "FlaubertConfig":
+            #     return obj
             return auto_class_docstring(obj, custom_args=custom_args, custom_intro=custom_intro, checkpoint=checkpoint)
 
     if obj:
