@@ -21,7 +21,7 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers import ClapFeatureExtractor
-from transformers.testing_utils import require_numba, require_torch, require_torchaudio
+from transformers.testing_utils import require_torch, require_torchaudio
 from transformers.trainer_utils import set_seed
 from transformers.utils.import_utils import is_torch_available
 
@@ -169,7 +169,6 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
 
         return [x["array"] for x in speech_samples]
 
-    @require_numba
     def test_integration_fusion_short_input(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(
@@ -292,7 +291,6 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             self.assertTrue(torch.all(input_features[0, 0] == input_features[0, 2]))
             self.assertTrue(torch.all(input_features[0, 0] == input_features[0, 3]))
 
-    @require_numba
     def test_integration_rand_trunc_short_input(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(
@@ -412,7 +410,6 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             torch.testing.assert_close(input_features[0, 0, idx_in_mel[0]], EXPECTED_VALUES[0], rtol=1e-4, atol=1e-4)
             torch.testing.assert_close(input_features[0, 0, idx_in_mel[1]], EXPECTED_VALUES[1], rtol=1e-4, atol=1e-4)
 
-    @require_numba
     def test_integration_fusion_long_input(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(
@@ -479,7 +476,6 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             self.assertEqual(input_features.shape, (1, 4, 1001, 64))
             torch.testing.assert_close(input_features[0, block_idx, MEL_BIN], EXPECTED_VALUES, rtol=1e-3, atol=1e-3)
 
-    @require_numba
     def test_integration_rand_trunc_long_input(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(

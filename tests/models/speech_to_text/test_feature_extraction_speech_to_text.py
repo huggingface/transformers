@@ -24,7 +24,6 @@ import numpy as np
 from transformers import Speech2TextFeatureExtractor
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
-    require_numba,
     require_torch,
     require_torchaudio,
 )
@@ -105,7 +104,6 @@ class Speech2TextFeatureExtractionTester:
         return speech_inputs
 
 
-@require_numba
 @require_torch
 @require_torchaudio
 class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
@@ -345,7 +343,6 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
 
 
 # exact same tests than before, except that we simulate that torchaudio is not available
-@require_numba
 @require_torch
 @unittest.mock.patch(
     "transformers.models.speech_to_text.feature_extraction_speech_to_text.is_speech_available", lambda: False

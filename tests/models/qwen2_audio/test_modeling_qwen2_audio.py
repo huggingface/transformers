@@ -29,7 +29,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
-    require_numba,
     require_torch,
     slow,
     torch_device,
@@ -203,7 +202,6 @@ class Qwen2AudioForConditionalGenerationModelTest(
 
 
 @require_torch
-@require_numba
 class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)

@@ -23,7 +23,6 @@ from datasets import load_dataset
 from transformers import Speech2TextConfig
 from transformers.testing_utils import (
     is_torch_available,
-    require_numba,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -603,7 +602,6 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 @require_torchaudio
 @require_sentencepiece
 @require_tokenizers
-@require_numba
 @slow
 @unittest.skip("@eustlb broken in a weird way. To investigate later.")
 class Speech2TextModelIntegrationTests(unittest.TestCase):

@@ -25,12 +25,11 @@ from transformers import (
     AutoTokenizer,
     WhisperFeatureExtractor,
 )
-from transformers.testing_utils import require_librosa, require_numba, require_torch, require_torchaudio
+from transformers.testing_utils import require_librosa, require_torch, require_torchaudio
 
 from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
 
 
-@require_numba
 class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AudioFlamingo3Processor
 
@@ -155,7 +154,6 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     @require_torchaudio
-    @require_numba
     def test_apply_transcription_request_single(self):
         processor = AutoProcessor.from_pretrained(self.checkpoint)
 
@@ -184,7 +182,6 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # Overwrite to remove skip numpy inputs (still need to keep as many cases as parent)
     @require_librosa
-    @require_numba
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
         if return_tensors == "np":

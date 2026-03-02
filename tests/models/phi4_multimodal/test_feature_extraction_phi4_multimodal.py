@@ -23,7 +23,7 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers import Phi4MultimodalFeatureExtractor
-from transformers.testing_utils import check_json_file_has_correct_format, require_numba, require_torch
+from transformers.testing_utils import check_json_file_has_correct_format, require_torch
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -212,7 +212,6 @@ class Phi4MultimodalFeatureExtractionTest(SequenceFeatureExtractionTestMixin, un
         return [x["array"] for x in speech_samples]
 
     @require_torch
-    @require_numba
     def test_torch_integration(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(
@@ -235,7 +234,6 @@ class Phi4MultimodalFeatureExtractionTest(SequenceFeatureExtractionTestMixin, un
     @unittest.mock.patch(
         "transformers.models.phi4_multimodal.feature_extraction_phi4_multimodal.is_torch_available", lambda: False
     )
-    @require_numba
     def test_numpy_integration(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = np.array(
@@ -256,7 +254,6 @@ class Phi4MultimodalFeatureExtractionTest(SequenceFeatureExtractionTestMixin, un
         self.assertTrue(np.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
 
     @require_torch
-    @require_numba
     def test_torch_integration_batch(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(

@@ -14,12 +14,11 @@
 import unittest
 
 from transformers import AutoProcessor, AutoTokenizer, Qwen2AudioProcessor
-from transformers.testing_utils import require_numba, require_torch, require_torchaudio
+from transformers.testing_utils import require_torch, require_torchaudio
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
-@require_numba
 @require_torch
 @require_torchaudio
 class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):

@@ -21,7 +21,7 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers import ClapAudioConfig, ClapConfig, ClapProcessor, ClapTextConfig
-from transformers.testing_utils import require_numba, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
@@ -514,7 +514,6 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class ClapModelIntegrationTest(unittest.TestCase):
     paddings = ["repeatpad", "repeat", "pad"]
 
-    @require_numba
     def test_integration_unfused(self):
         EXPECTED_MEANS_UNFUSED = {
             "repeatpad": 0.0024,
@@ -544,7 +543,6 @@ class ClapModelIntegrationTest(unittest.TestCase):
                 )
             )
 
-    @require_numba
     def test_integration_fused(self):
         EXPECTED_MEANS_FUSED = {
             "repeatpad": 0.00069,

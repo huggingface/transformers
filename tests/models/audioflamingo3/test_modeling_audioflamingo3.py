@@ -29,7 +29,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
-    require_numba,
     require_torch,
     slow,
     torch_device,
@@ -235,7 +234,6 @@ class AudioFlamingo3ForConditionalGenerationModelTest(ModelTesterMixin, Generati
 
 
 @require_torch
-@require_numba
 class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     """
     Slow tests against the public checkpoint to validate processor-model alignment and in-place fusion.

@@ -30,7 +30,6 @@ from transformers import WhisperConfig
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
-    require_numba,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -1224,7 +1223,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 @require_torch
 @require_torchaudio
-@require_numba
 class WhisperModelIntegrationTests(unittest.TestCase):
     _dataset = None
 
