@@ -31,6 +31,7 @@ from ...conversion_mapping import (
     register_checkpoint_conversion_mapping,
 )
 from ...masking_utils import create_causal_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
@@ -569,7 +570,7 @@ class NemotronHForCausalLM(ZambaForCausalLM):
         super().__init__(config)
         del self._tied_weights_keys
 
-        register_nemotron_h_conversion_mapping() # TODO @ArthurZucker should not be here
+        register_nemotron_h_conversion_mapping()  # TODO @ArthurZucker should not be here
 
     @can_return_tuple
     @auto_docstring
