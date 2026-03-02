@@ -342,6 +342,7 @@ class TrainerCallbackTest(unittest.TestCase):
                     step == trainer.state.max_steps
                     and trainer.args.eval_strategy == IntervalStrategy.STEPS
                     and step % trainer.args.eval_steps != 0
+                    and trainer.args.eval_delay <= trainer.state.global_step
                 ):
                     expected_events += evaluation_events.copy()
                 if step % trainer.args.save_steps == 0 or step == trainer.state.max_steps:
