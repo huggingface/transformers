@@ -23,7 +23,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..audioflamingo3.modeling_audioflamingo3 import AudioFlamingo3ForConditionalGeneration
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
-from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
     VibeVoiceAcousticTokenizerPreTrainedModel,
@@ -139,10 +138,6 @@ class VibeVoiceAsrConfig(PretrainedConfig):
 
 
 class VibeVoiceAsrRMSNorm(Qwen2RMSNorm):
-    pass
-
-
-class VibeVoiceAsrConv1dPaddingCache(MimiConv1dPaddingCache):
     pass
 
 
