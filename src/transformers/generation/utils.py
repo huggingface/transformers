@@ -1794,10 +1794,12 @@ class GenerationMixin(ContinuousMixin):
             or cache_to_check.max_cache_len < max_cache_len
         )
 
-        if self.config.is_encoder_decoder and hasattr(self, "_cache") and isinstance(self._cache, EncoderDecoderCache):
+        encoder_decoder_cache = getattr(self, "_cache", None)
+        if isinstance(encoder_decoder_cache, EncoderDecoderCache):
             need_new_cache = (
                 need_new_cache
-                or self._cache.cross_attention_cache.max_cache_len != model_kwargs["encoder_outputs"][0].shape[1]
+                or encoder_decoder_cache.cross_attention_cache.max_cache_len
+                != model_kwargs["encoder_outputs"][0].shape[1]
             )
 
         if need_new_cache:
