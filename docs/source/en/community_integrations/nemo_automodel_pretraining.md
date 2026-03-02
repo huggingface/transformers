@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # NeMo Automodel
 
-NVIDIA [NeMo Automodel](https://github.com/NVIDIA-NeMo/Automodel) is a Pytorch DTensor‑native SPMD open-source training library under NVIDIA [NeMo Framework](https://github.com/NVIDIA-NeMo), designed to streamline and scale pretraining and fine-tuning for [LLMs](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/llm.html) and [VLMs](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/vlm.html). Designed for flexibility, reproducibility, and scale, NeMo AutoModel enables both small-scale experiments and massive multi-GPU, multi-node training for fast experimentation in research and production environments. It supports Fully Sharded Data Parallelism (FSDP2), tensor, pipeline, expert, and context parallel in addition to fast kernels from DeepEP and TransformerEngine to enable high throughput. NeMo Automodel supports both dense models and Mixture-of-Expert (MoE) Models with [benchmarks](https://docs.nvidia.com/nemo/automodel/latest/performance-summary.html) here.
+[NeMo Automodel](https://github.com/NVIDIA-NeMo/Automodel) is an open-source PyTorch DTensor-native training library from NVIDIA. It supports large and small scale pretraining and fine-tuning for [LLMs](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/llm.html) and [VLMs](https://docs.nvidia.com/nemo/automodel/latest/model-coverage/vlm.html) for fast experimentation in research and production environments, with parallelism strategies including FSDP2, tensor, pipeline, expert, and context parallelism. For high throughput, it integrates kernels from DeepEP and TransformerEngine. 
 
 ```py
 # Instantiating Nemotron v3 Nano with expert parallelism, FSDP, and TransformerEngine + DeepEP kernels.
