@@ -16,6 +16,8 @@
       title: Loading models
     - local: custom_models
       title: Customizing models
+    - local: monkey_patching
+      title: Monkey patching
     - local: how_to_hack_models
       title: Customizing model components
     - local: model_sharing
@@ -232,6 +234,8 @@
     title: HIGGS
   - local: quantization/hqq
     title: HQQ
+  - local: quantization/metal
+    title: Metal
   - local: quantization/mxfp4
     title: MXFP4
   - local: quantization/optimum
@@ -1042,6 +1046,8 @@
         title: UnivNet
       - local: model_doc/vibevoice_acoustic_tokenizer
         title: VibeVoice Acoustic Tokenizer
+      - local: model_doc/vibevoice_asr
+        title: VibeVoice ASR
       - local: model_doc/vits
         title: VITS
       - local: model_doc/wav2vec2
@@ -1330,6 +1336,8 @@
         title: Time Series Transformer
       - local: model_doc/timesfm
         title: TimesFM
+      - local: model_doc/timesfm2_5
+        title: TimesFM2.5
       title: Time series models
     title: Models
   - sections:

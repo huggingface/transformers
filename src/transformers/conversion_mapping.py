@@ -68,6 +68,10 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "timesfm2_5": [
+            WeightRenaming("ff0", "fc1"),
+            WeightRenaming("ff1", "fc2"),
+        ],
         "olmo_hybrid": [
             WeightRenaming("attention_layer_norm", "input_layernorm"),
             WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
