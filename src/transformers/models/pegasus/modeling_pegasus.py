@@ -791,7 +791,6 @@ class PegasusModel(PegasusPreTrainedModel):
         """
         return (self.encoder.get_position_embeddings(), self.decoder.get_position_embeddings())
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -941,7 +940,6 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel, GenerationMixin):
         """
         return (self.model.encoder.get_position_embeddings(), self.model.decoder.get_position_embeddings())
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1106,7 +1104,6 @@ class PegasusForCausalLM(PegasusPreTrainedModel, GenerationMixin):
         self.config.max_position_embeddings = new_num_position_embeddings
         self.model.decoder.resize_position_embeddings(new_num_position_embeddings)
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     # Copied from transformers.models.bart.modeling_bart.BartForCausalLM.forward with Bart->Pegasus, facebook/bart-base->google/pegasus-large

@@ -1459,7 +1459,6 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         )
         return cls(text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder, config=config)
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

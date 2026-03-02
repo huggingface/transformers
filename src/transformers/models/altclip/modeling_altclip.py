@@ -953,7 +953,6 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
     def resize_token_embeddings(self, new_num_tokens: int | None = None) -> nn.Embedding:
         return super().resize_token_embeddings(new_num_tokens)
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -1012,7 +1012,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
             pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, **kwargs
         )
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

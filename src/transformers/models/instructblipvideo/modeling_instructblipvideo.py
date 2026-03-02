@@ -985,7 +985,6 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         return special_image_mask
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1209,7 +1208,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         return special_image_mask
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

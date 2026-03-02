@@ -239,7 +239,6 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -325,7 +324,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

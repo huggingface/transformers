@@ -59,6 +59,60 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = Kosmos2_5Config
 
 
+class Kosmos2_5PreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = Kosmos2_5Config
+    input_modalities = ("image", "text")
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Kosmos2_5VisionLayer", "Kosmos2_5TextBlock"]
+    _supports_flash_attn = True
+    _supports_cache_class = True
+    _supports_sdpa = True
+    _supports_attention_backend = True
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if hasattr(self.config, "initializer_factor"):
+            init_factor = self.config.initializer_factor
+            init_range = self.config.initializer_range
+            std = init_range * init_factor
+        elif hasattr(self.config, "vision_config"):
+            init_factor = self.config.vision_config.initializer_factor
+            init_range = self.config.vision_config.initializer_range
+            std = init_range * init_factor
+
+        if hasattr(self.config, "init_std"):
+            std = self.config.init_std
+        elif hasattr(self.config, "text_config"):
+            std = self.config.text_config.init_std
+
+        if isinstance(module, nn.Linear):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, (nn.LayerNorm, Kosmos2_5LayerNorm)):
+            init.ones_(module.weight)
+            if getattr(module, "bias", None) is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, Kosmos2_5ImageToTextProjection):
+            init.normal_(module.latent_query, mean=0.0, std=1.0)
+        elif isinstance(module, Kosmos2_5TextSinusoidalPositionalEmbedding):
+            emb_weights = module.get_embedding(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
+            init.copy_(module.weights, emb_weights)
+
+
 # Copied from transformers.models.kosmos2.modeling_kosmos2._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: int | None = None):
     """
@@ -540,10 +594,16 @@ class Kosmos2_5VisionLayer(GradientCheckpointingLayer):
 
 
 # Adapted from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEncoder with Pix2Struct->Kosmos2_5
-class Kosmos2_5VisionEncoder(nn.Module):
+class Kosmos2_5VisionEncoder(Kosmos2_5PreTrainedModel):
+    config_class = Kosmos2_5VisionConfig
+    input_modalities = ("image",)
+    _can_record_outputs = {
+        "hidden_states": Kosmos2_5VisionLayer,
+        "attentions": Kosmos2_5VisionAttention,
+    }
+
     def __init__(self, config: Kosmos2_5VisionConfig) -> None:
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         self.layer = nn.ModuleList([Kosmos2_5VisionLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
@@ -559,6 +619,8 @@ class Kosmos2_5VisionEncoder(nn.Module):
             )
         return expanded_attn_mask
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -849,17 +911,16 @@ class Kosmos2_5TextBlock(GradientCheckpointingLayer):
 
 
 # Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextTransformer with Kosmos2->Kosmos2_5
-class Kosmos2_5TextTransformer(nn.Module):
-    """
-    Transformer decoder consisting of `config.layers` layers. Each layer is a [`Kosmos2_5TextBlock`].
-    Here we doesn't have cross attention.
-    Args:
-        config: Kosmos2_5TextConfig
-    """
+class Kosmos2_5TextTransformer(Kosmos2_5PreTrainedModel):
+    config_class = Kosmos2_5TextConfig
+    input_modalities = ("text",)
+    _can_record_outputs = {
+        "hidden_states": Kosmos2_5TextBlock,
+        "attentions": Kosmos2_5TextAttention,
+    }
 
     def __init__(self, config: Kosmos2_5TextConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.layerdrop
 
@@ -879,6 +940,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         self.gradient_checkpointing = False
 
     @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -896,12 +958,6 @@ class Kosmos2_5TextTransformer(nn.Module):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
 
         # The argument `inputs_embeds` should be the one without being multiplied by `self.embed_scale`.
         if inputs_embeds is None:
@@ -1017,60 +1073,9 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
         return hidden_states, attn_weights
 
 
-class Kosmos2_5PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = Kosmos2_5Config
-    input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Kosmos2_5VisionLayer", "Kosmos2_5TextBlock"]
-    _supports_flash_attn = True
-    _supports_cache_class = True
-    _supports_sdpa = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": (Kosmos2_5VisionLayer, Kosmos2_5TextBlock),
-        "attentions": (Kosmos2_5VisionAttention, Kosmos2_5TextAttention),
-    }
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(self, Kosmos2_5VisionModel):
-            init_factor = self.config.initializer_factor
-            std = self.config.initializer_range * init_factor
-        elif isinstance(self, (Kosmos2_5TextModel, Kosmos2_5TextForCausalLM)):
-            std = self.config.init_std
-        elif isinstance(self, (Kosmos2_5Model, Kosmos2_5ForConditionalGeneration)):
-            std = self.config.text_config.init_std
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, (nn.LayerNorm, Kosmos2_5LayerNorm)):
-            init.ones_(module.weight)
-            if getattr(module, "bias", None) is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, Kosmos2_5ImageToTextProjection):
-            init.normal_(module.latent_query, mean=0.0, std=1.0)
-        elif isinstance(module, Kosmos2_5TextSinusoidalPositionalEmbedding):
-            emb_weights = module.get_embedding(
-                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
-            )
-            init.copy_(module.weights, emb_weights)
-
-
 class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5VisionConfig
-    input_modalities = ("text",)
+    input_modalities = ("image",)
 
     # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionModel.__init__ with Pix2Struct->Kosmos2_5
     def __init__(self, config: Kosmos2_5VisionConfig):
@@ -1090,8 +1095,7 @@ class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
         return self.embeddings.patch_projection
 
     # Similar to transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionModel.forward without docstring
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     def forward(
         self,
         flattened_patches: torch.Tensor | None = None,
@@ -1135,8 +1139,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_5_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPastAndCrossAttentions, config_class=Kosmos2_5TextConfig)
     def forward(
@@ -1181,12 +1184,6 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
 
     def __init__(self, config: Kosmos2_5Config):
         super().__init__(config)
-        # TODO To remove - hack used due to kosmos2.5 peculiar structure
-        config.text_config.output_hidden_states = config.output_hidden_states
-        config.text_config.output_attentions = config.output_attentions
-        config.vision_config.output_hidden_states = config.output_hidden_states
-        config.vision_config.output_attentions = config.output_attentions
-
         self.text_model = Kosmos2_5TextModel._from_config(config.text_config)
         self.vision_model = Kosmos2_5VisionModel._from_config(config.vision_config)
         self.image_to_text_projection = Kosmos2_5ImageToTextProjection(config)
@@ -1200,7 +1197,6 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.model.embed_tokens = value
 
-    @merge_with_config_defaults
     @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Kosmos2_5ModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1326,6 +1322,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_5_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=Kosmos2_5TextConfig)
     def forward(
@@ -1473,7 +1470,6 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
     def set_output_embeddings(self, new_embeddings):
         self.text_model.set_output_embeddings(new_embeddings)
 
-    @merge_with_config_defaults
     @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_5_INPUTS_DOCSTRING)
     @replace_return_docstrings(

@@ -741,7 +741,6 @@ class MarianModel(MarianPreTrainedModel):
 
         return model_embeds
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -942,7 +941,6 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings: nn.Embedding):
         self.lm_head = new_embeddings
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1085,7 +1083,6 @@ class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

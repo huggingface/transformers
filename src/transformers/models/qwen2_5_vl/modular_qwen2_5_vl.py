@@ -536,7 +536,6 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             position_ids = None
         return position_ids
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -627,7 +626,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

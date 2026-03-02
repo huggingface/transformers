@@ -475,7 +475,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -698,7 +697,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             **kwargs,
         )
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -261,7 +261,6 @@ class SmolVLMModel(Idefics3Model):
         image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
         """
     )
-    @merge_with_config_defaults
     @can_return_tuple
     def forward(
         self,

@@ -358,7 +358,6 @@ class PLBartForSequenceClassification(BigBirdPegasusForSequenceClassification):
 
 
 class PLBartForCausalLM(BartForCausalLM):
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(**super_kwargs):

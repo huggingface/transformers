@@ -267,7 +267,6 @@ class CohereForCausalLM(LlamaForCausalLM):
         self.logit_scale = config.logit_scale
         self.tie_word_embeddings = config.tie_word_embeddings
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

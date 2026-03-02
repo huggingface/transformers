@@ -1099,7 +1099,6 @@ class Zamba2ForSequenceClassification(ZambaForSequenceClassification):
         self.model = Zamba2Model(config)
         self.post_init()
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

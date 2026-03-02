@@ -209,7 +209,6 @@ class PerceptionLMModel(LlavaModel):
             )
         return special_image_mask, special_video_mask
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -314,7 +313,6 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
             model_inputs["pixel_values_videos"] = pixel_values_videos
         return model_inputs
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

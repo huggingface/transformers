@@ -45,6 +45,76 @@ from .configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2Visi
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
+class Kosmos2PreTrainedModel(PreTrainedModel):
+    config: Kosmos2Config
+    input_modalities = ("image", "text")
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Kosmos2VisionEncoderLayer", "Kosmos2TextBlock"]
+    _supports_attention_backend = True
+    _supports_flash_attn = False  # cuda device errors
+    _supports_sdpa = True
+
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module):
+        """Initialize the weights"""
+        if hasattr(self.config, "initializer_factor"):
+            factor = self.config.initializer_factor
+        elif hasattr(self.config, "vision_config"):
+            factor = self.config.vision_config.initializer_factor
+
+        if hasattr(self.config, "init_std"):
+            std = self.config.init_std
+        elif hasattr(self.config, "text_config"):
+            std = self.config.text_config.init_std
+
+        if isinstance(module, Kosmos2VisionEmbeddings):
+            init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
+            init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+            init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, Kosmos2VisionAttention):
+            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.embed_dim**-0.5) * factor
+            init.normal_(module.q_proj.weight, std=in_proj_std)
+            init.normal_(module.k_proj.weight, std=in_proj_std)
+            init.normal_(module.v_proj.weight, std=in_proj_std)
+            init.normal_(module.out_proj.weight, std=out_proj_std)
+        elif isinstance(module, Kosmos2VisionMLP):
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
+            init.normal_(module.fc1.weight, std=fc_std)
+            init.normal_(module.fc2.weight, std=in_proj_std)
+        elif isinstance(module, KosmosTextAttention):
+            init.normal_(module.q_proj.weight, std=std)
+            init.normal_(module.k_proj.weight, std=std)
+            init.normal_(module.v_proj.weight, std=std)
+            init.normal_(module.out_proj.weight, std=std)
+        elif isinstance(module, Kosmos2TextFFN):
+            init.normal_(module.fc1.weight, std=std)
+            init.normal_(module.fc2.weight, std=std)
+        elif isinstance(module, Kosmos2TextForCausalLM):
+            init.normal_(module.lm_head.weight, std=std)
+        elif isinstance(module, Kosmos2ImageToTextProjection):
+            init.normal_(module.dense.weight, std=std)
+            init.normal_(module.latent_query)
+        elif isinstance(module, Kosmos2TextTransformer):
+            init.normal_(module.embed_tokens.weight, mean=0.0, std=std)
+            if module.embed_tokens.padding_idx is not None:
+                init.zeros_(module.embed_tokens.weight[module.embed_tokens.padding_idx])
+        elif isinstance(module, nn.LayerNorm):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+        elif isinstance(module, Kosmos2TextSinusoidalPositionalEmbedding):
+            emb_weights = module.get_embedding(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
+            init.copy_(module.weights, emb_weights)
+
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            init.zeros_(module.bias)
+
+
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: int | None = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -448,11 +518,15 @@ class Kosmos2VisionEncoder(nn.Module):
 
 
 # Similar to `transformers.models.clip.modeling_clip.CLIPVisionTransformer` but without docstring for `forward`
-class Kosmos2VisionTransformer(nn.Module):
+class Kosmos2VisionTransformer(Kosmos2PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": Kosmos2VisionEncoderLayer,
+        "attentions": Kosmos2VisionAttention,
+    }
+
     # Copied from transformers.models.altclip.modeling_altclip.AltCLIPVisionTransformer.__init__ with AltCLIPVision->Kosmos2Vision,ALTCLIP_VISION->KOSMOS2_VISION,AltCLIP->Kosmos2Vision
     def __init__(self, config: Kosmos2VisionConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         embed_dim = config.hidden_size
 
         self.embeddings = Kosmos2VisionEmbeddings(config)
@@ -460,6 +534,9 @@ class Kosmos2VisionTransformer(nn.Module):
         self.encoder = Kosmos2VisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+    @capture_outputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -835,17 +912,16 @@ class Kosmos2TextBlock(GradientCheckpointingLayer):
         return outputs
 
 
-class Kosmos2TextTransformer(nn.Module):
-    """
-    Transformer decoder consisting of `config.layers` layers. Each layer is a [`Kosmos2TextBlock`].
-
-    Args:
-        config: Kosmos2TextConfig
-    """
+class Kosmos2TextTransformer(Kosmos2PreTrainedModel):
+    config: Kosmos2TextConfig
+    input_modalities = ("text",)
+    _can_record_outputs = {
+        "hidden_states": Kosmos2TextBlock,
+        "attentions": KosmosTextAttention,
+    }
 
     def __init__(self, config: Kosmos2TextConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.layerdrop
 
@@ -921,7 +997,9 @@ class Kosmos2TextTransformer(nn.Module):
 
         return hidden_states
 
+    @capture_outputs
     @merge_with_config_defaults
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -1045,80 +1123,6 @@ class Kosmos2TextTransformer(nn.Module):
         )
 
 
-@auto_docstring
-class Kosmos2PreTrainedModel(PreTrainedModel):
-    config: Kosmos2Config
-    input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Kosmos2VisionEncoderLayer", "Kosmos2TextBlock"]
-    _supports_attention_backend = True
-    _supports_flash_attn = False  # cuda device errors
-    _supports_sdpa = True
-    _can_record_outputs = {
-        "hidden_states": Kosmos2VisionEncoderLayer,
-        "attentions": Kosmos2VisionAttention,
-    }
-
-    @torch.no_grad()
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights"""
-        if isinstance(self, Kosmos2VisionModel):
-            factor = self.config.initializer_factor
-        elif isinstance(self, (Kosmos2Model, Kosmos2ForConditionalGeneration)):
-            factor = self.config.vision_config.initializer_factor
-
-        if isinstance(self, (Kosmos2TextModel, Kosmos2TextForCausalLM)):
-            std = self.config.init_std
-        elif isinstance(self, (Kosmos2Model, Kosmos2ForConditionalGeneration)):
-            std = self.config.text_config.init_std
-
-        if isinstance(module, Kosmos2VisionEmbeddings):
-            init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        elif isinstance(module, Kosmos2VisionAttention):
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
-            init.normal_(module.q_proj.weight, std=in_proj_std)
-            init.normal_(module.k_proj.weight, std=in_proj_std)
-            init.normal_(module.v_proj.weight, std=in_proj_std)
-            init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, Kosmos2VisionMLP):
-            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            init.normal_(module.fc1.weight, std=fc_std)
-            init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, KosmosTextAttention):
-            init.normal_(module.q_proj.weight, std=std)
-            init.normal_(module.k_proj.weight, std=std)
-            init.normal_(module.v_proj.weight, std=std)
-            init.normal_(module.out_proj.weight, std=std)
-        elif isinstance(module, Kosmos2TextFFN):
-            init.normal_(module.fc1.weight, std=std)
-            init.normal_(module.fc2.weight, std=std)
-        elif isinstance(module, Kosmos2TextForCausalLM):
-            init.normal_(module.lm_head.weight, std=std)
-        elif isinstance(module, Kosmos2ImageToTextProjection):
-            init.normal_(module.dense.weight, std=std)
-            init.normal_(module.latent_query)
-        elif isinstance(module, Kosmos2TextTransformer):
-            init.normal_(module.embed_tokens.weight, mean=0.0, std=std)
-            if module.embed_tokens.padding_idx is not None:
-                init.zeros_(module.embed_tokens.weight[module.embed_tokens.padding_idx])
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, Kosmos2TextSinusoidalPositionalEmbedding):
-            emb_weights = module.get_embedding(
-                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
-            )
-            init.copy_(module.weights, emb_weights)
-
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            init.zeros_(module.bias)
-
-
 class Kosmos2VisionModel(Kosmos2PreTrainedModel):
     config: Kosmos2VisionConfig
     main_input_name = "pixel_values"
@@ -1135,8 +1139,7 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.model.embeddings.patch_embedding
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1154,10 +1157,6 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
 class Kosmos2TextModel(Kosmos2PreTrainedModel):
     config: Kosmos2TextConfig
     input_modalities = ("text",)
-    _can_record_outputs = {
-        "hidden_states": Kosmos2TextBlock,
-        "attentions": KosmosTextAttention,
-    }
 
     def __init__(self, config: Kosmos2TextConfig):
         super().__init__(config)
@@ -1168,7 +1167,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.model.embed_tokens
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1221,10 +1219,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
 class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
     config: Kosmos2TextConfig
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _can_record_outputs = {
-        "hidden_states": Kosmos2TextBlock,
-        "attentions": KosmosTextAttention,
-    }
 
     def __init__(self, config: Kosmos2TextConfig):
         super().__init__(config)
@@ -1241,7 +1235,6 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1409,10 +1402,6 @@ class Kosmos2ImageToTextProjection(nn.Module):
 class Kosmos2Model(Kosmos2PreTrainedModel):
     config: Kosmos2Config
     main_input_name = "pixel_values"
-    _can_record_outputs = {
-        "hidden_states": Kosmos2TextBlock,
-        "attentions": KosmosTextAttention,
-    }
 
     def __init__(self, config: Kosmos2Config):
         super().__init__(config)
@@ -1462,8 +1451,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
 
         return vision_output
 
-    @capture_outputs
-    @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1527,7 +1515,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             if pixel_values is None:
                 raise ValueError("You have to specify either `pixel_values` or `image_embeds`.")
             image_features = self.get_image_features(
-                pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
+                pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True, **kwargs
             )
             image_embeds = image_features.pooler_output
             projection_attentions = image_features.projection_attentions
@@ -1566,10 +1554,6 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
     config: Kosmos2Config
     main_input_name = "pixel_values"
     _tied_weights_keys = {"text_model.lm_head.weight": "text_model.model.embed_tokens.weight"}
-    _can_record_outputs = {
-        "hidden_states": Kosmos2TextBlock,
-        "attentions": KosmosTextAttention,
-    }
 
     def __init__(self, config: Kosmos2Config):
         super().__init__(config)
@@ -1594,8 +1578,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.text_model.set_output_embeddings(new_embeddings)
 
-    @capture_outputs
-    @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

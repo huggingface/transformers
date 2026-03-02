@@ -1284,7 +1284,6 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             position_ids = None
         return position_ids
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1450,7 +1449,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         """
         return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

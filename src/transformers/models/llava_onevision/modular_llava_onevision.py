@@ -438,7 +438,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         return vision_outputs
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -530,7 +529,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
 
 class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGeneration):
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

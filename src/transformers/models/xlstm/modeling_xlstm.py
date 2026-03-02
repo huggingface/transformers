@@ -1540,7 +1540,6 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, new_embeddings):
         return self.backbone.set_input_embeddings(new_embeddings)
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

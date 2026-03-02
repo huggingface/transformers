@@ -562,7 +562,6 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         """
         return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

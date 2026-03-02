@@ -1225,7 +1225,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
             )
         return reshaped_lagged_sequence, features, loc, scale, static_feat
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1460,7 +1459,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             sliced_params = [p[:, -trailing_n:] for p in params]
         return self.distribution_output.distribution(sliced_params, loc=loc, scale=scale)
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

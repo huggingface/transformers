@@ -214,7 +214,6 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         )
         return special_image_mask
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -322,7 +321,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
             pixel_values=pixel_values, vision_feature_layers=vision_feature_layers, **kwargs
         )
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

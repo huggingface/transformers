@@ -320,7 +320,6 @@ class GotOcr2Model(LlavaModel):
 
         return image_outputs
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -372,7 +371,6 @@ class GotOcr2Model(LlavaModel):
 
 
 class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

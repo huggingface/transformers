@@ -242,7 +242,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
