@@ -31,6 +31,8 @@ class UperNetConfig(PreTrainedConfig):
         Whether to use an auxiliary head during training.
     auxiliary_loss_weight (`float`, *optional*, defaults to 0.4):
         Weight of the cross-entropy loss of the auxiliary head.
+    auxiliary_in_channels(`int`, *optional*, defaults to 256):
+        Number of input channels in the auxiliary head.
     auxiliary_channels (`int`, *optional*, defaults to 256):
         Number of channels to use in the auxiliary head.
     auxiliary_num_convs (`int`, *optional*, defaults to 1):

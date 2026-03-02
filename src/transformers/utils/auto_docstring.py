@@ -1080,7 +1080,6 @@ class ConfigArgs:
     Sequence length of one video embedding.
     """,
     }
-    in_channels = num_channels
 
     num_mel_bins = {
         "description": """
@@ -1263,12 +1262,6 @@ class ConfigArgs:
     }
 
     num_local_experts = {
-        "description": """
-    Sequence length of one video embedding.
-    """,
-    }
-
-    hidden_dropout = {
         "description": """
     Sequence length of one video embedding.
     """,
@@ -1600,12 +1593,6 @@ class ConfigArgs:
     """,
     }
 
-    codebook_size = {
-        "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
-    """,
-    }
-
     embedding_multiplier = {
         "description": """
     Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
@@ -1843,6 +1830,8 @@ class ConfigArgs:
     emb_pdrop = embd_pdrop
     embed_dropout = embd_pdrop
     embedding_dropout = embd_pdrop
+    hidden_dropout = hidden_dropout_prob
+    dropout_prob = dropout
     audio_token_index = audio_token_id
     layer_scale_initial_scale = layer_scale_init_value
     num_encoder_layers = encoder_layers
@@ -1868,6 +1857,11 @@ class ConfigArgs:
     eps = layer_norm_eps
     use_qkv_bias = qkv_bias
     norm_epsilon = layer_norm_eps
+    in_channels = num_channels
+    in_chans = num_channels
+    codebook_size = num_codebooks
+    layers_block_type = layer_types
+    sample_rate = sampling_rate
 
 
 class ModelArgs:
