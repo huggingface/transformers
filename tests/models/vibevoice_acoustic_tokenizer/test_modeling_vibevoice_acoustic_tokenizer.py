@@ -306,7 +306,7 @@ class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
 
         # Load expected outputs
         RESULTS_PATH = (
-            Path(__file__).parent.parent.parent / "fixtures/vibevoice/expected_acoustic_tokenizer_results.json"
+            Path(__file__).parent.parent.parent / "fixtures/vibevoice_acoustic_tokenizer/expected_results.json"
         )
         with open(RESULTS_PATH, "r") as f:
             expected_results = json.load(f)
