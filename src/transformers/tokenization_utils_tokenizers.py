@@ -199,6 +199,14 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     )
                     if tokenizer_object is not None:
                         local_kwargs["tokenizer_object"] = tokenizer_object
+                        # Set bos/eos tokens from proto spec if available. This is needed when
+                        # building a tokenizer_object directly from a .model file because the
+                        # tokenizer_object does not have bos/eos set.
+                        proto_spec = extractor.proto.trainer_spec
+                        if proto_spec.bos_id >= 0:
+                            local_kwargs.setdefault("bos_token", proto_spec.bos_piece or "<s>")
+                        if proto_spec.eos_id >= 0:
+                            local_kwargs.setdefault("eos_token", proto_spec.eos_piece or "</s>")
 
             except Exception as e:  # TODO only catch deserialization error here!
                 logger.warning(
