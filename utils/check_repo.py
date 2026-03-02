@@ -125,7 +125,9 @@ PRIVATE_MODELS = [
     "CLIPVisionTransformer",
     "MetaClip2TextTransformer",
     "MetaClip2VisionTransformer",
-    "MLCDVisionTransformer",
+    "Kosmos2TextTransformer",
+    "Kosmos2VisionTransformer",
+    "Kosmos2_5TextTransformer",
     # end of should have beens
     "VoxtralRealtimeTextModel",
     "VoxtralRealtimeTextForCausalLM",
