@@ -27,7 +27,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from ...configuration_utils import PretrainedConfig
-from ...generation.configuration_utils import CompileConfig, GenerationConfig
+from ...generation.configuration_utils import CompileConfig, ContinuousBatchingConfig, GenerationConfig
 from ...generation.logits_process import LogitsProcessorList
 from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
 from ...utils.generic import is_flash_attention_requested
@@ -521,34 +521,26 @@ class ContinuousBatchProcessor:
 # Manager Class (User Interface)
 @attach_tracer()
 class ContinuousBatchingManager:
-    """Manager for handling continuous batching of generation requests.
-
-    This class provides the user interface for submitting generation requests,
-    retrieving results, and managing the background generation thread.
+    """Manager for handling continuous batching of generation requests. It provides a user interface for submitting
+    generation requests, retrieving results, and managing the background generation thread. This class should be
+    created through one of:
+    - `init_continuous_batching`
+    - `continuous_batching_context_manager`
+    - `generate_batch`
     """
 
     def __init__(
         self,
         model: ProtoPretrainedModel,
         generation_config: GenerationConfig,
-        max_queue_size: int = 0,
-        q_padding_interval_size: int = 0,
-        kv_padding_interval_size: int = 0,
-        max_cached_graphs: int = 0,
-        allow_block_sharing: bool = True,
-        use_async_batching: bool | None = None,
+        continuous_batching_config: ContinuousBatchingConfig,
     ) -> None:
         """Initialize the continuous batching manager.
 
         Args:
             model: The language model for generation
             generation_config: Configuration for generation parameters
-            max_queue_size: Maximum size of the request queue (0 = unlimited)
-            q_padding_interval_size: (optional) Padding granularity for queries in tokens. 0 uses default.
-            kv_padding_interval_size: (optional) Padding granularity for KV cache in tokens. 0 uses default.
-            max_cached_graphs: (optional) Maximum number of cached CUDA graphs. 0 uses default.
-            allow_block_sharing: (optional) Whether to allow block sharing if the model has some full attention layers
-            use_async_batching: Whether to use async API or not. If None, will be automatically detected.
+            continuous_batching_config: Configuration for continuous batching parameters
         """
         # Reload paged version of the attention implementation if necessary
         if "paged|" not in model.config._attn_implementation:
@@ -556,10 +548,13 @@ class ContinuousBatchingManager:
 
         # Internal arguments
         self.model = model.eval()
-        self._allow_block_sharing = allow_block_sharing
-        self._use_prefix_sharing = allow_block_sharing  # approximation until the cache is created
+        self.generation_config = generation_config
+        self.cb_config = continuous_batching_config
 
-        self.input_queue = queue.Queue(maxsize=max_queue_size)
+        self._allow_block_sharing = self.cb_config.allow_block_sharing
+        self._use_prefix_sharing = self.cb_config.allow_block_sharing  # approximation until the cache is created
+
+        self.input_queue = queue.Queue(maxsize=self.cb_config.max_queue_size)
         self.output_queue = queue.Queue()
         self.stop_event = threading.Event()
         self.batch_processor: ContinuousBatchProcessor | None = None
@@ -568,91 +563,40 @@ class ContinuousBatchingManager:
         self._request_lock = threading.Lock()
 
         # Generation config related arguments
-        generation_config = model.generation_config if generation_config is None else generation_config
-        self.generation_config = generation_config
         self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor: LogitsProcessorList = self.model._get_logits_processor(generation_config)
         num_return_sequences = getattr(generation_config, "num_return_sequences", None)
         self.num_return_sequences = num_return_sequences if num_return_sequences is not None else 1
 
-        # self.model.generation_config.top_p = None NOTE: figure out why this was here
-
         # Cuda graph behavior is determined below using either user-specified arguments or heuristics
-        self.use_cuda_graph = self._decide_use_cuda_graphs(
-            use_cuda_graph=getattr(generation_config, "use_cuda_graph", None),
-            user_specified_param=bool(q_padding_interval_size or kv_padding_interval_size or max_cached_graphs),
+        is_attn_mask_needed = attn_mask_is_needed(self.model.config)
+        self.use_cuda_graph = self.cb_config.decide_use_cuda_graphs(
             compile_config=getattr(generation_config, "compile_config", None),
+            is_attn_mask_needed=is_attn_mask_needed,
         )
-        # If the user specifies to use async or not, no need to decide ourselves
-        if use_async_batching is not None:
-            self.use_async_batching = use_async_batching
-        # Otherwise, we enable async batching if there are no attn masks, because they add a lot of host-to-device
-        # transfers, and if CUDA graphs are not turned off, because that would mean we are trying to save memory
-        else:
-            self.use_async_batching = self.use_cuda_graph and not attn_mask_is_needed(self.model.config)
-            logger.info(
-                f"No behavior specified for use_async_batching, choosing {self.use_async_batching = } because CUDA "
-                "graphs are turned on and no attention mask is needed. If you want to save memory, you can disable "
-                "asynchronous batching but it will degrade performance (by ~25% for some workloads)."
-            )
+        # Same for asynchronous batching behavior
+        self.use_async_batching = self.cb_config.decide_use_async_batching(is_attn_mask_needed)
 
-        # Padding interval sizes for Q and KV (0 means use defaults)
-        self.q_padding_interval_size = (
-            q_padding_interval_size if q_padding_interval_size > 0 else Q_PADDING_INTERVAL_SIZE
-        )
-        self.kv_padding_interval_size = (
-            kv_padding_interval_size if kv_padding_interval_size > 0 else KV_PADDING_INTERVAL_SIZE
-        )
-        self.max_cached_graphs = max_cached_graphs if max_cached_graphs > 0 else MAX_CACHED_GRAPHS
+        # Resolve default parameters for Q and KV interval sizes, and max cached graphs. If one of those parameters is
+        # not specified (set to 0) then we use the default value and change its value in the config.
+        self.q_padding_interval_size = self.cb_config.q_padding_interval_size or Q_PADDING_INTERVAL_SIZE
+        if self.cb_config.q_padding_interval_size == 0:
+            self.cb_config.q_padding_interval_size = Q_PADDING_INTERVAL_SIZE
+        self.q_padding_interval_size = self.cb_config.q_padding_interval_size
+
+        if self.cb_config.kv_padding_interval_size == 0:
+            self.cb_config.kv_padding_interval_size = KV_PADDING_INTERVAL_SIZE
+        self.kv_padding_interval_size = self.cb_config.kv_padding_interval_size
+
+        if self.cb_config.max_cached_graphs == 0:
+            self.cb_config.max_cached_graphs = MAX_CACHED_GRAPHS
+        self.max_cached_graphs = self.cb_config.max_cached_graphs
 
         # Log probability generation is not supported yet (TODO)
         if self.log_prob_generation:
             raise NotImplementedError("log_prob_generation is not supported yet")
 
-    def _decide_use_cuda_graphs(
-        self,
-        use_cuda_graph: bool | None,
-        user_specified_param: int,
-        compile_config: CompileConfig | None,
-    ) -> bool:
-        """Returns whether or not to use cuda graphs for continuous batching, depending on the following criteria:
-        - (use_cuda_graph) which is the user choice
-        - (user_specified_param): a boolean indicating if the user specified a parameter related to cuda graphs
-        If none of the above criteria are met, we use a default heuristic based on the attention implementation: we turn
-        on cuda graphs if and only if no attention mask is needed.
-        """
-        # If cuda is not available, we cannot use cuda graphs
-        if not torch.cuda.is_available():
-            if use_cuda_graph:
-                logger.warning(f"use_cuda_graph is True but {torch.cuda.is_available() = }: turning off cuda graphs.")
-            return False
-        # If use_cuda_graph is specified, we follow the user's choice
-        if use_cuda_graph is not None:
-            return use_cuda_graph
-        # If the user specified a parameter related to cuda graphs, we activate cuda graphs
-        if user_specified_param:
-            return True
-        # If a compile config was found, turn off cuda graphs if the compile config already uses them
-        if compile_config is not None:
-            options = torch._inductor.list_mode_options().get(compile_config.mode, compile_config.options)
-            compile_uses_cudagraphs = options.get("triton.cudagraphs", False)
-            if compile_uses_cudagraphs:
-                logger.warning(
-                    f"Compile config {compile_config.mode = } uses cudagraphs, which usually does not work well with "
-                    "continuous batching. We recommend using mode 'default' or 'max-autotune-no-cudagraphs' instead."
-                )
-            return not compile_uses_cudagraphs  # TODO: should this also match the dynamic shapes?
-        # Otherwise we have a default heuristic based on the attention implementation:
-        # attention implementations where an attention mask is needed suffer a lot more from the padding associated
-        # with cuda graphs, so default is to turn cuda graphs off for those implementations
-        use_cuda_graph = not attn_mask_is_needed(self.model.config)
-        logger.warning(
-            f"No behavior specified for use_cuda_graph, defaulting to {use_cuda_graph = } because "
-            f"{self.model.config._attn_implementation = }. If you want to save memory, turn off cuda graphs, but "
-            "they tend to improve performances by a lot."
-        )
-        return use_cuda_graph
 
     @traced
     def start(self) -> None:
@@ -937,87 +881,82 @@ class ContinuousBatchingManager:
 
 
 class ContinuousMixin:
-    """Mixin class for models to add continuous batching capabilities."""
+    """Mixin class for models to add continuous batching capabilities. Continuous batching has three entry points:
+    - `init_continuous_batching`, which is the actual entry point for continuous batching
+    - `continuous_batching_context_manager`, which itself is a wrapper around `init_continuous_batching`
+    - `generate_batch`, which is really a wrapper around `continuous_batching_context_manager`
+
+    They are defined in this order. Any change made to any of those three entry points should be reflected in the other
+    two.
+    """
 
     generation_config: GenerationConfig
 
-    @contextmanager
-    def continuous_batching_context_manager(
-        self,
-        generation_config: GenerationConfig | None = None,
-        max_queue_size: int = 0,
-        q_padding_interval_size: int = 0,
-        kv_padding_interval_size: int = 0,
-        allow_block_sharing: bool = True,
-        block: bool = True,
-        timeout: float | None = None,
-        use_async_batching: bool | None = None,  # leave to None for automatic detection
-        max_cached_graphs: int = 0,
-    ) -> Generator[ContinuousBatchingManager]:
-        manager = self.init_continuous_batching(
-            generation_config=generation_config,
-            max_queue_size=max_queue_size,
-            q_padding_interval_size=q_padding_interval_size,
-            kv_padding_interval_size=kv_padding_interval_size,
-            max_cached_graphs=max_cached_graphs,
-            allow_block_sharing=allow_block_sharing,
-            use_async_batching=use_async_batching,
-        )
-        manager.start()
-        try:
-            yield manager
-        finally:
-            logger.debug(
-                "Continuous batching loop finished"
-            )  # a dummy log needed for the logs of stop to show. Won't show
-            manager.stop(block=block, timeout=timeout)
-
-    # NOTE: don't forget to update `continuous_batching_context_manager` when changing this method's definition
     def init_continuous_batching(
         self,
         generation_config: GenerationConfig | None = None,
-        max_queue_size: int = 0,
-        q_padding_interval_size: int = 0,
-        kv_padding_interval_size: int = 0,
-        allow_block_sharing: bool = True,
-        use_async_batching: bool | None = None,
-        max_cached_graphs: int = 0,
+        continuous_batching_config: ContinuousBatchingConfig | None = None,
+        **deprecated_kwargs,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
 
         Args:
             generation_config: An optional generation configuration, which may contain a CompileConfig object
-            max_queue_size: Maximum size of the input request queue
-            q_padding_interval_size: Padding granularity for queries in tokens. 0 uses default.
-            kv_padding_interval_size: Padding granularity for KV cache in tokens. 0 uses default.
-            allow_block_sharing: A flag to allow block sharing if the model has some full attention layers
-            use_async_batching: Whether to use async API or not. If None, will be automatically detected.
-            max_cached_graphs: Maximum number of cached CUDA graphs. 0 uses default.
+            continuous_batching_config: An optional continuous batching configuration
+            **deprecated_kwargs: Deprecated arguments that are now passed in the continuous_batching_config. Those are:
+                max_queue_size, q_padding_interval_size, kv_padding_interval_size, allow_block_sharing,
+                use_async_batching, max_cached_graphs
         Returns:
             `ContinuousBatchingManager`: The manager instance to add requests and retrieve results.
         """
+        # Mandatory attributes
         if not hasattr(self, "config") or not hasattr(self, "device") or not hasattr(self, "dtype"):
             raise AttributeError("Model must have 'config', 'device', and 'dtype' attributes.")
 
+        # Retrieve generation config
         gen_config = generation_config if generation_config is not None else self.generation_config
         if gen_config is None:
             raise ValueError("A GenerationConfig must be provided or set in the model.")
-
+        # Warn about EOS
         if gen_config.eos_token_id is None:
             logger.warning("`eos_token_id` not set in GenerationConfig. Setting to -1 (disabled).")
             gen_config.eos_token_id = -1
 
+        # Retrieve continuous batching config, or create it if none is provided
+        if continuous_batching_config is not None:
+            cb_config = continuous_batching_config
+        elif hasattr(gen_config, "continuous_batching_config"):
+            cb_config = gen_config.continuous_batching_config
+        else:
+            cb_config = ContinuousBatchingConfig()
+        cb_config.account_for_cb_deprecated_arguments(**deprecated_kwargs)
+
         # Create and return the manager
         return ContinuousBatchingManager(
-            model=self,
-            generation_config=gen_config,
-            max_queue_size=max_queue_size,
-            q_padding_interval_size=q_padding_interval_size,
-            kv_padding_interval_size=kv_padding_interval_size,
-            allow_block_sharing=allow_block_sharing,
-            use_async_batching=use_async_batching,
-            max_cached_graphs=max_cached_graphs,
+            model=self, generation_config=gen_config, continuous_batching_config=cb_config
         )
+
+    @contextmanager
+    def continuous_batching_context_manager(
+        self,
+        generation_config: GenerationConfig | None = None,
+        block: bool = True,
+        timeout: float | None = None,
+        continuous_batching_config: ContinuousBatchingConfig | None = None,
+        **deprecated_kwargs,
+    ) -> Generator[ContinuousBatchingManager]:
+        manager = self.init_continuous_batching(
+            generation_config=generation_config,
+            continuous_batching_config=continuous_batching_config,
+            **deprecated_kwargs,
+        )
+        manager.start()
+        try:
+            yield manager
+        finally:
+            # This is a dummy log needed for the logs of stop to show. It won't show.
+            logger.debug("Continuous batching loop finished")
+            manager.stop(block=block, timeout=timeout)
 
     # TODO: support streaming
     @traced
@@ -1026,13 +965,9 @@ class ContinuousMixin:
         self,
         inputs: list[list[int]],
         generation_config: GenerationConfig | None = None,
-        q_padding_interval_size: int = 0,
-        kv_padding_interval_size: int = 0,
-        allow_block_sharing: bool = True,
+        continuous_batching_config: ContinuousBatchingConfig | None = None,
         record_timestamps: bool = False,
         progress_bar: bool = True,
-        use_async_batching: bool | None = None,
-        max_cached_graphs: int = 0,
         **kwargs,
     ) -> dict[str, GenerationOutput]:
         """Generate sequences for a batch of prompts using continuous batching.
@@ -1040,38 +975,52 @@ class ContinuousMixin:
         Args:
             inputs: List of input token sequences (prompts)
             generation_config: Optional generation configuration
-            q_padding_interval_size: Padding granularity for queries in tokens. 0 uses default.
-            kv_padding_interval_size: Padding granularity for KV cache in tokens. 0 uses default.
-            allow_block_sharing: A flag to allow block sharing if the model has some full attention layers
+            continuous_batching_config: Optional continuous batching configuration
             record_timestamps: If set to true, the requests will have a timestamp for each token generated
             progress_bar: If set to true, a progress bar will be displayed
-            use_async_batching: Whether to use async double buffering or not. If None, will be automatically detected.
-            max_cached_graphs: Maximum number of cached CUDA graphs. 0 uses default.
-            **kwargs: Additional generation parameters
+            **kwargs: Additional generation parameters. Only max_new_tokens is used.
 
         Returns:
             `dict[str, GenerationOutput]`: a dictionary of request ids to GenerationOutput objects
         """
+        # If no input are provided, return an empty dictionary
         if not inputs:
             return {}
+
+        # If the logger level is less than DEBUG, disable the progress bar
         if logger.getEffectiveLevel() <= logging.DEBUG:
             logger.warning("Progress bar is disabled when logger level is less than DEBUG")
             progress_bar = False
 
-        # Initialize manager with the batch inputs
-        results = {}
+        # Extract deprecated arguments from regular kwargs (deprecated in v5.3). These args are now expected in the
+        # continuous_batching_config object.
+        deprecated_kwargs = {}
+        deprecated_keys = [
+            "q_padding_interval_size",
+            "kv_padding_interval_size",
+            "allow_block_sharing",
+            "use_async_batching",
+            "max_cached_graphs",
+            "max_queue_size",
+        ]
+        for depr_key in deprecated_keys:
+            if depr_key in kwargs:
+                deprecated_kwargs[depr_key] = kwargs.pop(depr_key)
+        # Extract max_new_tokens from kwargs, as it's the only expected kwarg
+        max_new_tokens = kwargs.pop("max_new_tokens", None)
+
+        # Compute the total number of requests
         gen_cfg = self.generation_config if generation_config is None else generation_config
-        num_requests = len(inputs) * (gen_cfg.num_return_sequences if gen_cfg.num_return_sequences is not None else 1)
+        num_return_sequences = gen_cfg.num_return_sequences if gen_cfg.num_return_sequences is not None else 1
+        num_requests = len(inputs) * num_return_sequences
+
         # Prepare context managers for the main loop
         manager_cm = self.continuous_batching_context_manager(
             generation_config=generation_config,
-            q_padding_interval_size=q_padding_interval_size,
-            kv_padding_interval_size=kv_padding_interval_size,
-            max_cached_graphs=max_cached_graphs,
-            allow_block_sharing=allow_block_sharing,
+            continuous_batching_config=continuous_batching_config,
             block=True,
             timeout=5,
-            use_async_batching=use_async_batching,
+            **deprecated_kwargs,
         )
         logging_cm = logging_redirect_tqdm([logger])
         pbar_cm = tqdm(
@@ -1080,13 +1029,13 @@ class ContinuousMixin:
             desc=f"Solving {num_requests} requests",
             unit="request",
         )
+
         # Main loop
+        results = {}
+        finished_count = 0
         with manager_cm as manager, logging_cm, pbar_cm as pbar:
             try:
-                manager.add_requests(
-                    inputs=inputs, max_new_tokens=kwargs.get("max_new_tokens"), record_timestamps=record_timestamps
-                )
-                finished_count = 0
+                manager.add_requests(inputs=inputs, max_new_tokens=max_new_tokens, record_timestamps=record_timestamps)
                 while finished_count < num_requests:
                     result = manager.get_result(timeout=1)
                     if result:
@@ -1095,19 +1044,19 @@ class ContinuousMixin:
                             results[req_id] = result
                             finished_count += 1
                             pbar.update(1)
-                    else:
-                        if not manager.is_running():
-                            logger.error("Generation thread terminated unexpectedly.")
-                            # This helps get some information in stdout
-                            print("Returning results of generate_batch despite unexpected termination.")
-                            break
+                    elif not manager.is_running():
+                        logger.error("Generation thread terminated unexpectedly.")
+                        # This helps get some information in stdout
+                        print("Returning results of generate_batch despite unexpected termination.")
+                        break
 
             except Exception as e:
                 logger.error(f"Error during batch generation: {e}", exc_info=True)
+
         # Re-order requests to match the order of the inputs
         reordered_results = {}
         for i in range(len(inputs)):
-            # We cannot guarantee that the generation succeeded for all requests, so we need to check if the request is in the results
+            # We cannot guarantee generation success for all requests, so check if the request is in the results
             result = results.get(f"req_{i}")
             if result is not None:
                 reordered_results[f"req_{i}"] = result

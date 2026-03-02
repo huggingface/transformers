@@ -1572,7 +1572,7 @@ class ContinuousBatchingConfig:
     # doubling the VRAM usage. If None, will be automatically detected.
     use_async_batching: bool | None = None
 
-    # If any of these parameters are set to a non-default, CUDA graphs will be used. Otherwise the automatically infer
+    # If any of these parameters are set to a non-default, CUDA graphs will be used. Otherwise we automatically infer
     # if they should be turned on. Padding interval sizes are in tokens and further explained in the docstring at the
     # top of the continuous_batching/continuous_api.py file.
     use_cuda_graph: bool | None = None
@@ -1580,12 +1580,16 @@ class ContinuousBatchingConfig:
     kv_padding_interval_size: int = 0
     max_cached_graphs: int = 0
 
+    # The parameters below are mostly useful in the context of serving
+    max_queue_size: int = 0
+
 
     def account_for_cb_deprecated_arguments(
         self,
+        max_queue_size: int = 0,
         q_padding_interval_size: int = 0,
         kv_padding_interval_size: int = 0,
-        allow_block_sharing: bool = True,
+        allow_block_sharing: bool = False,
         use_async_batching: bool | None = None,
         max_cached_graphs: int = 0,
     ) -> None:
@@ -1594,23 +1598,92 @@ class ContinuousBatchingConfig:
         passed and accounts for them in the continuous batching config. It raises a deprecation warning if any were
         passed.
         """
-        raise_deprecation_warning = False
+        kwargs_to_warn = []
+        if max_queue_size > 0:
+            kwargs_to_warn.append("max_queue_size")
+            self.max_queue_size = max_queue_size
         if q_padding_interval_size > 0:
-            raise_deprecation_warning = True
+            kwargs_to_warn.append("q_padding_interval_size")
             self.q_padding_interval_size = q_padding_interval_size
         if kv_padding_interval_size > 0:
-            raise_deprecation_warning = True
+            kwargs_to_warn.append("kv_padding_interval_size")
             self.kv_padding_interval_size = kv_padding_interval_size
-        if allow_block_sharing:
-            raise_deprecation_warning = True
+        if not allow_block_sharing:  # default is True, so False means the user explicitly set it to False
+            kwargs_to_warn.append("allow_block_sharing")
             self.allow_block_sharing = allow_block_sharing
         if use_async_batching is not None:
-            raise_deprecation_warning = True
+            kwargs_to_warn.append("use_async_batching")
             self.use_async_batching = use_async_batching
         if max_cached_graphs > 0:
-            raise_deprecation_warning = True
+            kwargs_to_warn.append("max_cached_graphs")
             self.max_cached_graphs = max_cached_graphs
-        if raise_deprecation_warning:
+        if kwargs_to_warn:
             logger.warning(
-                "Deprecated arguments were provided to generate_batch. Please use continuous_batching_config instead."
+                "The following arguments were provided to generate_batch instead of being passed through "
+                "continuous_batching_config: " + ", ".join(kwargs_to_warn)
             )
+
+    def decide_use_cuda_graphs(self, compile_config: CompileConfig | None, is_attn_mask_needed: bool) -> bool:
+        """Returns whether or not to use cuda graphs for continuous batching. If the user specified this in the config
+        or if they specified a parameter related to cuda graphs, they are turned on. Otherwise, we use a heuristic
+        based on the attention implementation: we turn on cuda graphs if and only if no attention mask is needed.
+
+        This function modifies the `use_cuda_graph` attribute of the config in place.
+        """
+        # If cuda is not available, we cannot use cuda graphs
+        import torch
+
+        if not torch.cuda.is_available():
+            if self.use_cuda_graph:  # throw a warning only if the user intended to use cuda graphs
+                logger.warning(f"use_cuda_graph is True but {torch.cuda.is_available() = }: turning off cuda graphs.")
+            self.use_cuda_graph = False
+
+        # If use_cuda_graph is specified, we follow the user's choice
+        elif self.use_cuda_graph is not None:
+            pass
+
+        # If the user specified a parameter related to cuda graphs, we activate cuda graphs
+        elif self.q_padding_interval_size or self.kv_padding_interval_size or self.max_cached_graphs:
+            self.use_cuda_graph = True
+
+        # If a compile config was found, turn off cuda graphs if the compile config already uses them
+        elif compile_config is not None:
+            options = torch._inductor.list_mode_options().get(compile_config.mode, compile_config.options)
+            compile_uses_cudagraphs = options.get("triton.cudagraphs", False)
+            if compile_uses_cudagraphs:
+                logger.warning(
+                    f"Compile config {compile_config.mode = } uses cudagraphs, which usually does not work well with "
+                    "continuous batching. We recommend using mode 'default' or 'max-autotune-no-cudagraphs' instead."
+                )
+            self.use_cuda_graph = not compile_uses_cudagraphs  # TODO: should this also match the dynamic shapes?
+
+        # Otherwise we have a default heuristic based on the attention implementation:
+        # attention implementations where an attention mask is needed suffer a lot more from the padding associated
+        # with cuda graphs, so default is to turn cuda graphs off for those implementations
+        else:
+            self.use_cuda_graph = not is_attn_mask_needed
+            logger.warning(
+                f"No behavior specified for use_cuda_graph, defaulting to {self.use_cuda_graph = } because "
+                f"{is_attn_mask_needed = }. If you want to save memory, turn off cuda graphs, but they tend to improve "
+                "performances by a lot."
+            )
+
+        # Return the decision
+        return self.use_cuda_graph
+
+    def decide_use_async_batching(self, is_attn_mask_needed: bool) -> bool:
+        """Returns whether or not to use asynchronous batching for continuous batching. If the user specified this in
+        the config, we follow their choice. Otherwise, we turn on asynchronous batching if and only if CUDA graphs are
+        turned on and no attention mask is needed.
+
+        This function modifies the `use_async_batching` attribute of the config in place.
+        """
+        # If the user specifies to use async or not, no need to decide ourselves
+        if self.use_async_batching is None:
+            self.use_async_batching = self.use_cuda_graph and not is_attn_mask_needed
+            logger.info(
+                f"No behavior specified for use_async_batching, choosing {self.use_async_batching = } because CUDA "
+                "graphs are turned on and no attention mask is needed. If you want to save memory, you can disable "
+                "asynchronous batching but it will degrade performance."
+            )
+        return self.use_async_batching
