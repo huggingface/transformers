@@ -15,7 +15,7 @@
 
 import re
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -117,15 +117,15 @@ class T5Tokenizer(TokenizersBackend):
             )
         )
 
-        normalizers_ = [
-            normalizers.Strip(left=False, right=True),  # stripping is important
-            normalizers.Replace(Regex(" {2,}"), "▁"),
-        ]
         if _spm_precompiled_charsmap is not None:
-            normalizers_ += [normalizers.Precompiled(_spm_precompiled_charsmap)]
+            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
 
-        self._tokenizer.normalizer = normalizers.Sequence(normalizers_)
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
+            ]
+        )
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         super().__init__(
