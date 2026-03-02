@@ -26,7 +26,7 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`Qwen3_5MoeTextModel`]. It is used to instantiate a
     Qwen3.5-MoE model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of
-    Qwen3.5-35B-A3B-Instruct [Qwen/Qwen3.5-35B-A3B-Instruct](https://huggingface.co/Qwen/Qwen3.5-35B-A3B-Instruct).
+    Qwen3.5-35B-A3B-Instruct [Qwen/Qwen3.5-35B-A3B](https://huggingface.co/Qwen/Qwen3.5-35B-A3B).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -259,7 +259,7 @@ class Qwen3_5MoeConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`Qwen3_5MoeModel`]. It is used to instantiate a
     Qwen3.5-MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    Qwen3.5-35B-A3B-Instruct [Qwen/Qwen3.5-35B-A3B-Instruct](https://huggingface.co/Qwen/Qwen3.5-35B-A3B-Instruct).
+    Qwen3.5-35B-A3B-Instruct [Qwen/Qwen3.5-35B-A3B](https://huggingface.co/Qwen/Qwen3.5-35B-A3B).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
