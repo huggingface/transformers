@@ -90,6 +90,8 @@ class ReformerConfig(PreTrainedConfig):
         Number of hashing rounds (e.g., number of random rotations) in Local Sensitive Hashing scheme. The higher
         `num_hashes`, the more accurate the `LSHSelfAttention` becomes, but also the more memory and time intensive
         the hashing becomes.
+    local_attn_chunk_length (`int`, *optional*, defaults to 64):
+        Length of each chunk in local attention layers.
 
     Examples:
 

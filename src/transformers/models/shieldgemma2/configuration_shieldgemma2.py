@@ -14,40 +14,22 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/gemma-3-4b")
 class ShieldGemma2Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ShieldGemma2ForImageClassification`]. It is used to instantiate an
-    ShieldGemma2ForImageClassification according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the shieldgemma-2-4b-it.
-
-    e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[ShieldGemma2TextConfig, dict]`, *optional*):
-            The config object of the text backbone.
-        vision_config (`Union[AutoConfig, dict]`,  *optional*):
-            Custom vision config or dict.
-        mm_tokens_per_image (`int`, *optional*, defaults to 256):
-            The number of tokens per image embedding.
-        boi_token_index (`int`, *optional*, defaults to 255999):
-            The begin-of-image token index to wrap the image prompt.
-        eoi_token_index (`int`, *optional*, defaults to 256000):
-            The end-of-image token index to wrap the image prompt.
-        image_token_index (`int`, *optional*, defaults to 262144):
-            The image token index to encode the image prompt.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+    mm_tokens_per_image (`int`, *optional*, defaults to 256):
+        The number of tokens per image embedding.
+    boi_token_index (`int`, *optional*, defaults to 255999):
+        The begin-of-image token index to wrap the image prompt.
+    eoi_token_index (`int`, *optional*, defaults to 256000):
+        The end-of-image token index to wrap the image prompt.
 
     Example:
 

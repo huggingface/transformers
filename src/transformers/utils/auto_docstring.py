@@ -1837,10 +1837,12 @@ class ConfigArgs:
     d_inner = intermediate_size
     initializer_std = init_std
     resid_dropout = resid_pdrop
+    residual_dropout = resid_pdrop
     dim_head = head_dim
     ffn_dim = intermediate_size
     emb_pdrop = embd_pdrop
     embed_dropout = embd_pdrop
+    embedding_dropout = embd_pdrop
     audio_token_index = audio_token_id
     layer_scale_initial_scale = layer_scale_init_value
     num_encoder_layers = encoder_layers
@@ -1848,6 +1850,7 @@ class ConfigArgs:
     input_channels = num_input_channels
     multi_modal_projector_bias = projector_bias
     projector_hidden_size = projection_dim
+    projection_size = projection_dim
     kernel_size = conv_kernel_size
     conv_kernel = conv_kernel_size
     use_absolute_embeddings = use_absolute_position_embeddings
@@ -1863,6 +1866,8 @@ class ConfigArgs:
     dim_ff = ffn_dim
     dropout_p = dropout
     eps = layer_norm_eps
+    use_qkv_bias = qkv_bias
+    norm_epsilon = layer_norm_eps
 
 
 class ModelArgs:

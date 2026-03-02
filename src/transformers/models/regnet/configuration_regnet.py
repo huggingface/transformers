@@ -33,6 +33,8 @@ class RegNetConfig(PreTrainedConfig):
         paper for a detailed explanation of how these layers were constructed.
     downsample_in_first_stage (`bool`, *optional*, defaults to `False`):
         If `True`, the first stage will downsample the inputs using a `stride` of 2.
+    groups_width (`int`, *optional*, defaults to 64):
+        Width of group for each stage.
 
     Example:
     ```python
