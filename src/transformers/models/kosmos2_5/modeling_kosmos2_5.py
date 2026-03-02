@@ -606,6 +606,7 @@ class Kosmos2_5VisionEncoder(Kosmos2_5PreTrainedModel):
         super().__init__(config)
         self.layer = nn.ModuleList([Kosmos2_5VisionLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
+        self.post_init()
 
     def _prepare_attention_mask(self, attention_mask, input_shape, inputs_embeds):
         if is_flash_attention_requested(self.config):
@@ -938,6 +939,8 @@ class Kosmos2_5TextTransformer(Kosmos2_5PreTrainedModel):
         self.layers = nn.ModuleList([Kosmos2_5TextBlock(config, layer_idx) for layer_idx in range(config.layers)])
         self.layer_norm = nn.LayerNorm(config.embed_dim, config.layer_norm_eps)
         self.gradient_checkpointing = False
+
+        self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs

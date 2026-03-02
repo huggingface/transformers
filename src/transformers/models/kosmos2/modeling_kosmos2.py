@@ -533,6 +533,8 @@ class Kosmos2VisionTransformer(Kosmos2PreTrainedModel):
         self.encoder = Kosmos2VisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+        self.post_init()
+
     @capture_outputs(tie_last_hidden_states=False)
     @merge_with_config_defaults
     @auto_docstring
@@ -937,6 +939,8 @@ class Kosmos2TextTransformer(Kosmos2PreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.embed_dim, config.layer_norm_eps)
 
         self.gradient_checkpointing = False
+
+        self.post_init()
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
