@@ -9,9 +9,7 @@ from ...configuration_utils import PreTrainedConfig
 
 
 class PPLCNetConfig(PreTrainedConfig):
-    model_type = "pp_lcnet"
-
-    """
+    r"""
     This is the configuration class to store the configuration of a [`PPLCNet`]. It is used to instantiate a
     PP-LCNet model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the PP-LCNet
@@ -58,6 +56,8 @@ class PPLCNetConfig(PreTrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     """
+
+    model_type = "pp_lcnet"
 
     def __init__(
         self,
