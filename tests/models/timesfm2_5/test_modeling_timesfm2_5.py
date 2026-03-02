@@ -44,7 +44,7 @@ class TimesFm2_5ModelTester:
         rms_norm_eps: float = 1e-6,
         quantiles: list[float] = [0.1, 0.5, 0.9],
         output_quantile_len: int = 16,
-        is_training: bool = False,
+        is_training: bool = True,
         batch_size: int = 2,
     ):
         self.parent = parent
@@ -98,6 +98,22 @@ class TimesFm2_5ModelTester:
         inputs_dict = {"past_values": forecast_input}
         return config, inputs_dict
 
+    def create_and_check_loss_computation(self, config, forecast_input):
+        model = TimesFm2_5ModelForPrediction(config)
+        model.to(torch_device)
+        model.train()
+
+        for horizon in (config.horizon_length, config.horizon_length // 2):
+            future_values = torch.randn(forecast_input.shape[0], horizon, device=torch_device)
+            outputs = model(past_values=forecast_input, future_values=future_values)
+            self.parent.assertIsNotNone(outputs.loss)
+            self.parent.assertEqual(outputs.loss.shape, ())
+            self.parent.assertTrue(torch.isfinite(outputs.loss))
+            # Predictions should always be full horizon_length regardless of future_values length.
+            self.parent.assertEqual(outputs.mean_predictions.shape[1], config.horizon_length)
+            self.parent.assertEqual(outputs.full_predictions.shape[1], config.horizon_length)
+            self.parent.assertEqual(outputs.full_predictions.shape[2], len(config.quantiles) + 1)
+
     def create_and_check_loss_backward(self, config, forecast_input):
         model = TimesFm2_5ModelForPrediction(config)
         model.to(torch_device)
@@ -105,9 +121,9 @@ class TimesFm2_5ModelTester:
 
         future_values = torch.randn(forecast_input.shape[0], config.horizon_length, device=torch_device)
         outputs = model(past_values=forecast_input, future_values=future_values)
+        self.parent.assertIsNotNone(outputs.loss)
         outputs.loss.backward()
 
-        # Not all trainable parameters are guaranteed to receive gradients for a single loss path.
         has_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters() if p.requires_grad)
         self.parent.assertTrue(has_grad, "No gradients were computed during backpropagation")
 
@@ -118,6 +134,7 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     is_encoder_decoder = False
     test_inputs_embeds = False
+    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = TimesFm2_5ModelTester(self)
@@ -285,30 +302,20 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
         if self.has_attentions and outputs.attentions is not None:
             self.assertIsNotNone(attentions.grad)
 
+    def test_training(self):
+        if not self.model_tester.is_training:
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_loss_backward(*config_and_inputs)
+
     def test_loss_computation(self):
-        """Test that loss is computed for both matching and shorter-than-horizon future_values."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = TimesFm2_5ModelForPrediction(config)
-        model.to(torch_device)
-        model.train()
-
-        past_values = inputs_dict["past_values"]
-
-        for horizon in (config.horizon_length, config.horizon_length // 2):
-            future_values = torch.randn(past_values.shape[0], horizon, device=torch_device)
-            outputs = model(past_values=past_values, future_values=future_values)
-            self.assertIsNotNone(outputs.loss)
-            self.assertEqual(outputs.loss.shape, ())
-            self.assertTrue(torch.isfinite(outputs.loss))
-            # Predictions should always be full horizon_length regardless of future_values length
-            self.assertEqual(outputs.mean_predictions.shape[1], config.horizon_length)
-            self.assertEqual(outputs.full_predictions.shape[1], config.horizon_length)
-            self.assertEqual(outputs.full_predictions.shape[2], len(config.quantiles) + 1)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_loss_computation(*config_and_inputs)
 
     def test_loss_backward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_loss_backward(*config_and_inputs)
-
 
 @require_torch
 @slow
