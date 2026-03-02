@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 class T5Tokenizer(TokenizersBackend):
-    """"
+    """
     Construct a T5 tokenizer (backed by HuggingFace's *tokenizers* library). Based on
     [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models).
 
