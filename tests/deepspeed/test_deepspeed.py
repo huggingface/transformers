@@ -23,9 +23,8 @@ from functools import partial
 import datasets
 from parameterized import parameterized
 
-import tests.trainer.test_trainer
 import transformers
-from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
+from tests.trainer.trainer_test_utils import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.integrations.deepspeed import (
     HfDeepSpeedConfig,
@@ -60,13 +59,16 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
-    from tests.trainer.test_trainer import (  # noqa
+    from tests.trainer.trainer_test_utils import (  # noqa
         RegressionModelConfig,
         RegressionPreTrainedModel,
     )
+    from tests.trainer.trainer_test_utils import (
+        get_regression_trainer as _get_regression_trainer,
+    )
 
     # hack to restore original logging level pre #21700
-    get_regression_trainer = partial(tests.trainer.test_trainer.get_regression_trainer, log_level="info")
+    get_regression_trainer = partial(_get_regression_trainer, log_level="info")
 
 
 set_seed(42)

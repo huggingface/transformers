@@ -166,7 +166,14 @@ _import_structure = {
         "ZeroShotObjectDetectionPipeline",
         "pipeline",
     ],
-    "processing_utils": ["ProcessorMixin"],
+    "processing_utils": [
+        "AudioKwargs",
+        "ImagesKwargs",
+        "ProcessingKwargs",
+        "ProcessorMixin",
+        "TextKwargs",
+        "VideosKwargs",
+    ],
     "quantizers": [],
     "testing_utils": [],
     "tokenization_python": ["PreTrainedTokenizer", "PythonBackend"],
@@ -674,7 +681,12 @@ if TYPE_CHECKING:
     from .pipelines import ZeroShotImageClassificationPipeline as ZeroShotImageClassificationPipeline
     from .pipelines import ZeroShotObjectDetectionPipeline as ZeroShotObjectDetectionPipeline
     from .pipelines import pipeline as pipeline
+    from .processing_utils import AudioKwargs as AudioKwargs
+    from .processing_utils import ImagesKwargs as ImagesKwargs
+    from .processing_utils import ProcessingKwargs as ProcessingKwargs
     from .processing_utils import ProcessorMixin as ProcessorMixin
+    from .processing_utils import TextKwargs as TextKwargs
+    from .processing_utils import VideosKwargs as VideosKwargs
     from .pytorch_utils import Conv1D as Conv1D
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
 
