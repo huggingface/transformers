@@ -539,11 +539,12 @@ class GenerationMixin(ContinuousMixin):
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step for every prompt.
         if not self.config.is_encoder_decoder and inputs_embeds is not None and is_first_iteration:
             model_inputs[input_ids_key] = None
-            inputs_embeds = (
-                inputs_embeds[:, -next_sequence_length:, :] if next_sequence_length is not None else inputs_embeds
+            prompt_embeds = cast(
+                torch.FloatTensor,
+                inputs_embeds[:, -next_sequence_length:, :] if next_sequence_length is not None else inputs_embeds,
             )
-            model_inputs["inputs_embeds"] = inputs_embeds.clone(memory_format=torch.contiguous_format)
-            batch_size, sequence_length = inputs_embeds.shape[:2]
+            model_inputs["inputs_embeds"] = prompt_embeds.clone(memory_format=torch.contiguous_format)
+            batch_size, sequence_length = prompt_embeds.shape[:2]
         else:
             # `clone` calls in this function ensure a consistent stride. See #32227
             input_ids = input_ids[:, -next_sequence_length:] if next_sequence_length is not None else input_ids
@@ -614,15 +615,13 @@ class GenerationMixin(ContinuousMixin):
 
     def _prepare_model_inputs(
         self,
-        inputs: torch.Tensor | None = None,
-        bos_token_id: torch.Tensor | None = None,
-        model_kwargs: dict[str, torch.Tensor] | None = None,
+        inputs: torch.Tensor | None,
+        bos_token_id: torch.Tensor | None,
+        model_kwargs: dict[str, torch.Tensor],
     ) -> tuple[torch.Tensor, str | None, dict[str, torch.Tensor]]:
         """
         This function extracts the model-specific `inputs` for generation.
         """
-        if model_kwargs is None:
-            model_kwargs = {}
         # 1. retrieve all kwargs that are non-None or non-model input related.
         # some encoder-decoder models have different names for model and encoder
         if (
@@ -681,12 +680,10 @@ class GenerationMixin(ContinuousMixin):
 
     def _maybe_initialize_input_ids_for_generation(
         self,
-        inputs: torch.Tensor | None = None,
-        bos_token_id: torch.Tensor | None = None,
-        model_kwargs: dict[str, torch.Tensor] | None = None,
+        inputs: torch.Tensor | None,
+        bos_token_id: torch.Tensor | None,
+        model_kwargs: dict[str, torch.Tensor],
     ) -> torch.LongTensor:
-        if model_kwargs is None:
-            model_kwargs = {}
         """Initializes input ids for generation, if necessary."""
         if inputs is not None:
             return inputs
