@@ -42,6 +42,10 @@ class CvtConfig(PreTrainedConfig):
         The padding size for query in attention layer
     stride_q (`list[int]`, *optional*, defaults to `[1, 1, 1]`):
         The stride size for query in attention layer
+    attention_drop_rate (`list[float]`, *optional*, defaults to `[0.0, 0.0, 0.0]`):
+        The dropout ratio for the attention probabilities.
+    drop_rate (`list[float]`, *optional*, defaults to `[0.0, 0.0, 0.0]`):
+        The dropout ratio for the patch embeddings probabilities.
 
     Example:
 

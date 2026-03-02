@@ -80,6 +80,14 @@ class FlaubertConfig(PreTrainedConfig):
         Model agnostic parameter to identify masked tokens when generating text in an MLM context.
     lang_id (`int`, *optional*, defaults to 1):
         The ID of the language used by the model. This parameter is used when generating text in a given language.
+    emb_dim (`int`, *optional*, defaults to 2048):
+        The dimensionality of embedding layer.
+    gelu_activation (`bool`, *optional*, defaults to True):
+        Whether to use GeLU activation function.
+    embed_init_std (`float`, *optional*, defaults to `2048**-0.5`):
+        Initializer std for embedding layers.
+    is_encoder (`bool`, *optional*, defaults to True):
+        Whether the model is used as an encoder.
     """
 
     model_type = "flaubert"
@@ -134,7 +142,6 @@ class FlaubertConfig(PreTrainedConfig):
         tie_word_embeddings=True,
         **kwargs,
     ):
-        """Constructs FlaubertConfig."""
         self.pre_norm = pre_norm
         self.layerdrop = layerdrop
         self.vocab_size = vocab_size

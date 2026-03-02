@@ -33,6 +33,7 @@ class GraniteMoeSharedConfig(PreTrainedConfig):
     logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits
     residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier
     attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier
+    shared_intermediate_size (`int`, *optional*, defaults to 1024): intermediate size for shared experts.
 
     ```python
     >>> from transformers import GraniteMoeSharedModel, GraniteMoeSharedConfig

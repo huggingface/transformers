@@ -28,7 +28,7 @@ class PegasusXConfig(PreTrainedConfig):
     block_size (`int`, *optional*, defaults to 512):
         Block size for encoder local attention. Sequence length should be an exact multiple of block size.
         block_size must be a multiple of 2 if stagger_local_block is True
-    stagger_local_block (`bool`, *optional*, defaults to `True`):
+    stagger_local_blocks (`bool`, *optional*, defaults to `True`):
         Whether to stagger every other local attention by half a block
 
     Example:

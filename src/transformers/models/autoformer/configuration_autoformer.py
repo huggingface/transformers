@@ -23,6 +23,48 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="huggingface/autoformer-tourism-monthly")
 class AutoformerConfig(PreTrainedConfig):
     r"""
+    prediction_length (`int`):
+        The prediction length for the decoder. In other words, the prediction horizon of the model.
+    context_length (`int`, *optional*, defaults to `prediction_length`):
+        The context length for the encoder. If unset, the context length will be the same as the
+        `prediction_length`.
+    distribution_output (`string`, *optional*, defaults to `"student_t"`):
+        The distribution emission head for the model. Could be either "student_t", "normal" or "negative_binomial".
+    loss (`string`, *optional*, defaults to `"nll"`):
+        The loss function for the model corresponding to the `distribution_output` head. For parametric
+        distributions it is the negative log likelihood (nll) - which currently is the only supported one.
+    input_size (`int`, *optional*, defaults to 1):
+        The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
+        multivariate targets.
+    lags_sequence (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`):
+        The lags of the input time series as covariates often dictated by the frequency. Default is `[1, 2, 3, 4,
+        5, 6, 7]`.
+    scaling (`bool`, *optional* defaults to `True`):
+        Whether to scale the input targets.
+    num_time_features (`int`, *optional*, defaults to 0):
+        The number of time features in the input time series.
+    num_dynamic_real_features (`int`, *optional*, defaults to 0):
+        The number of dynamic real valued features.
+    num_static_categorical_features (`int`, *optional*, defaults to 0):
+        The number of static categorical features.
+    num_static_real_features (`int`, *optional*, defaults to 0):
+        The number of static real valued features.
+    cardinality (`list[int]`, *optional*):
+        The cardinality (number of different values) for each of the static categorical features. Should be a list
+        of integers, having the same length as `num_static_categorical_features`. Cannot be `None` if
+        `num_static_categorical_features` is > 0.
+    num_parallel_samples (`int`, *optional*, defaults to 100):
+        The number of samples to generate in parallel for each time step of inference.
+    label_length (`int`, *optional*, defaults to 10):
+        Start token length of the Autoformer decoder, which is used for direct multi-step prediction (i.e.
+        non-autoregressive generation).
+    moving_average (`int`, *optional*, defaults to 25):
+        The window size of the moving average. In practice, it's the kernel size in AvgPool1d of the Decomposition
+        Layer.
+    autocorrelation_factor (`int`, *optional*, defaults to 3):
+        "Attention" (i.e. AutoCorrelation mechanism) factor which is used to find top k autocorrelations delays.
+        It's recommended in the paper to set it to a number between 1 and 5.
+
     Example:
 
     ```python

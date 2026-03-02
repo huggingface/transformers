@@ -23,6 +23,9 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="facebook/blenderbot-3B")
 class BlenderbotConfig(PreTrainedConfig):
     r"""
+    encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 3):
+        Number of ngrams to not be repeated in the encoder.
+
     Example:
 
     ```python

@@ -49,6 +49,8 @@ class EfficientLoFTRConfig(PreTrainedConfig):
         The size of the slice used to divide the fine features for the first and second fine matching stages.
     fine_matching_regress_temperature (`float`, *optional*, defaults to 10.0):
         The temperature to apply to the fine similarity matrix
+    num_attention_layers (`int`, *optional*, defaults to 4):
+        Number of attention layers in the LocalFeatureTransformer
 
     Examples:
         ```python

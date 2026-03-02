@@ -75,15 +75,6 @@ class BridgeTowerVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="BridgeTower/bridgetower-base")
 class BridgeTowerTextConfig(PreTrainedConfig):
     r"""
-    share_cross_modal_transformer_layers (`bool`, *optional*, defaults to `True`):
-        Whether cross modal transformer layers are shared.
-    share_link_tower_layers (`bool`, *optional*, defaults to `False`):
-        Whether the bride/link tower layers are shared.
-    link_tower_type (`str`, *optional*, defaults to `"add"`):
-        Type of the bridge/link layer.
-    init_layernorm_from_vision_encoder (`bool`, *optional*, defaults to `False`):
-        Whether to init LayerNorm from the vision encoder.
-
     Example:
 
     ```python
@@ -146,6 +137,15 @@ class BridgeTowerTextConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="BridgeTower/bridgetower-base")
 class BridgeTowerConfig(PreTrainedConfig):
     r"""
+    share_cross_modal_transformer_layers (`bool`, *optional*, defaults to `True`):
+        Whether cross modal transformer layers are shared.
+    share_link_tower_layers (`bool`, *optional*, defaults to `False`):
+        Whether the bride/link tower layers are shared.
+    init_layernorm_from_vision_encoder (`bool`, *optional*, defaults to `False`):
+        Whether to init LayerNorm from the vision encoder.
+    link_tower_type (`str`, *optional*, defaults to `"add"`):
+        Type of the bridge/link layer.
+
     Example:
 
     ```python

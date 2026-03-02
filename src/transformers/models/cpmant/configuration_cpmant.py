@@ -24,16 +24,16 @@ logger = logging.get_logger(__name__)
 class CpmAntConfig(PreTrainedConfig):
     r"""
     position_bias_num_buckets (`int`, *optional*, defaults to 512):
-         The number of position_bias buckets.
-     position_bias_max_distance (`int`, *optional*, defaults to 2048):
-         The maximum sequence length that this model might ever be used with. Typically set this to something large
-         just in case (e.g., 512 or 1024 or 2048).
-     prompt_types (`int`, *optional*, defaults to 32):
-         The type of prompt.
-     prompt_length (`int`, *optional*, defaults to 32):
-         The length of prompt.
-     segment_types (`int`, *optional*, defaults to 32):
-         The type of segment.
+        The number of position_bias buckets.
+    position_bias_max_distance (`int`, *optional*, defaults to 2048):
+        The maximum sequence length that this model might ever be used with. Typically set this to something large
+        just in case (e.g., 512 or 1024 or 2048).
+    prompt_types (`int`, *optional*, defaults to 32):
+        The type of prompt.
+    prompt_length (`int`, *optional*, defaults to 32):
+        The length of prompt.
+    segment_types (`int`, *optional*, defaults to 32):
+        The type of segment.
 
      Example:
 

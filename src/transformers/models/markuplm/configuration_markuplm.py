@@ -41,6 +41,8 @@ class MarkupLMConfig(PreTrainedConfig):
         (50*xpath_tag_unit_hidden_size)-dim.
     max_depth (`int`, *optional*, defaults to 50):
         The maximum depth in xpath.
+    xpath_unit_hidden_size (`int`, *optional*, defaults to 32):
+        The hidden size of each unit in xpath.
 
     Examples:
 

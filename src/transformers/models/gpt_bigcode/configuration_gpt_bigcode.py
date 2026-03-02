@@ -23,6 +23,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="google/gpt_bigcode")
 class GPTBigCodeConfig(PreTrainedConfig):
     r"""
+    multi_query (`bool`, *optional*, defaults to `True`):
+        Whether to use multi-query attention in the decoder. Ignored when `new_decoder_architecture` is `True`.
     scale_attn_weights (`bool`, *optional*, defaults to `True`):
         Scale attention weights by dividing by sqrt(hidden_size)..
     attention_softmax_in_fp32 (`bool`, *optional*, defaults to `True`):

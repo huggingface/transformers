@@ -23,6 +23,13 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="CohereForAI/aya-vision-8b")
 class AyaVisionConfig(PreTrainedConfig):
+    r"""
+    downsample_factor (`int`, *optional*, defaults to 2):
+        The downsample factor to apply to the vision features.
+    adapter_layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+        The epsilon value used for layer normalization in the adapter.
+    """
+
     model_type = "aya_vision"
     attribute_map = {
         "image_token_id": "image_token_index",

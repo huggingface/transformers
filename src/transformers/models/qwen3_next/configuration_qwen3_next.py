@@ -36,6 +36,10 @@ class Qwen3NextConfig(PreTrainedConfig):
         Number of value heads used in linear attention layers.
     decoder_sparse_step (`int`, *optional*, defaults to 1):
         The frequency of the MoE layer.
+    mlp_only_layers (`list[int]`, *optional*, defaults to `[]`):
+        Indicate which layers use Qwen3NextMLP rather than Qwen3NextSparseMoeBlock
+        The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
+        If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
 
     ```python
     >>> from transformers import Qwen3NextModel, Qwen3NextConfig

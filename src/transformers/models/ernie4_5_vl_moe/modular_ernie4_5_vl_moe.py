@@ -225,6 +225,19 @@ class Ernie4_5_VL_MoeTextConfig(Ernie4_5_MoeConfig, PreTrainedConfig):
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
     r"""
+    moe_num_experts (`int`, *optional*, defaults to 64):
+        Number of routed experts.
+    moe_num_shared_experts (`int`, *optional*, defaults to 2):
+        The number of experts that are shared for all MoE forwards.
+    moe_layer_start_index (`int`, *optional*, defaults to 1):
+        The first index at which MoE layers start to appear.
+    moe_layer_end_index (`int`, *optional*, defaults to -1):
+        The last possible index for a MoE layer.
+    moe_layer_interval (`int`, *optional*, defaults to 1):
+        The intervals between MoE layers to appear.
+    moe_norm_min (`float`, *optional*, defaults to 1e-12):
+        Minimum division value during routing normalization.
+
     Example:
 
     ```python

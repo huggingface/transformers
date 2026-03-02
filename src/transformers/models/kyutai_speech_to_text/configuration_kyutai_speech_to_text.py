@@ -25,6 +25,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="kyutai/stt-2.6b-en-trfs")
 class KyutaiSpeechToTextConfig(PreTrainedConfig):
     r"""
+    codebook_vocab_size (`int`, *optional*, defaults to 2049):
+        Vocabulary size of the codebook. Defines the number of different audio tokens that can be represented by each codebook.
     audio_bos_token_id (`int`, *optional*, defaults to 2048):
         Beginning of stream token id for codebook tokens.
     audio_pad_token_id (`int`, *optional*, defaults to 69569):
@@ -37,7 +39,6 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
               defines the audio encoder config.
             - **depth__config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
               defines the depth decoder config.
-
 
     Example:
     ```python

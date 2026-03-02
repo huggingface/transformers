@@ -23,6 +23,9 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="EleutherAI/gpt-j-6B")
 class GPTJConfig(PreTrainedConfig):
     r"""
+    rotary_dim (`int`, *optional*, defaults to 64):
+        Number of dimensions in the embedding that Rotary Position Embedding is applied to.
+
     Example:
 
     ```python

@@ -25,6 +25,11 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="sesame/csm-1b")
 class CsmDepthDecoderConfig(PreTrainedConfig):
     r"""
+    backbone_hidden_size (`int`, *optional*, defaults to 2048):
+        Dimension of the hidden representations of the backbone model used with this depth decoder.
+
+    Example:
+
     ```python
     >>> from transformers import CsmDepthDecoder, CsmDepthDecoderConfig
 
@@ -104,9 +109,17 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="sesame/csm-1b")
 class CsmConfig(PreTrainedConfig):
     r"""
+    codebook_pad_token_id (`int`, *optional*, defaults to 2050):
+        Padding token id for codebook tokens.
+    codebook_eos_token_id (`int`, *optional*, defaults to 0):
+        End of stream token id for codebook tokens.
+    audio_token_id (`int`, *optional*, defaults to 128002):
+        Audio token id in the text input.
+    audio_eos_token_id (`int`, *optional*, defaults to 128003):
+        End of stream token id for audio in the text input.
     tie_codebooks_embeddings (`bool`, *optional*, defaults to `True`):
          Whether to tie the codebook tokens embeddings of the backbone model to the codebook tokens embeddings of the depth decoder.
-     depth_decoder_config (`CsmDepthDecoderConfig`, *optional*):
+    depth_decoder_config (`CsmDepthDecoderConfig`, *optional*):
          Configuration for the depth decoder.
 
 

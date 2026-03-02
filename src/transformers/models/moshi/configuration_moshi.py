@@ -25,6 +25,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="kmhf/hf-moshiko")
 class MoshiDepthConfig(PreTrainedConfig):
     r"""
+    input_size (`int`, *optional*, defaults to 4096):
+        Dimensionality of the input hidden states. Used to connect the main decoder to the depth decoder.
     audio_vocab_size (`int`, *optional*, defaults to 2048):
         Vocabulary size of the audio part of model. Defines the number of different tokens that can be
         represented by the `audio_codes` passed when calling the Moshi models.

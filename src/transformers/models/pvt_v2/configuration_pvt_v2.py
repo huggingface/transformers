@@ -44,6 +44,8 @@ class PvtV2Config(BackboneConfigMixin, PreTrainedConfig):
     linear_attention (`bool`, *optional*, defaults to `False`):
         Use linear attention complexity. If set to True, `sr_ratio` is ignored and average pooling is used for
         dimensionality reduction in the attention layers rather than strided convolution.
+    num_encoder_blocks (`[int]`, *optional*, defaults to 4):
+        The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
 
     Example:
 

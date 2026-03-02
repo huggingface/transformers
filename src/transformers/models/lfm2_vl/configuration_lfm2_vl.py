@@ -24,6 +24,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="LiquidAI/LFM2-VL-1.6B")
 class Lfm2VlConfig(PreTrainedConfig):
     r"""
+    downsample_factor (`int`, *optional*, defaults to 2):
+        The downsample_factor factor of the vision backbone.
     projector_bias (`bool`, *optional*, defaults to `True`):
         Whether to use bias in the multimodal projector.
     projector_use_layernorm (`bool`, *optional*, defaults to `True`):

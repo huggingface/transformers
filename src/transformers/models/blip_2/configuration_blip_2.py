@@ -76,6 +76,11 @@ class Blip2VisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="Salesforce/blip2-opt-2.7b")
 class Blip2QFormerConfig(PreTrainedConfig):
     r"""
+    cross_attention_frequency (`int`, *optional*, defaults to 2):
+        The frequency of adding cross-attention to the Transformer layers.
+    use_qformer_text_input (`bool`, *optional*, defaults to `False`):
+        Whether to use BERT-style embeddings.
+
     Examples:
 
     ```python
@@ -134,6 +139,13 @@ class Blip2QFormerConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="Salesforce/blip2-opt-2.7b")
 class Blip2Config(PreTrainedConfig):
     r"""
+    qformer_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`Blip2QFormerConfig`].
+    num_query_tokens (`int`, *optional*, defaults to 32):
+        The number of query tokens passed through the Transformer.
+    image_text_hidden_size (`int`, *optional*, defaults to 256):
+        Dimensionality of the hidden state of the image-text fusion layer.
+
     Example:
 
     ```python

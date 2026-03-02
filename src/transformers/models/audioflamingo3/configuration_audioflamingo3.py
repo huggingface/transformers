@@ -24,6 +24,9 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="nvidia/audio-flamingo-3-hf")
 class AudioFlamingo3EncoderConfig(PretrainedConfig):
     r"""
+    max_source_positions (`int`, *optional*, defaults to 1500):
+        The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+
     Example:
 
     ```python

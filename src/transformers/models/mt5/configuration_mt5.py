@@ -27,8 +27,10 @@ class MT5Config(PreTrainedConfig):
         The number of buckets to use for each attention layer.
     relative_attention_max_distance (`int`, *optional*, defaults to 128):
         The maximum distance of the longer sequences for the bucket separation.
-    feed_forward_proj (`string`, *optional*, defaults to `"gated-gelu"`):
+    feed_forward_proj (`str`, *optional*, defaults to `"gated-gelu"`):
         Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`.
+    tokenizer_class (`str`, *optional*, defaults to `"T5Tokenizer"`):
+        The tokenizer's class name.
     """
 
     model_type = "mt5"

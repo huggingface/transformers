@@ -65,6 +65,10 @@ class RagConfig(PreTrainedConfig):
     output_retrieved(`bool`, *optional*, defaults to `False`):
         If set to `True`, `retrieved_doc_embeds`, `retrieved_doc_ids`, `context_input_ids` and
         `context_attention_mask` are returned. See returned tensors for more detail.
+    prefix (`str`, *optional*):
+        A string prefix prepended to every input before passing to the generator model.
+    dataset_revision (`str`, *optional*,):
+        The revision (commit hash, tag, or branch) of the Hugging Face dataset used for retrieval.
     """
 
     model_type = "rag"

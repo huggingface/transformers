@@ -30,7 +30,7 @@ class LevitConfig(PreTrainedConfig):
     mlp_ratios (`list[int]`, *optional*, defaults to `[2, 2, 2]`):
         Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
         encoder blocks.
-    attention_ratios (`list[int]`, *optional*, defaults to `[2, 2, 2]`):
+    attention_ratio (`list[int]`, *optional*, defaults to `[2, 2, 2]`):
         Ratio of the size of the output dimension compared to input dimension of attention layers.
 
     Example:

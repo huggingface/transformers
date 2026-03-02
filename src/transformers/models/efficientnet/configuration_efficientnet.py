@@ -40,6 +40,12 @@ class EfficientNetConfig(PreTrainedConfig):
         `"max"`]
     drop_connect_rate (`float`, *optional*, defaults to 0.2):
         The drop rate for skip connections.
+    kernel_sizes (`list[int]`, *optional*, defaults to `[3, 3, 5, 3, 5, 5, 3]`):
+        List of kernel sizes to be used in each block.
+    out_channels (`list[int]`, *optional*, defaults to `[16, 24, 40, 80, 112, 192, 320]`):
+        List of output channel sizes to be used in each block for convolutional layers.
+    depthwise_padding (`list[int]`, *optional*, defaults to `[]`):
+        List of block indices with square padding.
 
     Example:
     ```python

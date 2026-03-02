@@ -169,6 +169,10 @@ class EsmFoldConfig:
 @auto_docstring(checkpoint="facebook/esm-1b")
 class EsmConfig(PreTrainedConfig):
     r"""
+    is_folding_model (`bool`, defaults to `False`):
+        When this is enabled, ESMFold model will be initialized.
+    position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
+        Type of position embedding. Choose either `"absolute"` or "rotary"`.
     mask_token_id (`int`, *optional*):
         The index of the mask token in the vocabulary. This must be included in the config because of the
         "mask-dropout" scaling trick, which will scale the inputs depending on the number of masked tokens.

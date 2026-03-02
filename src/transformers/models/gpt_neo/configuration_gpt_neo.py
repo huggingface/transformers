@@ -25,6 +25,10 @@ class GPTNeoConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 256):
         The size of the sliding window for local attention.
+    attention_types (`list`, *optional*, defaults to `[[['global', 'local'], 12]]`):
+        The type of attention for each layer in a `List` of the following format `[[["attention_type"],
+        num_layerss]]` e.g. for a 24 layer model `[[["global"], 24]]` or `[[["global", "local"], 12]]` Choose the
+        value of `attention_type` from `["global", "local"]
 
     Example:
 

@@ -88,6 +88,8 @@ class Kosmos2_5VisionConfig(PreTrainedConfig):
         `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
     max_num_patches (`int`, *optional*, defaults to 4096):
         Maximum sequence length (here number of patches) supported by the model.
+    patch_embed_hidden_size (`int`, *optional*, defaults to 768):
+        Dimensionality of the input patch_embedding layer in the Transformer encoder.
 
     Example:
 

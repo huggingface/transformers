@@ -27,6 +27,8 @@ class HunYuanMoEV1Config(PreTrainedConfig):
     eod_token_id (int, *optional*, defaults to 3):
         Token ID representing the end-of-document marker. Used to indicate the termination of a text sequence.
         Example: In multi-document processing, this token helps the model distinguish between separate documents.
+    moe_topk (`int` or `list[int]`, *optional*, defaults to 1):
+        Number of experts selected per token (Top-K routing). List form enables layer-wise customization.
     """
 
     model_type = "hunyuan_v1_moe"

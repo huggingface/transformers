@@ -29,6 +29,19 @@ logger = logging.get_logger(__name__)
     checkpoint="ibm-fms/Bamba-9.8b-2.2T-hf",
 )
 class BambaConfig(PreTrainedConfig):
+    r"""
+    attn_layer_indices (`list`, *optional*):
+        Specifies the layer indices that will have full attention. Must contain values at most num_hidden_layers.
+    num_logits_to_keep (`int` or `None`, *optional*, defaults to 1):
+        Number of prompt logits to calculate during generation. If `None`, all logits will be calculated. If an
+        integer value, only last `num_logits_to_keep` logits will be calculated. Default is 1 because only the
+        logits of the last prompt token are needed for generation. For long sequences, the logits for the entire
+        sequence may use a lot of memory so, setting `num_logits_to_keep=1` will reduce memory footprint
+        significantly.
+    z_loss_coefficient (`float`, *optional*, defaults to 0.0):
+        Coefficient for auxiliary z-loss used to control logit growth during training
+    """
+
     model_type = "bamba"
     keys_to_ignore_at_inference = ["past_key_values"]
 

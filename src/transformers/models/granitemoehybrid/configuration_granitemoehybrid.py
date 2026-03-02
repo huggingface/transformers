@@ -30,6 +30,7 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
     residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier.
     attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier.
     position_embedding_type (`str`, *optional*): Positional embedding type to be used; defaults to None. Allowed options: `[None, "rope"]`
+    shared_intermediate_size (`int`, *optional*, defaults to 1024): intermediate size for shared experts.
 
     Example:
 

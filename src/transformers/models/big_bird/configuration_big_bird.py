@@ -23,6 +23,14 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="google/bigbird-roberta-base")
 class BigBirdConfig(PreTrainedConfig):
     r"""
+    rescale_embeddings (`bool`, *optional*, defaults to `False`)
+        Whether to rescale embeddings with (hidden_size ** 0.5).
+    block_size (`int`, *optional*, defaults to 64)
+        Size of each block. Useful only when `attention_type == "block_sparse"`.
+    num_random_blocks (`int`, *optional*, defaults to 3)
+        Each query is going to attend these many number of random blocks. Useful only when `attention_type ==
+        "block_sparse"`.
+
     Example:
 
     ```python

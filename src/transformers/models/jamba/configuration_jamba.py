@@ -33,6 +33,12 @@ class JambaConfig(PreTrainedConfig):
         Once in this many layers, we will have a vanilla attention layer
     attn_layer_offset (`int`, *optional*, defaults to 4):
         The first layer index that contains a vanilla attention mlp layer
+    mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
+        Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
+    use_mamba_kernels (`bool`, *optional*, defaults to `True`):
+        Flag indicating whether or not to use the fast mamba kernels. These are available only if `mamba-ssm` and
+        `causal-conv1d` are installed, and the mamba modules are running on a CUDA device. Raises ValueError if
+        `True` and kernels are not available
     """
 
     model_type = "jamba"

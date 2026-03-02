@@ -23,6 +23,15 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="itazap/blt-1b-hf")
 class BltLocalEncoderConfig(PreTrainedConfig):
+    r"""
+    cross_attn_k (`int`, *optional*, defaults to 2):
+        Number of cross-attention heads used in the model.
+    cross_attn_all_layers (`bool`, *optional*, defaults to `True`):
+        Whether all attention layers have cross attention.
+    hidden_size_global (`int`, *int*, defaults to 2046):
+        Hidden size of the global transformer layer.
+    """
+
     model_type = "blt_local_encoder"
     default_theta = 500000.0
 
@@ -69,6 +78,13 @@ class BltLocalEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="itazap/blt-1b-hf")
 class BltLocalDecoderConfig(PreTrainedConfig):
+    r"""
+    cross_attn_k (`int`, *optional*, defaults to 2):
+        Number of cross-attention heads used in the model.
+    cross_attn_all_layers (`bool`, *optional*, defaults to `True`):
+        Whether all attention layers have cross attention.
+    """
+
     model_type = "blt_local_decoder"
     default_theta = 500000.0
 
@@ -198,6 +214,41 @@ class BltPatcherConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="itazap/blt-1b-hf")
 class BltConfig(PreTrainedConfig):
     r"""
+    layer_type (`str`, *optional*, defaults to `"preactivation"`):
+        The layer to use, it can be either `"preactivation"` or `"bottleneck"`.
+    embedding_dynamic_padding (`bool`, *optional*, defaults to `False`):
+        Whether or not to make use of dynamic padding for the embedding layer.
+    width_factor (`int`, *optional*, defaults to 1):
+        The width factor for the model.
+    global_padding (`str`, *optional*):
+        Padding strategy to use for the convolutional layers. Can be either `"valid"`, `"same"`, or `None`.
+    num_groups (`int`, *optional*, defaults to 32):
+        Number of groups used for the `BitGroupNormActivation` layers.
+    patch_in_forward (`bool`, *optional*, defaults to `True`):
+        Whether to perform patching during the forward pass.
+    patch_size (`int`, *optional*, defaults to 4):
+        Size of the patches used in the patching mechanism.
+    patching_mode (`str`, *optional*, defaults to `"entropy"`):
+        The mode used for patching, such as entropy-based patching.
+    patching_threshold (`float`, *optional*, defaults to 1.34):
+        Threshold value used for determining when to apply patches.
+    patching_batch_size (`int`, *optional*, defaults to 1):
+        Batch size used during the patching process.
+    max_patch_length (`int`, *optional*):
+        Maximum length of patches that can be generated.
+    cross_attn_k (`int`, *optional*, defaults to 2):
+        Number of cross-attention heads used in the model.
+    encoder_hash_byte_group_size (`list`, *optional*):
+        List of byte group sizes used in the encoder hash function.
+    encoder_hash_byte_group_vocab (`int`, *optional*, defaults to 500002):
+        Vocabulary size for the encoder hash byte groups.
+    encoder_hash_byte_group_nb_functions (`int`, *optional*, defaults to 1):
+        Number of hash functions used in the encoder byte grouping.
+    patcher_config (`BltPatcherConfig`, *optional*):
+        Configuration for the patcher component of the model.
+    global_config (`BltGlobalTransformerConfig`, *optional*):
+        Configuration for the global transformer component of the model.
+
     Example:
     ```python
     >>> from transformers import BltModel, BltConfig

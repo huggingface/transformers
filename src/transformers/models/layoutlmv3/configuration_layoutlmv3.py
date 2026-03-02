@@ -42,6 +42,8 @@ class LayoutLMv3Config(PreTrainedConfig):
         The number of 2D relative position bins in the self-attention mechanism.
     has_spatial_attention_bias (`bool`, *optional*, defaults to `True`):
         Whether or not to use a spatial attention bias in the self-attention mechanism.
+    text_embed (`bool`, *optional*, defaults to `True`):
+        Whether or not to add text embeddings.
     visual_embed (`bool`, *optional*, defaults to `True`):
         Whether or not to add patch embeddings.
     input_size (`int`, *optional*, defaults to `224`):

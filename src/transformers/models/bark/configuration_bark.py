@@ -107,6 +107,12 @@ class BarkCoarseConfig(BarkSubModelConfig):
 @auto_docstring(checkpoint="suno/bark")
 class BarkFineConfig(BarkSubModelConfig):
     r"""
+    n_codes_total (`int`, *optional*, defaults to 8):
+        The total number of audio codebooks predicted. Used in the fine acoustics sub-model.
+    n_codes_given (`int`, *optional*, defaults to 1):
+        The number of audio codebooks predicted in the coarse acoustics sub-model. Used in the acoustics
+        sub-models.
+
     Example:
 
     ```python

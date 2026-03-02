@@ -21,6 +21,10 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @auto_docstring(checkpoint="OpenGVLab/InternVL3-1B-hf")
 class InternVLVisionConfig(PreTrainedConfig):
     r"""
+    projection_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability for the projection layer.
+    norm_type (`str`, *optional*, defaults to `"layer_norm"`):
+        The type of normalization to use in the encoder. Can be `"layer_norm"` or `"rms_norm"`.
     use_mask_token (`bool`, *optional*, defaults to `False`):
         Whether to use a mask token for masked image modeling
     use_mean_pooling (`bool`, *optional*, defaults to `True`):
@@ -100,6 +104,9 @@ class InternVLVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="OpenGVLab/InternVL3-1B-hf")
 class InternVLConfig(PreTrainedConfig):
     r"""
+    downsample_ratio (`float`, *optional*, defaults to 0.5):
+        Factor by which to downsample the image.
+
     Example:
 
     ```python

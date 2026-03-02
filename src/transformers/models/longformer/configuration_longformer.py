@@ -26,6 +26,8 @@ class LongformerConfig(PreTrainedConfig):
     attention_window (`int` or `list[int]`, *optional*, defaults to 512):
         Size of an attention window around each token. If an `int`, use the same size for all layers. To specify a
         different window size for each layer, use a `list[int]` where `len(attention_window) == num_hidden_layers`.
+    onnx_export (`bool`, *optional*, defaults to False):
+        Whether to create a model so that it is ONNX exportable or not.
 
     Example:
 
@@ -67,7 +69,6 @@ class LongformerConfig(PreTrainedConfig):
         tie_word_embeddings=True,
         **kwargs,
     ):
-        """Constructs LongformerConfig."""
         super().__init__(**kwargs)
 
         self.pad_token_id = pad_token_id

@@ -28,6 +28,14 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="kyutai/mimi")
 class MimiConfig(PreTrainedConfig):
     r"""
+    num_quantizers (`int`, *optional*, defaults to 32):
+        Number of quantizer channels, or codebooks, in the quantizer.
+    num_residual_layers (`int`,  *optional*, defaults to 1):
+        Number of residual layers.
+    upsampling_ratios (`Sequence[int]`, *optional*):
+        Kernel size and stride ratios. The encoder uses downsampling ratios instead of upsampling ratios, hence it
+        will use the ratios in the reverse order to the ones specified here that must match the decoder order.
+        If not specified, will defaults to `[8, 6, 5, 4]`
     frame_rate (`float`, *optional*):
         Should be computed from the other parameters, yet kept for backward compatibility.
     audio_channels (`int`, *optional*, defaults to 1):

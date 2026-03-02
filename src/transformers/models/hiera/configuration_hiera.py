@@ -24,6 +24,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="facebook/hiera-base-224")
 class HieraConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
+    layer_norm_init (`float`, *optional*, defaults to 1.0):
+        The initial weight value for layer normalization layers.
     patch_stride (`list(int)`, *optional*, defaults to `[4, 4]`):
         The stride of the patch.
     patch_padding (`list(int)`, *optional*, defaults to `[3, 3]`):

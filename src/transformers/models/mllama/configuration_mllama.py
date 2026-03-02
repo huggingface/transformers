@@ -22,6 +22,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
 class MllamaVisionConfig(PreTrainedConfig):
     r"""
+    num_global_layers (`int`, *optional*, defaults to 8):
+        Number of global layers in the Transformer encoder. Vision model has a second transformer encoder, called global.
     vision_output_dim (`int`, *optional*, defaults to 7680):
         Dimensionality of the vision model output. Includes output of transformer
         encoder with intermediate layers and global transformer encoder.

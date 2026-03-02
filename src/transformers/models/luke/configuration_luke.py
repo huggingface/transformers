@@ -69,7 +69,6 @@ class LukeConfig(PreTrainedConfig):
         tie_word_embeddings=True,
         **kwargs,
     ):
-        """Constructs LukeConfig."""
         super().__init__(**kwargs)
 
         self.pad_token_id = pad_token_id

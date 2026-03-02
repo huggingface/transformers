@@ -25,6 +25,10 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="facebook/flava-full")
 class FlavaImageConfig(PreTrainedConfig):
     r"""
+    num_blocks_per_group (`int`, *optional*, defaults to 2):
+        Number of conv-based blocks per group.
+    freeze (`bool`, defaults to `True`):
+        Whether to freeze the weights of the model.
     mask_token (`bool`, *optional*, defaults to `True`):
         Whether to use a mask token or not. Used in MIM (Masked Image Modeling) loss for FLAVA.
 
@@ -197,9 +201,6 @@ class FlavaMultimodalConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="facebook/flava-full")
 class FlavaImageCodebookConfig(PreTrainedConfig):
-    model_type = "flava_image_codebook"
-    base_config_key = "image_codebook_config"
-
     r"""
     num_groups (`int`, *optional*, defaults to 4):
         Number of groups to be created. This parameter as of now doesn't affect the model and is used for some
@@ -223,6 +224,9 @@ class FlavaImageCodebookConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```
     """
+
+    model_type = "flava_image_codebook"
+    base_config_key = "image_codebook_config"
 
     def __init__(
         self,
@@ -275,6 +279,10 @@ class FlavaConfig(PreTrainedConfig):
         Whether to skip running unmasked multimodal encoder whose outputs are not used by FLAVA losses.
     return_loss (`bool`, *optional*, defaults to `True`):
         Whether to return loss or not
+    image_codebook_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`FlavaCodebookConfig`].
+    init_codebook (`bool`, *optional*, defaults to `True`):
+        Whether to initialize the codebook
 
     Example:
 

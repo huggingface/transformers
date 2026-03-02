@@ -23,6 +23,19 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="google/bigbird-pegasus-large-arxiv")
 class BigBirdPegasusConfig(PreTrainedConfig):
     r"""
+    attention_type (`str`, *optional*, defaults to `"block_sparse"`)
+        Whether to use block sparse attention (with n complexity) as introduced in paper or original attention
+        layer (with n^2 complexity). Possible values are `"original_full"` and `"block_sparse"`.
+    use_bias (`bool`, *optional*, defaults to `True`)
+        Whether to use bias in query, key, value.
+    rescale_embeddings (`bool`, *optional*, defaults to `False`)
+        Whether to rescale embeddings with (hidden_size ** 0.5).
+    block_size (`int`, *optional*, defaults to 64)
+        Size of each block. Useful only when `attention_type == "block_sparse"`.
+    num_random_blocks (`int`, *optional*, defaults to 3)
+        Each query is going to attend these many number of random blocks. Useful only when `attention_type ==
+        "block_sparse"`.
+
     Example:
 
     ```python
