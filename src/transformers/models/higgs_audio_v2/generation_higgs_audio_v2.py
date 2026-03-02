@@ -27,6 +27,7 @@ from ...generation import (
     StoppingCriteriaList,
 )
 from ...generation.logits_process import (
+    InfNanRemoveLogitsProcessor,
     LogitsProcessor,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
@@ -204,6 +205,7 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
         TemperatureLogitsWarper,
         TopKLogitsWarper,
         TopPLogitsWarper,
+        InfNanRemoveLogitsProcessor,
     )
 
     def _get_logits_processor(self, *args, **kwargs):
