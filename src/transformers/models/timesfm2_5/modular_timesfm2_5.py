@@ -706,8 +706,8 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
         loss = None
         if future_values is not None:
             target_len = future_values.shape[1]
-            mean_preds = mean_predictions[:, :target_len]
-            full_preds = full_predictions[:, :target_len]
+            valid_mean_predicitions = mean_predictions[:, :target_len]
+            valid_full_predictions = full_predictions[:, :target_len]
             mse_loss = F.mse_loss(mean_preds, future_values)
             quantile_indices = [i for i in range(full_preds.shape[-1]) if i != decode_index]
             if quantile_indices:
