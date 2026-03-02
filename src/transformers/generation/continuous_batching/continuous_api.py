@@ -580,7 +580,6 @@ class ContinuousBatchingManager:
 
         # Resolve default parameters for Q and KV interval sizes, and max cached graphs. If one of those parameters is
         # not specified (set to 0) then we use the default value and change its value in the config.
-        self.q_padding_interval_size = self.cb_config.q_padding_interval_size or Q_PADDING_INTERVAL_SIZE
         if self.cb_config.q_padding_interval_size == 0:
             self.cb_config.q_padding_interval_size = Q_PADDING_INTERVAL_SIZE
         self.q_padding_interval_size = self.cb_config.q_padding_interval_size
@@ -945,6 +944,11 @@ class ContinuousMixin:
         continuous_batching_config: ContinuousBatchingConfig | None = None,
         **deprecated_kwargs,
     ) -> Generator[ContinuousBatchingManager]:
+        """A context manager to safely use the continuous batching manager. Arguments are similars to the ones of
+        `init_continuous_batching`, expect for:
+            - block: whether to block the thread when stopping the manager. Default is True.
+            - timeout: maximum time to wait for the thread to stop. Default is None (no timeout).
+        """
         manager = self.init_continuous_batching(
             generation_config=generation_config,
             continuous_batching_config=continuous_batching_config,
@@ -978,7 +982,8 @@ class ContinuousMixin:
             continuous_batching_config: Optional continuous batching configuration
             record_timestamps: If set to true, the requests will have a timestamp for each token generated
             progress_bar: If set to true, a progress bar will be displayed
-            **kwargs: Additional generation parameters. Only max_new_tokens is used.
+            **kwargs: Additional generation parameters. Only max_new_tokens is used, but other deprecated arguments
+                are extracted and passed to the continuous_batching_config object.
 
         Returns:
             `dict[str, GenerationOutput]`: a dictionary of request ids to GenerationOutput objects
