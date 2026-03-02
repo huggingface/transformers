@@ -354,7 +354,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "phi3",
     "step3p5",
     "vipllava",
-    "internlm2"
+    "internlm2",
 }
 
 for model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
