@@ -34,14 +34,17 @@ All models go through the dynamic weight loading system. Conversion mapping is a
 ```
 Checkpoint File → from_pretrained() → convert_and_load_state_dict_in_model()
                                               ↓
-                         ┌──────────────────────────────────────┐
-                         │  For each weight in checkpoint:      │
-                         │  1. Match key to model parameter     │
-                         │  2. Apply conversion (if defined)    │
-                         │  3. Apply TP sharding (if tp_plan)   │
-                         │  4. Apply quantization (if enabled)  │
-                         │  5. Set parameter on model           │
-                         └──────────────────────────────────────┘
+                         ┌───────────────────────────────────────────────────────────┐
+                         │  For each weight in checkpoint:                           │
+                         │  1. Match renamed/processed source key to model parameter │
+                         │  2. Shard the weight and send to device (async)           │
+                         │  3. Collect tensors with the same source_pattern together │
+                         │     (e.g. MoE experts, gate_up_proj)                     │
+                         │  4. Apply dequantization/deserialization (if pre-quant)   │
+                         │  5. Apply conversion (if defined)                        │
+                         │  6. Apply quantization (if enabled and step 4 not used)  │
+                         │  7. Set parameter on model                               │
+                         └───────────────────────────────────────────────────────────┘
 ```
 
 | Step | When it activates |
@@ -49,7 +52,8 @@ Checkpoint File → from_pretrained() → convert_and_load_state_dict_in_model()
 | Dynamic loading | Always, for all models |
 | Conversion mapping | Only when `model_type` is in `_MODEL_TO_CONVERSION_PATTERN` |
 | TP sharding | Only when `tp_plan="auto"` and model has `base_model_tp_plan` |
-| Quantization | Only when a quantization config is provided |
+| Dequantization/deserialization | Only when loading a pre-quantized checkpoint |
+| Quantization | Only when a quantization config is provided and weights are not pre-quantized |
 
 ### Dense models (e.g., Llama)
 
