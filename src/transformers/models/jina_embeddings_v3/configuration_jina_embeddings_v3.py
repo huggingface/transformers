@@ -72,6 +72,8 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
             Dropout probability for LoRA layers.
         lora_alpha (`int`, *optional*, defaults to 1):
             Scaling factor for LoRA adaptations.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
         load_trained_adapters (`bool`, *optional*, defaults to `True`):
             Whether to load trained adapter weights.
         matryoshka_dimensions (`list[int]`, *optional*):
