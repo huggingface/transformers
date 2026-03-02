@@ -1355,7 +1355,7 @@ def check_repo_quality():
     print("    - checking all auto mappings could be imported.")
     check_all_auto_mappings_importable()
     print("    - checking the DEPRECATED_MODELS constant is up to date.")
-    #check_deprecated_constant_is_up_to_date()
+    check_deprecated_constant_is_up_to_date()
     print("    - checking all models accept **kwargs in their call.")
     check_models_have_kwargs()
 
