@@ -370,7 +370,6 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = (
         {
             "feature-extraction": GitModel,
-            "image-to-text": GitForCausalLM,
             "text-generation": GitForCausalLM,
             "image-text-to-text": GitForCausalLM,
             "any-to-any": GitForCausalLM,
