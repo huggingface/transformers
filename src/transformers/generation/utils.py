@@ -336,6 +336,9 @@ GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
 if TYPE_CHECKING:
+    # `GenerationMixin` accesses many attributes/methods provided by `PreTrainedModel`.
+    # We use a type-checking-only host that combines the mixin and protocol so `ty` can
+    # resolve `self.<attr>` across the whole file without changing runtime inheritance.
 
     class _GenerationMixinHost(ContinuousMixin, GenerativePreTrainedModel):
         pass
