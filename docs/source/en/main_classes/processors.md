@@ -32,6 +32,22 @@ Those processors inherit from the following base class that implements the savin
 
 [[autodoc]] ProcessorMixin
 
+### Processing kwargs
+
+Processor `__call__` methods accept keyword arguments organized by modality. The following TypedDict classes define
+the available keyword arguments for each modality. Model-specific processors may subclass these to add or override
+fields.
+
+[[autodoc]] ProcessingKwargs
+
+[[autodoc]] TextKwargs
+
+[[autodoc]] ImagesKwargs
+
+[[autodoc]] VideosKwargs
+
+[[autodoc]] AudioKwargs
+
 ## Deprecated processors
 
 All processors follow the same architecture which is that of the

@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import math
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import auto_docstring
 
@@ -85,12 +87,54 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         self.vae_std = vae_std
 
     @property
-    def upsampling_ratios(self):
-        return self.downsampling_ratios[::-1]
+    def hop_length(self):
+        return int(math.prod(self.downsampling_ratios))
 
     @property
-    def decoder_depths(self):
-        return self.depths[::-1]
+    def encoder_config(self):
+        return VibeVoiceAcousticTokenizerEncoderConfig(**self.to_dict())
+
+    @property
+    def decoder_config(self):
+        config_dict = self.to_dict()
+        config_dict["depths"] = list(reversed(config_dict["depths"]))
+        return VibeVoiceAcousticTokenizerDecoderConfig(**config_dict)
 
 
-__all__ = ["VibeVoiceAcousticTokenizerConfig"]
+class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`VibeVoiceAcousticTokenizerEncoderModel`]. It is
+    used to instantiate a VibeVoice acoustic tokenizer encoder model according to the specified arguments, defining the
+    model architecture. Instantiating a configuration with the defaults will yield a similar configuration of the
+    acoustic tokenizer within the VibeVoice architecture.
+
+    e.g. [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B)
+    """
+
+    model_type = "vibevoice_acoustic_tokenizer_encoder"
+    base_config_key = "encoder_config"
+
+
+class VibeVoiceAcousticTokenizerDecoderConfig(VibeVoiceAcousticTokenizerConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`VibeVoiceAcousticTokenizerDecoderModel`]. It is
+    used to instantiate a VibeVoice acoustic tokenizer decoder model according to the specified arguments, defining the
+    model architecture. Instantiating a configuration with the defaults will yield a similar configuration of the
+    acoustic tokenizer within the VibeVoice architecture.
+
+    e.g. [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B)
+    """
+
+    model_type = "vibevoice_acoustic_tokenizer_decoder"
+    base_config_key = "decoder_config"
+
+    @property
+    def upsampling_ratios(self):
+        return list(reversed(self.downsampling_ratios))
+
+
+__all__ = [
+    "VibeVoiceAcousticTokenizerConfig",
+    "VibeVoiceAcousticTokenizerEncoderConfig",
+    "VibeVoiceAcousticTokenizerDecoderConfig",
+]

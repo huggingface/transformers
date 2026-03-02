@@ -86,6 +86,7 @@ from .integrations.tensor_parallel import (
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import lazy_import_flash_attention, lazy_import_paged_flash_attention
 from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from .monkey_patching import apply_patches, patch_output_recorders
 from .pytorch_utils import id_tensor_storage
 from .quantizers import HfQuantizer
 from .quantizers.auto import get_hf_quantizer
@@ -1458,21 +1459,38 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "experts_implementation" in kwargs:
             config._experts_implementation = kwargs.pop("experts_implementation")
 
-        init_contexts = []
+        init_contexts = [apply_patches()]
         if dtype is not None:
             init_contexts.append(local_torch_dtype(dtype, cls.__name__))
 
-        if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
+        needs_zero3_init = is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called
+        if needs_zero3_init:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
             import deepspeed
 
-            init_contexts.extend([deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()])
+            init_contexts.extend(
+                [
+                    init.no_init_weights(),
+                    deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
+                    set_zero3_state(),
+                ]
+            )
 
         # Instantiate the model
         with ContextManagers(init_contexts):
             model = cls(config, **kwargs)
+            patch_output_recorders(model)
+
+        # Under ZeRO-3, parameters were partitioned into empty tensors during construction,
+        # so weight init was suppressed. Re-initialize using the ZeRO-3 variant which gathers
+        # each module's parameters before init to avoid OOM on large models.
+        if needs_zero3_init:
+            from .integrations.deepspeed import initialize_weights_zero3
+
+            initialize_weights_zero3(model)
+            model.tie_weights()
 
         return model
 
@@ -3575,7 +3593,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     @classmethod
     def get_init_context(cls, dtype: torch.dtype, is_quantized: bool, _is_ds_init_called: bool):
         # Need to instantiate with correct dtype
-        init_contexts = [local_torch_dtype(dtype, cls.__name__), init.no_tie_weights()]
+        init_contexts = [local_torch_dtype(dtype, cls.__name__), init.no_tie_weights(), apply_patches()]
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
@@ -4048,10 +4066,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         config.name_or_path = pretrained_model_name_or_path
         model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called)
+
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         with ContextManagers(model_init_context):
-            # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
+            patch_output_recorders(model)
 
             if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
                 hf_quantizer.preprocess_model(

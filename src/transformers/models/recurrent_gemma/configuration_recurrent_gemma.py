@@ -107,7 +107,6 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-
         super().__init__(**kwargs)
 
     @property

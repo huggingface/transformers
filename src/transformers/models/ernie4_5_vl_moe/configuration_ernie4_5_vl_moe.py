@@ -18,11 +18,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
-class Ernie4_5_VL_MoeVisionConfig(PreTrainedConfig):
+class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     r"""
     temporal_merge_size (`int`, *optional*, defaults to 2):
         The size used for merge along the temporal dimension.
@@ -70,7 +73,7 @@ class Ernie4_5_VL_MoeVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
-class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig):
+class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):
         Whether to use a bias in any of the projections including mlp and attention for example
@@ -175,7 +178,7 @@ class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
-class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
+class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 101304):
         The image token index to encode the start of image.
@@ -193,20 +196,20 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Ernie4_5_VL_MoeForConditionalGeneration, Ernie4_5_VL_MoeConfig
+    >>> from transformers import Ernie4_5_VLMoeForConditionalGeneration, Ernie4_5_VLMoeConfig
 
-    >>> # Initializing a Ernie4_5_VL_Moe style configuration
-    >>> configuration = Ernie4_5_VL_MoeConfig()
+    >>> # Initializing a Ernie4_5_VLMoe style configuration
+    >>> configuration = Ernie4_5_VLMoeConfig()
 
     >>> # Initializing a model from the Ernie 4.5 VL 28B A3B configuration
-    >>> model = Ernie4_5_VL_MoeForConditionalGeneration(configuration)
+    >>> model = Ernie4_5_VLMoeForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
     model_type = "ernie4_5_vl_moe"
-    sub_configs = {"vision_config": Ernie4_5_VL_MoeVisionConfig, "text_config": Ernie4_5_VL_MoeTextConfig}
+    sub_configs = {"vision_config": Ernie4_5_VLMoeVisionConfig, "text_config": Ernie4_5_VLMoeTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -224,14 +227,14 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
     ):
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif isinstance(vision_config, Ernie4_5_VL_MoeVisionConfig):
+        elif isinstance(vision_config, Ernie4_5_VLMoeVisionConfig):
             self.vision_config = vision_config
         elif vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
 
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
-        elif isinstance(text_config, Ernie4_5_VL_MoeTextConfig):
+        elif isinstance(text_config, Ernie4_5_VLMoeTextConfig):
             self.text_config = text_config
         elif text_config is None:
             self.text_config = self.sub_configs["text_config"](**kwargs)
@@ -247,4 +250,35 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["Ernie4_5_VL_MoeConfig", "Ernie4_5_VL_MoeTextConfig", "Ernie4_5_VL_MoeVisionConfig"]
+class Ernie4_5_VL_MoeConfig(Ernie4_5_VLMoeConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeConfig` is deprecated; please use `Ernie4_5_VLMoeConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeTextConfig(Ernie4_5_VLMoeTextConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeTextConfig` is deprecated; please use `Ernie4_5_VLMoeTextConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeVisionConfig` is deprecated; please use `Ernie4_5_VLMoeVisionConfig` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+__all__ = [
+    "Ernie4_5_VL_MoeConfig",
+    "Ernie4_5_VL_MoeTextConfig",
+    "Ernie4_5_VL_MoeVisionConfig",
+    "Ernie4_5_VLMoeConfig",
+    "Ernie4_5_VLMoeTextConfig",
+    "Ernie4_5_VLMoeVisionConfig",
+]
