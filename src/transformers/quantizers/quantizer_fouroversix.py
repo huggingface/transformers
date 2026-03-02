@@ -58,10 +58,7 @@ class FourOverSixHfQuantizer(HfQuantizer):
 
         module, tensor_name = get_module_from_name(model, param_name)
 
-        return (
-            QuantizedModule.is_quantized_module_type(type(module))
-            and tensor_name in module.parameters_to_quantize
-        )
+        return QuantizedModule.is_quantized_module_type(type(module)) and tensor_name in module.parameters_to_quantize
 
     def _process_model_before_weight_loading(
         self,
