@@ -82,6 +82,10 @@ class Phi4MultimodalVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
 class Phi4MultimodalAudioConfig(PreTrainedConfig):
     r"""
+    num_blocks (`int`, *optional*, defaults to 24):
+        Number of hidden layers in the Transformer encoder.
+    downsample_rate (`int`, *optional*, defaults to 1):
+        Downsample rate for the audio feature extractor.
     activation (`str`, *optional*, defaults to `"swish"`):
         The non-linear activation function in the MLPs.
     chunk_size (`int`, *optional*, defaults to -1):

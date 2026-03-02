@@ -36,6 +36,12 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
 class Gemma3nTextConfig(PreTrainedConfig):
     r"""
+    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
+        scaling factor used on the attention scores
+    vocab_size_per_layer_input (`int`, *optional*, defaults to 262144):
+        Vocabulary size of the per-layer text embeddings that augment the standard embeddings.
+    hidden_size_per_layer_input (`int`, *optional*, defaults to 256):
+        Dimension of the hidden representations for per-layer emebeddings.
     altup_active_idx (`int`, *optional*, defaults to 0):
         The index of the prediction from which AltUp will compute additional predictions or correct
     altup_coef_clip (`float`, *optional*, defaults to 120.0):
@@ -346,6 +352,13 @@ class Gemma3nAudioConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
 class Gemma3nVisionConfig(PreTrainedConfig):
     r"""
+    architecture (`str`, *optional*, defaults to `"resnet50"`):
+        The timm architecture to load.
+    do_pooling (`bool`, *optional*, defaults to `True`):
+        Whether to do pooling for the last_hidden_state in `TimmWrapperModel` or not.
+    model_args (`dict[str, Any]`, *optional*):
+        Additional keyword arguments to pass to the `timm.create_model` function. e.g. `model_args={"depth": 3}`
+        for `timm/vit_base_patch32_clip_448.laion2b_ft_in12k_in1k` to create a model with 3 blocks. Defaults to `None`.
     vocab_offset (`int`, *optional*, defaults to 262144):
         Offset between the tokenizer vocab index for the token ids embedded by `Gemma3nMultimodalEmbedder` and the
         0-indexed `Gemma3nMultimodalEmbedder.embedding` table.

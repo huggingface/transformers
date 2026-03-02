@@ -27,6 +27,10 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="zai-org/GLM-5")
 class GlmMoeDsaConfig(PreTrainedConfig):
     r"""
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
+    mlp_layer_types (`list`, *optional*):
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to 3 dense + rest sparse.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of top tokens selected by the indexer for sparse attention.
     index_head_dim (`int`, *optional*, defaults to 128):

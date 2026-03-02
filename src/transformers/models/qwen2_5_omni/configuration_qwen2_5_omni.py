@@ -556,6 +556,12 @@ class Qwen2_5OmniDiTConfig(PreTrainedConfig):
         The scale of the Res2Net block in the encoder.
     enc_se_channels (`int`, *optional*, defaults to 64):
         The number of output channels after squeeze in the SqueezeExcitationBlock.
+    block_size (`int`, *optional*, defaults to 64):
+        Number of tokens (frames) in each processing block.
+    look_ahead_layers (`list[int]`, *optional*, defaults to `[10]`):
+        Number of transformer layers that are permitted to attend to future blocks
+    look_backward_layers (`list[int]`, *optional*, defaults to `[0, 20]`):
+        Number of transformer layers that attend to past blocks beyond the current block boundary
     """
 
     model_type = "qwen2_5_omni_dit"

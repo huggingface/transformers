@@ -1808,6 +1808,7 @@ class ConfigArgs:
     encoder_hidden_size = hidden_size
     encoder_num_layers = num_hidden_layers
     encoder_num_heads = num_attention_heads
+    encoder_num_attention_heads = num_attention_heads
     encoder_dropout = dropout
     attn_dropout = attention_dropout
     hidden_activation = hidden_act
@@ -1825,12 +1826,15 @@ class ConfigArgs:
     embed_dropout = embd_pdrop
     embedding_dropout = embd_pdrop
     hidden_dropout_prob = hidden_dropout
+    hidden_dropout_rate = hidden_dropout
     classifier_dropout_prob = classifier_dropout
     classifier_dropout_rate = classifier_dropout
     dropout_prob = dropout
     audio_token_index = audio_token_id
     layer_scale_initial_scale = layer_scale_init_value
     num_encoder_layers = encoder_layers
+    encoder_num_hidden_layers = encoder_layers
+    decoder_num_hidden_layers = decoder_layers
     audio_channels = num_input_channels
     input_channels = num_input_channels
     multi_modal_projector_bias = projector_bias

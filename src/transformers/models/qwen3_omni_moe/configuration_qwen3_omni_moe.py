@@ -29,27 +29,13 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     r"""
-    max_source_positions (`int`, *optional*, defaults to 1500):
-        The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-    n_window (`int`, *optional*, defaults to 100):
-        The chunk for conv and flash attn in AudioEncoder.
-    output_dim (`int`, *optional*, defaults to 3584):
-        The output dimension of AudioEncoder.
-
-    Example:
-
-    ```python
-    >>> from transformers import Qwen3OmniMoeAudioEncoderConfig, Qwen3OmniMoeAudioEncoder
-
-    >>> # Initializing a Qwen3OmniMoeAudioEncoderConfig
-    >>> configuration = Qwen3OmniMoeAudioEncoderConfig()
-
-    >>> # Initializing a Qwen3OmniMoeAudioEncoder (with random weights)
-    >>> model = Qwen3OmniMoeAudioEncoder(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+    downsample_hidden_size ( `int`, *optional*, defaults to `480`): Hidden size in donwsampling layer
+    conv_chunksize ( `int`, *optional*, defaults to `500`): Chunk size of each input to convolutional layer
+    n_window_infer ( `int`, *optional*, defaults to `400`): Number of windows during inference
+    max_source_positions (`int`, *optional*, defaults to 1500): Maximum sequence length for the inputs
+    n_window (`int`, *optional*, defaults to 100):  Number of windwos
+    output_dim (`int`, *optional*, defaults to 3584):  Dimensionality of the output
+    """
 
     model_type = "qwen3_omni_moe_audio_encoder"
 

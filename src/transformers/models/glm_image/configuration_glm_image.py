@@ -53,6 +53,9 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 class GlmImageVisionConfig(PreTrainedConfig):
     r"""
+    out_hidden_size (`int`, *optional*, defaults to 4096):
+        The output hidden size of the vision model.
+
     Example:
 
     ```python
@@ -108,6 +111,10 @@ class GlmImageVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 class GlmImageTextConfig(PreTrainedConfig):
     r"""
+    vision_vocab_size (`int`, *optional*, defaults to 16512):
+        Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be
+        represented by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
+
     Example:
 
     ```python

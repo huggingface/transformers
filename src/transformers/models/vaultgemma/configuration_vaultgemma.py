@@ -27,6 +27,8 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="google/vaultgemma-7b")
 class VaultGemmaConfig(PreTrainedConfig):
     r"""
+    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
+        scaling factor used on the attention scores
     final_logit_softcapping (`float`, *optional*, defaults to 30.0):
         scaling factor when applying tanh softcapping on the logits.
     attn_logit_softcapping (`float`, *optional*, defaults to 50.0):

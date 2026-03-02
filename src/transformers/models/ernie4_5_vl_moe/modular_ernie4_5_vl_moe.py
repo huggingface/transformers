@@ -92,6 +92,11 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 class Ernie4_5_VL_MoeVisionConfig(Qwen2VLVisionConfig):
+    r"""
+    temporal_merge_size (`int`, *optional*, defaults to 2):
+        The size used for merge along the temporal dimension.
+    """
+
     model_type = "ernie4_5_vl_moe_vision"
 
     base_model_tp_plan = {
@@ -142,6 +147,21 @@ class Ernie4_5_VL_MoeVisionConfig(Qwen2VLVisionConfig):
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 class Ernie4_5_VL_MoeTextConfig(Ernie4_5_MoeConfig, PreTrainedConfig):
+    r"""
+    use_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use a bias in any of the projections including mlp and attention for example
+    mlp_layer_types (`list`, *optional*):
+        MLP (Moe vs Dense) pattern for each layer.
+    moe_k (`int`, *optional*, defaults to 6):
+        Number of selected experts.
+    moe_num_experts (`int`, *optional*, defaults to 64):
+        Number of routed experts.
+    moe_num_shared_experts (`int`, *optional*, defaults to 2):
+        The number of experts that are shared for all MoE forwards.
+    moe_norm_min (`float`, *optional*, defaults to 1e-12):
+        Minimum division value during routing normalization.
+    """
+
     model_type = "ernie4_5_vl_moe_text"
     base_config_key = "text_config"
 
@@ -225,6 +245,19 @@ class Ernie4_5_VL_MoeTextConfig(Ernie4_5_MoeConfig, PreTrainedConfig):
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
     r"""
+    image_start_token_id (`int`, *optional*, defaults to 101304):
+        The image token index to encode the start of image.
+    image_end_token_id (`int`, *optional*, defaults to 101305):
+        The image token index to encode the end of image.
+    image_token_id (`int`, *optional*, defaults to 100295):
+        The image token index to encode the image prompt.
+    video_start_token_id (`int`, *optional*, defaults to 101306):
+        The video token index to encode the start of video.
+    video_end_token_id (`int`, *optional*, defaults to 101307):
+        The video token index to encode the end of video.
+    video_token_id (`int`, *optional*, defaults to 103367):
+        The video token index to encode the video prompt.
+
     Example:
 
     ```python

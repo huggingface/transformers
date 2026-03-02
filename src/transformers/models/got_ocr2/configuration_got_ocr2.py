@@ -26,6 +26,10 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @auto_docstring(checkpoint="facebook/sam-vit-huge")
 class GotOcr2VisionConfig(PreTrainedConfig):
     r"""
+    output_channels (`int`, *optional*, defaults to 256):
+        Dimensionality of the output channels in the Patch Encoder.
+    window_size (`int`, *optional*, defaults to 14):
+        Window size for relative position.
     use_abs_pos (`bool`, *optional*, defaults to `True`):
         Whether to use absolute position embedding.
     use_rel_pos (`bool`, *optional*, defaults to `True`):

@@ -26,6 +26,9 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 class GlmOcrVisionConfig(PreTrainedConfig):
     r"""
+    out_hidden_size (`int`, *optional*, defaults to 4096):
+        The output hidden size of the vision model.
+
     Example:
 
     ```python

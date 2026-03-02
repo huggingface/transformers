@@ -24,6 +24,9 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="DeepGlint-AI/mlcd-vit-bigG-patch14-336")
 class MLCDVisionConfig(PreTrainedConfig):
     r"""
+    num_key_value_groups (`int`, *optional*, defaults to 1):
+        Number of key-value groups used in Attention.
+
     Example:
 
     ```python

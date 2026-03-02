@@ -25,6 +25,9 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
 class Glm4vVisionConfig(PreTrainedConfig):
     r"""
+    out_hidden_size (`int`, *optional*, defaults to 4096):
+        The output hidden size of the vision model.
+
     Example:
 
     ```python

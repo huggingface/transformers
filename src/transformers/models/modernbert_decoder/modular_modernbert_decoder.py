@@ -49,6 +49,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="blab-jhu/test-32m-dec")
 class ModernBertDecoderConfig(PreTrainedConfig):
     r"""
+    initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):
+        The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
     norm_eps (`float`, *optional*, defaults to 1e-05):
         The epsilon used by the rms normalization layers.
     norm_bias (`bool`, *optional*, defaults to `False`):

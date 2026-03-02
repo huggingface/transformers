@@ -39,6 +39,12 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="THUDM/GLM-4-100B-A10B")
 class Glm4MoeConfig(PreTrainedConfig):
     r"""
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
+    first_k_dense_replace (`int`, *optional*, defaults to 1):
+        Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
+                                                        \--k dense layers--/
+
     Example:
 
     ```python

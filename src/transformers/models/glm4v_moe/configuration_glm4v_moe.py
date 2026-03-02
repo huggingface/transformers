@@ -25,6 +25,12 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
 class Glm4vMoeTextConfig(PreTrainedConfig):
     r"""
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
+    first_k_dense_replace (`int`, *optional*, defaults to 1):
+        Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
+                                                                \--k dense layers--/
+
     Example:
 
     ```python
@@ -130,6 +136,9 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
 class Glm4vMoeVisionConfig(PreTrainedConfig):
     r"""
+    out_hidden_size (`int`, *optional*, defaults to 4096):
+        The output hidden size of the vision model.
+
     Example:
 
     ```python

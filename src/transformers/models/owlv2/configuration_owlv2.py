@@ -20,8 +20,8 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.owlvit.configuration_owlvit.OwlViTTextConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
+# Copied from transformers.models.owlvit.configuration_owlvit.OwlViTTextConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2TextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -78,8 +78,8 @@ class Owlv2TextConfig(PreTrainedConfig):
         self.initializer_factor = initializer_factor
 
 
-# Copied from transformers.models.owlvit.configuration_owlvit.OwlViTVisionConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2, 32->16
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
+# Copied from transformers.models.owlvit.configuration_owlvit.OwlViTVisionConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2, 32->16
 class Owlv2VisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -132,8 +132,8 @@ class Owlv2VisionConfig(PreTrainedConfig):
         self.initializer_factor = initializer_factor
 
 
-# Copied from transformers.models.owlvit.configuration_owlvit.OwlViTConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
+# Copied from transformers.models.owlvit.configuration_owlvit.OwlViTConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2Config(PreTrainedConfig):
     model_type = "owlv2"
     sub_configs = {"text_config": Owlv2TextConfig, "vision_config": Owlv2VisionConfig}

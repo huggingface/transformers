@@ -44,9 +44,14 @@ from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 @auto_docstring(checkpoint="LGAI-EXAONE/K-EXAONE-236B-A23B")
 class ExaoneMoeConfig(Exaone4Config):
-    model_type = "exaone_moe"
-
     r"""
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
+    mlp_layer_types (`list`, *optional*):
+        MLP pattern for each layer. Prioritized over `first_k_dense_replace`.
+    first_k_dense_replace (`int`, *optional*, defaults to 1):
+        Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
+                                                    \--k dense layers--/
     sliding_window_pattern (`str`, *optional*, defaults to 4):
         The pattern to use for sliding window attention. Can be one of:
             - `None`: No sliding window attention is used
@@ -73,6 +78,8 @@ class ExaoneMoeConfig(Exaone4Config):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
+    model_type = "exaone_moe"
 
     def __init__(
         self,

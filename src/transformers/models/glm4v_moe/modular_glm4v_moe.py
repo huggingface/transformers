@@ -59,6 +59,12 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
 class Glm4vMoeTextConfig(Glm4MoeConfig):
     r"""
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
+    first_k_dense_replace (`int`, *optional*, defaults to 1):
+        Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
+                                                                \--k dense layers--/
+
     Example:
 
     ```python

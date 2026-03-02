@@ -27,6 +27,13 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="THUDM/GLM-4-100B-A10B")
 class Glm4MoeLiteConfig(PreTrainedConfig):
     r"""
+    rope_interleave (`bool`, *optional*, defaults to `True`):
+        Whether to interleave the rotary position embeddings.
+    mlp_layer_types (`list`, *optional*):
+        MLP (Moe vs Dense) pattern for each layer.
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
+
     Example:
 
     ```python

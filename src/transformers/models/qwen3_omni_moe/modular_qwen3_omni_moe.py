@@ -125,6 +125,15 @@ def _get_feat_extract_output_lengths(input_lengths):
 
 
 class Qwen3OmniMoeAudioEncoderConfig(Qwen2_5OmniAudioEncoderConfig):
+    r"""
+    downsample_hidden_size ( `int`, *optional*, defaults to `480`): Hidden size in donwsampling layer
+    conv_chunksize ( `int`, *optional*, defaults to `500`): Chunk size of each input to convolutional layer
+    n_window_infer ( `int`, *optional*, defaults to `400`): Number of windows during inference
+    max_source_positions (`int`, *optional*, defaults to 1500): Maximum sequence length for the inputs
+    n_window (`int`, *optional*, defaults to 100):  Number of windwos
+    output_dim (`int`, *optional*, defaults to 3584):  Dimensionality of the output
+    """
+
     def __init__(
         self,
         num_mel_bins: int | None = 128,

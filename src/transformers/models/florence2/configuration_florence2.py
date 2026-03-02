@@ -28,6 +28,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
 class Florence2VisionConfig(PreTrainedConfig):
     r"""
+    window_size (`int`, *optional*, defaults to 12):
+        The window size of the model.
     depths (`Tuple[int]`, *optional*, defaults to `(1, 1, 9, 1)`):
         The depth of the model.
     patch_stride (`Tuple[int]`, *optional*, defaults to `(4, 2, 2, 2)`):

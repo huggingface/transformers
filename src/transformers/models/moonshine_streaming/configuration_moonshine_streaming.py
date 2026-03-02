@@ -82,13 +82,8 @@ class MoonshineStreamingEncoderConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="UsefulSensors/moonshine-streaming-tiny")
 class MoonshineStreamingConfig(PreTrainedConfig):
     r"""
-        encoder_config (`MoonshineStreamingEncoderConfig`, *optional*):
-            Configuration of the encoder. If not provided, a default `MoonshineStreamingEncoderConfig` will be
-            instantiated.
-        decoder_start_token_id (`int`, *optional*):
-            The decoder start token id. If not specified, it will default to `bos_token_id`.
-        pad_head_dim_to_multiple_of (`int`, *optional*):
-            If set, the head dimension will be padded to a multiple of this value.
+    pad_head_dim_to_multiple_of (`int`, *optional*):
+        If set, the head dimension will be padded to a multiple of this value.
 
     ```python
     >>> from transformers import MoonshineStreamingModel, MoonshineStreamingConfig

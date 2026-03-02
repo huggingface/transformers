@@ -39,6 +39,10 @@ from ..sam2.modeling_sam2 import (
 @auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamVisionConfig(PreTrainedConfig):
     r"""
+    backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
+        The list of channel dimensions for the backbone.
+    backbone_feature_sizes (`List[List[int]]`, *optional*, defaults to `[[256, 256], [128, 128], [64, 64]]`):
+        The spatial sizes of the feature maps from the backbone.
     fpn_hidden_size (`int`, *optional*, defaults to 256):
         The hidden dimension of the FPN.
     fpn_kernel_size (`int`, *optional*, defaults to 1):
@@ -123,8 +127,8 @@ class EdgeTamConfig(Sam2Config):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):
          Dictionary of configuration options used to initialize [`EdgeTamPromptEncoderConfig`].
-     mask_decoder_config (Union[`dict`, `EdgeTamMaskDecoderConfig`], *optional*):
-         Dictionary of configuration options used to initialize [`EdgeTamMaskDecoderConfig`].
+    mask_decoder_config (Union[`dict`, `EdgeTamMaskDecoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`EdgeTamMaskDecoderConfig`].
 
      Example:
 

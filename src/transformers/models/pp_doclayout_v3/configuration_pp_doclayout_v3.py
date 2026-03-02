@@ -27,6 +27,9 @@ from ..auto import AutoConfig
 @auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV3_safetensors")
 class PPDocLayoutV3Config(PreTrainedConfig):
     r"""
+    initializer_bias_prior_prob (`float`, *optional*):
+        The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
+        If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
     batch_norm_eps (`float`, *optional*, defaults to 1e-05):
         The epsilon used by the batch normalization layers.
     freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):

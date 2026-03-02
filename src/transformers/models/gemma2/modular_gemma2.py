@@ -54,6 +54,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="google/gemma2-7b")
 class Gemma2Config(PreTrainedConfig):
     r"""
+    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
+        scaling factor used on the attention scores
     final_logit_softcapping (`float`, *optional*, defaults to 30.0):
         scaling factor when applying tanh softcapping on the logits.
     attn_logit_softcapping (`float`, *optional*, defaults to 50.0):

@@ -118,6 +118,10 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
 @auto_docstring(checkpoint="zai-org/GLM-Image")
 class GlmImageTextConfig(Glm4vTextConfig):
     r"""
+    vision_vocab_size (`int`, *optional*, defaults to 16512):
+        Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be
+        represented by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
+
     Example:
 
     ```python
