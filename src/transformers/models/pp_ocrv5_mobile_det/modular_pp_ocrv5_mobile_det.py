@@ -34,7 +34,6 @@ from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
-    auto_docstring,
     filter_out_non_signature_kwargs,
     is_cv2_available,
     logging,
@@ -49,7 +48,6 @@ if is_cv2_available():
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring
 class PPOCRV5MobileDetConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PPOCRV5MobileDet`]. It is used to instantiate a
@@ -538,7 +536,6 @@ def process(
     return boxes, scores
 
 
-@auto_docstring
 class PPOCRV5MobileDetImageProcessor(BaseImageProcessor):
     r"""
     Image Processor for the PPOCRV5 Mobile Det text detection model.
@@ -786,7 +783,6 @@ class PPOCRV5MobileDetImageProcessor(BaseImageProcessor):
         return {"height": resize_height, "width": resize_width}, np.array([height, width])
 
 
-@auto_docstring(custom_intro="ImageProcessorFast for the PPOCRV5 Mobile Det model.")
 class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
     """
     Image processor for PPOCRV5 Mobile Det model, handling preprocessing (resizing, normalization)
@@ -1636,7 +1632,6 @@ class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
             nn.init.kaiming_uniform_(module.in_conv.weight)
 
 
-@auto_docstring(custom_intro="The PPOCRV5 Mobile Det model.")
 class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     """
     Core PPOCRV5 Mobile Det model, consisting of Backbone, Neck, and Head networks.
@@ -1715,7 +1710,6 @@ class PPOCRV5MobileDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
     shape: Optional[torch.FloatTensor] = None
 
 
-@auto_docstring(custom_intro="ObjectDetection for the PPOCRV5 Mobile Det model.")
 class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
     """
     PPOCRV5 Mobile Det model for object (text) detection tasks. Wraps the core PPOCRV5MobileDetModel

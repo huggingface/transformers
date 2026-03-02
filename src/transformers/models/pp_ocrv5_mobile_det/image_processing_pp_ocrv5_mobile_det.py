@@ -23,7 +23,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import auto_docstring, filter_out_non_signature_kwargs, is_cv2_available
+from ...utils import filter_out_non_signature_kwargs, is_cv2_available
 from ...utils.generic import TensorType
 
 
@@ -422,27 +422,11 @@ def process(
     return boxes, scores
 
 
-@auto_docstring(custom_intro="ImageProcessor for the PPOCRV5 Mobile Det model.")
 class PPOCRV5MobileDetImageProcessor(BaseImageProcessor):
-    """
+    r"""
     Image Processor for the PPOCRV5 Mobile Det text detection model.
 
-    This class handles all image preprocessing (resizing, rescaling, normalization, channel flipping)
-    and post-processing (converting model logits to detected text boxes) required for the PPOCRV5 Mobile Det model.
-    It ensures input images are formatted correctly for model inference and converts model outputs into human-interpretable
-    text bounding boxes.
-
-    Key features:
-    - Aspect-ratio preserving image resizing with side length limits.
-    - RGB to BGR channel flipping (compatible with PaddlePaddle's original model).
-    - Standard image normalization and rescaling.
-    - Post-processing to extract quadrilateral or polygonal text boxes from segmentation maps.
-
-    Attributes:
-        model_input_names (List[str]): List of input names expected by the model (only "pixel_values" for this processor).
-        limit_side_len (int): Maximum/minimum side length for image resizing (depending on `limit_type`).
-        limit_type (str): Resizing strategy ("max", "min", or "resize_long").
-        max_side_limit (int): Hard maximum limit for the longest image side to prevent excessive memory usage.
+    Args:
         do_resize (bool): Whether to resize input images.
         size (dict[str, int]): Default target size for resizing (height, width).
         resample (PILImageResampling): Resampling mode for image resizing.
@@ -451,15 +435,15 @@ class PPOCRV5MobileDetImageProcessor(BaseImageProcessor):
         do_normalize (bool): Whether to normalize images using mean and standard deviation.
         image_mean (Union[float, List[float]]): Mean values for image normalization (BGR order, compatible with model).
         image_std (Union[float, List[float]]): Standard deviation values for image normalization (BGR order).
+        limit_side_len (int): Maximum/minimum side length for image resizing (depending on `limit_type`).
+        limit_type (str): Resizing strategy ("max", "min", or "resize_long").
+        max_side_limit (int): Hard maximum limit for the longest image side to prevent excessive memory usage.
     """
 
     model_input_names = ["pixel_values"]
 
     def __init__(
         self,
-        limit_side_len: int = 960,
-        limit_type: str = "max",
-        max_side_limit: int = 4000,
         do_resize: bool = True,
         size: Optional[dict[str, int]] = None,
         resample: Optional[PILImageResampling] = PILImageResampling.BICUBIC,
@@ -468,6 +452,9 @@ class PPOCRV5MobileDetImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
+        limit_side_len: int = 960,
+        limit_type: str = "max",
+        max_side_limit: int = 4000,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -540,7 +527,7 @@ class PPOCRV5MobileDetImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         # transformations
-        resize_imgs, target_sizes = [], []
+        resize_images, target_sizes = [], []
         if do_resize:
             for image in images:
                 size, shape = self.get_image_size(image, self.limit_side_len, self.limit_type, max_side_limit)
@@ -555,9 +542,9 @@ class PPOCRV5MobileDetImageProcessor(BaseImageProcessor):
                     print(size)
                     raise RuntimeError(f"Failed to resize image: {e}") from e
 
-                resize_imgs.append(image)
+                resize_images.append(image)
                 target_sizes.append(shape)
-            images = resize_imgs
+            images = resize_images
 
         if do_rescale:
             images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]

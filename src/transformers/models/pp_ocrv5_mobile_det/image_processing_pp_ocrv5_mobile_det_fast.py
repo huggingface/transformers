@@ -14,7 +14,7 @@ import torchvision.transforms.v2.functional as tvF
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import SizeDict
-from ...utils import auto_docstring, is_cv2_available
+from ...utils import is_cv2_available
 from ...utils.generic import TensorType
 
 
@@ -413,7 +413,6 @@ def process(
     return boxes, scores
 
 
-@auto_docstring(custom_intro="ImageProcessorFast for the PPOCRV5 Mobile Det model.")
 class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
     """
     Image processor for PPOCRV5 Mobile Det model, handling preprocessing (resizing, normalization)
@@ -449,14 +448,14 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> BatchFeature:
         data = {}
-        resize_imgs, target_sizes = [], []
+        resize_images, target_sizes = [], []
         if do_resize:
             for image in images:
                 size, shape = self.get_image_size(image, self.limit_side_len, self.limit_type, self.max_side_limit)
                 image = self.resize(image, size=size, interpolation=interpolation)
-                resize_imgs.append(image)
+                resize_images.append(image)
                 target_sizes.append(shape)
-            images = resize_imgs
+            images = resize_images
 
         processed_images = []
         for image in images:

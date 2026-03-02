@@ -6,14 +6,10 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
 
 
-@auto_docstring(custom_intro="Configuration for the PPOCRV5 Mobile Det model.")
 class PPOCRV5MobileDetConfig(PreTrainedConfig):
-    model_type = "pp_ocrv5_mobile_det"
-
-    """
+    r"""
     This is the configuration class to store the configuration of a [`PPOCRV5MobileDet`]. It is used to instantiate a
     PPOCRV5 Mobile text detection model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the PPOCRV5 Mobile Det
@@ -71,6 +67,8 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     """
+
+    model_type = "pp_ocrv5_mobile_det"
 
     def __init__(
         self,

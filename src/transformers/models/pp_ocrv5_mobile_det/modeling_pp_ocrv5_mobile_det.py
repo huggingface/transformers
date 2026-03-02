@@ -15,7 +15,7 @@ from torch import Tensor
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring
+from ...utils import ModelOutput
 from .configuration_pp_ocrv5_mobile_det import PPOCRV5MobileDetConfig
 
 
@@ -756,7 +756,6 @@ class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
             nn.init.kaiming_uniform_(module.in_conv.weight)
 
 
-@auto_docstring(custom_intro="The PPOCRV5 Mobile Det model.")
 class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     """
     Core PPOCRV5 Mobile Det model, consisting of Backbone, Neck, and Head networks.
@@ -835,7 +834,6 @@ class PPOCRV5MobileDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
     shape: Optional[torch.FloatTensor] = None
 
 
-@auto_docstring(custom_intro="ObjectDetection for the PPOCRV5 Mobile Det model.")
 class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
     """
     PPOCRV5 Mobile Det model for object (text) detection tasks. Wraps the core PPOCRV5MobileDetModel
