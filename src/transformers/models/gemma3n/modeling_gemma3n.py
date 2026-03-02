@@ -2016,7 +2016,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 
         return special_image_mask, special_audio_mask
 
-    @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,  # text inputs
@@ -2204,6 +2204,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
     def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         return self.model.get_image_features(pixel_values, **kwargs)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
