@@ -402,7 +402,7 @@ class PeVideoPreTrainedModel(PreTrainedModel):
     config: PeVideoConfig
     base_model_prefix = "video_model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PeVideoEncoderLayer"]
+    _no_split_modules = ["PeVideoEncoderLayer", "TimmWrapperForImageClassification"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True

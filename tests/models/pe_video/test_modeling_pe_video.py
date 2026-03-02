@@ -181,10 +181,6 @@ class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load(self):
         pass
 
-    @unittest.skip(reason="TimmWrapperModel does not support model parallelism")
-    def test_model_parallelism(self):
-        pass
-
     @unittest.skip(reason="@eustlb this is not really expected")
     def test_batching_equivalence(self):
         pass
@@ -359,10 +355,6 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="@eustlb this is not really expected")
     def test_can_init_all_missing_weights(self):
-        pass
-
-    @unittest.skip(reason="TimmWrapperModel does not support model parallelism")
-    def test_model_parallelism(self):
         pass
 
     @require_torch_gpu  # pe-video contains triton code which cannot run on CPU, so we only test on GPU
