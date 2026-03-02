@@ -4,11 +4,9 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_qwen3_asr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+from transformers.configuration_utils import PretrainedConfig
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
 
 
 class Qwen3ASRAudioEncoderConfig(PreTrainedConfig):
@@ -206,6 +204,7 @@ class Qwen3ASRTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
     base_config_key = "text_config"
 
     def __init__(
@@ -300,6 +299,7 @@ class Qwen3ASRThinkerConfig(PreTrainedConfig):
     model_type = "qwen3_asr_thinker"
     # Override parent's attribute_map as we use audio_token_id directly, not audio_token_index
     attribute_map = {}
+
     sub_configs = {
         "audio_config": Qwen3ASRAudioEncoderConfig,
         "text_config": Qwen3ASRTextConfig,
@@ -336,7 +336,7 @@ class Qwen3ASRThinkerConfig(PreTrainedConfig):
         self.audio_token_id = audio_token_id
 
 
-class Qwen3ASRConfig(PreTrainedConfig):
+class Qwen3ASRConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`Qwen3ASRForConditionalGeneration`]. It is used to instantiate a Qwen3ASR
     model according to the specified sub-models configurations, defining the model architecture.
@@ -378,30 +378,17 @@ class Qwen3ASRConfig(PreTrainedConfig):
     def __init__(
         self,
         thinker_config=None,
-        talker_config=None,
-        code2wav_config=None,
         support_languages=None,
-        attn_implementation=None,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         if thinker_config is None:
             thinker_config = {}
-            logger.info("thinker_config is None. Initializing thinker model with default values")
-
-        if talker_config is None:
-            talker_config = {}
-            logger.info("talker_config is None. Initializing talker model with default values")
-
-        if code2wav_config is None:
-            code2wav_config = {}
-            logger.info("code2wav_config is None. Initializing code2wav model with default values")
 
         self.thinker_config = Qwen3ASRThinkerConfig(**thinker_config)
-        super().__init__(**kwargs)
         self.support_languages = support_languages
-        self._attn_implementation = attn_implementation
 
-    def get_text_config(self, decoder=False) -> "PreTrainedConfig":
+    def get_text_config(self, decoder=False) -> "PretrainedConfig":
         """
         Returns the config that is meant to be used with text IO. On most models, it is the original config instance
         itself. On specific composite models, it is under a set of valid names.
@@ -410,26 +397,10 @@ class Qwen3ASRConfig(PreTrainedConfig):
             decoder (`Optional[bool]`, *optional*, defaults to `False`):
                 If set to `True`, then only search for decoder config names.
         """
-        # Overridden for deeply nested config like Qwen2-Omni. We don't have any omni model
+        # Overridden for deeply nested config like Qwen2.5-Omni. We don't have any omni model
         # except for Qwen yet. This has to be generalized if more deeply nested configs are
         # added. NOTE: currently method used only by vLLM
         return self.thinker_config.get_text_config()
-
-    @property
-    def num_attention_heads(self):
-        return self.thinker_config.text_config.num_attention_heads
-
-    @property
-    def hidden_size(self):
-        return self.thinker_config.text_config.hidden_size
-
-    @property
-    def vocab_size(self):
-        return self.thinker_config.text_config.vocab_size
-
-    @vocab_size.setter
-    def vocab_size(self, value):
-        self.thinker_config.text_config.vocab_size = value
 
 
 __all__ = ["Qwen3ASRAudioEncoderConfig", "Qwen3ASRThinkerConfig", "Qwen3ASRConfig"]

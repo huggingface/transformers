@@ -253,7 +253,7 @@ class Qwen3ASRThinkerConfig(Qwen3OmniMoeThinkerConfig):
         self.audio_token_id = audio_token_id
 
 
-class Qwen3ASRConfig(Qwen3OmniMoeConfig):
+class Qwen3ASRConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`Qwen3ASRForConditionalGeneration`]. It is used to instantiate a Qwen3ASR
     model according to the specified sub-models configurations, defining the model architecture.
@@ -287,6 +287,7 @@ class Qwen3ASRConfig(Qwen3OmniMoeConfig):
     >>> configuration = model.config
     ```"""
 
+    model_type = "qwen3_asr"
     sub_configs = {
         "thinker_config": Qwen3ASRThinkerConfig,
     }
@@ -294,63 +295,29 @@ class Qwen3ASRConfig(Qwen3OmniMoeConfig):
     def __init__(
         self,
         thinker_config=None,
-        talker_config=None,
-        code2wav_config=None,
         support_languages=None,
-        attn_implementation=None,
         **kwargs,
     ):
-        super().__init__(
-            thinker_config=thinker_config,
-            support_languages=support_languages,
-            attn_implementation=attn_implementation,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
+        if thinker_config is None:
+            thinker_config = {}
+
+        self.thinker_config = Qwen3ASRThinkerConfig(**thinker_config)
         self.support_languages = support_languages
-        self._attn_implementation = attn_implementation
-        del self.talker_config
-        del self.code2wav_config
-        del self.initializer_range
-        del self.enable_audio_output
-        del self.enable_audio_output
-        del self.im_start_token_id
-        del self.im_end_token_id
-        del self.tts_pad_token_id
-        del self.tts_bos_token_id
-        del self.tts_eos_token_id
-        del self.system_token_id
-        del self.user_token_id
-        del self.assistant_token_id
 
-    @property
-    def num_attention_heads(self):
-        return self.thinker_config.text_config.num_attention_heads
+    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+        """
+        Returns the config that is meant to be used with text IO. On most models, it is the original config instance
+        itself. On specific composite models, it is under a set of valid names.
 
-    @property
-    def hidden_size(self):
-        return self.thinker_config.text_config.hidden_size
-
-    @property
-    def vocab_size(self):
-        return self.thinker_config.text_config.vocab_size
-
-    @vocab_size.setter
-    def vocab_size(self, value):
-        self.thinker_config.text_config.vocab_size = value
-
-
-class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "padding_side": "left",
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": True,
-            "return_attention_mask": True,
-        },
-    }
+        Args:
+            decoder (`Optional[bool]`, *optional*, defaults to `False`):
+                If set to `True`, then only search for decoder config names.
+        """
+        # Overridden for deeply nested config like Qwen2.5-Omni. We don't have any omni model
+        # except for Qwen yet. This has to be generalized if more deeply nested configs are
+        # added. NOTE: currently method used only by vLLM
+        return self.thinker_config.get_text_config()
 
 
 class Qwen3ASRProcessor(AudioFlamingo3Processor):

@@ -17,13 +17,17 @@ from transformers.tokenization_utils_base import TextInput
 class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding": False,
-            "padding_side": "left",
+            "padding": True,
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
-            "padding": True,
+            "chunk_length": 30.0,
             "return_attention_mask": True,
+            "padding": "max_length",
+        },
+        "common_kwargs": {
+            "return_tensors": "pt",
+            "padding_side": "left",
         },
     }
 
