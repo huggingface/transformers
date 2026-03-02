@@ -1602,7 +1602,7 @@ class ContinuousBatchingConfig:
         max_queue_size: int = 0,
         q_padding_interval_size: int = 0,
         kv_padding_interval_size: int = 0,
-        allow_block_sharing: bool = False,
+        allow_block_sharing: bool = True,
         use_async_batching: bool | None = None,
         max_cached_graphs: int = 0,
     ) -> None:

@@ -923,7 +923,7 @@ class ContinuousMixin:
         # Retrieve continuous batching config, or create it if none is provided
         if continuous_batching_config is not None:
             cb_config = continuous_batching_config
-        elif hasattr(gen_config, "continuous_batching_config"):
+        elif getattr(gen_config, "continuous_batching_config", None) is not None:
             cb_config = gen_config.continuous_batching_config
         else:
             cb_config = ContinuousBatchingConfig()
