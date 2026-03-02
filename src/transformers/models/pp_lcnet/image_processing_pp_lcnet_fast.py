@@ -13,11 +13,9 @@ import torchvision.transforms.v2.functional as tvF
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import SizeDict
-from ...utils import auto_docstring
 from ...utils.generic import TensorType
 
 
-@auto_docstring(custom_intro="ImageProcessorFast for the PPLCNet model.")
 class PPLCNetImageProcessorFast(BaseImageProcessorFast):
     """
     Fast image processor for PP-LCNet models (PyTorch-optimized, inherits from `BaseImageProcessorFast`).
@@ -85,7 +83,7 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
             BatchFeature: Preprocessed image batch with key "pixel_values" containing the processed PyTorch tensors.
         """
         data = {}
-        resize_imgs = []
+        resize_images = []
         if do_resize:
             for image in images:
                 if self.resize_short is not None:
@@ -94,8 +92,8 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
                     )
 
                 image = self.resize(image, size=size, interpolation=interpolation)
-                resize_imgs.append(image)
-            images = resize_imgs
+                resize_images.append(image)
+            images = resize_images
 
         crop_images = []
         if do_center_crop:

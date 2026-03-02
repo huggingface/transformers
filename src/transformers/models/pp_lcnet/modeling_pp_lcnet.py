@@ -12,7 +12,7 @@ import torch.nn as nn
 
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring
+from ...utils import ModelOutput
 from .configuration_pp_lcnet import PPLCNetConfig
 
 
@@ -268,7 +268,6 @@ class PPLCNetPreTrainedModel(PreTrainedModel):
             nn.init.kaiming_normal_(module.convolution.weight)
 
 
-@auto_docstring(custom_intro="The PPLCNet model.")
 class PPLCNetModel(PPLCNetPreTrainedModel):
     """
     PP-LCNet base model: lightweight CNN backbone for image classification tasks.
@@ -404,7 +403,6 @@ class PPLCNetForImageClassificationOutput(BaseModelOutputWithNoAttention):
     shape: Optional[torch.FloatTensor] = None
 
 
-@auto_docstring(custom_intro="ImageClassification for the PPLCNet model.")
 class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
     """
     PP-LCNet model for image classification tasks.

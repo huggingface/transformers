@@ -29,13 +29,11 @@ from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
-    auto_docstring,
     filter_out_non_signature_kwargs,
 )
 from ...utils.generic import TensorType
 
 
-@auto_docstring(custom_intro="Configuration for the PPLCNet model.")
 class PPLCNetConfig(PreTrainedConfig):
     model_type = "pp_lcnet"
 
@@ -113,7 +111,6 @@ class PPLCNetConfig(PreTrainedConfig):
         self.divisor = divisor
 
 
-@auto_docstring(custom_intro="ImageProcessor for the PPLCNet model.")
 class PPLCNetImageProcessor(BaseImageProcessor):
     """
     Image processor for PP-LCNet models, handling all preprocessing steps required for image classification:
@@ -269,7 +266,7 @@ class PPLCNetImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         # transformations
-        resize_imgs = []
+        resize_images = []
         if do_resize:
             for image in images:
                 if resize_short is not None:
@@ -284,8 +281,8 @@ class PPLCNetImageProcessor(BaseImageProcessor):
                 except Exception as e:
                     print(size)
                     raise RuntimeError(f"Failed to resize image: {e}") from e
-                resize_imgs.append(image)
-            images = resize_imgs
+                resize_images.append(image)
+            images = resize_images
 
         if do_center_crop:
             images = [
@@ -337,7 +334,6 @@ class PPLCNetImageProcessor(BaseImageProcessor):
         return {"height": resized_height, "width": resized_width}
 
 
-@auto_docstring(custom_intro="ImageProcessorFast for the PPLCNet model.")
 class PPLCNetImageProcessorFast(BaseImageProcessorFast):
     """
     Fast image processor for PP-LCNet models (PyTorch-optimized, inherits from `BaseImageProcessorFast`).
@@ -405,7 +401,7 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
             BatchFeature: Preprocessed image batch with key "pixel_values" containing the processed PyTorch tensors.
         """
         data = {}
-        resize_imgs = []
+        resize_images = []
         if do_resize:
             for image in images:
                 if self.resize_short is not None:
@@ -414,8 +410,8 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
                     )
 
                 image = self.resize(image, size=size, interpolation=interpolation)
-                resize_imgs.append(image)
-            images = resize_imgs
+                resize_images.append(image)
+            images = resize_images
 
         crop_images = []
         if do_center_crop:
@@ -702,7 +698,6 @@ class PPLCNetPreTrainedModel(PreTrainedModel):
             nn.init.kaiming_normal_(module.convolution.weight)
 
 
-@auto_docstring(custom_intro="The PPLCNet model.")
 class PPLCNetModel(PPLCNetPreTrainedModel):
     """
     PP-LCNet base model: lightweight CNN backbone for image classification tasks.
@@ -838,7 +833,6 @@ class PPLCNetForImageClassificationOutput(BaseModelOutputWithNoAttention):
     shape: Optional[torch.FloatTensor] = None
 
 
-@auto_docstring(custom_intro="ImageClassification for the PPLCNet model.")
 class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
     """
     PP-LCNet model for image classification tasks.

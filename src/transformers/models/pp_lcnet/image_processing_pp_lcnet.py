@@ -22,11 +22,10 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import auto_docstring, filter_out_non_signature_kwargs
+from ...utils import filter_out_non_signature_kwargs
 from ...utils.generic import TensorType
 
 
-@auto_docstring(custom_intro="ImageProcessor for the PPLCNet model.")
 class PPLCNetImageProcessor(BaseImageProcessor):
     """
     Image processor for PP-LCNet models, handling all preprocessing steps required for image classification:
@@ -182,7 +181,7 @@ class PPLCNetImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         # transformations
-        resize_imgs = []
+        resize_images = []
         if do_resize:
             for image in images:
                 if resize_short is not None:
@@ -197,8 +196,8 @@ class PPLCNetImageProcessor(BaseImageProcessor):
                 except Exception as e:
                     print(size)
                     raise RuntimeError(f"Failed to resize image: {e}") from e
-                resize_imgs.append(image)
-            images = resize_imgs
+                resize_images.append(image)
+            images = resize_images
 
         if do_center_crop:
             images = [
