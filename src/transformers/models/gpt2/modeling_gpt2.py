@@ -101,6 +101,12 @@ class GPT2Attention(nn.Module):
         self.layer_idx = layer_idx
         self.reorder_and_upcast_attn = config.reorder_and_upcast_attn
 
+        self.scaling = 1.0
+        if self.scale_attn_weights:
+            self.scaling = self.head_dim**-0.5
+        if self.scale_attn_by_inverse_layer_idx:
+            self.scaling /= float(self.layer_idx + 1)
+
         if self.is_cross_attention:
             self.c_attn = Conv1D(2 * self.embed_dim, self.embed_dim)
             self.q_attn = Conv1D(self.embed_dim, self.embed_dim)
@@ -230,6 +236,7 @@ class GPT2Attention(nn.Module):
                 value_states,
                 attention_mask,
                 dropout=self.attn_dropout.p if self.training else 0.0,
+                scaling=self.scaling,
                 **kwargs,
             )
 

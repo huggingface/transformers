@@ -246,6 +246,28 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         )
         result.loss.backward()
 
+    def test_gpt2_sdpa_matches_eager_with_scaling_configs(self):
+        """Test that SDPA and eager produce equivalent outputs when scaling configs differ from defaults."""
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
+        config, input_ids, token_type_ids, _, _, _, _ = config_and_inputs
+        config.scale_attn_weights = False
+        config.scale_attn_by_inverse_layer_idx = True
+
+        # Eager attention (known-correct reference)
+        config._attn_implementation = "eager"
+        model_eager = GPT2LMHeadModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            output_eager = model_eager(input_ids, token_type_ids=token_type_ids).logits
+
+        # SDPA attention (was buggy: ignored scaling configs)
+        config._attn_implementation = "sdpa"
+        model_sdpa = GPT2LMHeadModel(config).to(torch_device).eval()
+        model_sdpa.load_state_dict(model_eager.state_dict())
+        with torch.no_grad():
+            output_sdpa = model_sdpa(input_ids, token_type_ids=token_type_ids).logits
+
+        torch.testing.assert_close(output_eager, output_sdpa, atol=1e-5, rtol=1e-4)
+
     def test_gpt2_reorder_and_upcast_attn(self):
         # extra test: model-specific flag
         config_and_inputs = self.model_tester.prepare_config_and_inputs(reorder_and_upcast_attn=True)
