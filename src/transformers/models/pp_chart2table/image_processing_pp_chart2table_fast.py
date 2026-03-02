@@ -72,12 +72,12 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> BatchFeature:
         data = {}
-        resize_imgs = []
+        resize_images = []
         if do_resize:
             for image in images:
-                img = self.resize(image, size=size, interpolation=interpolation)
-                resize_imgs.append(img)
-            images = resize_imgs
+                image = self.resize(image, size=size, interpolation=interpolation)
+                resize_images.append(image)
+            images = resize_images
 
         processed_images = []
         for image in images:

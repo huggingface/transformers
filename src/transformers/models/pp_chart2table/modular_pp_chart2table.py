@@ -497,17 +497,17 @@ class PPChart2TableImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         # transformations
-        resize_imgs = []
+        resize_images = []
         if do_resize:
             for image in images:
-                img = resize(
+                image = resize(
                     image,
                     size=(size["height"], size["width"]),
                     resample=resample,
                     input_data_format=input_data_format,
                 )
-                resize_imgs.append(img)
-            images = resize_imgs
+                resize_images.append(image)
+            images = resize_images
 
         if do_rescale:
             images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
@@ -583,12 +583,12 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> BatchFeature:
         data = {}
-        resize_imgs = []
+        resize_images = []
         if do_resize:
             for image in images:
-                img = self.resize(image, size=size, interpolation=interpolation)
-                resize_imgs.append(img)
-            images = resize_imgs
+                image = self.resize(image, size=size, interpolation=interpolation)
+                resize_images.append(image)
+            images = resize_images
 
         processed_images = []
         for image in images:
@@ -633,8 +633,8 @@ class PPChart2TableProcessor(ProcessorMixin):
         else:
             image_inputs = {}
         img_cnt = len(image_inputs)
-        _, _, h, _ = image_inputs["pixel_values"].shape
-        num_patches = h // self.image_processor.patch_size // self.image_processor.merge_size
+        _, _, height, _ = image_inputs["pixel_values"].shape
+        num_patches = height // self.image_processor.patch_size // self.image_processor.merge_size
         prompt = (
             "<|im_start|>system\n"
             "You should follow the instructions carefully and explain your answers in detail.<|im_end|><|im_start|>user\n"

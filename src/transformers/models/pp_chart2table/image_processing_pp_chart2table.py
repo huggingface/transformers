@@ -130,17 +130,17 @@ class PPChart2TableImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         # transformations
-        resize_imgs = []
+        resize_images = []
         if do_resize:
             for image in images:
-                img = resize(
+                image = resize(
                     image,
                     size=(size["height"], size["width"]),
                     resample=resample,
                     input_data_format=input_data_format,
                 )
-                resize_imgs.append(img)
-            images = resize_imgs
+                resize_images.append(image)
+            images = resize_images
 
         if do_rescale:
             images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
