@@ -8,9 +8,7 @@ from ...configuration_utils import PreTrainedConfig
 
 
 class UVDocConfig(PreTrainedConfig):
-    model_type = "uvdoc"
-
-    """
+    r"""
     This is the configuration class to store the configuration of a [`UVDocModel`]. It is used to instantiate a
     UVDoc model according to the specified arguments, defining the model architecture for document rectification
     (correcting perspective distortion, tilt, and geometric deformation of document images).
@@ -73,6 +71,8 @@ class UVDocConfig(PreTrainedConfig):
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
+
+    model_type = "uvdoc"
 
     def __init__(
         self,

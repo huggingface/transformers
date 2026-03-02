@@ -28,9 +28,7 @@ from ...utils.generic import TensorType
 
 
 class UVDocConfig(PreTrainedConfig):
-    model_type = "uvdoc"
-
-    """
+    r"""
     This is the configuration class to store the configuration of a [`UVDocModel`]. It is used to instantiate a
     UVDoc model according to the specified arguments, defining the model architecture for document rectification
     (correcting perspective distortion, tilt, and geometric deformation of document images).
@@ -94,6 +92,8 @@ class UVDocConfig(PreTrainedConfig):
         >>> configuration = model.config
     """
 
+    model_type = "uvdoc"
+
     def __init__(
         self,
         num_filter: int = 32,
@@ -123,9 +123,7 @@ class UVDocConfig(PreTrainedConfig):
 
 
 class UVDocImageProcessor(BaseImageProcessor):
-    model_input_names = ["pixel_values"]
-
-    """
+    r"""
     Image processor for the UVDoc model, tailored for document rectification tasks.
     This processor handles all preprocessing (resize, rescale, normalize, channel flip) and postprocessing
     steps required for UVDoc model inference on document images, using numpy-based operations for broad
@@ -148,6 +146,8 @@ class UVDocImageProcessor(BaseImageProcessor):
         model_input_names (`List[str]`):
             List of input names expected by the UVDoc model (only "pixel_values" for image inputs).
     """
+
+    model_input_names = ["pixel_values"]
 
     def __init__(
         self,
