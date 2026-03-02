@@ -19,6 +19,7 @@ save/load/serialization logic.
 import copy
 import json
 import os
+from copy import deepcopy
 from typing import Any, TypeVar
 
 import numpy as np
@@ -36,13 +37,13 @@ from .utils.hub import cached_file
 
 logger = logging.get_logger(__name__)
 
-ProcessingMixinType = TypeVar("ProcessingMixinType", bound="ProcessingMixin")
+PreprocessingMixinType = TypeVar("PreprocessingMixinType", bound="PreprocessingMixin")
 
 
-class ProcessingMixin(PushToHubMixin):
+class PreprocessingMixin(PushToHubMixin):
     """
     Base mixin providing saving/loading functionality shared by
-    ImageProcessingMixin and FeatureExtractionMixin.
+    ImageProcessingMixin, AudioProcessingMixin and FeatureExtractionMixin.
 
     Subclasses must set the following class attributes:
         _config_name: str            — config file name (e.g. IMAGE_PROCESSOR_NAME)
@@ -86,9 +87,80 @@ class ProcessingMixin(PushToHubMixin):
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
+    def _init_kwargs_from_valid_kwargs(self, kwargs: dict):
+        """
+        Initialize instance attributes from `valid_kwargs` annotations.
+
+        For each key in `self.valid_kwargs.__annotations__`, pops it from `kwargs`
+        and sets it on the instance (or deep-copies the class default).
+        Also sets `self._valid_kwargs_names`.
+        """
+        for key in self.valid_kwargs.__annotations__:
+            kwarg = kwargs.pop(key, None)
+            if kwarg is not None:
+                setattr(self, key, kwarg)
+            else:
+                setattr(self, key, deepcopy(getattr(self, key, None)))
+        self._valid_kwargs_names = list(self.valid_kwargs.__annotations__.keys())
+
+    def filter_out_unused_kwargs(self, kwargs: dict) -> dict:
+        """
+        Filter out the unused kwargs from the kwargs dictionary.
+        """
+        if self.unused_kwargs is None:
+            return kwargs
+
+        for kwarg_name in self.unused_kwargs:
+            if kwarg_name in kwargs:
+                logger.warning_once(f"This processor does not use the `{kwarg_name}` parameter. It will be ignored.")
+                kwargs.pop(kwarg_name)
+        return kwargs
+
+    @classmethod
+    def from_dict(cls, config_dict: dict[str, Any], **kwargs):
+        """
+        Instantiates a processor from a Python dictionary of parameters.
+
+        Args:
+            config_dict (`dict[str, Any]`):
+                Dictionary that will be used to instantiate the processor object.
+            kwargs (`dict[str, Any]`):
+                Additional parameters from which to initialize the processor object.
+
+        Returns:
+            A processor of type [`~PreprocessingMixin`].
+        """
+        config_dict = config_dict.copy()
+        return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+
+        # Use valid_kwargs pattern when available (image/audio processors)
+        if hasattr(cls, "valid_kwargs") and hasattr(cls.valid_kwargs, "__annotations__"):
+            config_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
+            processor = cls(**config_dict)
+
+            # Apply extra kwargs to instance (BC for remote code)
+            extra_keys = []
+            for key in reversed(list(kwargs.keys())):
+                if hasattr(processor, key) and key not in cls.valid_kwargs.__annotations__:
+                    setattr(processor, key, kwargs.pop(key, None))
+                    extra_keys.append(key)
+            if extra_keys:
+                logger.warning_once(
+                    f"Processor {cls.__name__}: kwargs {extra_keys} were applied for backward compatibility. "
+                    f"To avoid this warning, add them to valid_kwargs."
+                )
+        else:
+            processor = cls(**config_dict)
+
+        logger.info(f"Processor {processor}")
+        if return_unused_kwargs:
+            return processor, kwargs
+        else:
+            return processor
+
     @classmethod
     def from_pretrained(
-        cls: type[ProcessingMixinType],
+        cls: type[PreprocessingMixinType],
         pretrained_model_name_or_path: str | os.PathLike,
         cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
@@ -96,7 +168,7 @@ class ProcessingMixin(PushToHubMixin):
         token: str | bool | None = None,
         revision: str = "main",
         **kwargs,
-    ) -> ProcessingMixinType:
+    ) -> PreprocessingMixinType:
         r"""
         Instantiate a processor from a pretrained model name or path.
 
@@ -107,7 +179,7 @@ class ProcessingMixin(PushToHubMixin):
                 - a string, the *model id* of a pretrained processor hosted inside a model repo on
                   huggingface.co.
                 - a path to a *directory* containing a processor file saved using the
-                  [`~ProcessingMixin.save_pretrained`] method, e.g., `./my_model_directory/`.
+                  [`~PreprocessingMixin.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
@@ -129,7 +201,7 @@ class ProcessingMixin(PushToHubMixin):
                 loaded values.
 
         Returns:
-            A processor of type [`~ProcessingMixin`].
+            A processor of type [`~PreprocessingMixin`].
         """
         kwargs["cache_dir"] = cache_dir
         kwargs["force_download"] = force_download
@@ -146,7 +218,7 @@ class ProcessingMixin(PushToHubMixin):
     def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
         Save a processor object to the directory `save_directory`, so that it can be re-loaded using the
-        [`~ProcessingMixin.from_pretrained`] class method.
+        [`~PreprocessingMixin.from_pretrained`] class method.
 
         Args:
             save_directory (`str` or `os.PathLike`):
@@ -319,6 +391,7 @@ class ProcessingMixin(PushToHubMixin):
         """
         output = copy.deepcopy(self.__dict__)
         output[self._type_key] = self.__class__.__name__
+        output.pop("_valid_kwargs_names", None)
         for key in self._excluded_dict_keys:
             if key in output:
                 del output[key]
@@ -334,7 +407,7 @@ class ProcessingMixin(PushToHubMixin):
                 Path to the JSON file containing the parameters.
 
         Returns:
-            A processor of type [`~ProcessingMixin`]: The processor object instantiated from that JSON file.
+            A processor of type [`~PreprocessingMixin`]: The processor object instantiated from that JSON file.
         """
         with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
