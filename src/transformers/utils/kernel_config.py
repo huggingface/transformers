@@ -97,8 +97,8 @@ class KernelConfig(PushToHubMixin):
     Kernel configuration class. This class is used to configure the kernel mapping for a model.
     """
 
-    def __init__(self, kernel_mapping={}, use_local_kernel=False):
-        self.kernel_mapping = kernel_mapping
+    def __init__(self, kernel_mapping=None, use_local_kernel=False):
+        self.kernel_mapping = kernel_mapping if kernel_mapping is not None else {}
         self.registered_layer_names = {}
         self.use_local_kernel = use_local_kernel
 
