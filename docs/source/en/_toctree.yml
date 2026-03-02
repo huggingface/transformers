@@ -16,6 +16,8 @@
       title: Loading models
     - local: custom_models
       title: Customizing models
+    - local: monkey_patching
+      title: Monkey patching
     - local: how_to_hack_models
       title: Customizing model components
     - local: model_sharing
@@ -232,6 +234,8 @@
     title: HIGGS
   - local: quantization/hqq
     title: HQQ
+  - local: quantization/metal
+    title: Metal
   - local: quantization/mxfp4
     title: MXFP4
   - local: quantization/optimum
@@ -714,6 +718,8 @@
         title: Olmo3
       - local: model_doc/olmoe
         title: OLMoE
+      - local: model_doc/olmo_hybrid
+        title: OlmoHybrid
       - local: model_doc/opt
         title: OPT
       - local: model_doc/pegasus
@@ -1040,6 +1046,8 @@
         title: UnivNet
       - local: model_doc/vibevoice_acoustic_tokenizer
         title: VibeVoice Acoustic Tokenizer
+      - local: model_doc/vibevoice_asr
+        title: VibeVoice ASR
       - local: model_doc/vits
         title: VITS
       - local: model_doc/wav2vec2
@@ -1248,6 +1256,8 @@
         title: Pix2Struct
       - local: model_doc/pixtral
         title: Pixtral
+      - local: model_doc/pp_doclayout_v2
+        title: PP-DocLayoutV2
       - local: model_doc/pp_doclayout_v3
         title: PP-DocLayoutV3
       - local: model_doc/qwen2_5_omni
@@ -1326,6 +1336,8 @@
         title: Time Series Transformer
       - local: model_doc/timesfm
         title: TimesFM
+      - local: model_doc/timesfm2_5
+        title: TimesFM2.5
       title: Time series models
     title: Models
   - sections:
