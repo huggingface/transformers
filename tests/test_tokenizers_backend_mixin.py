@@ -507,6 +507,16 @@ The following string should be properly encoded: Hello.
 But ird and ปี   ird   ด
 Hey how are you doing"""  # noqa: W293
 
+    ADDITIONAL_ROUNDTRIP_CASES = [
+        "وقال، ماما، لقد عدت للمنزل.",
+        "لم ينطق ببنت شفة.",
+        "Он ничего не сказал.",
+        "Αυτό είναι ένα δοκιμαστικό κείμενο.",
+        "यह सिर्फ एक परीक्षण वाक्य है।",
+        "Tôi đã sống ở Việt Nam từ năm 1990.",
+        "def foo(x):\n    return x + 1\n",
+    ]
+
     EXPECTED_XLANGAI_OPENCUA_7B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
     EXPECTED_INTERNLM_INTERNLM2_CHAT_7B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n\nhithere\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
     EXPECTED_STEPFUN_AI_STEP_35_FLASH = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
@@ -539,3 +549,20 @@ Hey how are you doing"""  # noqa: W293
             expected_decoded_text,
             f"Roundtrip failed for {model_id}: got {decoded!r}",
         )
+
+    @parameterized.expand(TOKENIZERS_BACKEND_V5_MODELS_WITH_EXPECTED)
+    def test_additional_roundtrip_cases(self, model_id: str, _expected_decoded_text: str) -> None:
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_id,
+            trust_remote_code=True,
+            use_fast=True,
+        )
+        for text in self.ADDITIONAL_ROUNDTRIP_CASES:
+            with self.subTest(text=text):
+                ids = tokenizer.encode(text, add_special_tokens=False)
+                decoded = tokenizer.decode(ids, skip_special_tokens=True)
+                self.assertEqual(
+                    decoded,
+                    text,
+                    f"Roundtrip failed for {model_id} on sample {text!r}",
+                )
