@@ -1,5 +1,5 @@
 # 1) Install deps:
-#    1.1) git clone https://huggingface.co/Qwen/Qwen3-ASR
+#    1.1) git clone https://huggingface.co/spaces/Qwen/Qwen3-ASR
 #    1.2) cd qwen3-asr
 #    1.3) pip install -r requirements.txt
 # 2) Put this file in tests/models/qwen3_asr
