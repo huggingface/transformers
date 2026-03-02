@@ -440,7 +440,15 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             model_tester_kwargs["text_kwargs"] = {"vocab_size": vocab_size}
 
     # `parent` is an instance of `unittest.TestCase`, but we don't need it here.
-    model_tester = model_tester_class(parent=None, **model_tester_kwargs)
+
+    # TODO: we need to make sure the kwargs are actually arguments!
+    #   But we are likely NOT to override anymore! Let's do something easy and quick here despite ugly.
+    try:
+        model_tester = model_tester_class(parent=None, **model_tester_kwargs)
+    except TypeError as e:
+        if "vocab_size" in model_tester_kwargs:
+            model_tester_kwargs_new = {k: v for k, v in model_tester_kwargs.items() if k != "vocab_size"}
+            model_tester = model_tester_class(parent=None, **model_tester_kwargs_new)
 
     if hasattr(model_tester, "get_pipeline_config"):
         config = model_tester.get_pipeline_config()
