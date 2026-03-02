@@ -20,7 +20,6 @@ from types import ModuleType
 
 from packaging import version as pkg_version
 
-from ..dynamic_module_utils import resolve_trust_remote_code
 from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.import_utils import is_kernels_available
 from .flash_attention import flash_attention_forward
@@ -299,7 +298,7 @@ def is_kernel(attn_implementation: str | None) -> bool:
 
 
 def load_and_register_attn_kernel(
-    attn_implementation: str, attention_wrapper: Callable | None = None, trust_remote_code: bool | None = None
+    attn_implementation: str, attention_wrapper: Callable | None = None, trust_remote_code: bool = False
 ) -> ModuleType | None:
     """
     Load and register the kernel associated to `attn_implementation`.
@@ -410,7 +409,7 @@ def get_kernel(
     kernel_name: str,
     revision: str | None = None,
     version: int | str | None = None,
-    trust_remote_code: bool | None = None,
+    trust_remote_code: bool = False,
 ) -> ModuleType:
     from .. import __version__
 
@@ -419,12 +418,10 @@ def get_kernel(
 
     repo_parent = kernel_name.split("/")[0]
     # all `kernels-community` repos are trusted by default!
-    if repo_parent != "kernels-community":
-        trust_remote_code = resolve_trust_remote_code(trust_remote_code, kernel_name, False, True)
-        if not trust_remote_code:
-            raise ValueError(
-                "You need to specify `trust_remote_code=True` to use kernels outside of the `kernels-community` repository"
-            )
+    if repo_parent != "kernels-community" and not trust_remote_code:
+        raise ValueError(
+            "You need to specify `trust_remote_code=True` to use kernels outside of the `kernels-community` repository"
+        )
 
     user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
     kernels_version = importlib.metadata.version("kernels")

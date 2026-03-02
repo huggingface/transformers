@@ -1261,6 +1261,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
             self.config._attn_implementation,
             is_init_check=True,
+            # We need to use this constant set through context manager as it cannot be forwarded in the model's __init__
             trust_remote_code=integrations.hub_kernels.TRUST_REMOTE_KERNELS,
         )
         # Check the experts implementation is supported, or set it if not yet set (on the internal attr, to avoid
@@ -1788,7 +1789,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return True
 
     def _check_and_adjust_attn_implementation(
-        self, attn_implementation: str | None, is_init_check: bool = False, trust_remote_code: bool | None = None
+        self, attn_implementation: str | None, is_init_check: bool = False, trust_remote_code: bool = False
     ) -> str:
         """
         Check that the `attn_implementation` exists and is supported by the models, and try to get the kernel from hub if
@@ -1992,7 +1993,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # heuristic -> if we the use_experts_implementation decorator is used, then we can set it
         return "@use_experts_implementation" in code
 
-    def set_attn_implementation(self, attn_implementation: str | dict, trust_remote_code: bool | None = None):
+    def set_attn_implementation(self, attn_implementation: str | dict, trust_remote_code: bool = False):
         """
         Set the requested `attn_implementation` for this model.
 
