@@ -596,7 +596,6 @@ class ContinuousBatchingManager:
         if self.log_prob_generation:
             raise NotImplementedError("log_prob_generation is not supported yet")
 
-
     @traced
     def start(self) -> None:
         """Start the background generation thread."""
