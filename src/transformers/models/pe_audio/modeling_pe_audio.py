@@ -498,7 +498,7 @@ class PeAudioPreTrainedModel(PreTrainedModel):
     config: PeAudioConfig
     base_model_prefix = "audio_model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PeAudioEncoderLayer"]
+    _no_split_modules = ["PeAudioEncoderLayer", "TimmWrapperForImageClassification"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
