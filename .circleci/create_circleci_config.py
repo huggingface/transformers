@@ -332,7 +332,7 @@ tensor_parallel_ci_job = CircleCIJob(
     "tensor_parallel_ci",
     additional_env={"RUN_TENSOR_PARALLEL_TESTS": True},
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    install_steps=["uv pip install ."],
+    install_steps=["uv pip install .", "uv pip install torchao"],
     marker="is_tensor_parallel_test",
     parallelism=6,
 )
