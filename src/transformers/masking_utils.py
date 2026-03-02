@@ -486,7 +486,7 @@ def sdpa_mask(
     # For BC on `cache_positions` that used to be an arg at the position of `q_length`
     if isinstance(q_length, torch.Tensor):
         logger.warning_once(
-            "`cache_position` is deprecated as an arg, and will be removed in Transformers v6. Please use `q_length` and "
+            "`cache_position` is deprecated as an arg, and will be removed in Transformers v5.6. Please use `q_length` and "
             "`q_offset` instead, similarly to `kv_length` and `kv_offset`"
         )
         q_length, q_offset = q_length.shape[0], q_length[0].to(device)
@@ -691,7 +691,7 @@ def flex_attention_mask(
     # For BC on `cache_positions` that used to be an arg at the position of `q_length`
     if isinstance(q_length, torch.Tensor):
         logger.warning_once(
-            "`cache_position` is deprecated as an arg, and will be removed in Transformers v6. Please use `q_length` and "
+            "`cache_position` is deprecated as an arg, and will be removed in Transformers v5.6. Please use `q_length` and "
             "`q_offset` instead, similarly to `kv_length` and `kv_offset`"
         )
         q_length, q_offset = q_length.shape[0], q_length[0].to(device)
