@@ -193,12 +193,9 @@ class HiggsAudioV2GenerationOutput(GenerateDecoderOnlyOutput):
 
 class HiggsAudioV2GenerationMixin(GenerationMixin):
     def _get_logits_processor(self, *args, **kwargs):
-        if kwargs.get("logits_processor") is None:
-            logits_processor = LogitsProcessorList()
-        else:
-            logits_processor = kwargs.get("logits_processor")
-
-        logits_processor.append(
+        logits_processor = super()._get_logits_processor(*args, **kwargs)
+        logits_processor.insert(
+            0,
             HiggsAudioV2DelayPatternLogitsProcessor(
                 delay_pattern=[el + 1 for el in range(self.config.num_codebooks)],
                 audio_bos_token_id=self.config.audio_bos_token_id,
@@ -207,7 +204,7 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
                 audio_stream_eos_id=self.config.audio_stream_eos_id,
                 num_codebooks=self.config.num_codebooks,
                 codebook_size=self.config.codebook_size,
-            )
+            ),
         )
         return logits_processor
 
