@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, MutableMapping
-from typing import Any, Protocol, TypeAlias
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
 
-import torch
+
+if TYPE_CHECKING:
+    import torch
 
 
 # A few helpful type aliases
