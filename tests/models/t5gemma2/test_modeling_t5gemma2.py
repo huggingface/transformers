@@ -37,7 +37,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -947,7 +947,7 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
+            assert_similar_generate_outputs(outputs, outputs_cached)
             self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     @unittest.skip("T5Gemma 2 only support final layer hidden states.")

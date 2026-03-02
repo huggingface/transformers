@@ -61,6 +61,7 @@ from transformers.utils.generic import is_flash_attention_requested
 if is_torch_available():
     import torch
     import torch.nn.functional as F
+    from torch.nn.attention import SDPBackend, sdpa_kernel
 
     from transformers import (
         AutoModelForCausalLM,
@@ -725,7 +726,7 @@ class GenerationTesterMixin:
                 atol = rtol = 1e-5
 
             # The two outputs must match and their shape must be as expected
-            self.assertTrue(has_similar_generate_outputs(output_greedy, output_assisted, atol=atol, rtol=rtol))
+            assert_similar_generate_outputs(output_greedy, output_assisted, atol=atol, rtol=rtol)
             for output in (output_greedy, output_assisted):
                 self._check_generate_outputs(output, model.config, use_cache=True)
 
@@ -809,7 +810,7 @@ class GenerationTesterMixin:
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
-            self.assertTrue(has_similar_generate_outputs(output_greedy, output_prompt_lookup, atol=atol, rtol=rtol))
+            assert_similar_generate_outputs(output_greedy, output_prompt_lookup, atol=atol, rtol=rtol)
             for output in (output_greedy, output_prompt_lookup):
                 self._check_generate_outputs(output, model.config, use_cache=True)
 
@@ -1183,9 +1184,7 @@ class GenerationTesterMixin:
             else:
                 atol = rtol = 1e-5
             if not has_complex_embeds_computation:
-                self.assertTrue(
-                    has_similar_generate_outputs(outputs_from_ids, outputs_from_embeds, atol=atol, rtol=rtol)
-                )
+                assert_similar_generate_outputs(outputs_from_ids, outputs_from_embeds, atol=atol, rtol=rtol)
 
             # input_ids is not a required input on most models -- if we don't pass it, the newly generated tokens will
             # be the same
@@ -1194,9 +1193,7 @@ class GenerationTesterMixin:
                     inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
                 )
                 outputs_from_embeds.sequences = outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :]
-                self.assertTrue(
-                    has_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds, atol=atol, rtol=rtol)
-                )
+                assert_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds, atol=atol, rtol=rtol)
 
     @pytest.mark.generate
     def test_generate_from_inputs_embeds_with_static_cache(self):
@@ -1359,7 +1356,7 @@ class GenerationTesterMixin:
                 atol = rtol = 1e-3
             else:
                 atol = rtol = 1e-5
-            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached, atol=atol, rtol=rtol))
+            assert_similar_generate_outputs(outputs, outputs_cached, atol=atol, rtol=rtol)
             self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     @pytest.mark.generate
@@ -1487,10 +1484,8 @@ class GenerationTesterMixin:
                     atol = rtol = 1e-3
                 else:
                     atol = rtol = 1e-5
-                self.assertTrue(
-                    has_similar_generate_outputs(
-                        dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol
-                    )
+                assert_similar_generate_outputs(
+                    dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol
                 )
 
     @require_optimum_quanto
@@ -1651,7 +1646,7 @@ class GenerationTesterMixin:
             else:
                 atol = rtol = 1e-5
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
-                self.assertTrue(has_similar_generate_outputs(dynamic_result, compiled_result, atol=atol, rtol=rtol))
+                assert_similar_generate_outputs(dynamic_result, compiled_result, atol=atol, rtol=rtol)
 
     @pytest.mark.generate
     def test_generate_compilation_all_outputs(self):
@@ -1877,7 +1872,7 @@ class GenerationTesterMixin:
                 del model_attn
                 gc.collect()
 
-                self.assertTrue(has_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3))
+                assert_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3)
 
     @pytest.mark.generate
     @slow
@@ -3398,29 +3393,30 @@ class GenerationIntegrationTests(unittest.TestCase):
         tokenized_inputs = tokenizer([text], return_tensors="pt")
         input_ids = tokenized_inputs.input_ids.to(torch_device)
 
-        # Traditional way of generating text
-        outputs_normal = model.generate(input_ids)
-        self.assertEqual(outputs_normal.shape, (1, 20 + input_ids.shape[1]))
+        with sdpa_kernel([SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]):
+            # Traditional way of generating text
+            outputs_normal = model.generate(input_ids)
+            self.assertEqual(outputs_normal.shape, (1, 20 + input_ids.shape[1]))
 
-        # Should be different with token_type_ids
-        outputs_tti = model.generate(
-            input_ids,
-            token_type_ids=torch.zeros(input_ids.shape, dtype=torch.long).to(torch_device),
-        )
-        with self.assertRaises(AssertionError):
-            self.assertListEqual(outputs_tti.tolist(), outputs_normal.tolist())
+            # Should be different with token_type_ids
+            outputs_tti = model.generate(
+                input_ids,
+                token_type_ids=torch.zeros(input_ids.shape, dtype=torch.long).to(torch_device),
+            )
+            with self.assertRaises(AssertionError):
+                self.assertListEqual(outputs_tti.tolist(), outputs_normal.tolist())
 
-        # Assistant model
-        assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
-        assistant.config.pad_token_id = tokenizer.eos_token_id
+            # Assistant model
+            assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+            assistant.config.pad_token_id = tokenizer.eos_token_id
 
-        # If assisted generation passes model_kwargs correctly, should be same as previous
-        outputs_assisted = model.generate(
-            input_ids,
-            token_type_ids=torch.zeros(input_ids.shape, dtype=torch.long).to(torch_device),
-            assistant_model=assistant,
-        )
-        self.assertListEqual(outputs_assisted.tolist(), outputs_tti.tolist())
+            # If assisted generation passes model_kwargs correctly, should be same as previous
+            outputs_assisted = model.generate(
+                input_ids,
+                token_type_ids=torch.zeros(input_ids.shape, dtype=torch.long).to(torch_device),
+                assistant_model=assistant,
+            )
+            self.assertListEqual(outputs_assisted.tolist(), outputs_tti.tolist())
 
     def test_assisted_decoding_num_assistant_tokens_heuristic_schedule(self):
         # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
@@ -3674,6 +3670,9 @@ class GenerationIntegrationTests(unittest.TestCase):
         draft_name = "double7/vicuna-68m"
         target_name = "Qwen/Qwen2-0.5B-Instruct"
 
+        # TODO Matt: Slightly flaky (~1%) without set_seed - if anyone wants to do
+        #            a deep dive on why, feel free!
+        set_seed(42)
         draft_model = AutoModelForCausalLM.from_pretrained(draft_name)
         target_model = AutoModelForCausalLM.from_pretrained(target_name)
 
@@ -3939,13 +3938,14 @@ class GenerationIntegrationTests(unittest.TestCase):
         inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
 
         model = AutoModelForCausalLM.from_pretrained(checkpoint).to(torch_device)
-        original_outputs = model.generate(**inputs, do_sample=False, max_new_tokens=20)
-        original_decoded = tokenizer.batch_decode(original_outputs, skip_special_tokens=True)
-        self.assertEqual(original_decoded, [expected_output])
+        with sdpa_kernel([SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]):
+            original_outputs = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+            original_decoded = tokenizer.batch_decode(original_outputs, skip_special_tokens=True)
+            self.assertEqual(original_decoded, [expected_output])
 
-        outputs_assisted = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
-        decoded_assisted = tokenizer.batch_decode(outputs_assisted, skip_special_tokens=True)
-        self.assertEqual(decoded_assisted, [expected_output])
+            outputs_assisted = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
+            decoded_assisted = tokenizer.batch_decode(outputs_assisted, skip_special_tokens=True)
+            self.assertEqual(decoded_assisted, [expected_output])
 
     @slow
     def test_beam_search_advanced_stopping_criteria(self):
@@ -4599,8 +4599,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             atol = rtol = 1e-3
         else:
             atol = rtol = 1e-5
-
-        self.assertTrue(has_similar_generate_outputs(full_outputs, full_sequence_outputs, atol=atol, rtol=rtol))
+        assert_similar_generate_outputs(full_outputs, full_sequence_outputs, atol=atol, rtol=rtol)
         cache1, cache2 = full_outputs.past_key_values, full_sequence_outputs.past_key_values
         for idx in range(len(cache1)):
             if isinstance(cache1, EncoderDecoderCache):
@@ -4626,7 +4625,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # Of course we get only the new tokens as outputs here, so slice before performing the check
         full_outputs["sequences"] = full_outputs["sequences"][:, -3:]
-        self.assertTrue(has_similar_generate_outputs(full_outputs, single_token_outputs, atol=atol, rtol=rtol))
+        assert_similar_generate_outputs(full_outputs, single_token_outputs, atol=atol, rtol=rtol)
         cache1, cache2 = full_outputs.past_key_values, single_token_outputs.past_key_values
         for idx in range(len(cache1)):
             if isinstance(cache1, EncoderDecoderCache):
@@ -4910,39 +4909,58 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.assert_no_sklearn()
 
 
+def _get_generate_outputs_mismatch_message(output_1, output_2, atol=1e-5, rtol=1e-5) -> str:
+    # scores doesn't include data regarding decoder input tokens
+    decoder_input_length = output_1.sequences.shape[1] - len(output_1.scores)
+    output_matches = output_1.sequences == output_2.sequences
+    has_matching_outputs = output_matches.all()
+    if has_matching_outputs:
+        return ""
+    for batch_idx in range(output_1.sequences.shape[0]):
+        batch_matches = output_matches[batch_idx]
+        if batch_matches.all():
+            continue
+        first_mismatch_idx = batch_matches.int().argmin()  # gets the index of the first False
+        first_mismatch_idx -= decoder_input_length
+        output_1_first_mismatch_scores = output_1.scores[first_mismatch_idx][batch_idx]
+        output_2_first_mismatch_scores = output_2.scores[first_mismatch_idx][batch_idx]
+        has_matching_scores = torch.allclose(
+            output_1_first_mismatch_scores, output_2_first_mismatch_scores, atol=atol, rtol=rtol
+        )
+        if not has_matching_scores:
+            score_diff = (output_1_first_mismatch_scores - output_2_first_mismatch_scores).abs()
+            max_diff = score_diff.max().item()
+            mean_diff = score_diff.mean().item()
+            num_mismatched_tokens = (~batch_matches).sum().item()
+            total_tokens = batch_matches.numel()
+            return (
+                f"Generate outputs are not similar enough (atol={atol}, rtol={rtol}).\n"
+                f"  Sequence mismatch: {num_mismatched_tokens}/{total_tokens} tokens differ "
+                f"(first at position {first_mismatch_idx + decoder_input_length}).\n"
+                f"  Batch index: {batch_idx}\n"
+                f"  Token at mismatch — output_1: {output_1.sequences[batch_idx, first_mismatch_idx + decoder_input_length].item()}, "
+                f"output_2: {output_2.sequences[batch_idx, first_mismatch_idx + decoder_input_length].item()}\n"
+                f"  Score diff at first mismatch — max: {max_diff:.6e}, mean: {mean_diff:.6e}"
+            )
+    return ""
+
+
 def has_similar_generate_outputs(output_1, output_2, atol=1e-5, rtol=1e-5) -> bool:
     """
     Returns a boolean indicating whether a pair of generate outputs are similar. Two `generate` call outputs are
     considered similar in the following situations:
     1. The sequences are the same
     2. The sequences are different, but the scores up to (and including) the first mismatch are nearly identical
-
-    Args:
-        output_1 (`GenerateOutput`): The first `generate` call output.
-        output_2 (`GenerateOutput`): The second `generate` call output.
-        atol (`float`, *optional*, defaults to 1e-5): The absolute tolerance for the scores.
-        rtol (`float`, *optional*, defaults to 1e-5): The relative tolerance for the scores.
-
-    Returns:
-        A boolean indicating whether the two generate outputs are similar.
     """
-    # scores doesn't include data regarding decoder input tokens
-    decoder_input_length = output_1.sequences.shape[1] - len(output_1.scores)
-    output_matches = output_1.sequences == output_2.sequences
-    has_matching_outputs = output_matches.all()
-    has_matching_scores = None
-    if not has_matching_outputs:
-        for batch_idx in range(output_1.sequences.shape[0]):
-            batch_matches = output_matches[batch_idx]
-            if batch_matches.all():
-                continue
-            first_mismatch_idx = batch_matches.int().argmin()  # gets the index of the first False
-            first_mismatch_idx -= decoder_input_length
-            output_1_first_mismatch_scores = output_1.scores[first_mismatch_idx][batch_idx]
-            output_2_first_mismatch_scores = output_2.scores[first_mismatch_idx][batch_idx]
-            has_matching_scores = torch.allclose(
-                output_1_first_mismatch_scores, output_2_first_mismatch_scores, atol=atol, rtol=rtol
-            )
-            if not has_matching_scores:
-                break
-    return has_matching_outputs or has_matching_scores
+    return not _get_generate_outputs_mismatch_message(output_1, output_2, atol=atol, rtol=rtol)
+
+
+def assert_similar_generate_outputs(output_1, output_2, atol=1e-5, rtol=1e-5):
+    """
+    Asserts that a pair of generate outputs are similar, with a descriptive error message on failure.
+
+    Similar to `has_similar_generate_outputs`, but raises an assertion error on failure.
+    """
+    mismatch_message = _get_generate_outputs_mismatch_message(output_1, output_2, atol=atol, rtol=rtol)
+    if mismatch_message:
+        raise AssertionError(mismatch_message)
