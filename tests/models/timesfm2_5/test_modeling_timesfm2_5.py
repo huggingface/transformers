@@ -108,9 +108,7 @@ class TimesFm2_5ModelTester:
         outputs.loss.backward()
 
         # Not all trainable parameters are guaranteed to receive gradients for a single loss path.
-        has_grad = any(
-            p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters() if p.requires_grad
-        )
+        has_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters() if p.requires_grad)
         self.parent.assertTrue(has_grad, "No gradients were computed during backpropagation")
 
 
