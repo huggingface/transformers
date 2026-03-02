@@ -482,23 +482,13 @@ model.layers.0.mlp.experts.down_proj     # (8, 14336, 4096)
 ],
 ```
 
-### ERNIE 4.5 VL MoE
+### Custom operations (ERNIE 4.5 VL MoE)
 
-This model has text and vision experts that need special handling:
+When the built-in operations aren't sufficient, you can create a custom [`ConversionOps`] subclass. For example, ERNIE 4.5 VL MoE needs to split a shared expert list between text and vision modalities — something no single built-in op handles. The custom `ErnieFuseAndSplitTextVisionExperts` operation splits and re-stacks experts across two target keys:
 
 ```python
 "ernie4_5_vl_moe": [
-    # Vision model renaming
     WeightRenaming("vision_model", "vision_tower"),
-
-    # Gate weight transposition
-    WeightConverter(
-        source_patterns="mlp.gate.weight",
-        target_patterns="mlp.text_moe.gate.weight",
-        operations=[Transpose(dim0=0, dim1=1)],
-    ),
-
-    # Split experts between text and vision
     WeightConverter(
         source_patterns=["experts.*.down_proj.weight"],
         target_patterns=[
@@ -509,6 +499,8 @@ This model has text and vision experts that need special handling:
     ),
 ],
 ```
+
+Custom ops must implement `convert()` and the `reverse_op` property to support round-trip save/load.
 
 ### Model type aliases
 
