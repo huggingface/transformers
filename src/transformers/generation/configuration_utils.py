@@ -429,6 +429,8 @@ class GenerationConfig(PushToHubMixin):
         self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", None)
 
+        self.continuous_batching_config = kwargs.pop("continuous_batching_config", None)
+
         # Deprecated (moved to the Hub). TODO remove for v5
         self.low_memory = kwargs.pop("low_memory", None)
         self.penalty_alpha = kwargs.pop("penalty_alpha", None)
@@ -1538,3 +1540,77 @@ class CompileConfig:
     def to_dict(self) -> dict[str, Any]:
         """Serializes this instance to a Python dictionary."""
         return copy.deepcopy({key: value for key, value in self.__dict__.items() if key != "_compile_all_devices"})
+
+
+@dataclass
+class ContinuousBatchingConfig:
+    """
+    Class that holds arguments relative to continuous batching, when using continuous batching through the 
+    `generate_batch` method.
+    """
+
+    # Size of each KV cache block
+    block_size: int = 256
+
+    # The number of blocks used in the KV cache and the maximum number of tokens in a batch. Once the block size is set,
+    # these can be auto inferred using GPU size.
+    num_blocks: int | None = None
+    max_batch_tokens: int | None = None
+
+    # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache.
+    max_memory_percent: float = 0.8
+
+    # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
+    # the fast decode path will not be used. Currently turned off by default.
+    max_blocks_per_request: int | None = 0
+
+    # Block sharing can only be allowed, but never forced: some model just do not support it. If you only have a few
+    # short prompts, but long generation lengths, you might want to disable block sharing.
+    allow_block_sharing: bool = True
+
+    # Enables asynchronous batching. This removes the CPU overhead from the continuous batching loop, at the cost of
+    # doubling the VRAM usage. If None, will be automatically detected.
+    use_async_batching: bool | None = None
+
+    # If any of these parameters are set to a non-default, CUDA graphs will be used. Otherwise the automatically infer
+    # if they should be turned on. Padding interval sizes are in tokens and further explained in the docstring at the
+    # top of the continuous_batching/continuous_api.py file.
+    use_cuda_graph: bool | None = None
+    q_padding_interval_size: int = 0
+    kv_padding_interval_size: int = 0
+    max_cached_graphs: int = 0
+
+
+    def account_for_cb_deprecated_arguments(
+        self,
+        q_padding_interval_size: int = 0,
+        kv_padding_interval_size: int = 0,
+        allow_block_sharing: bool = True,
+        use_async_batching: bool | None = None,
+        max_cached_graphs: int = 0,
+    ) -> None:
+        """Some arguments given to `generate_batch`, `init_continuous_batching` or `continuous_batching_context_manager`
+        are now deprecated and are expected inside the continuous batching config. This method checks if any were
+        passed and accounts for them in the continuous batching config. It raises a deprecation warning if any were
+        passed.
+        """
+        raise_deprecation_warning = False
+        if q_padding_interval_size > 0:
+            raise_deprecation_warning = True
+            self.q_padding_interval_size = q_padding_interval_size
+        if kv_padding_interval_size > 0:
+            raise_deprecation_warning = True
+            self.kv_padding_interval_size = kv_padding_interval_size
+        if allow_block_sharing:
+            raise_deprecation_warning = True
+            self.allow_block_sharing = allow_block_sharing
+        if use_async_batching is not None:
+            raise_deprecation_warning = True
+            self.use_async_batching = use_async_batching
+        if max_cached_graphs > 0:
+            raise_deprecation_warning = True
+            self.max_cached_graphs = max_cached_graphs
+        if raise_deprecation_warning:
+            logger.warning(
+                "Deprecated arguments were provided to generate_batch. Please use continuous_batching_config instead."
+            )
