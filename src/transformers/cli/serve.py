@@ -730,6 +730,9 @@ class Serve:
         Returns:
             `str`: The built chunk, a string containing a JSON string with the payload.
         """
+        if isinstance(chunk, str):
+            # Error paths may yield pre-formatted strings — pass them through as-is.
+            return chunk if chunk.startswith("data: ") else f"data: {chunk}\n\n"
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
     @staticmethod
@@ -854,7 +857,10 @@ class Serve:
                         )
 
                     if result.status == RequestStatus.FINISHED:
-                        generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
+                        generated_all_tokens = (
+                            generation_config.max_new_tokens is not None
+                            and n_tokens_generated >= generation_config.max_new_tokens
+                        )
 
                         # If the tokenizer has an eos_token, we can have a more robust check.
                         if hasattr(tokenizer, "eos_token"):
@@ -1198,7 +1204,10 @@ class Serve:
                             _request_id, content=result, model=model_id_and_revision
                         )
 
-                generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
+                generated_all_tokens = (
+                    generation_config.max_new_tokens is not None
+                    and n_tokens_generated >= generation_config.max_new_tokens
+                )
 
                 # If the tokenizer has an eos_token, we can have a more robust check.
                 if hasattr(streamer.tokenizer, "eos_token"):

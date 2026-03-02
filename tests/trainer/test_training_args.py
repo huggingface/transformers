@@ -1,6 +1,9 @@
+import dataclasses
 import os
 import tempfile
 import unittest
+
+import torch
 
 from transformers import TrainingArguments
 from transformers.debug_utils import DebugOption
@@ -350,3 +353,32 @@ class TestTrainingArguments(unittest.TestCase):
         """Test that JSON string dict fields are parsed into dicts."""
         args = TrainingArguments(output_dir="tmp", lr_scheduler_kwargs='{"factor": 0.5}', report_to=None)
         self.assertEqual(args.lr_scheduler_kwargs, {"factor": 0.5})
+
+    def test_dtype_to_json(self):
+        @dataclasses.dataclass
+        class TorchDtypeTrainingArguments(TrainingArguments):
+            dtype: torch.dtype = dataclasses.field(
+                default=torch.float32,
+            )
+
+        for dtype in [
+            "float32",
+            "float64",
+            "complex64",
+            "complex128",
+            "float16",
+            "bfloat16",
+            "uint8",
+            "int8",
+            "int16",
+            "int32",
+            "int64",
+            "bool",
+        ]:
+            torch_dtype = getattr(torch, dtype)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                args = TorchDtypeTrainingArguments(output_dir=tmp_dir, dtype=torch_dtype)
+
+                args_dict = args.to_dict()
+                self.assertIn("dtype", args_dict)
+                self.assertEqual(args_dict["dtype"], dtype)
