@@ -110,6 +110,7 @@ from .stopping_criteria import (
 
 
 if TYPE_CHECKING:
+    from .._typing import GenerativePreTrainedModel
     from ..modeling_utils import PreTrainedModel
     from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .streamers import BaseStreamer
@@ -334,7 +335,16 @@ GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderO
 GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
-class GenerationMixin(ContinuousMixin):
+if TYPE_CHECKING:
+
+    class _GenerationMixinHost(ContinuousMixin, GenerativePreTrainedModel):
+        pass
+
+else:
+    _GenerationMixinHost = ContinuousMixin
+
+
+class GenerationMixin(_GenerationMixinHost):
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in model classes.
     Inheriting from this class causes the model to have special generation-related behavior, such as loading a
@@ -362,28 +372,6 @@ class GenerationMixin(ContinuousMixin):
 
     To learn more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
     """
-
-    # Type declarations for attributes provided by the host class (PreTrainedModel).
-    # These let the type checker resolve `self.<attr>` accesses inside the mixin.
-    config: Any
-    device: torch.device
-    dtype: torch.dtype
-    main_input_name: str
-    base_model_prefix: str
-    _is_stateful: bool
-    hf_quantizer: Any
-    encoder: Any
-    hf_device_map: dict[str, Any]
-    forward: Callable[..., Any]
-    __call__: Callable[..., Any]
-    can_generate: Callable[..., bool]
-    get_encoder: Callable[..., Any]
-    get_output_embeddings: Callable[..., Any]
-    get_input_embeddings: Callable[..., Any]
-    set_output_embeddings: Callable[..., None]
-    set_input_embeddings: Callable[..., None]
-    get_compiled_call: Callable[..., Any]
-    set_experts_implementation: Callable[..., Any]
 
     # Should be overwritten by models that can generate non-text output
     output_modalities = ("text",)
@@ -513,7 +501,7 @@ class GenerationMixin(ContinuousMixin):
         return custom_generate_function
 
     def prepare_inputs_for_generation(
-        self,
+        self: "GenerativePreTrainedModel",
         input_ids: torch.LongTensor,
         next_sequence_length: int | None = None,
         past_key_values: Cache | None = None,
@@ -679,7 +667,7 @@ class GenerationMixin(ContinuousMixin):
         return inputs, input_name, model_kwargs
 
     def _maybe_initialize_input_ids_for_generation(
-        self,
+        self: "GenerativePreTrainedModel",
         inputs: torch.Tensor | None,
         bos_token_id: torch.Tensor | None,
         model_kwargs: dict[str, torch.Tensor],
@@ -1673,7 +1661,7 @@ class GenerationMixin(ContinuousMixin):
         return generation_config
 
     def _prepare_generation_config(
-        self,
+        self: "GenerativePreTrainedModel",
         generation_config: GenerationConfig | None,
         **kwargs: Any,
     ) -> tuple[GenerationConfig, dict]:
@@ -1739,7 +1727,7 @@ class GenerationMixin(ContinuousMixin):
 
         return generation_config, model_kwargs
 
-    def _get_initial_cache_position(self, seq_length, device, model_kwargs):
+    def _get_initial_cache_position(self: "GenerativePreTrainedModel", seq_length, device, model_kwargs):
         """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
         # `torch.compile`-friendly `torch.arange` from a shape -- the lines below are equivalent to `torch.arange`
         if "cache_position" in model_kwargs and model_kwargs["cache_position"] is not None:
@@ -2123,7 +2111,7 @@ class GenerationMixin(ContinuousMixin):
         return repo
 
     def _extract_generation_mode_kwargs(
-        self,
+        self: "GenerativePreTrainedModel",
         custom_generate,
         kwargs,
         synced_gpus,
@@ -2580,7 +2568,9 @@ class GenerationMixin(ContinuousMixin):
 
         return result
 
-    def _has_unfinished_sequences(self, this_peer_finished: bool, synced_gpus: bool, device: torch.device) -> bool:
+    def _has_unfinished_sequences(
+        self: "GenerativePreTrainedModel", this_peer_finished: bool, synced_gpus: bool, device: torch.device
+    ) -> bool:
         """
         Returns whether there are still unfinished sequences in the device. The existence of unfinished sequences is
         fed through `this_peer_finished`. ZeRO stage 3-friendly.
