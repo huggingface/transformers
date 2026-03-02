@@ -38,7 +38,7 @@ from transformers.utils import (
     is_vision_available,
 )
 
-from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -481,7 +481,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             outputs_from_embeds = model.generate(
                 input_ids=input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
-            self.assertTrue(has_similar_generate_outputs(outputs_from_ids, outputs_from_embeds))
+            assert_similar_generate_outputs(outputs_from_ids, outputs_from_embeds)
 
             # input_ids is not a required input on most models -- if we don't pass it, the newly generated tokens will
             # be the same
@@ -489,7 +489,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
             outputs_from_embeds.sequences = outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :]
-            self.assertTrue(has_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds))
+            assert_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds)
 
 
 # We will verify our results on an image of cute cats

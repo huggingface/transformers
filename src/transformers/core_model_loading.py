@@ -1150,7 +1150,11 @@ def convert_and_load_state_dict_in_model(
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
 
             _dtype = dtype
-            if hf_quantizer and hf_quantizer.pre_quantized and original_key != renamed_key:
+            if (
+                hf_quantizer
+                and hf_quantizer.pre_quantized
+                and (original_key != renamed_key or not tensor.get_dtype().startswith(("F", "BF")))
+            ):
                 # if the key was renamed as it is not available in the state dict otherwise, it means that we are deserializing it,
                 # so we need to make sure to load the tensor with the same dtype from the checkpoint
                 # TODO: make the condition more srict for native fp8 model such as qwen2moe fp8
