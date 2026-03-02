@@ -2522,13 +2522,14 @@ def create_import_structure_from_path(module_path):
 
     adjacent_modules = []
 
-    for entry in os.scandir(module_path):
-        if entry.name == "__pycache__":
-            continue
-        if entry.is_dir():
-            import_structure[entry.name] = create_import_structure_from_path(entry.path)
-        elif not entry.name.startswith(("convert_", "modular_")):
-            adjacent_modules.append(entry.name)
+    with os.scandir(module_path) as entries:
+        for entry in entries:
+            if entry.name == "__pycache__":
+                continue
+            if entry.is_dir():
+                import_structure[entry.name] = create_import_structure_from_path(entry.path)
+            elif not entry.name.startswith(("convert_", "modular_")):
+                adjacent_modules.append(entry.name)
 
     # We're only taking a look at files different from __init__.py
     # We could theoretically require things directly from the __init__.py
