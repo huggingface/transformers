@@ -23,8 +23,6 @@ from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
 if TYPE_CHECKING:
     import torch
 
-import torch
-
 
 # A few helpful type aliases
 Level: TypeAlias = int
