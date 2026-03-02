@@ -391,6 +391,7 @@ if TYPE_CHECKING:
     from .textnet import *
     from .time_series_transformer import *
     from .timesfm import *
+    from .timesfm2_5 import *
     from .timesformer import *
     from .timm_backbone import *
     from .timm_wrapper import *
@@ -403,6 +404,7 @@ if TYPE_CHECKING:
     from .univnet import *
     from .upernet import *
     from .vaultgemma import *
+    from .vibevoice_asr import *
     from .video_llama_3 import *
     from .video_llava import *
     from .videomae import *
