@@ -15,10 +15,12 @@ import importlib.metadata
 import os
 import re
 from collections.abc import Callable
+from contextlib import contextmanager
 from types import ModuleType
 
 from packaging import version as pkg_version
 
+from ..dynamic_module_utils import resolve_trust_remote_code
 from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.import_utils import is_kernels_available
 from .flash_attention import flash_attention_forward
@@ -290,25 +292,14 @@ _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
 
 def is_kernel(attn_implementation: str | None) -> bool:
     """Check whether `attn_implementation` matches a kernel pattern from the hub."""
-    if attn_implementation is None:
-        return False
-    match_object = re.search(r"^(?:paged\|)?([^/:]+)/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", attn_implementation)
-    if match_object is not None:
-        # Due to security reason, we only allow kernels from the `kernels-community` repo, as otherwise loading
-        # random kernels will lead to arbitrary code execution
-        repo_id = match_object.group(1)
-        if repo_id != "kernels-community":
-            logger.warning_once(
-                "For security reasons, we currently only accept kernels from the `kernels-community` repository. We "
-                f"will skip kernel from `{repo_id}`"
-            )
-            return False
-        return True
-    return False
+    return (
+        attn_implementation is not None
+        and re.search(r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", attn_implementation) is not None
+    )
 
 
 def load_and_register_attn_kernel(
-    attn_implementation: str, attention_wrapper: Callable | None = None
+    attn_implementation: str, attention_wrapper: Callable | None = None, trust_remote_code: bool | None = None
 ) -> ModuleType | None:
     """
     Load and register the kernel associated to `attn_implementation`.
@@ -319,6 +310,9 @@ def load_and_register_attn_kernel(
             have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
             They just prepare the arguments properly. This is mostly used for continious batching, where we
             want the `paged` wrapper, which calls the paged cache.
+        trust_remote_code (`bool`, optional):
+            Whether to trust remote code, if `attn_implementation` is a custom kernel outside of the `kernels-community`
+            hub repository.
     """
     from ..masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
     from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -347,7 +341,7 @@ def load_and_register_attn_kernel(
 
     # Load the kernel from hub
     try:
-        kernel = get_kernel(repo_id, revision=rev)
+        kernel = get_kernel(repo_id, revision=rev, trust_remote_code=trust_remote_code)
     except Exception as e:
         raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
     # correctly wrap the kernel
@@ -412,18 +406,32 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
-def get_kernel(kernel_name: str, revision: str | None = None, version: int | str | None = None) -> ModuleType:
+def get_kernel(
+    kernel_name: str,
+    revision: str | None = None,
+    version: int | str | None = None,
+    trust_remote_code: bool | None = None,
+) -> ModuleType:
     from .. import __version__
 
-    user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
-    if _kernels_available:
-        kernels_version = importlib.metadata.version("kernels")
-        if pkg_version.parse(kernels_version) >= pkg_version.parse("0.10.4"):
-            return get_kernel_hub(kernel_name, revision=revision, version=version, user_agent=user_agent)
-        else:
-            return get_kernel_hub(kernel_name, revision=revision, version=version)
-    else:
+    if not _kernels_available:
         raise ImportError("kernels is not installed, please install it with `pip install kernels`")
+
+    repo_parent = kernel_name.split("/")[0]
+    # all `kernels-community` repos are trusted by default!
+    if repo_parent != "kernels-community":
+        trust_remote_code = resolve_trust_remote_code(trust_remote_code, kernel_name, False, True)
+        if not trust_remote_code:
+            raise ValueError(
+                "You need to specify `trust_remote_code=True` to use kernels outside of the `kernels-community` repository"
+            )
+
+    user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
+    kernels_version = importlib.metadata.version("kernels")
+    if pkg_version.parse(kernels_version) >= pkg_version.parse("0.10.4"):
+        return get_kernel_hub(kernel_name, revision=revision, version=version, user_agent=user_agent)
+    else:
+        return get_kernel_hub(kernel_name, revision=revision, version=version)
 
 
 def use_kernelized_func(module_names: list[Callable] | Callable):
@@ -450,6 +458,26 @@ def use_kernelized_func(module_names: list[Callable] | Callable):
         return cls
 
     return decorator
+
+
+TRUST_REMOTE_KERNELS = False
+
+
+@contextmanager
+def trust_remote_kernels():
+    """
+    Context manager used to adjust the value of the global `TRUST_REMOTE_KERNELS`. This is needed, as this argument
+    cannot be forwarded directly to the `__init__` of the models, where we set the attention implementation.
+    """
+    global TRUST_REMOTE_KERNELS
+
+    try:
+        TRUST_REMOTE_KERNELS = True
+
+        yield
+    finally:
+        # Set back the original
+        TRUST_REMOTE_KERNELS = False
 
 
 __all__ = [

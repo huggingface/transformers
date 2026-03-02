@@ -71,7 +71,9 @@ _hf_api_to_flash_mapping = {
 }
 
 
-def _lazy_imports(implementation: str | None, attention_wrapper: Callable | None = None):
+def _lazy_imports(
+    implementation: str | None, attention_wrapper: Callable | None = None, trust_remote_code: bool | None = None
+):
     """
     Lazy loads the respective flash attention implementations.
 
@@ -107,7 +109,9 @@ def _lazy_imports(implementation: str | None, attention_wrapper: Callable | None
 
             # We want to explicitly register the name with `paged|` if found
             kernel_implementation = f"paged|{implementation}" if is_paged else implementation
-            kernel = load_and_register_attn_kernel(kernel_implementation, attention_wrapper)
+            kernel = load_and_register_attn_kernel(
+                kernel_implementation, attention_wrapper, trust_remote_code=trust_remote_code
+            )
 
             flash_attn_func = getattr(kernel, "flash_attn_func", None)
             flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
@@ -147,7 +151,9 @@ def _lazy_define_process_function(flash_function):
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
 
-def lazy_import_flash_attention(implementation: str | None, attention_wrapper: Callable | None = None):
+def lazy_import_flash_attention(
+    implementation: str | None, attention_wrapper: Callable | None = None, trust_remote_code: bool | None = None
+):
     """
     Lazily import flash attention and return the respective functions + flags.
 
@@ -162,20 +168,22 @@ def lazy_import_flash_attention(implementation: str | None, attention_wrapper: C
     if implementation is not None and _loaded_implementation != implementation:
         _loaded_implementation = implementation
 
-        _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation, attention_wrapper)
+        _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(
+            implementation, attention_wrapper, trust_remote_code=trust_remote_code
+        )
         _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
 
     return (_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
 
 
-def lazy_import_paged_flash_attention(implementation: str | None):
+def lazy_import_paged_flash_attention(implementation: str | None, trust_remote_code: bool | None = None):
     """
     Same as `lazy_import_flash_attention` but explicitly wrapping it with the paged implementation.
     """
     from .integrations.flash_paged import paged_attention_forward
 
     (_, flash_attn_varlen_func, _, _), _ = lazy_import_flash_attention(
-        implementation, attention_wrapper=paged_attention_forward
+        implementation, attention_wrapper=paged_attention_forward, trust_remote_code=trust_remote_code
     )
     return flash_attn_varlen_func
 
