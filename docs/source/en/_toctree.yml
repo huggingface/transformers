@@ -1044,6 +1044,8 @@
         title: UnivNet
       - local: model_doc/vibevoice_acoustic_tokenizer
         title: VibeVoice Acoustic Tokenizer
+      - local: model_doc/vibevoice_asr
+        title: VibeVoice ASR
       - local: model_doc/vits
         title: VITS
       - local: model_doc/wav2vec2

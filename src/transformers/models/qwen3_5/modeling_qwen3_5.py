@@ -1407,7 +1407,7 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Qwen3_5Config
-    _no_split_modules = ["Qwen3_5TextDecoderLayer", "Qwen3_5VisionBlock"]
+    _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
