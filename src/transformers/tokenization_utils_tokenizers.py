@@ -292,6 +292,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # when a class with a custom __init__ rebuilds the backend tokenizer from scratch.
         _json_truncation = kwargs.pop("_json_truncation", None)
         _json_padding = kwargs.pop("_json_padding", None)
+        # Precompiled SentencePiece charsmap is already used by model-specific tokenizers
+        # (before calling super().__init__) and should not be stored in `init_kwargs` to keep the tokenizer  serializable.
+        kwargs.pop("_spm_precompiled_charsmap", None)
 
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         gguf_file = kwargs.pop("gguf_file", None)
