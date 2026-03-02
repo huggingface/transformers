@@ -1462,17 +1462,33 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if dtype is not None:
             init_contexts.append(local_torch_dtype(dtype, cls.__name__))
 
-        if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
+        needs_zero3_init = is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called
+        if needs_zero3_init:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
             import deepspeed
 
-            init_contexts.extend([deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()])
+            init_contexts.extend(
+                [
+                    init.no_init_weights(),
+                    deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
+                    set_zero3_state(),
+                ]
+            )
 
         # Instantiate the model
         with ContextManagers(init_contexts):
             model = cls(config, **kwargs)
+
+        # Under ZeRO-3, parameters were partitioned into empty tensors during construction,
+        # so weight init was suppressed. Re-initialize using the ZeRO-3 variant which gathers
+        # each module's parameters before init to avoid OOM on large models.
+        if needs_zero3_init:
+            from .integrations.deepspeed import initialize_weights_zero3
+
+            initialize_weights_zero3(model)
+            model.tie_weights()
 
         return model
 

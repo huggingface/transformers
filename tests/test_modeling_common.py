@@ -3873,9 +3873,6 @@ class ModelTesterMixin:
         if not is_torch_fp16_available_on_device(torch_device):
             self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
 
-        if torch_device == "xpu":
-            self.skipTest("XPU FA2 currently does not support backward.")
-
         torch.compiler.reset()
         dtype = torch.float16
 
@@ -4166,6 +4163,10 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
+                if model_class.__name__ == "VideoMAEForPreTraining":
+                    # this model computes the loss unconditionally
+                    continue
+
                 if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
                 else:

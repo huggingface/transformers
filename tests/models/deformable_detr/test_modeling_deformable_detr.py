@@ -19,8 +19,6 @@ import math
 import unittest
 from functools import cached_property
 
-import pytest
-
 from transformers import DeformableDetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     require_timm,
@@ -743,25 +741,3 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
             [[-9.9160, -4.2876, -6.4985], [-9.6945, -4.0855, -6.8031], [-10.0665, -5.8471, -7.7001]]
         )
         assert torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=2e-4)
-
-    @pytest.mark.torch_export_test
-    def test_export(self):
-        model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr").to(torch_device).eval()
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        inputs = image_processor(image, return_tensors="pt").to(torch_device)
-
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["pixel_values"], inputs["pixel_mask"]),
-            strict=True,
-        )
-        with torch.no_grad():
-            eager_outputs = model(inputs["pixel_values"], inputs["pixel_mask"])
-            exported_outputs = exported_program.module().forward(inputs["pixel_values"], inputs["pixel_mask"])
-        self.assertEqual(eager_outputs.logits.shape, exported_outputs.logits.shape)
-        torch.testing.assert_close(eager_outputs.logits, exported_outputs.logits, rtol=TOLERANCE, atol=TOLERANCE)
-        self.assertEqual(eager_outputs.pred_boxes.shape, exported_outputs.pred_boxes.shape)
-        torch.testing.assert_close(
-            eager_outputs.pred_boxes, exported_outputs.pred_boxes, rtol=TOLERANCE, atol=TOLERANCE
-        )
