@@ -173,6 +173,7 @@ class VibeVoiceAcousticTokenizerConv1dPaddingCache:
         return padded_hidden_states
 
 
+# TODO: @eustlb, @ebezzam this should be latter factorized with other causalconv1d (e.g. VoxtralRealtimeCausalConv1d)
 class VibeVoiceAcousticTokenizerCausalConv1d(nn.Module):
     """Conv1d with built-in causal padding and optional streaming support through a cache."""
 

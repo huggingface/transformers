@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-01-26 and added to Hugging Face Transformers on 2026-02-24.*
+*This model was released on 2026-01-26 and added to Hugging Face Transformers on 2026-03-02.*
 
 # VibeVoice ASR
 
@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 VibeVoice ASR is an automatic speech recognition model from Microsoft that combines acoustic and semantic audio tokenizers with a causal language model for robust speech-to-text transcription. The model uses VibeVoice's acoustic and semantic tokenizers that process audio at 24kHz, paired with a Qwen2-based language decoder for generating transcriptions. See the [technical report](https://huggingface.co/papers/2601.18184) for more details.
 
-The model checkpoint is available at: [microsoft/VibeVoice-ASR](https://huggingface.co/microsoft/VibeVoice-ASR)
+The model checkpoint is available at: [microsoft/VibeVoice-ASR-HF](https://huggingface.co/microsoft/VibeVoice-ASR-HF)
 
 Highlights:
 
@@ -56,7 +56,7 @@ A notable feature of VibeVoice ASR is its ability to transcribe multi-speaker co
 ```python
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
 
-model_id = "bezzam/VibeVoice-ASR-7B"
+model_id = "microsoft/VibeVoice-ASR-HF"
 processor = AutoProcessor.from_pretrained(model_id)
 model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 print(f"Model loaded on {model.device} with dtype {model.dtype}")
@@ -123,7 +123,7 @@ Below we transcribe an audio where the speaker (with a German accent) talks abou
 ```python
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
 
-model_id = "bezzam/VibeVoice-ASR-7B"
+model_id = "microsoft/VibeVoice-ASR-HF"
 processor = AutoProcessor.from_pretrained(model_id)
 model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 print(f"Model loaded on {model.device} with dtype {model.dtype}")
@@ -160,7 +160,7 @@ Batch inference is possible by passing a list of audio and, if provided, a list 
 ```python
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
 
-model_id = "bezzam/VibeVoice-ASR-7B"
+model_id = "microsoft/VibeVoice-ASR-HF"
 audio = [
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/example_output/VibeVoice-1.5B_output.wav"
@@ -189,7 +189,7 @@ However, if chunks of 60 seconds are too large for your device, the `acoustic_to
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
 
 acoustic_tokenizer_chunk_size = 64000    # default is 1440000 (60s @ 24kHz)
-model_id = "bezzam/VibeVoice-ASR-7B"
+model_id = "microsoft/VibeVoice-ASR-HF"
 audio = [
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/example_output/VibeVoice-1.5B_output.wav"
@@ -213,7 +213,7 @@ VibeVoice ASR also accepts chat template inputs (`apply_transcription_request` i
 ```python
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
 
-model_id = "bezzam/VibeVoice-ASR-7B"
+model_id = "microsoft/VibeVoice-ASR-HF"
 processor = AutoProcessor.from_pretrained(model_id)
 model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
@@ -262,7 +262,7 @@ VibeVoice ASR can be trained with the loss outputted by the model.
 ```python
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
 
-model_id = "bezzam/VibeVoice-ASR-7B"
+model_id = "microsoft/VibeVoice-ASR-HF"
 processor = AutoProcessor.from_pretrained(model_id)
 model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 model.train()
@@ -315,7 +315,7 @@ import time
 import torch
 from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
 
-model_id = "bezzam/VibeVoice-ASR-7B"
+model_id = "microsoft/VibeVoice-ASR-HF"
 
 num_warmup = 5
 num_runs = 20
@@ -398,7 +398,7 @@ The model can be used as a pipeline, but you will have to define your own method
 ```python
 from transformers import pipeline
 
-model_id = "bezzam/VibeVoice-ASR-7B"
+model_id = "microsoft/VibeVoice-ASR-HF"
 pipe = pipeline("any-to-any", model=model_id, device_map="auto")
 chat_template = [
     {

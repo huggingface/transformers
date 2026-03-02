@@ -190,6 +190,7 @@ class VibeVoiceAsrFeedForward(nn.Module):
         return self.linear2(self.activation(self.linear1(hidden_states)))
 
 
+# TODO: @eustlb, @ebezzam this should be latter factorized with other causalconv1d (e.g. VoxtralRealtimeCausalConv1d)
 class VibeVoiceAsrCausalConv1d(nn.Module):
     """Conv1d with built-in causal padding and optional streaming support through a cache."""
 
@@ -422,7 +423,7 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         ```python
         >>> from transformers import VibeVoiceAsrForConditionalGeneration, AutoProcessor
 
-        >>> model_id = "bezzam/VibeVoice-ASR-7B"
+        >>> model_id = "microsoft/VibeVoice-ASR-HF"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, dtype="auto", device_map="auto")
 

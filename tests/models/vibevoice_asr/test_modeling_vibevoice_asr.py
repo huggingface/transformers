@@ -271,7 +271,7 @@ class VibeVoiceAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
         from transformers.testing_utils import cleanup
 
         cleanup(torch_device, gc_collect=True)
-        cls.checkpoint = "bezzam/VibeVoice-ASR-7B"
+        cls.checkpoint = "microsoft/VibeVoice-ASR-HF"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
 
     def tearDown(self):

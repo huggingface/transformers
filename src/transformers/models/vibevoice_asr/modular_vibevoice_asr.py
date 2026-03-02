@@ -299,7 +299,7 @@ class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneratio
         ```python
         >>> from transformers import VibeVoiceAsrForConditionalGeneration, AutoProcessor
 
-        >>> model_id = "bezzam/VibeVoice-ASR-7B"
+        >>> model_id = "microsoft/VibeVoice-ASR-HF"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, dtype="auto", device_map="auto")
 

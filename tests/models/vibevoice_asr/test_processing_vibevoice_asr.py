@@ -35,7 +35,7 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     @require_torch
     def setUpClass(cls):
-        cls.checkpoint = "bezzam/VibeVoice-ASR-7B"
+        cls.checkpoint = "microsoft/VibeVoice-ASR-HF"
         cls.tmpdirname = tempfile.mkdtemp()
 
         processor = VibeVoiceAsrProcessor.from_pretrained(cls.checkpoint)
