@@ -349,46 +349,10 @@ if matched_tp_pattern := tp_plan_alt.search(renamed_key):
 
 ## Quantization integration
 
-Quantization is integrated through the `HfQuantizer` class in `src/transformers/quantizers/base.py`. Quantizers can provide:
+Quantization hooks into the loading pipeline in two ways, depending on whether the checkpoint is already quantized:
 
-1. **Quantization operations** for on-the-fly quantization during load.
-2. **Weight conversions** for deserializing pre-quantized checkpoints.
-
-### Pre-quantized loading
-
-For pre-quantized models, the quantizer provides [`WeightConverter`] instances:
-
-```python
-def get_weight_conversions(self):
-    """Returns list of WeightConverter for deserializing quantized weights."""
-    return []  # Override in subclass
-```
-
-Example for TorchAO:
-```python
-WeightConverter(
-    source_patterns=[":qdata", ":scale"],
-    target_patterns="",
-    operations=[TorchaoDeserialize()],
-)
-```
-
-### On-the-fly quantization
-
-For non-pre-quantized models, the quantizer provides a quantization operation that is applied after other conversions:
-
-```python
-if hf_quantizer is not None and mapping.quantization_operation is not None:
-    collected_tensors = mapping.quantization_operation.convert(
-        collected_tensors,
-        source_patterns=...,
-        target_patterns=...,
-        model=model,
-        config=config,
-    )
-```
-
-The system preserves checkpoint dtypes for pre-quantized weights to avoid unwanted dtype casts during deserialization.
+- **Pre-quantized checkpoints**: The quantizer provides [`WeightConverter`] instances (via `get_weight_conversions()`) that deserialize quantized tensors. Checkpoint dtypes are preserved to avoid unwanted casts.
+- **On-the-fly quantization**: The quantizer provides a quantization operation that is applied after conversion ops, quantizing weights as they are loaded.
 
 ## Fast and efficient model loading
 
