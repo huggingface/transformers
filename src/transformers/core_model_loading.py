@@ -899,6 +899,7 @@ def set_param_for_module(
 
     if param_name == torch.nn.modules.module._EXTRA_STATE_KEY_SUFFIX:
         module_obj.set_extra_state(param_value)
+        loading_info.missing_keys.discard(target_name)
         return
 
     ref = getattr(module_obj, param_name)

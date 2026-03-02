@@ -2999,8 +2999,13 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            model = MyModel.from_pretrained(tmpdirname)
+            del model
+            model, loading_info = MyModel.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(model.my_layer.some_counter, 42)
+            self.assertEqual(len(loading_info["missing_keys"]), 0)
+            self.assertEqual(len(loading_info["unexpected_keys"]), 0)
+            self.assertEqual(len(loading_info["mismatched_keys"]), 0)
+            self.assertEqual(len(loading_info["error_msgs"]), 0)
 
     @mark.xfail(reason="save and from_pretrained currently only supports tensor extra_state")
     def test_save_and_load_model_with_dict_extra_state(self):
@@ -3036,8 +3041,13 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            model = MyModel.from_pretrained(tmpdirname)
+            del model
+            model, loading_info = MyModel.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(model.my_layer.some_counter, 42)
+            self.assertEqual(len(loading_info["missing_keys"]), 0)
+            self.assertEqual(len(loading_info["unexpected_keys"]), 0)
+            self.assertEqual(len(loading_info["mismatched_keys"]), 0)
+            self.assertEqual(len(loading_info["error_msgs"]), 0)
 
 
 class TestGetDecoder(unittest.TestCase):
