@@ -98,6 +98,21 @@ class TimesFm2_5ModelTester:
         inputs_dict = {"past_values": forecast_input}
         return config, inputs_dict
 
+    def create_and_check_loss_backward(self, config, forecast_input):
+        model = TimesFm2_5ModelForPrediction(config)
+        model.to(torch_device)
+        model.train()
+
+        future_values = torch.randn(forecast_input.shape[0], config.horizon_length, device=torch_device)
+        outputs = model(past_values=forecast_input, future_values=future_values)
+        outputs.loss.backward()
+
+        # Not all trainable parameters are guaranteed to receive gradients for a single loss path.
+        has_grad = any(
+            p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters() if p.requires_grad
+        )
+        self.parent.assertTrue(has_grad, "No gradients were computed during backpropagation")
+
 
 @require_torch
 class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
@@ -289,23 +304,12 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(torch.isfinite(outputs.loss))
             # Predictions should always be full horizon_length regardless of future_values length
             self.assertEqual(outputs.mean_predictions.shape[1], config.horizon_length)
+            self.assertEqual(outputs.full_predictions.shape[1], config.horizon_length)
+            self.assertEqual(outputs.full_predictions.shape[2], len(config.quantiles) + 1)
 
     def test_loss_backward(self):
-        """Test that loss supports backpropagation."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = TimesFm2_5ModelForPrediction(config)
-        model.to(torch_device)
-        model.train()
-
-        past_values = inputs_dict["past_values"]
-        future_values = torch.randn(past_values.shape[0], config.horizon_length, device=torch_device)
-
-        outputs = model(past_values=past_values, future_values=future_values)
-        outputs.loss.backward()
-
-        # Check that gradients were computed for at least some parameters
-        has_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters() if p.requires_grad)
-        self.assertTrue(has_grad, "No gradients were computed during backpropagation")
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_loss_backward(*config_and_inputs)
 
 
 @require_torch
