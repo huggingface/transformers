@@ -385,18 +385,19 @@ Sync loading is used when:
 ### Materialization flow
 
 ```
-1. Checkpoint iteration:
-   - For each key, submit materialization job
+1. Checkpoint iteration (Phase 1):
+   - For each key, submit materialization job to ThreadPoolExecutor
    - Job returns Future (async) or Callable (sync)
-   - Add to WeightConverter.collected_tensors
+   - Collect into the matching WeightConverter/WeightRenaming
 
-2. Conversion phase:
-   - materialize_tensors() waits for all Futures
-   - Applies conversion operations
-   - Sets parameters on model
+2. Per-mapping processing (Phase 2, one mapping at a time):
+   - materialize_tensors() waits for this mapping's Futures only
+   - Apply conversion operations chain (self.operations)
+   - Apply quantization operation (if on-the-fly)
+   - Set parameters on model
+   - Delete realized tensors immediately
 
 3. Cleanup:
-   - Delete realized tensors immediately
    - Thread pool shutdown (with cancel_futures=True for interrupts)
 ```
 
