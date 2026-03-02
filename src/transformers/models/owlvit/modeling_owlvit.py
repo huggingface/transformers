@@ -435,10 +435,9 @@ class OwlViTAttention(nn.Module):
         keys = keys.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        attn_impl = getattr(self.config, "_attn_implementation", None)
-        if attn_impl and attn_impl != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[attn_impl]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
