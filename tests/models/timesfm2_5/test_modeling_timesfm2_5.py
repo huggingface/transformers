@@ -100,7 +100,6 @@ class TimesFm2_5ModelTester:
         return config, inputs_dict
 
 
-
 @require_torch
 class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (TimesFm2_5ModelForPrediction,) if is_torch_available() else ()
@@ -280,10 +279,9 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
         if return_labels:
             batch_size = inputs_dict["past_values"].shape[0]
             rng = random.Random(42)
-            inputs_dict["future_values"] = floats_tensor(
-                [batch_size, self.model_tester.horizon_length], rng=rng
-            )
+            inputs_dict["future_values"] = floats_tensor([batch_size, self.model_tester.horizon_length], rng=rng)
         return inputs_dict
+
 
 @require_torch
 @slow
