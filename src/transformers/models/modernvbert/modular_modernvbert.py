@@ -14,7 +14,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 import torch
 import torch.nn as nn

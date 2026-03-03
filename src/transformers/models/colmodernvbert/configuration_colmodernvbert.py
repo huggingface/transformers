@@ -19,7 +19,6 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Any
 
 from huggingface_hub.dataclasses import strict
 
@@ -63,7 +62,7 @@ class ColModernVBertConfig(PreTrainedConfig):
     """
 
     model_type = "colmodernvbert"
-    sub_configs: dict[str, Any] = {"vlm_config": PreTrainedConfig}
+    sub_configs = {"vlm_config": PreTrainedConfig}
 
     vlm_config: dict | PreTrainedConfig | None = None
     embedding_dim: int = 128

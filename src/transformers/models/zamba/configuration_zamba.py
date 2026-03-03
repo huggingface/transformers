@@ -125,7 +125,7 @@ class ZambaConfig(PreTrainedConfig):
     vocab_size: int = 32000
     tie_word_embeddings: bool = True
     hidden_size: int = 3712
-    attention_hidden_size: int = None
+    attention_hidden_size: int | None = None
     intermediate_size: int = 14848
     num_hidden_layers: int = 76
     num_attention_heads: int = 16

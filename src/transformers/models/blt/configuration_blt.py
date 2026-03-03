@@ -48,7 +48,7 @@ class BltLocalEncoderConfig(PreTrainedConfig):
     max_position_embeddings: int = 24576
     rope_parameters: RopeParameters | dict | None = None
     hidden_act: str = "silu"
-    intermediate_size: int = None
+    intermediate_size: int | None = None
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):

@@ -86,8 +86,8 @@ class RwkvConfig(PreTrainedConfig):
     context_length: int = 1024
     hidden_size: int = 4096
     num_hidden_layers: int = 32
-    attention_hidden_size: int = None
-    intermediate_size: int = None
+    attention_hidden_size: int | None = None
+    intermediate_size: int | None = None
     layer_norm_epsilon: float = 1e-5
     bos_token_id: int | None = 0
     eos_token_id: int | None = 0

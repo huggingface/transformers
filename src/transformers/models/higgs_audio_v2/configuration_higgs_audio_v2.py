@@ -156,9 +156,9 @@ class HiggsAudioV2Config(PreTrainedConfig):
     initializer_range: float = interval(min=0.0, max=1.0)(default=0.2)
     rms_norm_eps: float = 1e-6
     use_cache: bool = True
-    pad_token_id: int = 128001
+    pad_token_id: int | None = 128001
     bos_token_id: int | None = 1
-    eos_token_id: int = 128009
+    eos_token_id: int | None = 128009
     pretraining_tp: int | None = 1
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None

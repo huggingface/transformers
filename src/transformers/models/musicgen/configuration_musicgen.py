@@ -102,7 +102,7 @@ class MusicgenDecoderConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
     is_decoder: bool = False
     add_cross_attention: bool = False
-    cross_attention_hidden_size: int = None
+    cross_attention_hidden_size: int | None = None
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

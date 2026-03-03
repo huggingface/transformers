@@ -250,7 +250,7 @@ class MoshiConfig(PreTrainedConfig):
     num_hidden_layers: int = 32
     num_attention_heads: int = 32
     num_key_value_heads: int | None = None
-    audio_vocab_size: int = None
+    audio_vocab_size: int | None = None
     max_position_embeddings: int = 3000
     rope_parameters: RopeParameters | dict | None = None
     hidden_act: str = "silu"

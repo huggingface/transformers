@@ -253,7 +253,7 @@ class Wav2Vec2Config(PreTrainedConfig):
     adapter_kernel_size: int = 3
     adapter_stride: int = 2
     num_adapter_layers: int = 3
-    output_hidden_size: int = None
+    output_hidden_size: int | None = None
     adapter_attn_dim: int | None = None
 
     def __post_init__(self, **kwargs):

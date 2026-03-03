@@ -141,8 +141,8 @@ class HiggsAudioV2Config(LlamaConfig):
     num_hidden_layers: int = 28
     num_attention_heads: int = 24
     num_key_value_heads: int = 8
-    pad_token_id: int = 128001
-    eos_token_id: int = 128009
+    pad_token_id: int | None = 128001
+    eos_token_id: int | None = 128009
     head_dim: int | None = 128
     num_codebooks: int = 8
     codebook_size: int = 1024

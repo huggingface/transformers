@@ -82,7 +82,7 @@ class RagConfig(PreTrainedConfig):
     model_type = "rag"
     has_no_defaults_at_init = True
 
-    vocab_size: int = None
+    vocab_size: int | None = None
     is_encoder_decoder: bool = True
     prefix: str | None = None
     bos_token_id: int | None = None

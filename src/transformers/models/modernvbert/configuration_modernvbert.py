@@ -19,7 +19,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 from huggingface_hub.dataclasses import strict
 

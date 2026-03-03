@@ -718,9 +718,10 @@ class RotaryEmbeddingConfigMixin:
             rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
             validation_fn = getattr(self, f"_validate_{rope_type}_rope_parameters", None)
             rope_parameters["rope_type"] = rope_type
+            ignore_keys = set(self.ignore_keys_at_rope_validation)
 
             if validation_fn is not None:
-                validation_fn(rope_parameters, ignore_keys=self.ignore_keys_at_rope_validation)
+                validation_fn(rope_parameters, ignore_keys=ignore_keys)
             else:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"

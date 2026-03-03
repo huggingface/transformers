@@ -146,8 +146,8 @@ class Dots1Config(PreTrainedConfig):
     num_hidden_layers: int = 62
     num_attention_heads: int = 32
     num_key_value_heads: int | None = 32
-    n_shared_experts: int = None
-    n_routed_experts: int = None
+    n_shared_experts: int | None = None
+    n_routed_experts: int | None = None
     n_group: int | None = 1
     topk_group: int | None = 1
     num_experts_per_tok: int | None = None

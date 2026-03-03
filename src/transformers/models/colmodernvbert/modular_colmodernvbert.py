@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 import torch
 
@@ -64,7 +64,7 @@ class ColModernVBertConfig(ColQwen2Config):
     """
 
     model_type = "colmodernvbert"
-    sub_configs: dict[str, Any] = {"vlm_config": PreTrainedConfig}
+    sub_configs = {"vlm_config": PreTrainedConfig}
 
     vlm_config: dict | PreTrainedConfig | None = None
     embedding_dim: int = 128

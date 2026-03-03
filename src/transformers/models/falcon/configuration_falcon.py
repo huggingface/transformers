@@ -132,7 +132,7 @@ class FalconConfig(PreTrainedConfig):
     bos_token_id: int | None = 11
     eos_token_id: int | list[int] | None = 11
     pad_token_id: int | None = None
-    ffn_hidden_size: int = None
+    ffn_hidden_size: int | None = None
     activation: str | None = "gelu"
     tie_word_embeddings: bool = True
 

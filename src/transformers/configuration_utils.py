@@ -923,7 +923,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         output.pop("kwargs", None)
 
         def to_list(value):
-            if isinstance(value, tuple):
+            if isinstance(value, (tuple, set)):
                 value = [to_list(item) for item in value]
             return value
 
@@ -935,7 +935,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
             # Some models have defaults as tuples because dataclass
             # doesn't allow mutables. Let's convert back to `list``
-            elif isinstance(value, tuple):
+            elif isinstance(value, (tuple, set)):
                 value = to_list(value)
 
             output[key] = value

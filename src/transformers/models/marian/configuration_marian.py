@@ -102,7 +102,7 @@ class MarianConfig(PreTrainedConfig):
     }
 
     vocab_size: int = 58101
-    decoder_vocab_size: int = None
+    decoder_vocab_size: int | None = None
     max_position_embeddings: int = 1024
     encoder_layers: int = 12
     encoder_ffn_dim: int = 4096
