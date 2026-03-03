@@ -141,9 +141,16 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         **kwargs,
     ) -> bool:
         import bitsandbytes as bnb
+        import bitsandbytes.nn.parametrize as bnb_parametrize
+
+        parametrizations = model.parametrizations.get(param_name, None)
+        has_bnb_4bit = any(isinstance(p, bnb_parametrize.Bnb4bitParametrization) for p in parametrizations) if isinstance(parametrizations, ModuleDict) else False
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module._parameters.get(tensor_name, None), bnb.nn.Params4bit):
+        if has_bnb_4bit:
+            # explicit parametrization registered already
+            return True
+        elif isinstance(module._parameters.get(tensor_name, None), bnb.nn.Params4bit):
             # Add here check for loaded components' dtypes once serialization is implemented
             return True
         elif isinstance(module, bnb.nn.Linear4bit) and tensor_name == "bias":
