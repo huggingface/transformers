@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Optional, Union
+from typing import Any
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
@@ -64,8 +64,8 @@ class IsaacProcessor(ProcessorMixin):
         *,
         vision_token: str = "<image>",
         max_sequence_length: int = 16384,
-        rescale_factor: Optional[float] = None,
-        config: Optional[Union[IsaacConfig, dict]] = None,
+        rescale_factor: float | None = None,
+        config: IsaacConfig | dict | None = None,
     ) -> None:
         if isinstance(config, dict):
             config = IsaacConfig(**config)
@@ -96,14 +96,14 @@ class IsaacProcessor(ProcessorMixin):
         self.max_sequence_length = max_sequence_length
 
     def _pack_batch(
-        self, texts: list[str], images_list: Optional[list[Optional[list[Image]]]]
-    ) -> dict[str, Optional[torch.Tensor]]:
+        self, texts: list[str], images_list: list[list[Image] | None] | None
+    ) -> dict[str, torch.Tensor | None]:
         if images_list is None:
             pairs = ((t, None) for t in texts)
         else:
             pairs = zip(texts, images_list, strict=True)
 
-        per_sample: list[dict[str, Optional[torch.Tensor]]] = []
+        per_sample: list[dict[str, torch.Tensor | None]] = []
         for txt, imgs in pairs:
             if imgs is not None and isinstance(imgs, Image):
                 imgs = [imgs]
@@ -161,7 +161,7 @@ class IsaacProcessor(ProcessorMixin):
             "position_ids": padded_position_ids,
         }
 
-    def _pack_single(self, text: str, images: Optional[list[Image]]) -> dict[str, Optional[torch.Tensor]]:
+    def _pack_single(self, text: str, images: list[Image] | None) -> dict[str, torch.Tensor | None]:
         segments = text.split(self.vision_token)  # Parse by vision_token; interleave text segments and image segments.
         num_images = len(segments) - 1
         items: list[dict[str, Any]] = []
@@ -208,7 +208,7 @@ class IsaacProcessor(ProcessorMixin):
         end = total
 
         image_pad_value = self.image_pad_token_id
-        base_device: Optional[torch.device] = None
+        base_device: torch.device | None = None
         position_ids, modality, input_ids = [], [], []
         vpatches, grids, vision_token_offsets, vision_token_lengths = [], [], [], []
 
@@ -313,13 +313,13 @@ class IsaacProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[str, list[str]],
-        images: Optional[Union[Image, list[Image]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        text: str | list[str],
+        images: Image | list[Image] | None = None,
+        return_tensors: str | TensorType | None = TensorType.PYTORCH,
         **kwargs,
     ) -> BatchFeature:
         texts = [text] if isinstance(text, str) else text
-        images_list: Optional[list[Optional[list[Image]]]] = None
+        images_list: list[list[Image] | None] | None = None
         if images is not None:
             if isinstance(images, list) and len(images) == len(texts):
                 if not images:

@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 from ...configuration_utils import PreTrainedConfig, PretrainedConfig, layer_type_validation
 from ...models.qwen3.configuration_qwen3 import Qwen3Config
@@ -89,8 +88,8 @@ class IsaacConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vision_config: Optional[IsaacVisionConfig] = None,
-        text_config: Optional[Union[Qwen3Config, dict]] = None,
+        vision_config: IsaacVisionConfig | None = None,
+        text_config: Qwen3Config | dict | None = None,
         vision_rescale_factor: float = 1 / 255,
         max_sequence_length: int = 16384,
         vision_token: str = "<image>",

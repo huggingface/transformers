@@ -21,6 +21,7 @@ from collections.abc import Callable, Sequence
 from enum import IntEnum
 from typing import Any, Optional, Union
 
+from ... import initialization as init
 from ...cache_utils import DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...feature_extraction_utils import BatchFeature
@@ -37,14 +38,14 @@ from ...image_utils import (
 )
 from ...masking_utils import ALL_MASK_ATTENTION_FUNCTIONS, create_masks_for_generate, packed_sequence_mask_function
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, OutputRecorder, PreTrainedModel
 from ...models.qwen3.configuration_qwen3 import Qwen3Config
 from ...models.qwen3.modeling_qwen3 import Qwen3Attention, Qwen3ForCausalLM, Qwen3Model, Qwen3PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import TensorType, auto_docstring
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from ...utils.generic import OutputRecorder, TransformersKwargs, can_return_tuple, check_model_inputs, maybe_autocast
+from ...utils.generic import TransformersKwargs, can_return_tuple, check_model_inputs, maybe_autocast
 from ...utils.import_utils import (
     is_torch_available,
     is_torchdynamo_compiling,

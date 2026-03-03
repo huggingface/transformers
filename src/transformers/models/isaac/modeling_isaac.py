@@ -36,11 +36,11 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, OutputRecorder, PreTrainedModel
 from ...models.qwen3.modeling_qwen3 import Qwen3Attention, Qwen3Model, Qwen3PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring
-from ...utils.generic import OutputRecorder, TransformersKwargs, can_return_tuple, check_model_inputs, maybe_autocast
+from ...utils import auto_docstring, torch_compilable_check
+from ...utils.generic import TransformersKwargs, can_return_tuple, check_model_inputs, maybe_autocast
 from ...utils.import_utils import (
     is_torch_available,
     is_torchdynamo_compiling,
@@ -68,10 +68,10 @@ class ModalityType(IntEnum):
 
 
 class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
-    patch_size: Optional[int]
-    max_num_patches: Optional[int]
-    min_num_patches: Optional[int]
-    pixel_shuffle_scale: Optional[int]
+    patch_size: int | None
+    max_num_patches: int | None
+    min_num_patches: int | None
+    pixel_shuffle_scale: int | None
 
 
 class IsaacVisionEmbeddings(nn.Module):
@@ -143,7 +143,10 @@ class IsaacVisionEmbeddings(nn.Module):
 
         for i in range(batch_size):
             # (1, dim, height, width) -> (1, dim, target_height, target_width)
-            height, width = spatial_shapes[i]
+            height, width = spatial_shapes[i].tolist()  # will be itemized in F.interpolate either way
+            torch_compilable_check((width > 0), "Width of resized positional embeddings must be positive.")
+            torch_compilable_check((height > 0), "Height of resized positional embeddings must be positive.")
+            torch_compilable_check((height * width) <= max_length, "Resized positional embeddings exceed max_length.")
             resized_embeddings = F.interpolate(
                 positional_embeddings,
                 size=(height, width),
@@ -193,7 +196,7 @@ class IsaacVisionEmbeddings(nn.Module):
         self,
         seq_patches: torch.Tensor,
         spatial_shapes: torch.Tensor,
-    ) -> tuple[Optional[torch.Tensor], torch.Tensor]:
+    ) -> tuple[torch.Tensor | None, torch.Tensor]:
         """Rebatch a packed patch sequence using per-image grids to align embeddings.
 
         Args:
@@ -249,10 +252,10 @@ class IsaacVisionAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
         **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
         batch_size, seq_length, embed_dim = hidden_states.shape
         queries = self.q_proj(hidden_states)
@@ -354,7 +357,7 @@ class IsaacVisionEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
@@ -395,7 +398,7 @@ class IsaacVisionEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         hidden_states = inputs_embeds
@@ -413,7 +416,7 @@ def create_pixel_shuffle_index_map(
     seq_sizes: torch.Tensor,
     token_grids: torch.Tensor,
     scale_factor: int = 1,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
 ) -> torch.Tensor:
     """
     Build a gather-index map that tells us, for every *output* token after
@@ -650,9 +653,9 @@ class IsaacRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[IsaacConfig] = None,
+        config: IsaacConfig | None = None,
         device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
+        seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -683,7 +686,7 @@ class IsaacRotaryEmbedding(nn.Module):
         self,
         position_ids: torch.Tensor,
         modality_tensor: torch.Tensor,
-        hidden_states: Optional[torch.Tensor] = None,
+        hidden_states: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         if hidden_states is None:
             batch, seq_len, _ = position_ids.shape
@@ -722,7 +725,7 @@ class IsaacRotaryEmbedding(nn.Module):
         return cos_combined, sin_combined
 
     @staticmethod
-    def _resolve_mrope_section(section: Optional[list[int]], rotary_half_dim: int) -> list[int]:
+    def _resolve_mrope_section(section: list[int] | None, rotary_half_dim: int) -> list[int]:
         if section is None:
             weights = (2, 1, 1)
             base = [rotary_half_dim * w // sum(weights) for w in weights]
@@ -803,7 +806,7 @@ class IsaacModel(PreTrainedModel):
         return self.vision_embedding.vision_tower
 
     def embed_packed_inputs(
-        self, input_ids: torch.Tensor, packed_inputs: dict[str, Optional[torch.Tensor]]
+        self, input_ids: torch.Tensor, packed_inputs: dict[str, torch.Tensor | None]
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Expects input_ids for text tokens and packed_inputs containing:
@@ -879,7 +882,7 @@ class IsaacModel(PreTrainedModel):
     def get_rope_index(
         self,
         *,
-        position_ids: Optional[torch.Tensor] = None,
+        position_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor,
         inputs_embeds: torch.Tensor,
         cache_position: torch.Tensor,
@@ -934,14 +937,14 @@ class IsaacModel(PreTrainedModel):
     @check_model_inputs
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        packed_inputs: Optional[dict[str, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        packed_inputs: dict[str, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         """
@@ -959,7 +962,7 @@ class IsaacModel(PreTrainedModel):
 
         output_attentions = kwargs.pop("output_attentions", None)
 
-        modality_tensor: Optional[torch.Tensor] = None
+        modality_tensor: torch.Tensor | None = None
 
         if packed_inputs is not None:
             inputs_embeds, modality_tensor = self.embed_packed_inputs(input_ids, packed_inputs)
@@ -1067,7 +1070,7 @@ def rotate_half(x):
 
 
 @use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -1075,8 +1078,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -1111,7 +1112,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -1121,8 +1122,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -1167,11 +1167,11 @@ class IsaacAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -1187,9 +1187,9 @@ class IsaacAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1223,12 +1223,12 @@ class IsaacDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -1276,7 +1276,7 @@ class IsaacPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config_class = IsaacConfig
     _can_compile_fullgraph = False
@@ -1296,15 +1296,15 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
     @check_model_inputs
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        packed_inputs: Optional[dict[str, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        packed_inputs: dict[str, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         """Run multimodal CausalLM forward, accepting packed vision/text inputs.
@@ -1348,12 +1348,12 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        packed_inputs: Optional[dict[str, torch.Tensor]] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        packed_inputs: dict[str, torch.Tensor] | None = None,
+        cache_position: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
         model_inputs = super().prepare_inputs_for_generation(
