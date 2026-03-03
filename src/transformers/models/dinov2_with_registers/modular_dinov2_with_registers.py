@@ -413,7 +413,7 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
             hidden_states=hidden_states if user_requested_hidden_states else None,
-            attentions=output.attentions
+            attentions=output.attentions,
         )
 
 

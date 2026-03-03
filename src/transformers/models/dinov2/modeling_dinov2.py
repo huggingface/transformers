@@ -615,7 +615,7 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
             hidden_states=hidden_states if user_requested_hidden_states else None,
-            attentions=output.attentions
+            attentions=output.attentions,
         )
 
 
