@@ -238,9 +238,8 @@ class TimesFm2_5ResidualBlock(TimesFmResidualBlock):
         self.activation = ACT2FN[config.activation]
 
     def forward(self, x):
-        # Align activations to block parameter dtype for mixed precision stability.
-        if x.dtype != self.input_layer.weight.dtype:
-            x = x.to(self.input_layer.weight.dtype)
+        # Align activations to block parameter dtype for mixed precision stability
+        x = x.to(self.input_layer.weight.dtype)
         return super().forward(x)
 
 
