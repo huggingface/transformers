@@ -28,7 +28,6 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..csm.modeling_csm import CsmBackboneModelEmbeddings
 from ..llama.configuration_llama import LlamaConfig
@@ -330,7 +329,6 @@ class HiggsAudioV2Model(LlamaModel):
 
         return special_audio_mask
 
-    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
