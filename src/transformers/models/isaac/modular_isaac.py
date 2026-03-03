@@ -1306,36 +1306,41 @@ class IsaacModel(Qwen3PreTrainedModel):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         modality = modality_tensor.to(device=input_ids.device, dtype=torch.long)
         embeds = self.text_model.embed_tokens(input_ids)
+        image_token_mask = modality == ModalityType.image.value
 
         if vision_patches is None or vision_token_grids is None:
+            if torch.any(image_token_mask):
+                raise ValueError("Image placeholders require `vision_patches` and `vision_token_grids`.")
             return embeds, modality
 
         vision_patches = vision_patches.to(device=embeds.device)
-        token_grids = vision_token_grids.to(device=vision_patches.device, dtype=torch.long)
+        token_grids = vision_token_grids.to(device=embeds.device, dtype=torch.long)
         image_attention_mask = (
-            vision_image_attention_mask.to(device=vision_patches.device, dtype=torch.long)
+            vision_image_attention_mask.to(device=embeds.device, dtype=torch.bool)
             if vision_image_attention_mask is not None
-            else torch.ones(token_grids.shape[:2], device=vision_patches.device, dtype=torch.long)
+            else torch.ones(token_grids.shape[:2], device=embeds.device, dtype=torch.bool)
         )
         patch_attention_mask = (
-            vision_patch_attention_mask.to(device=vision_patches.device, dtype=torch.long)
+            vision_patch_attention_mask.to(device=embeds.device, dtype=torch.long)
             if vision_patch_attention_mask is not None
-            else torch.ones(vision_patches.shape[:3], device=vision_patches.device, dtype=torch.long)
+            else torch.ones(vision_patches.shape[:3], device=embeds.device, dtype=torch.long)
         )
         offsets = (
-            vision_token_offsets.to(device=vision_patches.device, dtype=torch.long)
+            vision_token_offsets.to(device=embeds.device, dtype=torch.long)
             if vision_token_offsets is not None
-            else torch.zeros(token_grids.shape[:2], device=vision_patches.device, dtype=torch.long)
+            else torch.zeros(token_grids.shape[:2], device=embeds.device, dtype=torch.long)
         )
         reduction_factor = int(self.config.vision_config.pixel_shuffle_scale_factor) ** 2
         lengths = (
-            vision_token_lengths.to(device=vision_patches.device, dtype=torch.long)
+            vision_token_lengths.to(device=embeds.device, dtype=torch.long)
             if vision_token_lengths is not None
             else token_grids.prod(-1).div(reduction_factor, rounding_mode="floor").to(dtype=torch.long)
         )
 
         valid_images = image_attention_mask.bool()
         if not torch.any(valid_images):
+            if torch.any(image_token_mask):
+                raise ValueError("Image placeholders are present but no valid images were provided.")
             return embeds, modality
 
         flat_vision_patches = vision_patches[valid_images]
@@ -1343,41 +1348,39 @@ class IsaacModel(Qwen3PreTrainedModel):
         flat_token_grids = token_grids[valid_images]
         flat_offsets = offsets[valid_images]
         flat_lengths = lengths[valid_images]
-        flat_batch_indices = valid_images.nonzero(as_tuple=False)[:, 0]
 
         vision_embeddings, _, per_image_lengths = self.vision_embedding(
             (flat_vision_patches, flat_token_grids, flat_patch_attention_mask)
         )
 
-        embeds = embeds.clone()
-        num_batches = modality.shape[0]
-        image_positions = [
-            (modality[b] == ModalityType.image.value).nonzero(as_tuple=False).squeeze(-1) for b in range(num_batches)
-        ]
-        cursors = [0 for _ in range(num_batches)]
+        if torch.any(flat_offsets < 0) or torch.any(flat_lengths < 0):
+            raise ValueError("`vision_token_offsets` and `vision_token_lengths` must be non-negative.")
+        if torch.any(flat_offsets + flat_lengths > per_image_lengths):
+            raise ValueError("Requested vision token slices exceed available per-image vision embeddings.")
 
-        for image_idx, batch_index in enumerate(flat_batch_indices.tolist()):
-            total_length = int(per_image_lengths[image_idx].item())
-            if total_length <= 0:
-                continue
+        max_chunk_length = int(flat_lengths.max().item()) if flat_lengths.numel() > 0 else 0
+        if max_chunk_length == 0:
+            if torch.any(image_token_mask):
+                raise ValueError("Image placeholders are present but all selected vision chunks are empty.")
+            return embeds, modality
 
-            offset = max(0, min(int(flat_offsets[image_idx].item()), total_length))
-            length = max(0, min(int(flat_lengths[image_idx].item()), total_length - offset))
-            if length <= 0:
-                continue
+        token_positions = torch.arange(max_chunk_length, device=embeds.device, dtype=torch.long)
+        gather_positions = flat_offsets[:, None] + token_positions[None, :]
+        gather_mask = token_positions[None, :] < flat_lengths[:, None]
+        image_features = vision_embeddings[
+            torch.arange(vision_embeddings.shape[0], device=embeds.device, dtype=torch.long)[:, None],
+            gather_positions,
+        ][gather_mask]
+        image_features = image_features.to(device=embeds.device, dtype=embeds.dtype)
 
-            chunk = vision_embeddings[image_idx, offset : offset + length]
-            positions = image_positions[batch_index]
-            if positions.numel() == 0:
-                continue
-            start = cursors[batch_index]
-            end = min(start + chunk.shape[0], positions.shape[0])
-            if end <= start:
-                continue
-            embeds[batch_index, positions[start:end]] = chunk[: end - start].to(
-                device=embeds.device, dtype=embeds.dtype
+        expected_image_tokens = int(image_token_mask.sum().item())
+        if image_features.shape[0] != expected_image_tokens:
+            raise ValueError(
+                f"Image features and image placeholders do not match: tokens={expected_image_tokens}, features={image_features.shape[0]}."
             )
-            cursors[batch_index] = end
+
+        scatter_mask = image_token_mask.unsqueeze(-1).expand_as(embeds)
+        embeds = embeds.masked_scatter(scatter_mask, image_features)
 
         return embeds, modality
 
