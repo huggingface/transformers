@@ -379,15 +379,7 @@ def pixel_shuffle_padded(
             - attention mask `(num_images, max_tokens)`
             - per-image valid token lengths `(num_images,)`
     """
-    if x.ndim != 3:
-        raise ValueError(f"`x` must be rank-3 (num_images, max_patches, hidden_size), got shape {tuple(x.shape)}.")
-    if token_grids.ndim != 2 or token_grids.shape[-1] != 2:
-        raise ValueError(f"`token_grids` must have shape (num_images, 2), got {tuple(token_grids.shape)}.")
-
     num_images, _, embed_dim = x.shape
-    scale_factor = int(scale_factor)
-    if scale_factor <= 0:
-        raise ValueError(f"`scale_factor` must be positive, got {scale_factor}.")
 
     output_lengths: list[int] = []
     for image_idx in range(num_images):
@@ -420,20 +412,13 @@ def pixel_shuffle_padded(
             continue
 
         # Vision patches are contiguous in row-major order.
+        height_blocks = height_tokens // scale_factor
+        width_blocks = width_tokens // scale_factor
         tokens = x[image_idx, :seq_length]
-        tokens = tokens.view(height_tokens, width_tokens, embed_dim)
-        tokens = (
-            tokens.view(
-                height_tokens // scale_factor,
-                scale_factor,
-                width_tokens // scale_factor,
-                scale_factor,
-                embed_dim,
-            )
-            .permute(0, 2, 1, 3, 4)
-            .contiguous()
-            .view(out_length, output_dim)
-        )
+        tokens = tokens.view(height_tokens, width_tokens, embed_dim).permute(2, 0, 1).unsqueeze(0)
+        tokens = F.pixel_unshuffle(tokens, downscale_factor=scale_factor)
+        tokens = tokens.view(1, embed_dim, scale_factor, scale_factor, height_blocks, width_blocks)
+        tokens = tokens.permute(0, 4, 5, 2, 3, 1).contiguous().view(out_length, output_dim)
         shuffled[image_idx, :out_length] = tokens
         shuffled_attention_mask[image_idx, :out_length] = 1
 

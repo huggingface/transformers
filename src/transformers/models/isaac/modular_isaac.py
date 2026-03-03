@@ -514,20 +514,13 @@ def pixel_shuffle_padded(
             continue
 
         # Vision patches are contiguous in row-major order.
+        height_blocks = height_tokens // scale_factor
+        width_blocks = width_tokens // scale_factor
         tokens = x[image_idx, :seq_length]
-        tokens = tokens.view(height_tokens, width_tokens, embed_dim)
-        tokens = (
-            tokens.view(
-                height_tokens // scale_factor,
-                scale_factor,
-                width_tokens // scale_factor,
-                scale_factor,
-                embed_dim,
-            )
-            .permute(0, 2, 1, 3, 4)
-            .contiguous()
-            .view(out_length, output_dim)
-        )
+        tokens = tokens.view(height_tokens, width_tokens, embed_dim).permute(2, 0, 1).unsqueeze(0)
+        tokens = F.pixel_unshuffle(tokens, downscale_factor=scale_factor)
+        tokens = tokens.view(1, embed_dim, scale_factor, scale_factor, height_blocks, width_blocks)
+        tokens = tokens.permute(0, 4, 5, 2, 3, 1).contiguous().view(out_length, output_dim)
         shuffled[image_idx, :out_length] = tokens
         shuffled_attention_mask[image_idx, :out_length] = 1
 
