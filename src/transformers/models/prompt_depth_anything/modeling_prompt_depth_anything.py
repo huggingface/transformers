@@ -25,7 +25,7 @@ from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import torch_int
+from ...utils.generic import merge_with_config_defaults, torch_int
 from ...utils.output_capturing import capture_outputs
 from .configuration_prompt_depth_anything import PromptDepthAnythingConfig
 
@@ -384,6 +384,7 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(

@@ -425,16 +425,8 @@ class XGLMModel(XGLMPreTrainedModel):
 
             [What are attention masks?](../glossary#attention-mask)
         """
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -464,7 +456,7 @@ class XGLMModel(XGLMPreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(
                 past_key_values_length,
-                input_shape[-1] + past_key_values_length,
+                inputs_embeds.shape[1] + past_key_values_length,
                 dtype=torch.long,
                 device=input_ids.device if input_ids is not None else inputs_embeds.device,
             )

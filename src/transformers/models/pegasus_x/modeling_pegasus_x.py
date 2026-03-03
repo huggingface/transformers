@@ -561,7 +561,7 @@ class PegasusXEncoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states, attention_mask=attention_mask, block_size=self.block_size
             )
 
-        hidden_states, global_hidden_states, attn_weights = self.self_attn(
+        hidden_states, global_hidden_states, _ = self.self_attn(
             token_hidden_states=hidden_states,
             global_hidden_states=global_hidden_states,
             attention_mask=attention_mask,
@@ -595,12 +595,8 @@ class PegasusXEncoderLayer(GradientCheckpointingLayer):
         global_hidden_states = self.fc2(global_hidden_states)
         global_hidden_states = nn.functional.dropout(global_hidden_states, p=self.dropout, training=self.training)
         global_hidden_states = global_residual + global_hidden_states
-        outputs = (hidden_states, global_hidden_states)
 
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states, global_hidden_states
 
     @classmethod
     def pad_local_tokens(cls, hidden_states, attention_mask, block_size):
@@ -688,7 +684,7 @@ class PegasusXDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
@@ -699,12 +695,11 @@ class PegasusXDecoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         # Cross-Attention Block
-        cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
-            hidden_states, cross_attn_weights = self.encoder_attn(
+            hidden_states, _ = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
@@ -723,7 +718,7 @@ class PegasusXDecoderLayer(GradientCheckpointingLayer):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
-        return (hidden_states, self_attn_weights, cross_attn_weights)
+        return hidden_states
 
 
 @auto_docstring
@@ -740,6 +735,11 @@ class PegasusXPreTrainedModel(PreTrainedModel):
 
 
 class PegasusXEncoder(PegasusXPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": PegasusXEncoderLayer,
+        "attentions": OutputRecorder(PegasusXGlobalLocalAttention, index=2),
+    }
+
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     [`PegasusXEncoderLayer`].
@@ -805,14 +805,13 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         """
         return self.embed_positions
 
+    @merge_with_config_defaults
     @capture_outputs
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
         inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
         **kwargs,
     ):
         r"""
@@ -844,22 +843,8 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -873,7 +858,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
 
         # Setup mask
         if attention_mask is None:
-            attention_mask = torch.ones(*input_shape, dtype=inputs_embeds.dtype, device=inputs_embeds.device)
+            attention_mask = torch.ones(*inputs_embeds.shape[:-1], dtype=inputs_embeds.dtype, device=inputs_embeds.device)
         attention_mask = attention_mask.to(dtype=hidden_states.dtype)
         mask_min_value = torch.finfo(hidden_states.dtype).min
         inverted_mask = 1.0 - attention_mask
@@ -893,12 +878,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
             torch.arange(self.config.num_global_tokens, device=hidden_states.device)[None].expand(batch_size, -1)
         )
 
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
+        for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
@@ -907,32 +887,21 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
                     to_drop = True
 
             if to_drop:
-                layer_outputs = (None, None)
+                hidden_states, global_hidden_states = (None, None)
             else:
-                layer_outputs = encoder_layer(
+                hidden_states, global_hidden_states = encoder_layer(
                     hidden_states,
                     global_hidden_states,
                     attention_mask,
-                    output_attentions=output_attentions,
+                    **kwargs,
                 )
-
-                hidden_states = layer_outputs[0]
-                global_hidden_states = layer_outputs[1]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[2],)
 
         # Undo padding-to-block-size
         hidden_states = hidden_states[:, :seq_len]
 
         hidden_states = self.layer_norm(hidden_states)
 
-        if output_hidden_states:
-            encoder_states = encoder_states + ((hidden_states, global_hidden_states),)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class PegasusXDecoder(PegasusXPreTrainedModel):
@@ -1039,28 +1008,11 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
                 Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
                 cache in the correct position and to infer the complete sequence length.
         """
-        # retrieve input_ids and inputs_embeds
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
-            input = input_ids
-            input_shape = input.shape
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-            input = inputs_embeds[:, :, -1]
-        else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input)
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing`. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
@@ -1113,7 +1065,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 causal_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
@@ -1123,7 +1075,6 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
                 cache_position=cache_position,
                 **kwargs,
             )
-            hidden_states = layer_outputs[0]
 
         hidden_states = self.layer_norm(hidden_states)
 

@@ -1332,7 +1332,6 @@ class BigBirdEncoder(nn.Module):
         self.layer = nn.ModuleList(
             [BigBirdLayer(config, seed=layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.gradient_checkpointing = False
 
     def set_attention_type(self, value: str):
         if value not in ["original_full", "block_sparse"]:
@@ -1361,13 +1360,6 @@ class BigBirdEncoder(nn.Module):
         cache_position=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
@@ -1611,10 +1603,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
     ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         if not self.config.is_decoder:
             use_cache = False
-        if kwargs.get("output_attentions") is None:
-            kwargs["output_attentions"] = self.config.output_attentions
-        if kwargs.get("output_hidden_states") is None:
-            kwargs["output_hidden_states"] = self.config.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")

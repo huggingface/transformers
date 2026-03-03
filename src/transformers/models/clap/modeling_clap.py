@@ -34,6 +34,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 
@@ -1330,6 +1331,7 @@ class ClapAudioModel(ClapPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.audio_encoder.patch_embed.proj
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -1412,6 +1414,7 @@ class ClapTextModel(ClapPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -1438,14 +1441,6 @@ class ClapTextModel(ClapPreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length)), device=device)
-
-        if token_type_ids is None:
-            if hasattr(self.embeddings, "token_type_ids"):
-                buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
-            else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.

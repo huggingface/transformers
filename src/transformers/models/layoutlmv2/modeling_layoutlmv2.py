@@ -33,7 +33,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import auto_docstring, is_detectron2_available, logging, requires_backends
-from ...utils.generic import TransformersKwargs
+from ...utils.generic import TransformersKwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_layoutlmv2 import LayoutLMv2Config
 
@@ -677,6 +677,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -819,7 +820,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
     def get_input_embeddings(self):
         return self.layoutlmv2.embeddings.word_embeddings
 
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1017,7 +1018,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
     def get_input_embeddings(self):
         return self.layoutlmv2.embeddings.word_embeddings
 
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1158,7 +1159,7 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
     def get_input_embeddings(self):
         return self.layoutlmv2.embeddings.word_embeddings
 
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

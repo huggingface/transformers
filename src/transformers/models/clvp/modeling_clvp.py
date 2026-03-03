@@ -865,17 +865,11 @@ class ClvpEncoder(ClvpPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ClvpEncoderOutput:
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         # expand attention_mask and create position_ids if needed
         attention_mask = create_bidirectional_mask(
@@ -886,7 +880,7 @@ class ClvpEncoder(ClvpPreTrainedModel):
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(input_shape[1], dtype=torch.long, device=device)
+            position_ids = torch.arange(inputs_embeds.shape[1], dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
 
         rotary_pos_emb = self.rotary_pos_emb(inputs_embeds) if self.rotary_pos_emb is not None else None
@@ -963,31 +957,17 @@ class ClvpDecoder(ClvpPreTrainedModel):
         cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        if token_type_ids is not None:
-            token_type_ids = token_type_ids.view(-1, input_shape[-1])
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.input_embeds_layer(input_ids)
+
+        seq_len = inputs_embeds.shape[1]
+        device = inputs_embeds.device
+
+        if token_type_ids is not None:
+            token_type_ids = token_type_ids.view(-1, seq_len)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -995,13 +975,13 @@ class ClvpDecoder(ClvpPreTrainedModel):
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
             cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + input_shape[-1], device=inputs_embeds.device
+                past_key_values_length, past_key_values_length + seq_len, device=inputs_embeds.device
             )
         if position_ids is None:
             position_ids = torch.arange(
-                past_key_values_length, input_shape[-1] + past_key_values_length, dtype=torch.long, device=device
+                past_key_values_length, seq_len + past_key_values_length, dtype=torch.long, device=device
             )
-            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
+            position_ids = position_ids.unsqueeze(0).view(-1, seq_len)
 
         position_embeds = self.position_embeds_layer(position_ids)
         inputs_embeds = inputs_embeds + position_embeds
@@ -1022,7 +1002,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
 
         hidden_states = self.drop(hidden_states)
 
-        output_shape = (-1,) + input_shape[1:] + (hidden_states.size(-1),)
+        output_shape = (-1, seq_len,) + (hidden_states.size(-1),)
 
         for block in self.layers:
             hidden_states = block(

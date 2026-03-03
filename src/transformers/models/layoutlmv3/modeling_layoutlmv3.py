@@ -39,7 +39,7 @@ from ...utils import (
     logging,
     torch_int,
 )
-from ...utils.generic import TransformersKwargs
+from ...utils.generic import TransformersKwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
@@ -627,6 +627,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
 
         return embeddings
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(

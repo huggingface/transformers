@@ -520,21 +520,13 @@ class BartEncoder(BartPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         **encoder_kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input = input_ids
-            input_ids = input_ids.view(-1, input_ids.shape[-1])
-        elif inputs_embeds is not None:
-            input = inputs_embeds[:, :, -1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        embed_pos = self.embed_positions(input)
+        embed_pos = self.embed_positions(inputs_embeds[:, :, -1])  # needed for the shape only
         embed_pos = embed_pos.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + embed_pos
@@ -620,18 +612,8 @@ class BartDecoder(BartPreTrainedModel):
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
-        # retrieve input_ids and inputs_embeds
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
-            input = input_ids
-            input_shape = input.shape
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-            input = inputs_embeds[:, :, -1]
-        else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+            raise ValueError("You must specify exactly one of decoder_input_ids or decoder_inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input)

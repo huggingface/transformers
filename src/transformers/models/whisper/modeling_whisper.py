@@ -743,16 +743,8 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
                 cache in the correct position and to infer the complete sequence length.
         """
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
+        if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -772,11 +764,11 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
         if cache_position is None:
             cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + input_shape[1], device=inputs_embeds.device
+                past_key_values_length, past_key_values_length + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0).repeat(input_shape[0], 1)
+            position_ids = cache_position.unsqueeze(0).repeat(inputs_embeds.shape[0], 1)
 
         # embed positions
         if input_ids is not None:

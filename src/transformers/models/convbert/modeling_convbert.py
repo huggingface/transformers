@@ -40,6 +40,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_convbert import ConvBertConfig
 
@@ -595,6 +596,7 @@ class ConvBertModel(ConvBertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(

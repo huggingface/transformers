@@ -1027,6 +1027,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.vision_model.embeddings.patch_embedding = value
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(

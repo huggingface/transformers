@@ -439,10 +439,10 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
     # Ignore copy
-    @capture_outputs
     @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -497,13 +497,6 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
             input = inputs_embeds[:, :, -1:]
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing`. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))

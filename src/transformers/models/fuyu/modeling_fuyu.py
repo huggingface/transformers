@@ -176,26 +176,21 @@ class FuyuModel(FuyuPreTrainedModel):
         image_patches_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Tensor of indices of the image patches in the input_ids tensor.
         """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            batch_size, seq_length = input_ids.shape
-        elif inputs_embeds is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
-        else:
-            raise ValueError("You have to specify either input_is or inputs_embeds")
+        if inputs_embeds is None:
+            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
+
+        seq_len = inputs_embeds.shape[1]
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
             past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+                past_key_values_length, seq_len + past_key_values_length, dtype=torch.long, device=device
             )
             position_ids = position_ids.unsqueeze(0)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
 
         if image_patches is not None:
             patch_embeddings = self.get_image_features(image_patches, return_dict=True).last_hidden_state
