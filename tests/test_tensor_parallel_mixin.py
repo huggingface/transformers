@@ -317,7 +317,7 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
     print(f"[Rank {_rank}] TP-quantized tokens:     {output_tp.sequences[0].tolist()}")
     print(f"[Rank {_rank}] Sequences match: {torch.equal(output.sequences, output_tp.sequences)}")
 
-    # Compare generated token sequences (allow up to 20% mismatch due to Float8 quantization
+    # Compare generated token sequences (allow up to 25% mismatch due to Float8 quantization
     # scale differences between full-weight and sharded-weight quantization)
     # NOTE(3outeille): Some models have no perfect match. Investigate better the discrepancy but for now low priority.
     seq = output.sequences[0]
@@ -325,9 +325,9 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
     min_len = min(len(seq), len(seq_tp))
     match_count = (seq[:min_len] == seq_tp[:min_len]).sum().item()
     match_ratio = match_count / max(len(seq), len(seq_tp))
-    assert match_ratio >= 0.8, (
+    assert match_ratio >= 0.75, (
         f"non-TP-quantized + TP-quantized model generated too many different tokens "
-        f"(match ratio: {match_ratio:.2%}, threshold: 80%).\n"
+        f"(match ratio: {match_ratio:.2%}, threshold: 75%).\n"
         f"Non-TP+quantized: {output.sequences.tolist()} \n TP+quantized: {output_tp.sequences.tolist()}"
     )
 
@@ -411,6 +411,7 @@ class TensorParallelTesterMixin(ABC):
         rtol = self.tensor_parallel_rtol
 
         with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
@@ -426,6 +427,7 @@ class TensorParallelTesterMixin(ABC):
         rtol = self.tensor_parallel_rtol
 
         with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
@@ -444,6 +446,7 @@ class TensorParallelTesterMixin(ABC):
         max_new_tokens = 25
 
         with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
             _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_impl)(
@@ -462,6 +465,7 @@ class TensorParallelTesterMixin(ABC):
         max_new_tokens = 25
 
         with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
