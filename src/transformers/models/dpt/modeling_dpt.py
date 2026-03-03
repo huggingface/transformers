@@ -785,6 +785,7 @@ class DPTModel(DPTPreTrainedModel):
             pooler_output=pooled_output,
             intermediate_activations=embedding_output.intermediate_activations,
             hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 

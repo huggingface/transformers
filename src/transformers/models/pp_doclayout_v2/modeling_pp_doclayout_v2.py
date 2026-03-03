@@ -183,12 +183,7 @@ class PPDocLayoutV2ReadingOrderSelfAttention(nn.Module):
         return nn.Softmax(dim=-1)(new_attention_scores)
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        rel_pos=None,
-        rel_2d_pos=None,
+        self, hidden_states, attention_mask=None, rel_pos=None, rel_2d_pos=None, **kwargs: Unpack[TransformersKwargs]
     ):
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
@@ -238,9 +233,7 @@ class PPDocLayoutV2ReadingOrderSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
+        return context_layer, attention_probs
 
 
 class PPDocLayoutV2ReadingOrderSelfOutput(nn.Module):
