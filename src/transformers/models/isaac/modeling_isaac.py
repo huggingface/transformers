@@ -923,8 +923,6 @@ class IsaacModel(PreTrainedModel):
                 Mask indicating which image slots are populated, shape `(batch_size, max_images)`.
         """
 
-        output_attentions = kwargs.pop("output_attentions", None)
-
         if inputs_embeds is None and input_ids is None:
             raise ValueError("`input_ids` or `inputs_embeds` must be provided.")
 
@@ -1003,7 +1001,6 @@ class IsaacModel(PreTrainedModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=(cos, sin),
-                output_attentions=output_attentions,
                 **kwargs,
             )
 
