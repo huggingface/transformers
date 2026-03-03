@@ -413,45 +413,30 @@ class FP8Experts(nn.Module):
             config.moe_intermediate_size if hasattr(config, "moe_intermediate_size") else config.intermediate_size
         )
 
-        block_n, block_k = block_size[0], block_size[1]
+        bo, bi = self.block_size
 
         if self.has_gate:
-            self.gate_up_proj = nn.Parameter(
-                torch.zeros(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim, dtype=dtype)
-            )
+            gu_proj_out, gu_proj_in = 2 * self.intermediate_dim, self.hidden_dim
+            gu_scale_out, gu_scale_in = triton.cdiv(gu_proj_out, bo), triton.cdiv(gu_proj_in, bi)
+            self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, gu_proj_out, gu_proj_in, dtype=dtype))
             self.gate_up_proj_scale_inv = nn.Parameter(
-                torch.zeros(
-                    self.num_experts,
-                    triton.cdiv(2 * self.intermediate_dim, block_n),
-                    triton.cdiv(self.hidden_dim, block_k),
-                    dtype=torch.float32,
-                )
+                torch.zeros(self.num_experts, gu_scale_out, gu_scale_in, dtype=torch.float32)
             )
             self.register_parameter("gate_up_proj_bias", None)
         else:
-            self.up_proj = nn.Parameter(
-                torch.zeros(self.num_experts, self.hidden_dim, self.intermediate_dim, dtype=dtype)
-            )
+            u_proj_out, u_proj_in = self.intermediate_dim, self.hidden_dim
+            u_scale_out, u_scale_in = triton.cdiv(u_proj_out, bo), triton.cdiv(u_proj_in, bi)
+            self.up_proj = nn.Parameter(torch.zeros(self.num_experts, u_proj_out, u_proj_in, dtype=dtype))
             self.up_proj_scale_inv = nn.Parameter(
-                torch.zeros(
-                    self.num_experts,
-                    triton.cdiv(self.hidden_dim, block_k),
-                    triton.cdiv(self.intermediate_dim, block_n),
-                    dtype=torch.float32,
-                )
+                torch.zeros(self.num_experts, u_scale_out, u_scale_in, dtype=torch.float32)
             )
             self.register_parameter("up_proj_bias", None)
 
-        self.down_proj = nn.Parameter(
-            torch.zeros(self.num_experts, self.intermediate_dim, self.hidden_dim, dtype=dtype)
-        )
+        d_proj_out, d_proj_in = self.hidden_dim, self.intermediate_dim
+        d_scale_out, d_scale_in = triton.cdiv(d_proj_out, bo), triton.cdiv(d_proj_in, bi)
+        self.down_proj = nn.Parameter(torch.zeros(self.num_experts, d_proj_out, d_proj_in, dtype=dtype))
         self.down_proj_scale_inv = nn.Parameter(
-            torch.zeros(
-                self.num_experts,
-                triton.cdiv(self.hidden_dim, block_k),
-                triton.cdiv(self.intermediate_dim, block_n),
-                dtype=torch.float32,
-            )
+            torch.zeros(self.num_experts, d_scale_out, d_scale_in, dtype=torch.float32)
         )
         self.register_parameter("down_proj_bias", None)
 
