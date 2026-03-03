@@ -1,24 +1,23 @@
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
 import torch
 from torch import nn
-from typing import Callable, Optional
 
 from transformers.audio_utils import AudioInput
 from transformers.cache_utils import Cache, DynamicCache
+from transformers.configuration_utils import PretrainedConfig
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.generation import GenerationMixin
 from transformers.masking_utils import create_causal_mask
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 from transformers.modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPast,
     MoeCausalLMOutputWithPast,
 )
-from transformers.configuration_utils import PretrainedConfig
-from transformers.modeling_utils import PreTrainedModel, ALL_ATTENTION_FUNCTIONS
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.tokenization_utils_base import TextInput
 from transformers.utils import auto_docstring, can_return_tuple
@@ -26,10 +25,9 @@ from transformers.utils.deprecation import deprecate_kwarg
 from transformers.utils.generic import TransformersKwargs, check_model_inputs
 
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
-from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig
-from ..qwen3_omni_moe.configuration_qwen3_omni_moe import (
-    Qwen3OmniMoeAudioEncoderConfig
-)
+from ..qwen3.modeling_qwen3 import Qwen3DecoderLayer
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeAttention
+from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeAudioEncoderConfig
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeAudioAttention,
     Qwen3OmniMoeAudioEncoder,
@@ -45,8 +43,8 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeAttention
-from ..qwen3.modeling_qwen3 import Qwen3DecoderLayer
+from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig
+
 
 class Qwen3ASRAudioEncoderConfig(Qwen3OmniMoeAudioEncoderConfig):
     pass
@@ -506,18 +504,18 @@ class Qwen3ASRTextRMSNorm(Qwen3OmniMoeThinkerTextRMSNorm):
 class Qwen3ASRTextAttention(Qwen3MoeAttention):
     def __init__(self, config: Qwen3ASRConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        del self.sliding_window 
+        del self.sliding_window
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -732,13 +730,6 @@ class Qwen3ASRThinkerTextRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding)
         super().__init__()
         self.rope_type = config.rope_scaling.get("rope_type", "linear")
         self.mrope_section = config.rope_scaling.get("mrope_section", [24, 20, 20])
-
-    def compute_default_rope_parameters(
-        config: Qwen3ASRTextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        raise ValueError("Not needed.")
 
 class Qwen3ASRThinkerTextMLP(Qwen3OmniMoeThinkerTextMLP):
     pass

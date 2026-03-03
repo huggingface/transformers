@@ -2,47 +2,44 @@
 Reproducible Usage
 ==================
 
-1) Download the original Qwen3-ASR weights (requires Git LFS):
-
-```
-git lfs install
-git clone https://huggingface.co/Qwen/Qwen3-ASR-0.6B
-```
-
-2) Convert to the Hugging Face Transformers format (locally):
-
-```
-python src/transformers/models/qwen3_asr/convert_qwen3_asr_to_hf.py --src_dir qwen3-asr --dst_dir qwen3-asr-hf
-```
-
-3) Convert and push directly to the Hub (requires `huggingface-cli login` or `HF_TOKEN`):
+1) Convert directly from a Hugging Face model ID and push to the Hub:
 
 ```
 python src/transformers/models/qwen3_asr/convert_qwen3_asr_to_hf.py \
-  --src_dir qwen3-asr-0.6b \
+  --model_id Qwen/Qwen3-ASR-0.6B \
   --dst_dir qwen3-asr-hf \
   --push_to_hub <username-or-org>/qwen3-asr
 ```
 
+2) Convert from a local directory:
+
+```
+python src/transformers/models/qwen3_asr/convert_qwen3_asr_to_hf.py \
+  --src_dir /path/to/local/model \
+  --dst_dir qwen3-asr-hf
+```
+
+The script will automatically download the model from Hugging Face Hub if a model_id is provided.
 This command uploads both the processor (tokenizer + feature extractor) and the converted
 model (sharded safetensors + configs) to the specified Hub repository.
 """
 import argparse
-import json
 import logging
-from collections import defaultdict
+import shutil
+import tempfile
 from pathlib import Path
 
-import torch
+from huggingface_hub import snapshot_download
 from safetensors.torch import safe_open
 
 from transformers import (
+    AutoTokenizer,
     Qwen3ASRConfig,
     Qwen3ASRForConditionalGeneration,
     Qwen3ASRProcessor,
     WhisperFeatureExtractor,
-    AutoTokenizer,
 )
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -84,7 +81,7 @@ def write_processor(src_root: Path, dst_root: Path):
     )
     # fmt: on
 
-    processor = Qwen3ASRProcessor(   
+    processor = Qwen3ASRProcessor(
         feature_extractor=WhisperFeatureExtractor(),
         tokenizer=AutoTokenizer.from_pretrained(src_root),  # check this
         chat_template=chat_template,
@@ -120,7 +117,8 @@ def write_model(src_root: Path, dst_root: Path):
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Convert Qwen3ASR to Hugging Face format.")
-    ap.add_argument("--src_dir", required=True, help="Source model root directory")
+    ap.add_argument("--model_id", default=None, type=str, help="Hugging Face model ID (e.g., Qwen/Qwen3-ASR-0.6B)")
+    ap.add_argument("--src_dir", default=None, help="Source model root directory (alternative to --model_id)")
     ap.add_argument("--dst_dir", required=True, help="Destination directory for converted model")
     ap.add_argument(
         "--push_to_hub",
@@ -130,13 +128,24 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    src_root = Path(args.src_dir).resolve()
+    # Determine source directory
+    if args.model_id:
+        logger.info("Downloading model from Hugging Face Hub: %s", args.model_id)
+        src_root = Path(tempfile.mkdtemp())
+        src_root = Path(snapshot_download(args.model_id, cache_dir=str(src_root)))
+        logger.info("Model downloaded to: %s", src_root)
+    elif args.src_dir:
+        src_root = Path(args.src_dir).resolve()
+    else:
+        raise ValueError("Either --model_id or --src_dir must be provided")
+
     if not src_root.is_dir():
         raise FileNotFoundError(f"Source directory not found: {src_root}")
 
     dst_root = Path(args.dst_dir).resolve()
     if dst_root.exists():
-        raise FileExistsError(f"Destination already exists: {dst_root}")
+        logger.info("Removing existing destination directory: %s", dst_root)
+        shutil.rmtree(dst_root)
 
     processor = write_processor(src_root, dst_root)
     model = write_model(src_root, dst_root)
