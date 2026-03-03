@@ -41,6 +41,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.qwen3.configuration_qwen3 import Qwen3Config
 from ...models.qwen3.modeling_qwen3 import (
     Qwen3Attention,
+    Qwen3DecoderLayer,
     Qwen3ForCausalLM,
     Qwen3Model,
     Qwen3PreTrainedModel,
@@ -56,7 +57,7 @@ from ...utils.import_utils import (
     is_torchvision_available,
     is_vision_available,
 )
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLRotaryEmbedding
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
@@ -1267,6 +1268,7 @@ class IsaacModel(Qwen3PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_flex_attn = False
     _can_record_outputs = {
+        "hidden_states": OutputRecorder(Qwen3DecoderLayer),
         "attentions": Qwen3Attention,
         "vision_attentions": IsaacVisionAttention,
     }
@@ -1506,9 +1508,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         """
 
         output_attentions = kwargs.pop("output_attentions", None)
-        output_hidden_states = kwargs.pop("output_hidden_states", None)
-        if output_hidden_states is None:
-            output_hidden_states = getattr(self.config, "output_hidden_states", False)
 
         if inputs_embeds is None and input_ids is None:
             raise ValueError("`input_ids` or `inputs_embeds` must be provided.")
@@ -1599,7 +1598,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
-            hidden_states=(hidden_states,) if output_hidden_states else None,
         )
 
 

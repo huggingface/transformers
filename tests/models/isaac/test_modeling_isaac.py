@@ -407,7 +407,7 @@ class IsaacModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.is_training = True
-        self.expected_num_hidden_layers = 1
+        self.expected_num_hidden_layers = num_hidden_layers + 1
 
         self.text_config = {
             "bos_token_id": 0,

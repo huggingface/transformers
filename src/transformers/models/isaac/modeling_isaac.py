@@ -36,7 +36,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...models.qwen3.modeling_qwen3 import Qwen3Attention, Qwen3Model, Qwen3PreTrainedModel
+from ...models.qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3Model, Qwen3PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, torch_compilable_check
 from ...utils.generic import TransformersKwargs, can_return_tuple, maybe_autocast, merge_with_config_defaults
@@ -44,7 +44,7 @@ from ...utils.import_utils import (
     is_torch_available,
     is_torchdynamo_compiling,
 )
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_isaac import IsaacConfig, IsaacVisionConfig
 
 
@@ -684,6 +684,7 @@ class IsaacModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
+        "hidden_states": OutputRecorder(Qwen3DecoderLayer),
         "attentions": Qwen3Attention,
         "vision_attentions": IsaacVisionAttention,
     }
@@ -923,9 +924,6 @@ class IsaacModel(PreTrainedModel):
         """
 
         output_attentions = kwargs.pop("output_attentions", None)
-        output_hidden_states = kwargs.pop("output_hidden_states", None)
-        if output_hidden_states is None:
-            output_hidden_states = getattr(self.config, "output_hidden_states", False)
 
         if inputs_embeds is None and input_ids is None:
             raise ValueError("`input_ids` or `inputs_embeds` must be provided.")
@@ -1016,7 +1014,6 @@ class IsaacModel(PreTrainedModel):
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
-            hidden_states=(hidden_states,) if output_hidden_states else None,
         )
 
 
