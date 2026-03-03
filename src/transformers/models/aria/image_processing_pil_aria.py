@@ -70,7 +70,9 @@ class AriaImageProcessorPil(PilBackend):
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
     ) -> np.ndarray:
         """Resize an image to a target resolution while maintaining aspect ratio."""
-        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format=ChannelDimension.FIRST)
+        new_height, new_width = get_patch_output_size(
+            image, target_resolution, input_data_format=ChannelDimension.FIRST
+        )
         return self.resize(image, SizeDict(height=new_height, width=new_width), resample)
 
     def _pad_for_patching(

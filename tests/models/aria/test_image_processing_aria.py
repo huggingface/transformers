@@ -158,7 +158,7 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
             self.assertTrue(hasattr(image_processing, "max_image_size"))
@@ -169,7 +169,7 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "split_image"))
 
     def test_call_numpy(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
@@ -191,7 +191,7 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_numpy_4_channels(self):
         # Aria always processes images as RGB, so it always returns images with 3 channels
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor_dict = self.image_processor_dict
             image_processing = image_processing_class(**image_processor_dict)
             # create random numpy tensors
@@ -214,7 +214,7 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pil(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
@@ -235,7 +235,7 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pytorch(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
@@ -288,7 +288,7 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(encoded_images.shape[-2:], image_shape)
 
     def test_get_num_patches_without_images(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
             self.assertEqual(num_patches, 1)

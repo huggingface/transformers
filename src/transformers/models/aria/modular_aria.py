@@ -34,7 +34,15 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_python import PreTokenizedInput, TextInput
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, is_torchvision_available, logging
+from ...utils import (
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torch_available,
+    is_torchvision_available,
+    logging,
+)
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -52,6 +60,8 @@ from ..llava.modeling_llava import (
     LlavaModel,
     LlavaModelOutputWithPast,
 )
+
+
 logger = logging.get_logger(__name__)
 
 
@@ -473,7 +483,9 @@ class AriaImageProcessor(TorchvisionBackend):
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
     ) -> "torch.Tensor":
         """Resize an image to a target resolution while maintaining aspect ratio."""
-        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format=ChannelDimension.FIRST)
+        new_height, new_width = get_patch_output_size(
+            image, target_resolution, input_data_format=ChannelDimension.FIRST
+        )
         return self.resize(image, SizeDict(height=new_height, width=new_width), resample)
 
     def _pad_for_patching(
