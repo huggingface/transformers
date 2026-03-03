@@ -149,7 +149,7 @@ class LayoutLMv2SelfAttention(nn.Module):
         rel_2d_pos=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        batch_size, seq_length, _ = hidden_states.shape
+        batch_size = hidden_states.shape[0]
         query, key, value = self.compute_qkv(hidden_states)
 
         # (B, L, H*D) -> (B, H, L, D)

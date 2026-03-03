@@ -909,9 +909,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         if output_hidden_states:
             encoder_states = encoder_states + ((hidden_states, global_hidden_states),)
 
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=encoder_states)
 
 
 class PegasusXDecoder(PegasusXPreTrainedModel):
