@@ -24,7 +24,7 @@ class NemotronHConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NemotronHModel`]. It is used to instantiate a
     NemotronH model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the NemotronH-v0.1 model.
+    with the defaults will yield a similar configuration to that of NVIDIA-Nemotron-3-Nano-30B-A3B-BF16 [nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
