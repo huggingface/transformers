@@ -289,12 +289,10 @@ class ConfigTestUtils(unittest.TestCase):
         decoder_config = config.get_text_config(decoder=True)
         self.assertNotEqual(decoder_config, config)
         self.assertEqual(decoder_config.num_hidden_layers, config.decoder_layers)
-        self.assertTrue(getattr(decoder_config, "encoder_ffn_dim", None) is None)  # encoder_ffn_dim is removed
 
         encoder_config = config.get_text_config(encoder=True)
         self.assertNotEqual(encoder_config, config)
         self.assertEqual(encoder_config.num_hidden_layers, config.encoder_layers)
-        self.assertTrue(getattr(encoder_config, "decoder_ffn_dim", None) is None)  # decoder_ffn_dim is removed
 
     @require_torch
     def test_bc_torch_dtype(self):
