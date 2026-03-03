@@ -1765,7 +1765,6 @@ class ModelUtilsTest(TestCasePlus):
             outputs_from_saved = new_model(input_ids)
             torch.testing.assert_close(outputs_from_saved["logits"], outputs["logits"])
 
-
     def test_can_generate(self):
         """Tests the behavior of `PreTrainedModel.can_generate` method."""
         logger = logging.get_logger("transformers.modeling_utils")
