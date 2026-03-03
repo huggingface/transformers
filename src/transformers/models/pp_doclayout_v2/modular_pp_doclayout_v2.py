@@ -57,81 +57,46 @@ from ..rt_detr.modeling_rt_detr import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV2_safetensors")
 class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PPDocLayoutV2ReadingOrder`].
-
-    It is used to instantiate the reading order sub-module of the PP-DocLayoutV2 model. This configuration defines the architecture and hyperparameters specific to the reading order detection task within the larger PP-DocLayoutV2 framework.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 512):
-            Dimension of the encoder layers and the pooled layer.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        has_relative_attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether or not to use a relative attention bias in the self-attention mechanism.
-        has_spatial_attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether or not to use a spatial attention bias in the self-attention mechanism.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        num_hidden_layers (`int`, *optional*, defaults to 6):
-            Number of the hidden layers.
-        rel_pos_bins (`int`, *optional*, defaults to 32):
-            The number of relative position bins to be used in the self-attention mechanism.
-        max_rel_pos (`int`, *optional*, defaults to 128):
-            The maximum number of relative positions to be used in the self-attention mechanism.
-        rel_2d_pos_bins (`int`, *optional*, defaults to 64):
-            The number of 2D relative position bins in the self-attention mechanism.
-        max_rel_2d_pos (`int`, *optional*, defaults to 256):
-            The maximum number of relative 2D positions in the self-attention mechanism.
-        max_position_embeddings (`int`, *optional*, defaults to 514):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
-            The maximum value that the 2D position embedding might ever be used with. Typically set this to something
-            large just in case (e.g., 1024).
-        type_vocab_size (`int`, *optional*, defaults to 1):
-            The vocabulary size of the `token_type_ids`.
-        vocab_size (`int`, *optional*, defaults to 4):
-            Vocabulary size of the model. Defines the number of different tokens that can be represented by the `inputs_ids`.
-        initializer_range (`float`, *optional*, defaults to 0.01):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        start_token_id (`int`, *optional*, defaults to 0):
-            Token id representing the start of a sequence.
-        pad_token_id (`int`, *optional*, defaults to 1):
-            Token id used for padding the input sequences.
-        end_token_id (`int`, *optional*, defaults to 2):
-            Token id representing the end of a sequence.
-        pred_token_id (`int`, *optional*, defaults to 3):
-            Token id representing valid prediction positions (placeholders) in the sequence.
-        coordinate_size (`int`, *optional*, defaults to 171):
-            Dimension of the coordinate embeddings.
-        shape_size (`int`, *optional*, defaults to 170):
-            Dimension of the width and height embeddings.
-        num_classes (`int`, *optional*, defaults to 20):
-            Number of labels or classes for the layout elements.
-        relation_bias_embed_dim (`int`, *optional*, defaults to 16):
-            Embedding dimension for the relation bias.
-        relation_bias_theta (`float`, *optional*, defaults to 10000):
-            Temperature parameter used for relation bias scaling.
-        relation_bias_scale (`float`, *optional*, defaults to 100):
-            Scale parameter for the relation bias.
-        global_pointer_head_size (`int`, *optional*, defaults to 64):
-            The size of the global pointer head.
-        gp_dropout_value (`float`, *optional*, defaults to 0.0):
-            The dropout probability in the global pointer head.
+    has_relative_attention_bias (`bool`, *optional*, defaults to `True`):
+        Whether or not to use a relative attention bias in the self-attention mechanism.
+    has_spatial_attention_bias (`bool`, *optional*, defaults to `True`):
+        Whether or not to use a spatial attention bias in the self-attention mechanism.
+    rel_pos_bins (`int`, *optional*, defaults to 32):
+        The number of relative position bins to be used in the self-attention mechanism.
+    max_rel_pos (`int`, *optional*, defaults to 128):
+        The maximum number of relative positions to be used in the self-attention mechanism.
+    rel_2d_pos_bins (`int`, *optional*, defaults to 64):
+        The number of 2D relative position bins in the self-attention mechanism.
+    max_rel_2d_pos (`int`, *optional*, defaults to 256):
+        The maximum number of relative 2D positions in the self-attention mechanism.
+    max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
+        The maximum value that the 2D position embedding might ever be used with. Typically set this to something
+        large just in case (e.g., 1024).
+    start_token_id (`int`, *optional*, defaults to 0):
+        Token id representing the start of a sequence.
+    end_token_id (`int`, *optional*, defaults to 2):
+        Token id representing the end of a sequence.
+    pred_token_id (`int`, *optional*, defaults to 3):
+        Token id representing valid prediction positions (placeholders) in the sequence.
+    coordinate_size (`int`, *optional*, defaults to 171):
+        Dimension of the coordinate embeddings.
+    shape_size (`int`, *optional*, defaults to 170):
+        Dimension of the width and height embeddings.
+    num_classes (`int`, *optional*, defaults to 20):
+        Number of labels or classes for the layout elements.
+    relation_bias_embed_dim (`int`, *optional*, defaults to 16):
+        Embedding dimension for the relation bias.
+    relation_bias_theta (`float`, *optional*, defaults to 10000):
+        Temperature parameter used for relation bias scaling.
+    relation_bias_scale (`float`, *optional*, defaults to 100):
+        Scale parameter for the relation bias.
+    global_pointer_head_size (`int`, *optional*, defaults to 64):
+        The size of the global pointer head.
+    gp_dropout_value (`float`, *optional*, defaults to 0.0):
+        The dropout probability in the global pointer head.
     """
 
     def __init__(
@@ -204,105 +169,68 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV2_safetensors")
 class PPDocLayoutV2Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PP-DocLayoutV2`]. It is used to instantiate a
-    PP-DocLayoutV2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the PP-DocLayoutV2
-    [PaddlePaddle/PP-DocLayoutV2_safetensors](https://huggingface.co/PaddlePaddle/PP-DocLayoutV2_safetensors) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        initializer_range (`float`, *optional*, defaults to 0.01):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_bias_prior_prob (`float`, *optional*):
-            The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
-            If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the batch normalization layers.
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `RTDetrResNetConfig()`):
-            The configuration of the backbone model.
-        freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
-            Whether to freeze the batch normalization layers in the backbone.
-        encoder_hidden_dim (`int`, *optional*, defaults to 256):
-            Dimension of the layers in hybrid encoder.
-        encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
-            Multi level features input for encoder.
-        feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
-            Strides used in each feature map.
-        encoder_layers (`int`, *optional*, defaults to 1):
-            Total of layers to be used by the encoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The ratio for all dropout layers.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
-            Indexes of the projected layers to be used in the encoder.
-        positional_encoding_temperature (`int`, *optional*, defaults to 10000):
-            The temperature parameter used to create the positional encodings.
-        encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        activation_function (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the general layer. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        eval_size (`tuple[int, int]`, *optional*):
-            Height and width used to computes the effective height and width of the position embeddings after taking
-            into account the stride.
-        normalize_before (`bool`, *optional*, defaults to `False`):
-            Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
-            feed-forward modules.
-        hidden_expansion (`float`, *optional*, defaults to 1.0):
-            Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
-        d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers exclude hybrid encoder.
-        num_queries (`int`, *optional*, defaults to 300):
-            Number of object queries.
-        decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
-            Multi level features dimension for decoder
-        decoder_ffn_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        num_feature_levels (`int`, *optional*, defaults to 3):
-            The number of input feature levels.
-        decoder_n_points (`int`, *optional*, defaults to 4):
-            The number of sampled keys in each feature level for each attention head in the decoder.
-        decoder_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
-        decoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        num_denoising (`int`, *optional*, defaults to 100):
-            The total number of denoising tasks or queries to be used for contrastive denoising.
-        label_noise_ratio (`float`, *optional*, defaults to 0.5):
-            The fraction of denoising labels to which random noise should be added.
-        box_noise_scale (`float`, *optional*, defaults to 1.0):
-            Scale or magnitude of noise to be added to the bounding boxes.
-        learn_initial_query (`bool`, *optional*, defaults to `False`):
-            Indicates whether the initial query embeddings for the decoder should be learned during training
-        anchor_image_size (`tuple[int, int]`, *optional*):
-            Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
-        disable_custom_kernels (`bool`, *optional*, defaults to `True`):
-            Whether to disable custom kernels.
-        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-            Whether the architecture has an encoder decoder structure.
-        class_thresholds (`list[float]`, *optional*):
-            The thresholds for each label.
-        class_order (`list[int]`, *optional*):
-            The priority for each label.
-        reading_order_config (`dict`, *optional*):
-            The configuration of a `PPDocLayoutV2ReadingOrder`.
+    initializer_bias_prior_prob (`float`, *optional*):
+        The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
+        If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
+    freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
+        Whether to freeze the batch normalization layers in the backbone.
+    encoder_hidden_dim (`int`, *optional*, defaults to 256):
+        Dimension of the layers in hybrid encoder.
+    encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
+        Multi level features input for encoder.
+    feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
+        Strides used in each feature map.
+    encoder_layers (`int`, *optional*, defaults to 1):
+        Total of layers to be used by the encoder.
+    encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
+        Indexes of the projected layers to be used in the encoder.
+    positional_encoding_temperature (`int`, *optional*, defaults to 10000):
+        The temperature parameter used to create the positional encodings.
+    encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    eval_size (`tuple[int, int]`, *optional*):
+        Height and width used to computes the effective height and width of the position embeddings after taking
+        into account the stride.
+    normalize_before (`bool`, *optional*, defaults to `False`):
+        Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
+        feed-forward modules.
+    hidden_expansion (`float`, *optional*, defaults to 1.0):
+        Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
+    num_queries (`int`, *optional*, defaults to 300):
+        Number of object queries.
+    decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
+        Multi level features dimension for decoder
+    decoder_ffn_dim (`int`, *optional*, defaults to 1024):
+        Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    num_feature_levels (`int`, *optional*, defaults to 3):
+        The number of input feature levels.
+    decoder_n_points (`int`, *optional*, defaults to 4):
+        The number of sampled keys in each feature level for each attention head in the decoder.
+    num_denoising (`int`, *optional*, defaults to 100):
+        The total number of denoising tasks or queries to be used for contrastive denoising.
+    label_noise_ratio (`float`, *optional*, defaults to 0.5):
+        The fraction of denoising labels to which random noise should be added.
+    box_noise_scale (`float`, *optional*, defaults to 1.0):
+        Scale or magnitude of noise to be added to the bounding boxes.
+    learn_initial_query (`bool`, *optional*, defaults to `False`):
+        Indicates whether the initial query embeddings for the decoder should be learned during training
+    anchor_image_size (`tuple[int, int]`, *optional*):
+        Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
+    disable_custom_kernels (`bool`, *optional*, defaults to `True`):
+        Whether to disable custom kernels.
+    class_thresholds (`list[float]`, *optional*):
+        The thresholds for each label.
+    class_order (`list[int]`, *optional*):
+        The priority for each label.
+    reading_order_config (`dict`, *optional*):
+        The configuration of a `PPDocLayoutV2ReadingOrder`.
 
     Examples:
 

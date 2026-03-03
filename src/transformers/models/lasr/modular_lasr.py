@@ -99,7 +99,7 @@ class LasrProcessor(ParakeetProcessor):
     pass
 
 
-@auto_docstring(checkpoint="")
+@auto_docstring(checkpoint="TODO")
 class LasrEncoderConfig(ParakeetEncoderConfig):
     r"""
     convolution_bias (`bool`, *optional*, defaults to `False`):
@@ -200,7 +200,7 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
         del self.scale_input
 
 
-@auto_docstring(checkpoint="")
+@auto_docstring(checkpoint="TODO")
 class LasrCTCConfig(ParakeetCTCConfig):
     r"""
         ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):

@@ -158,30 +158,11 @@ class GroupViTVisionConfig(PreTrainedConfig):
         self.assign_mlp_ratio = assign_mlp_ratio
 
 
+@auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")
 class GroupViTConfig(PreTrainedConfig):
     r"""
-    [`GroupViTConfig`] is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to
-    instantiate a GroupViT model according to the specified arguments, defining the text model and vision model
-    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the GroupViT
-    [nvidia/groupvit-gcc-yfcc](https://huggingface.co/nvidia/groupvit-gcc-yfcc) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`GroupViTTextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`GroupViTVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 256):
-            Dimensionality of text and vision projection layers.
-        projection_intermediate_dim (`int`, *optional*, defaults to 4096):
-            Dimensionality of intermediate layer of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original GroupViT
-            implementation.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    projection_intermediate_dim (`int`, *optional*, defaults to 4096):
+        Dimensionality of intermediate layer of text and vision projection layers.
     """
 
     model_type = "groupvit"

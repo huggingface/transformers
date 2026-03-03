@@ -101,30 +101,14 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         return VibeVoiceAcousticTokenizerDecoderConfig(**config_dict)
 
 
+@auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`VibeVoiceAcousticTokenizerEncoderModel`]. It is
-    used to instantiate a VibeVoice acoustic tokenizer encoder model according to the specified arguments, defining the
-    model architecture. Instantiating a configuration with the defaults will yield a similar configuration of the
-    acoustic tokenizer within the VibeVoice architecture.
-
-    e.g. [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B)
-    """
-
     model_type = "vibevoice_acoustic_tokenizer_encoder"
     base_config_key = "encoder_config"
 
 
+@auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 class VibeVoiceAcousticTokenizerDecoderConfig(VibeVoiceAcousticTokenizerConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`VibeVoiceAcousticTokenizerDecoderModel`]. It is
-    used to instantiate a VibeVoice acoustic tokenizer decoder model according to the specified arguments, defining the
-    model architecture. Instantiating a configuration with the defaults will yield a similar configuration of the
-    acoustic tokenizer within the VibeVoice architecture.
-
-    e.g. [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B)
-    """
-
     model_type = "vibevoice_acoustic_tokenizer_decoder"
     base_config_key = "decoder_config"
 
