@@ -254,6 +254,9 @@ class ParakeetTDTConfig(PreTrainedConfig):
             Number of LSTM layers in the prediction network.
         num_duration_bins (`int`, *optional*, defaults to 5):
             Number of duration bins for predicting token durations.
+        durations (`list[int]`, *optional*, defaults to `[0, 1, 2, 3, 4]`):
+            Duration values for TDT loss computation. Each value represents how many frames a token or blank
+            emission spans. Must have length equal to `num_duration_bins`.
         hidden_act (`str`, *optional*, defaults to `"relu"`):
             The activation function in the joint network.
         max_symbols_per_step (`int`, *optional*, defaults to 10):
@@ -287,6 +290,7 @@ class ParakeetTDTConfig(PreTrainedConfig):
         decoder_hidden_size=640,
         num_decoder_layers=1,
         num_duration_bins=5,
+        durations=None,
         hidden_act="relu",
         max_symbols_per_step=10,
         encoder_config: dict | ParakeetEncoderConfig = None,
@@ -297,6 +301,7 @@ class ParakeetTDTConfig(PreTrainedConfig):
         self.decoder_hidden_size = decoder_hidden_size
         self.num_decoder_layers = num_decoder_layers
         self.num_duration_bins = num_duration_bins
+        self.durations = durations if durations is not None else list(range(num_duration_bins))
         self.hidden_act = hidden_act
         self.max_symbols_per_step = max_symbols_per_step
 

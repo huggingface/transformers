@@ -321,6 +321,7 @@ def convert_tdt_config(nemo_config, encoder_config):
         decoder_hidden_size=decoder_hidden_size,
         num_decoder_layers=num_decoder_layers,
         num_duration_bins=num_duration_bins,
+        durations=durations,
         hidden_act="relu",
         max_symbols_per_step=10,
         seconds_per_frame=seconds_per_frame,
