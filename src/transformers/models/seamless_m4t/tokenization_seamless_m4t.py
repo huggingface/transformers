@@ -13,7 +13,7 @@
 # limitations under the License.
 """Tokenization class for SeamlessM4T."""
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_python import (
@@ -123,6 +123,8 @@ class SeamlessM4TTokenizer(TokenizersBackend):
         vocab_file=None,
         **kwargs,
     ):
+        _spm_precompiled_charsmap = kwargs.pop("_spm_precompiled_charsmap", None)
+
         self._vocab = vocab or {
             str(pad_token): 0,
             str(unk_token): 1,
@@ -142,20 +144,15 @@ class SeamlessM4TTokenizer(TokenizersBackend):
             )
         )
 
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Replace(Regex(r"[\n\r\t]"), " "),
-                normalizers.NFKC(),
-                normalizers.Strip(left=False, right=True),
-                normalizers.Replace(Regex(r" +▁"), "▁"),
-                normalizers.Replace(Regex(r"^▁+$"), ""),
-                normalizers.Replace(Regex(r" {2,}"), "▁"),
-            ]
-        )
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Sequence(
+                [normalizers.Precompiled(_spm_precompiled_charsmap), normalizers.Replace(" ", "▁")]
+            )
+        else:
+            self._tokenizer.normalizer = normalizers.Sequence([normalizers.Replace(" ", "▁")])
 
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=True)
-
-        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="first", split=True)
+        self._tokenizer.pre_tokenizer = None
+        self._tokenizer.decoder = decoders.Sequence([decoders.Replace("▁", " ")])
 
         if "__" not in src_lang:
             src_lang = f"__{src_lang}__"
