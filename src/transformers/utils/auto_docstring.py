@@ -610,7 +610,8 @@ class ConfigArgs:
     }
     hidden_act = {
         "description": """
-    The non-linear activation function (function or string) in the decoder.
+    The non-linear activation function (function or string) in the decoder. For example, `"gelu"`,
+    `"relu"`, `"silu"`, etc.
     """,
     }
 
@@ -635,7 +636,7 @@ class ConfigArgs:
     use_cache = {
         "description": """
     Whether or not the model should return the last key/values attentions (not used by all models). Only
-    relevant if `config.is_decoder=True`.
+    relevant if `config.is_decoder=True` or when the model is a decoder-only generative model.
     """,
     }
 
@@ -676,37 +677,37 @@ class ConfigArgs:
 
     pad_token_id = {
         "description": """
-    Padding token id.
+    Token id used for padding in the vocabulary.
     """,
     }
 
     eos_token_id = {
         "description": """
-    End of stream token id.
+    Token id used for end-of-stream in the vocabulary.
     """,
     }
 
     bos_token_id = {
         "description": """
-    Beginning of stream token id.
+    Token id used for beginning-of-stream in the vocabulary.
     """,
     }
 
     sep_token_id = {
         "description": """
-    End of the separator token id.
+    Token id used for separator in the vocabulary.
     """,
     }
 
     cls_token_id = {
         "description": """
-    End of cls token id.
+    Token id used for CLS in the vocabulary.
     """,
     }
 
     tie_word_embeddings = {
         "description": """
-    Whether to tie weight embeddings
+    Whether to tie weight embeddings according to model's `tied_weights_keys` mapping.
     """,
     }
 
@@ -723,27 +724,15 @@ class ConfigArgs:
     """,
     }
 
-    d_ff = {
-        "description": """
-    Whether to tie weight embeddings.
-    """,
-    }
-
-    num_layers = {
-        "description": """
-    Number of hidden layers in the Transformer encoder.
-    """,
-    }
-
     num_decoder_layers = {
         "description": """
     Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
     """,
     }
 
-    num_heads = {
+    num_encoder_layers = {
         "description": """
-    Number of attention heads for each attention layer in the Transformer encoder.
+    Number of hidden layers in the Transformer encoder. Will use the same value as `num_layers` if not set.
     """,
     }
 
@@ -772,18 +761,6 @@ class ConfigArgs:
     """,
     }
 
-    encoder_layers = {
-        "description": """
-    Number of encoder layers.
-    """,
-    }
-
-    decoder_layers = {
-        "description": """
-    Number of decoder layers.
-    """,
-    }
-
     encoder_attention_heads = {
         "description": """
     Number of attention heads for each attention layer in the Transformer encoder.
@@ -804,14 +781,7 @@ class ConfigArgs:
 
     encoder_ffn_dim = {
         "description": """
-    Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-    """,
-    }
-
-    activation_function = {
-        "description": """
-    The non-linear activation function (function or string). If string, `"gelu"`,
-    `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
     """,
     }
 
@@ -821,15 +791,9 @@ class ConfigArgs:
     """,
     }
 
-    init_std = {
-        "description": """
-    The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-    """,
-    }
-
     encoder_layerdrop = {
         "description": """
-    he LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
+    The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
     for more details.
     """,
     }
@@ -843,7 +807,7 @@ class ConfigArgs:
 
     scale_embedding = {
         "description": """
-    Scale embeddings by diving by sqrt(d_model).
+    Whether to scale embeddings by diving by sqrt(d_model).
     """,
     }
 
@@ -876,12 +840,6 @@ class ConfigArgs:
     num_shared_experts = {
         "description": """
     Number of shared experts that are always activated for all tokens.
-    """,
-    }
-
-    route_scale = {
-        "description": """
-    Scaling factor applied to routing weights.
     """,
     }
 
@@ -967,9 +925,7 @@ class ConfigArgs:
 
     projector_hidden_act = {
         "description": """
-    Number of shared experts.
     The activation function used by the multimodal projector.
-
     """,
     }
 
@@ -992,7 +948,6 @@ class ConfigArgs:
     Whether to use bias in the multimodal projector.
     """,
     }
-    projector_bias = multimodal_projector_bias
 
     image_token_id = {
         "description": """
@@ -1012,21 +967,9 @@ class ConfigArgs:
     """,
     }
 
-    image_token_index = {
-        "description": """
-    The image token index used as a placeholder for input images.
-    """,
-    }
-
-    video_token_index = {
-        "description": """
-    The video token index used as a placeholder for video images.
-    """,
-    }
-
     image_seq_length = {
         "description": """
-    equence length of one image embedding.
+    Sequence length of one image embedding.
     """,
     }
 
@@ -1038,265 +981,223 @@ class ConfigArgs:
 
     add_cross_attention = {
         "description": """
-    Sequence length of one video embedding.
+    Whether cross-attention layers should be added to the model.
     """,
     }
 
     is_decoder = {
         "description": """
-    Sequence length of one video embedding.
+    Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
     """,
     }
 
     sliding_window = {
         "description": """
-    Sequence length of one video embedding.
+    Sliding window attention window size. If `None`, no sliding window is applied.
     """,
     }
 
     use_sliding_window = {
         "description": """
-    Sequence length of one video embedding.
+    Whether to use sliding window attention.
     """,
     }
 
     shared_expert_intermediate_size = {
         "description": """
-    Sequence length of one video embedding.
+    Intermediate size of the shared expert MLPs.
     """,
     }
 
     decoder_sparse_step = {
         "description": """
-    Sequence length of one video embedding.
+    The frequency of adding a sparse MoE layer. The default is 1, which means all decoder layers are sparse MoE.
     """,
     }
 
     output_router_logits = {
         "description": """
-    Sequence length of one video embedding.
+    Whether or not the router logits should be returned by the model. Enabling this will also allow the model
+    to output the auxiliary loss, including load balancing loss and router z-loss.
     """,
     }
 
     router_aux_loss_coef = {
         "description": """
-    Sequence length of one video embedding.
+    Auxiliary load balancing loss coefficient. Used to penalize uneven expert routing in MoE models.
     """,
     }
 
     out_indices = {
         "description": """
-    Sequence length of one video embedding.
+    Indices of the intermediate hidden states (feature maps) to return from the backbone. Each index
+    corresponds to one stage of the model.
     """,
     }
 
     out_features = {
         "description": """
-    Sequence length of one video embedding.
-    """,
-    }
-
-    dropout = {
-        "description": """
-    Sequence length of one video embedding.
+    Names of the intermediate hidden states (feature maps) to return from the backbone. One of `"stem"`,
+    `"stage1"`, `"stage2"`, etc.
     """,
     }
 
     image_size = {
         "description": """
-    Sequence length of one video embedding.
+    The size (resolution) of each image.
     """,
     }
 
     patch_size = {
         "description": """
-    Sequence length of one video embedding.
+    The size (resolution) of each patch.
     """,
     }
 
     num_channels = {
         "description": """
-    Sequence length of one video embedding.
+    The number of input channels.
     """,
     }
 
     num_mel_bins = {
         "description": """
-    Sequence length of one video embedding.
+    Number of mel features used per input frame. Should correspond to the value used in the
+    `AutoFeatureExtractor` class.
     """,
     }
 
     sampling_rate = {
         "description": """
-    Sequence length of one video embedding.
-    """,
-    }
-
-    attention_probs_dropout_prob = {
-        "description": """
-    Sequence length of one video embedding.
+    The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
     """,
     }
 
     hidden_dropout = {
         "description": """
-    Sequence length of one video embedding.
+    The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
     """,
     }
 
     mlp_ratio = {
         "description": """
-    Sequence length of one video embedding.
+    Ratio of the MLP hidden dim to the embedding dim.
     """,
     }
 
     qkv_bias = {
         "description": """
-    Sequence length of one video embedding.
-    """,
-    }
-
-    num_encoder_attention_heads = {
-        "description": """
-    Sequence length of one video embedding.
-    """,
-    }
-
-    num_decoder_attention_heads = {
-        "description": """
-    Sequence length of one video embedding.
+    Whether to add a bias to the queries, keys and values.
     """,
     }
 
     n_embd = {
         "description": """
-    Sequence length of one video embedding.
-    """,
-    }
-
-    n_layers = {
-        "description": """
-    Sequence length of one video embedding.
-    """,
-    }
-
-    n_heads = {
-        "description": """
-    Sequence length of one video embedding.
-    """,
-    }
-
-    n_positions = {
-        "description": """
-    Sequence length of one video embedding.
-    """,
-    }
-
-    attn_pdrop = {
-        "description": """
-    Sequence length of one video embedding.
+    Dimensionality of the embeddings and hidden states.
     """,
     }
 
     resid_pdrop = {
         "description": """
-    Sequence length of one video embedding.
+    The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
     """,
     }
 
     embd_pdrop = {
         "description": """
-    Sequence length of one video embedding.
+    The dropout ratio for the embeddings.
     """,
     }
 
     clip_qkv = {
         "description": """
-    Sequence length of one video embedding.
+    If not `None`, cap the absolute value of the query, key, and value tensors to this value.
     """,
     }
 
     type_vocab_size = {
         "description": """
-    Sequence length of one video embedding.
+    The vocabulary size of the `token_type_ids`.
     """,
     }
 
     audio_config = {
         "description": """
-    Sequence length of one video embedding.
+    The config object or dictionary of the audio backbone.
     """,
     }
 
     layerdrop = {
         "description": """
-    Sequence length of one video embedding.
+    The LayerDrop probability. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556) for
+    more details.
     """,
     }
 
     expert_capacity = {
         "description": """
-    Sequence length of one video embedding.
+    The number of tokens that each expert can process. If `None`, `expert_capacity` will be set to
+    `(sequence_length / num_experts) * capacity_factor`.
     """,
     }
 
     decoder_start_token_id = {
         "description": """
-    Sequence length of one video embedding.
+    If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
     """,
     }
 
     is_encoder_decoder = {
         "description": """
-    Sequence length of one video embedding.
+    Whether the model is used as an encoder/decoder or not.
     """,
     }
 
     num_codebooks = {
         "description": """
-    Sequence length of one video embedding.
+    The number of parallel codebooks used by the model.
     """,
     }
 
     codebook_dim = {
         "description": """
-    Sequence length of one video embedding.
+    Dimensionality of each codebook embedding vector.
     """,
     }
 
     hidden_sizes = {
         "description": """
-    Sequence length of one video embedding.
+    Dimensionality (hidden size) at each stage of the model.
     """,
     }
 
     depths = {
         "description": """
-    Sequence length of one video embedding.
+    Number of layers at each stage of the model.
     """,
     }
 
     patch_sizes = {
         "description": """
-    Sequence length of one video embedding.
+    Patch size at each stage of the model.
     """,
     }
 
     strides = {
         "description": """
-    Sequence length of one video embedding.
+    Stride at each stage of the model.
     """,
     }
 
     router_jitter_noise = {
         "description": """
-    Sequence length of one video embedding.
+    Amount of noise to add to the router logits during training for better load balancing.
     """,
     }
 
     num_local_experts = {
         "description": """
-    Sequence length of one video embedding.
+    Number of local experts on each device. `num_experts` should be divisible by `num_local_experts`.
     """,
     }
 
@@ -1308,91 +1209,91 @@ class ConfigArgs:
 
     backbone_config = {
         "description": """
-    Sequence length of one video embedding.
+    The configuration of the backbone model.
     """,
     }
 
     no_object_weight = {
         "description": """
-    Sequence length of one video embedding.
+    Relative classification weight of the no-object class in the object detection loss.
     """,
     }
 
     class_weight = {
         "description": """
-    Sequence length of one video embedding.
+    Relative weight of the classification error in the Hungarian matching cost.
     """,
     }
 
     mask_weight = {
         "description": """
-    Sequence length of one video embedding.
+    Relative weight of the focal loss in the panoptic segmentation loss.
     """,
     }
 
     dice_weight = {
         "description": """
-    Sequence length of one video embedding.
+    Relative weight of the dice loss in the panoptic segmentation loss.
     """,
     }
 
     class_cost = {
         "description": """
-    Accepted range of time step values for clamping.
+    Relative weight of the classification error in the Hungarian matching cost.
     """,
     }
 
     bbox_cost = {
         "description": """
-    Accepted range of time step values for clamping.
+    Relative weight of the L1 bounding box error in the Hungarian matching cost.
     """,
     }
 
     giou_cost = {
         "description": """
-    Accepted range of time step values for clamping.
+    Relative weight of the generalized IoU loss in the Hungarian matching cost.
     """,
     }
 
     focal_alpha = {
         "description": """
-    Accepted range of time step values for clamping.
+    Alpha parameter in the focal loss.
     """,
     }
 
     mask_loss_coefficient = {
         "description": """
-    Accepted range of time step values for clamping.
+    Relative weight of the focal loss in the panoptic segmentation loss.
     """,
     }
 
     giou_loss_coefficient = {
         "description": """
-    Accepted range of time step values for clamping.
+    Relative weight of the generalized IoU loss in the panoptic segmentation loss.
     """,
     }
 
     bbox_loss_coefficient = {
         "description": """
-    Accepted range of time step values for clamping.
+    Relative weight of the L1 bounding box loss in the panoptic segmentation loss.
     """,
     }
 
     cls_loss_coefficient = {
         "description": """
-    Accepted range of time step values for clamping.
+    Relative weight of the classification loss in the panoptic segmentation loss.
     """,
     }
 
     dice_loss_coefficient = {
         "description": """
-    Accepted range of time step values for clamping.
+    Relative weight of the dice loss in the panoptic segmentation loss.
     """,
     }
 
     semantic_loss_ignore_index = {
         "description": """
-    Accepted range of time step values for clamping.
+    The index that is ignored by the loss function of the semantic segmentation model.
     """,
     }
 
@@ -1408,23 +1309,10 @@ class ConfigArgs:
     """,
     }
 
-    embedding_size = {
-        "description": """
-    Dimensionality of vocabulary embeddings.
-    """,
-    }
-
     num_dense_layers = {
         "description": """
     Number of initial dense layers before MoE layers begin. Layers with index < num_dense_layers will use
     standard dense MLPs instead of MoE.
-    """,
-    }
-
-    projection_hidden_act = {
-        "description": """
-    The non-linear activation function (function or string) in the projection layer. If string, `"gelu"`,
-    `"relu"`, `"silu"` and `"gelu_new"` are supported.
     """,
     }
 
@@ -1437,12 +1325,6 @@ class ConfigArgs:
     vq_config = {
         "description": """
     Configuration dict of the vector quantize module.
-    """,
-    }
-
-    embed_dim = {
-        "description": """
-    Dimensionality of each embedding vector.
     """,
     }
 
@@ -1470,90 +1352,6 @@ class ConfigArgs:
     """,
     }
 
-    mamba_n_heads = {
-        "description": """
-    The number of mamba heads used in the v2 implementation.
-    """,
-    }
-
-    mamba_d_head = {
-        "description": """
-    Head embedding dimension size
-    """,
-    }
-
-    mamba_n_groups = {
-        "description": """
-    The number of the mamba groups used in the v2 implementation.
-    """,
-    }
-
-    mamba_d_state = {
-        "description": """
-    The dimension the mamba state space latents.
-    """,
-    }
-
-    mamba_d_conv = {
-        "description": """
-    The size of the mamba convolution kernel
-    """,
-    }
-
-    mamba_expand = {
-        "description": """
-    Expanding factor (relative to hidden_size) used to determine the mamba intermediate size
-    """,
-    }
-
-    mamba_chunk_size = {
-        "description": """
-    The chunks in which to break the sequence when doing prefill/training
-    """,
-    }
-
-    mamba_conv_bias = {
-        "description": """
-    Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
-    """,
-    }
-
-    mamba_proj_bias = {
-        "description": """
-    Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
-    """,
-    }
-
-    time_step_min = {
-        "description": """
-    Minimum `time_step` used to bound `dt_proj.bias`.
-    """,
-    }
-
-    time_step_max = {
-        "description": """
-    Maximum `time_step` used to bound `dt_proj.bias`.
-    """,
-    }
-
-    time_step_limit = {
-        "description": """
-    Accepted range of time step values for clamping.
-    """,
-    }
-
-    scale_attn_weights = {
-        "description": """
-    Scale attention weights by dividing by sqrt(hidden_size).
-    """,
-    }
-
-    expand_ratio = {
-        "description": """
-    Expand ratio to set the output dimensions for the expansion
-    """,
-    }
-
     conv_kernel_size = {
         "description": """
     The size of the convolutional kernel.
@@ -1574,91 +1372,79 @@ class ConfigArgs:
 
     use_absolute_position_embeddings = {
         "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    Whether to use absolute position embeddings.
     """,
     }
 
     use_relative_position_bias = {
         "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    Whether to use relative position bias in the self-attention layers.
     """,
     }
 
     layer_scale_init_value = {
         "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    Scale to use in the self-attention layers. 0.1 for base, 1e-6 for large. Set 0 to disable layer scale.
     """,
     }
 
     vlm_config = {
         "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    The config object or dictionary of the vision-language backbone.
     """,
     }
 
     init_xavier_std = {
         "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    The scaling factor used for the Xavier initialization of the cross-attention weights.
     """,
     }
 
     auxiliary_loss = {
         "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    Whether auxiliary decoding losses (losses at each decoder layer) are to be used.
     """,
     }
 
     encoder_config = {
         "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    The config object or dictionary of the encoder backbone.
     """,
     }
 
     decoder_config = {
         "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
-    """,
-    }
-
-    n_inner = {
-        "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    The config object or dictionary of the decoder backbone.
     """,
     }
 
     embedding_multiplier = {
         "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    Scaling factor applied to the word embeddings. Used to scale the embeddings relative to the hidden size.
     """,
     }
 
     logits_scaling = {
         "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    Scaling factor applied to the output logits before computing the probability distribution.
     """,
     }
 
     residual_multiplier = {
         "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    Scaling factor applied to the residual connections.
     """,
     }
 
     attention_multiplier = {
         "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
+    Scaling factor applied to the attention weights.
     """,
     }
 
     classifier_activation = {
         "description": """
-    Shrinks or expands the number of channels in each layer. This is sometimes also called "alpha" or "width multiplier".
-    """,
-    }
-
-    num_input_channels = {
-        "description": """
-    Number of input time series channels (variates). Each channel is treated as a separate time series.
+    The activation function for the classification head.
     """,
     }
 
@@ -1742,10 +1528,6 @@ class ConfigArgs:
     """,
     }
 
-    # ─────────────────────────────────────────────
-    # Qwen2VLVisionConfig / Qwen2VLConfig
-    # ─────────────────────────────────────────────
-
     depth = {
         "description": """
     Number of Transformer layers in the vision encoder.
@@ -1776,9 +1558,77 @@ class ConfigArgs:
     """,
     }
 
-    # ─────────────────────────────────────────────
-    # Mamba2Config / MambaConfig
-    # ─────────────────────────────────────────────
+    mamba_n_heads = {
+        "description": """
+    The number of mamba heads used in the v2 implementation.
+    """,
+    }
+
+    mamba_d_head = {
+        "description": """
+    Head embedding dimension size
+    """,
+    }
+
+    mamba_n_groups = {
+        "description": """
+    The number of the mamba groups used in the v2 implementation.
+    """,
+    }
+
+    mamba_d_conv = {
+        "description": """
+    The size of the mamba convolution kernel
+    """,
+    }
+
+    mamba_expand = {
+        "description": """
+    Expanding factor (relative to hidden_size) used to determine the mamba intermediate size
+    """,
+    }
+
+    mamba_chunk_size = {
+        "description": """
+    The chunks in which to break the sequence when doing prefill/training
+    """,
+    }
+
+    mamba_conv_bias = {
+        "description": """
+    Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
+    """,
+    }
+
+    mamba_proj_bias = {
+        "description": """
+    Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
+    """,
+    }
+
+    time_step_min = {
+        "description": """
+    Minimum `time_step` used to bound `dt_proj.bias`.
+    """,
+    }
+
+    time_step_max = {
+        "description": """
+    Maximum `time_step` used to bound `dt_proj.bias`.
+    """,
+    }
+
+    time_step_limit = {
+        "description": """
+    Accepted range of time step values for clamping.
+    """,
+    }
+
+    expand_ratio = {
+        "description": """
+    Expand ratio to set the output dimensions for the expansion
+    """,
+    }
 
     state_size = {
         "description": """
@@ -1828,39 +1678,19 @@ class ConfigArgs:
     """,
     }
 
-    layer_norm_epsilon = layer_norm_eps
-    embedding_dim = embed_dim
-    hidden_dim = hidden_size
-    n_layer = num_hidden_layers
-    n_head = num_attention_heads
-    attention_heads = num_attention_heads
-    decoder_intermediate_size = intermediate_size
-    decoder_hidden_act = hidden_act
-    decoder_attention_dropout = attention_dropout
-    decoder_num_attention_heads = num_attention_heads
-    decoder_num_heads = num_attention_heads
-    decoder_hidden_dim = hidden_size
-    decoder_hidden_size = hidden_size
-    decoder_num_layers = num_hidden_layers
-    decoder_dropout = dropout
-    encoder_hidden_dim = hidden_size
-    encoder_hidden_size = hidden_size
-    encoder_num_layers = num_hidden_layers
-    encoder_num_heads = num_attention_heads
-    encoder_num_attention_heads = num_attention_heads
-    encoder_dropout = dropout
+    mamba_d_state = state_size
+    num_input_channels = num_channels
+    audio_channels = num_channels
+    input_channels = num_channels
+    in_channels = num_channels
+    in_chans = num_channels
+    scale_attn_weights = scale_embedding
+    attention_probs_dropout_prob = attention_dropout
+    attn_pdrop = attention_dropout
     attn_dropout = attention_dropout
-    hidden_activation = hidden_act
-    rms_norm = rms_norm_eps
-    norm_eps = layer_norm_eps
-    activation = hidden_act
-    d_head = head_dim
-    d_inner = intermediate_size
-    initializer_std = init_std
+    dropout = dropout_rate
     resid_dropout = resid_pdrop
     residual_dropout = resid_pdrop
-    dim_head = head_dim
-    ffn_dim = intermediate_size
     emb_pdrop = embd_pdrop
     embed_dropout = embd_pdrop
     embedding_dropout = embd_pdrop
@@ -1869,13 +1699,70 @@ class ConfigArgs:
     classifier_dropout_prob = classifier_dropout
     classifier_dropout_rate = classifier_dropout
     dropout_prob = dropout
-    audio_token_index = audio_token_id
-    layer_scale_initial_scale = layer_scale_init_value
-    num_encoder_layers = encoder_layers
+    dropout_p = dropout
+    decoder_attention_dropout = attention_dropout
+    decoder_dropout = dropout
+    encoder_dropout = dropout
+
+    route_scale = routed_scaling_factor
+    activation_function = hidden_act
+    hidden_dim = hidden_size
+    num_decoder_attention_heads = decoder_attention_heads
+    num_encoder_attention_heads = encoder_attention_heads
+    decoder_num_heads = decoder_attention_heads
+    decoder_num_attention_heads = decoder_attention_heads
+    encoder_num_heads = encoder_attention_heads
+    encoder_num_attention_heads = encoder_attention_heads
+    encoder_layers = num_encoder_layers
+    decoder_layers = num_decoder_layers
+    decoder_num_layers = num_decoder_layers
+    encoder_num_layers = num_encoder_layers
+    d_ff = intermediate_size
+    dim_ff = intermediate_size
+    n_inner = intermediate_size
+    decoder_intermediate_size = intermediate_size
+    num_kv_heads = num_key_value_heads
+    num_layers = num_hidden_layers
+    n_layers = num_hidden_layers
+    n_layer = num_hidden_layers
+    layers = num_layers
     encoder_num_hidden_layers = encoder_layers
     decoder_num_hidden_layers = decoder_layers
-    audio_channels = num_input_channels
-    input_channels = num_input_channels
+    num_heads = num_attention_heads
+    n_heads = num_attention_heads
+    n_head = num_attention_heads
+    hidden_activation = hidden_act
+    activation = hidden_act
+    d_head = head_dim
+    d_inner = intermediate_size
+    dim_head = head_dim
+    ffn_dim = intermediate_size
+    attention_heads = num_attention_heads
+    n_positions = max_position_embeddings
+    init_std = initializer_range
+    initializer_std = initializer_range
+    projector_bias = multimodal_projector_bias
+    image_token_index = image_token_id
+    video_token_index = video_token_id
+    audio_token_index = audio_token_id
+    embedding_size = n_embd
+    embed_dim = n_embd
+    projection_hidden_act = projector_hidden_act
+    layer_norm_epsilon = layer_norm_eps
+    rms_norm = rms_norm_eps
+    norm_eps = layer_norm_eps
+    eps = layer_norm_eps
+    norm_epsilon = layer_norm_eps
+    qk_layernorms = qk_layernorm
+    use_qk_norm = qk_layernorm
+    use_qkv_bias = qkv_bias
+
+    decoder_hidden_act = hidden_act
+    decoder_hidden_dim = hidden_size
+    decoder_hidden_size = hidden_size
+    encoder_hidden_dim = hidden_size
+    encoder_hidden_size = hidden_size
+    layer_scale_initial_scale = layer_scale_init_value
     multi_modal_projector_bias = projector_bias
     projector_hidden_size = projection_dim
     projection_size = projection_dim
@@ -1883,25 +1770,15 @@ class ConfigArgs:
     conv_kernel = conv_kernel_size
     use_absolute_embeddings = use_absolute_position_embeddings
     use_abs_pos = use_absolute_position_embeddings
-    layers = num_layers
     aux_loss_coef = router_aux_loss_coef
-    qk_layernorms = qk_layernorm
-    use_qk_norm = qk_layernorm
-    num_kv_heads = num_key_value_heads
-    text_vocab_size = vocab_size
     embedding_dimension = embed_dim
+    embedding_dim = embed_dim
     emb_dim = embed_dim
     n_codebooks = num_codebooks
-    dim_ff = ffn_dim
-    dropout_p = dropout
-    eps = layer_norm_eps
-    use_qkv_bias = qkv_bias
-    norm_epsilon = layer_norm_eps
-    in_channels = num_channels
-    in_chans = num_channels
     codebook_size = num_codebooks
     layers_block_type = layer_types
     sample_rate = sampling_rate
+    text_vocab_size = vocab_size
 
 
 class ModelArgs:
