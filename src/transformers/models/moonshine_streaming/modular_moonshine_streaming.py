@@ -375,7 +375,7 @@ class MoonshineStreamingDecoder(MoonshineDecoder):
             [What are attention masks?](../glossary#attention-mask)
         """
         position_embeddings = self.pos_emb(
-            torch.arange(encoder_hidden_states.shape[1], device=self.pos_emb.weight.device)
+            torch.arange(encoder_hidden_states.shape[1], device=encoder_hidden_states.device)
         )
         encoder_hidden_states = encoder_hidden_states + position_embeddings.to(encoder_hidden_states.device)
         encoder_hidden_states = self.proj(encoder_hidden_states)
