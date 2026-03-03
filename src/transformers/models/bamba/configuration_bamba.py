@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 IBM and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Bamba model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -103,6 +100,12 @@ class BambaConfig(PreTrainedConfig):
             Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
         mamba_proj_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
+        time_step_min (`float`, *optional*, defaults to 0.001):
+            Minimum `time_step` used to bound `dt_proj.bias`.
+        time_step_max (`float`, *optional*, defaults to 0.1):
+            Maximum `time_step` used to bound `dt_proj.bias`.
+        time_step_limit (`tuple`, *optional*, defaults to `(0.0, inf)`):
+            Accepted range of time step values for clamping.
         z_loss_coefficient (`float`, *optional*, defaults to 0.0):
             Coefficient for auxiliary z-loss used to control logit growth during training
         rope_parameters (`RopeParameters`, *optional*):
@@ -116,35 +119,38 @@ class BambaConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 128000,
-        tie_word_embeddings: Optional[bool] = False,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 14336,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 8,
-        hidden_act: Optional[str] = "silu",
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-5,
-        use_cache: Optional[bool] = True,
-        num_logits_to_keep: Optional[int] = 1,
-        pad_token_id: Optional[int] = 0,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        max_position_embeddings: Optional[int] = 262144,
-        attention_dropout: Optional[float] = 0.0,
-        attn_layer_indices: Optional[list[int]] = None,
-        mamba_n_heads: Optional[int] = 128,
-        mamba_d_head: Optional[str] = "auto",
-        mamba_n_groups: Optional[int] = 1,
-        mamba_d_state: Optional[int] = 256,
-        mamba_d_conv: Optional[int] = 4,
-        mamba_expand: Optional[int] = 2,
-        mamba_chunk_size: Optional[int] = 256,
-        mamba_conv_bias: Optional[bool] = True,
-        mamba_proj_bias: Optional[bool] = False,
-        z_loss_coefficient: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters] = None,
+        vocab_size: int | None = 128000,
+        tie_word_embeddings: bool | None = False,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 14336,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 8,
+        hidden_act: str | None = "silu",
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-5,
+        use_cache: bool | None = True,
+        num_logits_to_keep: int | None = 1,
+        pad_token_id: int | None = 0,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        max_position_embeddings: int | None = 262144,
+        attention_dropout: float | None = 0.0,
+        attn_layer_indices: list[int] | None = None,
+        mamba_n_heads: int | None = 128,
+        mamba_d_head: str | None = "auto",
+        mamba_n_groups: int | None = 1,
+        mamba_d_state: int | None = 256,
+        mamba_d_conv: int | None = 4,
+        mamba_expand: int | None = 2,
+        mamba_chunk_size: int | None = 256,
+        mamba_conv_bias: bool | None = True,
+        mamba_proj_bias: bool | None = False,
+        time_step_min: float | None = 0.001,
+        time_step_max: float | None = 0.1,
+        time_step_limit: tuple[float, float] | None = (0.0, float("inf")),
+        z_loss_coefficient: float | None = 0.0,
+        rope_parameters: RopeParameters | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -192,17 +198,18 @@ class BambaConfig(PreTrainedConfig):
         self.mamba_chunk_size = mamba_chunk_size
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
+        self.time_step_min = time_step_min
+        self.time_step_max = time_step_max
+        self.time_step_limit = tuple(time_step_limit) if time_step_limit is not None else None
         self.z_loss_coefficient = z_loss_coefficient
         self.rope_parameters = rope_parameters
         kwargs["partial_rotary_factor"] = 0.5  # hardcode for BC
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
     @property
     def layers_block_type(self):

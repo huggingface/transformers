@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019-present, the HuggingFace Inc. team, The Google AI Language Team and Facebook, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@ part from HuggingFace PyTorch version of Google AI Bert model (https://github.co
 """
 
 from collections.abc import Callable
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -50,7 +48,9 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_distilbert import DistilBertConfig
 
 
@@ -92,16 +92,17 @@ class Embeddings(nn.Module):
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
 
+    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def forward(
         self,
         input_ids: torch.Tensor,
-        input_embeds: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
     ) -> torch.Tensor:
         if input_ids is not None:
-            input_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
+            inputs_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
 
-        seq_length = input_embeds.size(1)
+        seq_length = inputs_embeds.size(1)
 
         if position_ids is None:
             # Setting the position-ids to the registered buffer in constructor, it helps
@@ -115,7 +116,7 @@ class Embeddings(nn.Module):
 
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
 
-        embeddings = input_embeds + position_embeddings  # (bs, max_seq_length, dim)
+        embeddings = inputs_embeds + position_embeddings  # (bs, max_seq_length, dim)
         embeddings = self.LayerNorm(embeddings)  # (bs, max_seq_length, dim)
         embeddings = self.dropout(embeddings)  # (bs, max_seq_length, dim)
         return embeddings
@@ -127,8 +128,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -139,7 +140,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -177,7 +177,7 @@ class DistilBertSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -188,9 +188,9 @@ class DistilBertSelfAttention(nn.Module):
         key_layer = self.k_lin(hidden_states).view(*hidden_shape).transpose(1, 2)
         value_layer = self.v_lin(hidden_states).view(*hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -245,7 +245,7 @@ class TransformerBlock(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, ...]:
         # Self-Attention
@@ -273,9 +273,9 @@ class Transformer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[BaseModelOutput]:
+    ) -> BaseModelOutput:
         for layer_module in self.layer:
             hidden_states = layer_module(
                 hidden_states,
@@ -383,16 +383,17 @@ class DistilBertModel(DistilBertPreTrainedModel):
     def set_input_embeddings(self, new_embeddings: nn.Embedding):
         self.embeddings.word_embeddings = new_embeddings
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[BaseModelOutput, tuple[torch.Tensor, ...]]:
+    ) -> BaseModelOutput | tuple[torch.Tensor, ...]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -413,7 +414,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=embeddings,
+            inputs_embeds=embeddings,
             attention_mask=attention_mask,
         )
 
@@ -477,13 +478,13 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[MaskedLMOutput, tuple[torch.Tensor, ...]]:
+    ) -> MaskedLMOutput | tuple[torch.Tensor, ...]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -571,13 +572,13 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[SequenceClassifierOutput, tuple[torch.Tensor, ...]]:
+    ) -> SequenceClassifierOutput | tuple[torch.Tensor, ...]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -669,14 +670,14 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        start_positions: Optional[torch.Tensor] = None,
-        end_positions: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        start_positions: torch.Tensor | None = None,
+        end_positions: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[QuestionAnsweringModelOutput, tuple[torch.Tensor, ...]]:
+    ) -> QuestionAnsweringModelOutput | tuple[torch.Tensor, ...]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -769,13 +770,13 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[TokenClassifierOutput, tuple[torch.Tensor, ...]]:
+    ) -> TokenClassifierOutput | tuple[torch.Tensor, ...]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -844,13 +845,13 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[MultipleChoiceModelOutput, tuple[torch.Tensor, ...]]:
+    ) -> MultipleChoiceModelOutput | tuple[torch.Tensor, ...]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.

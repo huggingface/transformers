@@ -135,7 +135,7 @@ Another way to define tools is by passing a [JSON schema](https://json-schema.or
 You can also manually call the low-level functions that convert Python functions to JSON schemas, and then check or edit the generated schemas. This is usually not necessary, but is useful for understanding the underlying mechanics. It's particularly important
 for chat template authors who need to access the JSON schema to render the tool definitions.
 
-The  [`~PreTrainedTokenizerBase.apply_chat_template`] method uses the [get_json_schema](https://github.com/huggingface/transformers/blob/14561209291255e51c55260306c7d00c159381a5/src/transformers/utils/chat_template_utils.py#L205) function to convert Python functions to a JSON schema.
+The [`~PreTrainedTokenizerBase.apply_chat_template`] method uses the [get_json_schema](https://github.com/huggingface/transformers/blob/14561209291255e51c55260306c7d00c159381a5/src/transformers/utils/chat_template_utils.py#L205) function to convert Python callables to a JSON schema. This includes methods: `self` and `cls` are treated as implicit receiver arguments and are ignored.
 
 ```py
 from transformers.utils import get_json_schema

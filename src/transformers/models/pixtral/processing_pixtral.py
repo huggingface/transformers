@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +15,6 @@
 Processor class for Pixtral.
 """
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
@@ -29,7 +26,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_vision_available, logging
+from ...utils import auto_docstring, is_vision_available, logging
 
 
 if is_vision_available():
@@ -61,51 +58,8 @@ def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
 
 
+@auto_docstring
 class PixtralProcessor(ProcessorMixin):
-    r"""
-    Constructs a Pixtral processor which wraps a Pixtral image processor and a Pixtral tokenizer into a single processor.
-
-    [`PixtralProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See the
-    [`~PixtralProcessor.__call__`] and [`~PixtralProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`PixtralImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        patch_size (`int`, *optional*, defaults to 16):
-            Patch size from the vision tower.
-        spatial_merge_size (`int`, *optional*, defaults to 1):
-            The downsampling factor for the spatial merge operation.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        image_token (`str`, *optional*, defaults to `"[IMG]"`):
-            Special token used to denote image location.
-        image_break_token (`str`, *optional*, defaults to `"[IMG_BREAK]"`):
-            Special token used to denote the end of a line of pixels in an image.
-        image_end_token (`str`, *optional*, defaults to `"[IMG_END]"`):
-            Special token used to denote the end of an image input.
-    """
-
-    @classmethod
-    def _load_tokenizer_from_pretrained(
-        cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
-    ):
-        """
-        Override for BC. Pixtral requires a modified pre_tokenizer with ByteLevel prepended to handle
-        the specific tokenization format expected by pretrained Pixtral models.
-        """
-        from tokenizers import pre_tokenizers
-
-        from ...models.llama import LlamaTokenizer
-
-        tokenizer = LlamaTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        # Add ByteLevel pre_tokenizer before the existing one
-        tokenizer._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [pre_tokenizers.ByteLevel(False), tokenizer._tokenizer.pre_tokenizer]
-        )
-        return tokenizer
-
     def __init__(
         self,
         image_processor=None,
@@ -118,6 +72,18 @@ class PixtralProcessor(ProcessorMixin):
         image_end_token="[IMG_END]",
         **kwargs,
     ):
+        r"""
+        patch_size (`int`, *optional*, defaults to 16):
+            Patch size from the vision tower.
+        spatial_merge_size (`int`, *optional*, defaults to 1):
+            The downsampling factor for the spatial merge operation.
+        image_token (`str`, *optional*, defaults to `"[IMG]"`):
+            Special token used to denote image location.
+        image_break_token (`str`, *optional*, defaults to `"[IMG_BREAK]"`):
+            Special token used to denote the end of a line of pixels in an image.
+        image_end_token (`str`, *optional*, defaults to `"[IMG_END]"`):
+            Special token used to denote the end of an image input.
+        """
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
         self.image_token = image_token
@@ -130,33 +96,14 @@ class PixtralProcessor(ProcessorMixin):
         self.image_ids = [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[PixtralProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -169,7 +116,7 @@ class PixtralProcessor(ProcessorMixin):
 
         output_kwargs = self._merge_kwargs(
             PixtralProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            tokenizer_init_kwargs=getattr(self.tokenizer, "init_kwargs", {}),
             **kwargs,
         )
 
@@ -216,6 +163,8 @@ class PixtralProcessor(ProcessorMixin):
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        # Remove return_token_type_ids as MistralCommonBackend doesn't support it
+        output_kwargs["text_kwargs"].pop("return_token_type_ids", None)
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 

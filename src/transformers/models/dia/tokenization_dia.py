@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization class for Dia."""
-
-from typing import Optional
 
 from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import logging
@@ -46,9 +43,9 @@ class DiaTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        pad_token: Optional[str] = "<pad>",
-        unk_token: Optional[str] = "<pad>",
-        max_length: Optional[int] = 1024,
+        pad_token: str | None = "<pad>",
+        unk_token: str | None = "<pad>",
+        max_length: int | None = 1024,
         offset: int = 0,
         **kwargs,
     ):

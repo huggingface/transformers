@@ -4,11 +4,11 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_efficientloftr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import Optional, Union
+from typing import Optional
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 from PIL import Image, ImageDraw
-from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -84,7 +84,7 @@ def convert_to_grayscale(
     """
     if is_grayscale(image):
         return image
-    return F.rgb_to_grayscale(image, num_output_channels=3)
+    return tvF.rgb_to_grayscale(image, num_output_channels=3)
 
 
 @auto_docstring
@@ -111,19 +111,20 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> ImageInput:
         # we need to handle image pairs validation and flattening
+        images = self.fetch_images(images)
         return flatten_pair_images(images)
 
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        size: Union[dict[str, int], SizeDict],
+        size: dict[str, int] | SizeDict,
         rescale_factor: float,
         do_rescale: bool,
         do_resize: bool,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_grayscale: bool,
         disable_grouping: bool,
-        return_tensors: Union[str, TensorType],
+        return_tensors: str | TensorType,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -159,7 +160,7 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
     def post_process_keypoint_matching(
         self,
         outputs: "EfficientLoFTRKeypointMatchingOutput",
-        target_sizes: Union[TensorType, list[tuple]],
+        target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         """

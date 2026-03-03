@@ -84,6 +84,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## CLIPSegProcessor
 
 [[autodoc]] CLIPSegProcessor
+    - __call__
 
 ## CLIPSegModel
 

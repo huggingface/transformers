@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 """Tokenization classes for XLM-RoBERTa model (Tokenizers backend)."""
-
-from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -56,7 +53,7 @@ class XLMRobertaTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
+        vocab: str | list[tuple[str, float]] | None = None,
         add_prefix_space: bool = True,
         bos_token: str = "<s>",
         eos_token: str = "</s>",

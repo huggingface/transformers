@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Deepseek AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,13 +15,11 @@
 Processor class for Janus.
 """
 
-from typing import Optional, Union
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -35,6 +32,13 @@ DEFAULT_SYSTEM_PROMPT = (
 
 
 class JanusTextKwargs(TextKwargs, total=False):
+    """
+    generation_mode (`str`, *optional*, defaults to `"text"`):
+        The generation mode indicating which modality to generate. Can be one of `"text"` or `"image"`. When set
+        to `"text"`, the processor prepares inputs for text generation. When set to `"image"`, it prepares inputs
+        for image generation by appending image start tokens to the prompt.
+    """
+
     generation_mode: str
 
 
@@ -46,25 +50,13 @@ class JanusProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class JanusProcessor(ProcessorMixin):
-    r"""
-    Constructs a Janus processor which wraps a Janus Image Processor and a Llama tokenizer into a single processor.
-
-    [`JanusProcessor`] offers all the functionalities of [`JanusImageProcessor`] and [`LlamaTokenizerFast`]. See the
-    [`~JanusProcessor.__call__`] and [`~JanusProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`JanusImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`]):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        use_default_system_prompt (`str`, *optional*, defaults to `False`):
-            Use default system prompt for Text Generation.
-    """
-
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=False, **kwargs):
+        r"""
+        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
+            Use default system prompt for Text Generation.
+        """
         self.num_image_tokens = 576
         self.image_token = tokenizer.image_token
         self.image_start_token = tokenizer.boi_token
@@ -73,32 +65,14 @@ class JanusProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: Optional[ImageInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        images: ImageInput | None = None,
         **kwargs: Unpack[JanusProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        JanusImageProcessor's [`~JanusImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
-        of the above two methods for more information.
-
-        Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

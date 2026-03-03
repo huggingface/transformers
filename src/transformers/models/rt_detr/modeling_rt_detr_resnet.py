@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft Research, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,17 +17,16 @@ See https://github.com/lyuwenyu/RT-DETR/blob/5b628eaa0a2fc25bdafec7e6148d5296b14
 """
 
 import math
-from typing import Optional
 
 import torch
 from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_rt_detr_resnet import RTDetrResNetConfig
 
 
@@ -331,12 +329,11 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
     ResNet backbone, to be used with frameworks like RTDETR.
     """
 )
-class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
+class RTDetrResNetBackbone(BackboneMixin, RTDetrResNetPreTrainedModel):
     has_attentions = False
 
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.embedding_size] + config.hidden_sizes
         self.embedder = RTDetrResNetEmbeddings(config)
@@ -349,8 +346,8 @@ class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: Tensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
         r"""

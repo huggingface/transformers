@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023, HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -166,6 +165,7 @@ class NllbMoeConfig(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        tie_word_embeddings=True,
         output_router_logits=False,
         **kwargs,
     ):
@@ -206,15 +206,12 @@ class NllbMoeConfig(PreTrainedConfig):
         self.moe_eval_capacity_token_fraction = moe_eval_capacity_token_fraction
         self.moe_token_dropout = moe_token_dropout
         self.output_router_logits = output_router_logits
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["NllbMoeConfig"]
