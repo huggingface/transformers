@@ -732,10 +732,7 @@ class PegasusXPreTrainedModel(PreTrainedModel):
 
 
 class PegasusXEncoder(PegasusXPreTrainedModel):
-    _can_record_outputs = {
-        "hidden_states": PegasusXEncoderLayer,
-        "attentions": OutputRecorder(PegasusXGlobalLocalAttention, index=2),
-    }
+    _can_record_outputs = {"attentions": OutputRecorder(PegasusXGlobalLocalAttention, index=2)}
 
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -809,7 +806,8 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         input_ids=None,
         attention_mask=None,
         inputs_embeds=None,
-        **kwargs,
+        output_hidden_states=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Args:
@@ -840,6 +838,11 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
         """
+        # We need to treat this special because it only adds the last global state which is unique
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -877,7 +880,10 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
             torch.arange(self.config.num_global_tokens, device=hidden_states.device)[None].expand(batch_size, -1)
         )
 
+        encoder_states = () if output_hidden_states else None
         for encoder_layer in self.layers:
+            if output_hidden_states:
+                encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
@@ -900,7 +906,12 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
 
         hidden_states = self.layer_norm(hidden_states)
 
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        if output_hidden_states:
+            encoder_states = encoder_states + ((hidden_states, global_hidden_states),)
+
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=encoder_states
+        )
 
 
 class PegasusXDecoder(PegasusXPreTrainedModel):

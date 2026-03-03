@@ -330,7 +330,7 @@ class PPDocLayoutV2ReadingOrderLayer(GradientCheckpointingLayer):
         rel_2d_pos=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        attention_output, _ = self.attention(
+        attention_output = self.attention(
             hidden_states,
             attention_mask,
             rel_pos=rel_pos,
