@@ -2364,7 +2364,7 @@ class ModelUtilsTest(TestCasePlus):
             # Test that an untrusted kernel will raise an error without the flag
             with self.assertRaisesRegex(
                 ValueError,
-                "You need to specify `trust_remote_code=True` to use kernels outside of the `kernels-community` repository",
+                "You need to specify `load_kernels_from_hub=True` to use kernels outside of the `kernels-community` repository",
             ):
                 _ = LlamaModel.from_pretrained(tmpdirname, attn_implementation=untrusted_kernel)
 
@@ -2374,7 +2374,7 @@ class ModelUtilsTest(TestCasePlus):
             # Test that it works with the flag - though the repo does not exist, so patch the dispatch
             with patch("transformers.modeling_utils.lazy_import_flash_attention", dummy_lazy_import):
                 model = LlamaModel.from_pretrained(
-                    tmpdirname, attn_implementation=untrusted_kernel, trust_remote_code=True
+                    tmpdirname, attn_implementation=untrusted_kernel, load_kernels_from_hub=True
                 )
                 self.assertEqual(model.config._attn_implementation, untrusted_kernel)
 
