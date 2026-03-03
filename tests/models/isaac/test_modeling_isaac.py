@@ -37,6 +37,7 @@ from transformers import (
     PythonBackend,
     is_torch_available,
 )
+from transformers.masking_utils import create_bidirectional_mask
 from transformers.image_utils import load_image
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
 from transformers.models.isaac.modeling_isaac import (
@@ -625,7 +626,7 @@ class IsaacAttentionDtypeTest(unittest.TestCase):
         assert attn_output.dtype == attn.out_proj.weight.dtype
         assert attn_output.dtype == hidden_states.dtype
 
-    def test_flash_attention_matches_weight_dtype_bf16_with_cu_seqlens(self):
+    def test_flash_attention_matches_weight_dtype_bf16_with_prepared_mask(self):
         self._skip_if_no_cuda_bf16()
         torch.manual_seed(0)
 
@@ -636,10 +637,15 @@ class IsaacAttentionDtypeTest(unittest.TestCase):
         attn = IsaacVisionAttention(config).to(device=device, dtype=torch.bfloat16).eval()
 
         hidden_states = torch.randn(1, 5, config.hidden_size, device=device, dtype=torch.bfloat16)
-        cu_seqlens = torch.tensor([0, 3, 5], device=device, dtype=torch.int32)
+        attention_mask = torch.tensor([[1, 1, 1, 0, 0]], device=device, dtype=torch.long)
+        prepared_attention_mask = create_bidirectional_mask(
+            config=config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
 
         with torch.no_grad():
-            attn_output, _ = attn(hidden_states, cu_seqlens=cu_seqlens, max_seqlen=3)
+            attn_output, _ = attn(hidden_states, attention_mask=prepared_attention_mask)
 
         assert attn_output.dtype == attn.out_proj.weight.dtype
         assert attn_output.dtype == hidden_states.dtype

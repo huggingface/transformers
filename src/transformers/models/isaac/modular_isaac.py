@@ -389,10 +389,8 @@ class IsaacVisionAttention(Siglip2Attention):
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        attn_impl = self.config._attn_implementation
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS["sdpa"]
-        if attn_impl != "sdpa":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[attn_impl]
+        attn_impl = self.config._attn_implementation or "sdpa"
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS[attn_impl]
 
         attention_kwargs: dict[str, Any] = {
             "is_causal": False,
