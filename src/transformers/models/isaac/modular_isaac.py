@@ -1649,8 +1649,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         vision_image_attention_mask (`torch.LongTensor`, *optional*):
             Mask indicating which image slots are populated, shape `(batch_size, max_images)`.
         """
-        output_attentions = kwargs.pop("output_attentions", None)
-
         outputs = self.model(
             input_ids=input_ids,
             modality_tensor=modality_tensor,
@@ -1665,7 +1663,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             cache_position=cache_position,
             **kwargs,
         )
@@ -1680,7 +1677,7 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions if output_attentions else None,
+            attentions=outputs.attentions,
         )
 
     def prepare_inputs_for_generation(
