@@ -452,7 +452,10 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
 
         hidden_states = self.drop(hidden_states)
 
-        output_shape = (-1, inputs_embeds.shape[1],) + (hidden_states.size(-1),)
+        output_shape = (
+            -1,
+            inputs_embeds.shape[1],
+        ) + (hidden_states.size(-1),)
 
         for block in self.h:
             hidden_states = block(

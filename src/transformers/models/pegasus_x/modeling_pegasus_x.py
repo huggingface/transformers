@@ -858,7 +858,9 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
 
         # Setup mask
         if attention_mask is None:
-            attention_mask = torch.ones(*inputs_embeds.shape[:-1], dtype=inputs_embeds.dtype, device=inputs_embeds.device)
+            attention_mask = torch.ones(
+                *inputs_embeds.shape[:-1], dtype=inputs_embeds.dtype, device=inputs_embeds.device
+            )
         attention_mask = attention_mask.to(dtype=hidden_states.dtype)
         mask_min_value = torch.finfo(hidden_states.dtype).min
         inverted_mask = 1.0 - attention_mask

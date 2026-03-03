@@ -33,7 +33,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import auto_docstring, is_detectron2_available, logging, requires_backends
-from ...utils.generic import TransformersKwargs, merge_with_config_defaults
+from ...utils.generic import TransformersKwargs, can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_layoutlmv2 import LayoutLMv2Config
 

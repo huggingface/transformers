@@ -1002,7 +1002,10 @@ class ClvpDecoder(ClvpPreTrainedModel):
 
         hidden_states = self.drop(hidden_states)
 
-        output_shape = (-1, seq_len,) + (hidden_states.size(-1),)
+        output_shape = (
+            -1,
+            seq_len,
+        ) + (hidden_states.size(-1),)
 
         for block in self.layers:
             hidden_states = block(
