@@ -414,7 +414,10 @@ def get_kernel(
     from .. import __version__
 
     if not _kernels_available:
-        raise ImportError("kernels is not installed, please install it with `pip install kernels`")
+        raise ImportError(
+            "`kernels` is either not installed or uses an incompatible version. Please install the latest version "
+            "with `pip install -U kernels`."
+        )
 
     repo_parent = kernel_name.split("/")[0]
     # all `kernels-community` repos are trusted by default!
