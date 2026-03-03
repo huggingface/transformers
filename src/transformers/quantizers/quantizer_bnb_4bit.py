@@ -358,7 +358,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         # TODO: consider bringing replace_with_bnb_linear() code from ..integrations/bitsandbyter.py to here
 
         if self.quantization_config.target_parameters:
-            # TODO: consider when param is in a module specified by modules_to_not_convert
             matched_params = [
                 param_name
                 for param_name, _ in model.named_parameters()
@@ -367,6 +366,9 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                         lambda target_param: param_name.endswith("." + target_param) or param_name == target_param,
                         self.quantization_config.target_parameters,
                     )
+                )
+                and not any(
+                    (key + "." in param_name) or (key == param_name) for key in self.modules_to_not_convert
                 )
             ]
 
@@ -419,9 +421,22 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     def _dequantize(self, model):
         from ..integrations import dequantize_and_replace
 
-        # TODO: support target_parameters
-
         model = dequantize_and_replace(
             model, self.modules_to_not_convert, quantization_config=self.quantization_config
         )
+
+        # Remove parametrizations applied to target parameters, leaving the dequantized values
+        if self.quantization_config.target_parameters:
+            import torch.nn.utils.parametrize as P
+
+            for module_name, module in model.named_modules():
+                if P.is_parametrized(module):
+                    for param_name in list(module.parametrizations.keys()):
+                        full_name = f"{module_name}.{param_name}" if module_name else param_name
+                        if any(
+                            full_name.endswith("." + tp) or full_name == tp
+                            for tp in self.quantization_config.target_parameters
+                        ):
+                            P.remove_parametrizations(module, param_name, leave_parametrized=True)
+
         return model
