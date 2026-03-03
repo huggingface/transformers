@@ -144,6 +144,17 @@ class IsaacVisionConfig(Siglip2VisionConfig):
 
 
 class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
+    """
+    patch_size (`int`, *optional*):
+        Side length (in pixels) for square patches extracted from resized images.
+    max_num_patches (`int`, *optional*):
+        Upper bound on extracted patches per image after resizing.
+    min_num_patches (`int`, *optional*):
+        Lower bound on extracted patches per image after resizing.
+    pixel_shuffle_scale (`int`, *optional*):
+        Pixel-shuffle reduction factor applied in the vision tower.
+    """
+
     patch_size: int | None
     max_num_patches: int | None
     min_num_patches: int | None
@@ -1517,6 +1528,18 @@ class IsaacModel(Qwen3PreTrainedModel):
             modality_tensor (`torch.LongTensor`, *optional*):
                 Modality identifiers aligned with the embedded sequence, shaped `(batch_size, seq_len)` and containing
                 values from `ModalityType`. Treated as text-only when omitted.
+            vision_patches (`torch.FloatTensor`, *optional*):
+                Padded per-image patch vectors of shape `(batch_size, max_images, max_patches, patch_dim)`.
+            vision_patch_attention_mask (`torch.LongTensor`, *optional*):
+                Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
+            vision_token_grids (`torch.LongTensor`, *optional*):
+                Per-image patch grids `(h, w)` with shape `(batch_size, max_images, 2)`.
+            vision_token_offsets (`torch.LongTensor`, *optional*):
+                Start offsets inside the per-image vision embedding sequence, shape `(batch_size, max_images)`.
+            vision_token_lengths (`torch.LongTensor`, *optional*):
+                Number of vision tokens to consume per image, shape `(batch_size, max_images)`.
+            vision_image_attention_mask (`torch.LongTensor`, *optional*):
+                Mask indicating which image slots are populated, shape `(batch_size, max_images)`.
         """
 
         output_attentions = kwargs.pop("output_attentions", None)
@@ -1582,7 +1605,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         if not isinstance(attention_mask, dict):
             attention_mask = create_masks_for_generate(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 cache_position=cache_position,
                 past_key_values=past_key_values,
@@ -1652,7 +1675,22 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
-        """Run multimodal CausalLM forward with top-level batched tensors from `IsaacProcessor`."""
+        r"""
+        modality_tensor (`torch.LongTensor`, *optional*):
+            Modality identifiers aligned with the token sequence, shaped `(batch_size, seq_len)`.
+        vision_patches (`torch.FloatTensor`, *optional*):
+            Padded per-image patch vectors of shape `(batch_size, max_images, max_patches, patch_dim)`.
+        vision_patch_attention_mask (`torch.LongTensor`, *optional*):
+            Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
+        vision_token_grids (`torch.LongTensor`, *optional*):
+            Per-image patch grids `(h, w)` with shape `(batch_size, max_images, 2)`.
+        vision_token_offsets (`torch.LongTensor`, *optional*):
+            Start offsets inside the per-image vision embedding sequence, shape `(batch_size, max_images)`.
+        vision_token_lengths (`torch.LongTensor`, *optional*):
+            Number of vision tokens to consume per image, shape `(batch_size, max_images)`.
+        vision_image_attention_mask (`torch.LongTensor`, *optional*):
+            Mask indicating which image slots are populated, shape `(batch_size, max_images)`.
+        """
         output_attentions = kwargs.pop("output_attentions", None)
 
         outputs = self.model(
