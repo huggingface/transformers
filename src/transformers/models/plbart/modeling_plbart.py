@@ -548,7 +548,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
             raise ValueError("You must specify exactly one of decoder_input_ids or decoder_inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
