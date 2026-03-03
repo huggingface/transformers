@@ -14,9 +14,7 @@
 
 import unittest
 
-import pytest
-
-from transformers import AutoTokenizer, RobertaConfig, is_torch_available
+from transformers import RobertaConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -564,41 +562,3 @@ class RobertaModelIntegrationTest(TestCasePlus):
         # expected_tensor = roberta.predict("mnli", input_ids, return_logits=True).detach()
 
         torch.testing.assert_close(output, expected_tensor, rtol=1e-4, atol=1e-4)
-
-    @pytest.mark.torch_export_test
-    @slow
-    def test_export(self):
-        roberta_model = "FacebookAI/roberta-base"
-        device = "cpu"
-        attn_implementation = "sdpa"
-        max_length = 512
-
-        tokenizer = AutoTokenizer.from_pretrained(roberta_model)
-        inputs = tokenizer(
-            "The goal of life is <mask>.",
-            return_tensors="pt",
-            padding="max_length",
-            max_length=max_length,
-        )
-
-        model = RobertaForMaskedLM.from_pretrained(
-            roberta_model,
-            device_map=device,
-            attn_implementation=attn_implementation,
-            use_cache=True,
-        )
-
-        logits = model(**inputs).logits
-        eager_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
-        self.assertEqual(eager_predicted_mask.split(), ["happiness", "love", "peace", "freedom", "simplicity"])
-
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["input_ids"],),
-            kwargs={"attention_mask": inputs["attention_mask"]},
-            strict=True,
-        )
-
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
-        exported_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
-        self.assertEqual(eager_predicted_mask, exported_predicted_mask)

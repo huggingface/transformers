@@ -222,7 +222,7 @@ class FalconMambaMixer(MambaMixer):
                     " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
                 )
 
-    def __init__(self, config: FalconMambaConfig, layer_idx: int):
+    def __init__(self, config: FalconMambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
         super().__init__(config, layer_idx)
 
         # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
@@ -488,6 +488,12 @@ class FalconMambaMixer(MambaMixer):
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
 
+    @torch.no_grad()
+    def init_falcon_mamba_weights(self):
+        super().init_falcon_mamba_weights()
+        init.ones_(self.b_c_rms)
+        init.ones_(self.dt_rms)
+
 
 class FalconMambaRMSNorm(MambaRMSNorm):
     def forward(self, hidden_states):
@@ -502,11 +508,7 @@ class FalconMambaBlock(MambaBlock):
 
 @auto_docstring
 class FalconMambaPreTrainedModel(MambaPreTrainedModel):
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, FalconMambaMixer):
-            init.ones_(module.b_c_rms)
-            init.ones_(module.dt_rms)
+    pass
 
 
 class FalconMambaOutput(MambaOutput):
