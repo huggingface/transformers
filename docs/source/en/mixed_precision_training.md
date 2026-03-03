@@ -15,7 +15,7 @@ limitations under the License.
 
 # Mixed precision training
 
-Full precision (fp32) training stores and computes everything in 32-bits. Mixed precision uses a lower precision (fp16 or bf16) data type for the compute intensive computations in the forward and backward passes, while keeping a "main copy" of the fp32 weights for the optimizer update. This makes compute faster and halves weights and activation memory, and preserves training stability. 
+Full precision (fp32) training stores and computes everything in 32 bits. Mixed precision uses fp16 or bf16 for the compute-intensive forward and backward passes, while keeping an fp32 copy of the weights for the optimizer update. Compute is faster, weight and activation memory are reduced, and training stability is preserved.
 
 ```text
 ┌─────────────────────────────────────────────────────┐
@@ -39,7 +39,10 @@ Full precision (fp32) training stores and computes everything in 32-bits. Mixed 
 └─────────────────────────────────────────────────────┘
 ```
 
-Set [`~TrainingArguments.bf16`] or [`~TrainingArguments.fp16`]  to `True` to enable mixed precision training. These are both 16-bit data types but bf16 has the same exponent range as fp32, so it almost never runs into overflow issues. Use bf16 on more modern hardware like A100, H100, or Ampere GPUs and fallback to fp16 on hardware like V100 or T4.
+Set [`~TrainingArguments.bf16`] or [`~TrainingArguments.fp16`] to `True` to enable mixed precision training. Both are 16-bit types, but bf16 has the same exponent range as fp32 so it almost never overflows. Use bf16 on Ampere or newer GPUs (A100, H100) and fall back to fp16 on older hardware like V100 or T4.
+
+> [!WARNING]
+> Load the model in fp32, otherwise [autocast](https://docs.pytorch.org/docs/stable/amp.html#autocasting) becomes a no-op. Loading in bf16 or fp16 leaves no fp32 master copy for the optimizer to update from.
 
 ```py
 from transformers import TrainingArguments
@@ -48,9 +51,11 @@ args = TrainingArguments(..., bf16=True)
 args = TrainingArguments(..., fp16=True)
 ```
 
+If your model is numerically stable in bf16/fp16, you can skip mixed precision entirely and load and train directly in bf16/fp16. This avoids the fp32 copy of the weights in memory.
+
 ## tf32
 
-[tf32](https://blogs.nvidia.com/blog/tensorfloat-32-precision-format/) is a compute mode on Ampere GPUs that uses 10-bit mantissa for matmuls instead of 23-bits. This can give you a speedup, especially when paired with bf16 or fp16. PyTorch enables tf32 for matmuls by default on Ampere and newer GPUs, but setting it explicitly in [`TrainingArguments`] ensures it's active regardless of the PyTorch version or environment defaults.
+[tf32](https://blogs.nvidia.com/blog/tensorfloat-32-precision-format/) is a compute mode on Ampere GPUs that uses 10-bit mantissa for matmuls instead of 23-bits. This can give you a speedup, especially when paired with bf16/fp16. PyTorch enables tf32 for matmuls by default on Ampere and newer GPUs, but setting it explicitly in [`TrainingArguments`] ensures it's active regardless of the PyTorch version or environment defaults.
 
 ```py
 from transformers import TrainingArguments
