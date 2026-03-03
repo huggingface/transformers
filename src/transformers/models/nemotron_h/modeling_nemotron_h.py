@@ -1082,10 +1082,8 @@ class NemotronHBlock(GradientCheckpointingLayer):
                     cache_position=cache_position,
                     **kwargs,
                 )
-            elif self.block_type == "moe":
-                hidden_states = self.mixer(hidden_states)
             else:
-                raise ValueError(f"Invalid block_type: {self.block_type}")
+                hidden_states = self.mixer(hidden_states)
 
             hidden_states = residual + hidden_states
             return hidden_states
