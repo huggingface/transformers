@@ -1004,6 +1004,8 @@
         title: Kyutai Speech-To-Text
       - local: model_doc/lasr
         title: LASR
+      - local: model_doc/lfm2_audio
+        title: Lfm2Audio
       - local: model_doc/mimi
         title: Mimi
       - local: model_doc/mms

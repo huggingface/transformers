@@ -52,6 +52,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
         ("lasr_ctc", "LasrFeatureExtractor"),
         ("lasr_encoder", "LasrFeatureExtractor"),
+        ("lfm2_audio", "ParakeetFeatureExtractor"),
         ("markuplm", "MarkupLMFeatureExtractor"),
         ("mimi", "EncodecFeatureExtractor"),
         ("moonshine", "Wav2Vec2FeatureExtractor"),

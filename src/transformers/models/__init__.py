@@ -213,6 +213,7 @@ if TYPE_CHECKING:
     from .led import *
     from .levit import *
     from .lfm2 import *
+    from .lfm2_audio import *
     from .lfm2_moe import *
     from .lfm2_vl import *
     from .lightglue import *
