@@ -14,7 +14,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Container
+from collections.abc import Container
 
 import torch
 import torch.nn.functional as F
