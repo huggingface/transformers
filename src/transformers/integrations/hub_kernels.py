@@ -298,7 +298,7 @@ def is_kernel(attn_implementation: str | None) -> bool:
 
 
 def load_and_register_attn_kernel(
-    attn_implementation: str, attention_wrapper: Callable | None = None, load_kernels_from_hub: bool = False
+    attn_implementation: str, attention_wrapper: Callable | None = None, allow_all_kernels: bool = False
 ) -> ModuleType | None:
     """
     Load and register the kernel associated to `attn_implementation`.
@@ -309,9 +309,9 @@ def load_and_register_attn_kernel(
             have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
             They just prepare the arguments properly. This is mostly used for continious batching, where we
             want the `paged` wrapper, which calls the paged cache.
-        load_kernels_from_hub (`bool`, optional):
-            Whether to load kernels from unverified hub repos, if `attn_implementation` is a custom kernel outside
-            of the `kernels-community` hub repository.
+        allow_all_kernels (`bool`, optional):
+            Whether to load kernels from unverified hub repos, if it is a custom kernel outside of the `kernels-community`
+            hub repository.
     """
     from ..masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
     from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -340,7 +340,7 @@ def load_and_register_attn_kernel(
 
     # Load the kernel from hub
     try:
-        kernel = get_kernel(repo_id, revision=rev, load_kernels_from_hub=load_kernels_from_hub)
+        kernel = get_kernel(repo_id, revision=rev, allow_all_kernels=allow_all_kernels)
     except Exception as e:
         raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
     # correctly wrap the kernel
@@ -409,7 +409,7 @@ def get_kernel(
     kernel_name: str,
     revision: str | None = None,
     version: int | str | None = None,
-    load_kernels_from_hub: bool = False,
+    allow_all_kernels: bool = False,
 ) -> ModuleType:
     from .. import __version__
 
@@ -421,9 +421,9 @@ def get_kernel(
 
     repo_parent = kernel_name.split("/")[0]
     # all `kernels-community` repos are trusted by default!
-    if repo_parent != "kernels-community" and not load_kernels_from_hub:
+    if repo_parent != "kernels-community" and not allow_all_kernels:
         raise ValueError(
-            "You need to specify `load_kernels_from_hub=True` to use kernels outside of the `kernels-community` repository"
+            "You need to specify `allow_all_kernels=True` to use kernels outside of the `kernels-community` repository"
         )
 
     user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
@@ -461,24 +461,24 @@ def use_kernelized_func(module_names: list[Callable] | Callable):
 
 
 # Whether to allow hub kernels coming from untrusted repos, i.e. repos outside `kernels-community`
-ALLOW_HUB_KERNELS = False
+ALLOW_ALL_KERNELS = False
 
 
 @contextmanager
-def allow_hub_kernels():
+def allow_all_hub_kernels():
     """
     Context manager used to adjust the value of the global `ALLOW_HUB_KERNELS`. This is needed, as this argument
     cannot be forwarded directly to the `__init__` of the models, where we set the attention implementation.
     """
-    global ALLOW_HUB_KERNELS
+    global ALLOW_ALL_KERNELS
 
     try:
-        ALLOW_HUB_KERNELS = True
+        ALLOW_ALL_KERNELS = True
 
         yield
     finally:
         # Set back the original
-        ALLOW_HUB_KERNELS = False
+        ALLOW_ALL_KERNELS = False
 
 
 __all__ = [

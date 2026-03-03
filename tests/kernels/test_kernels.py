@@ -347,7 +347,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
     def test_trust_remote_code_for_attention_kernels(self):
         """
         Test that using an untrusted kernel (any repo outside `kernels-community`) as attention requires
-        passing an expplicit `load_kernels_from_hub=True`
+        passing an expplicit `allow_all_kernels=True`
         """
         from transformers import LlamaConfig, LlamaModel
 
@@ -362,7 +362,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
             # Test that an untrusted kernel will raise an error without the flag
             with self.assertRaisesRegex(
                 ValueError,
-                "You need to specify `load_kernels_from_hub=True` to use kernels outside of the `kernels-community` repository",
+                "You need to specify `allow_all_kernels=True` to use kernels outside of the `kernels-community` repository",
             ):
                 _ = LlamaModel.from_pretrained(tmpdirname, attn_implementation=untrusted_kernel)
 
@@ -372,7 +372,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
             # Test that it works with the flag - though the repo does not exist, so patch the dispatch
             with patch("transformers.modeling_utils.lazy_import_flash_attention", dummy_lazy_import):
                 model = LlamaModel.from_pretrained(
-                    tmpdirname, attn_implementation=untrusted_kernel, load_kernels_from_hub=True
+                    tmpdirname, attn_implementation=untrusted_kernel, allow_all_kernels=True
                 )
                 self.assertEqual(model.config._attn_implementation, untrusted_kernel)
 
