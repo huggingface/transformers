@@ -110,7 +110,7 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size_divisor"))
@@ -119,7 +119,7 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_pil(self):
         # Initialize image_processing
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
@@ -132,7 +132,7 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_numpy(self):
         # Initialize image_processing
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
@@ -146,7 +146,7 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_pytorch(self):
         # Initialize image_processing
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
@@ -159,7 +159,7 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
 
     def test_call_numpy_4_channels(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors

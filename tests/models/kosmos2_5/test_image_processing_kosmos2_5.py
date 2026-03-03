@@ -177,7 +177,7 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         )
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_normalize"))
             self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
@@ -185,7 +185,7 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_expected_patches(self):
         dummy_image = self.image_processor_tester.prepare_dummy_image()
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             max_patch = 2048
 
@@ -206,7 +206,7 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             * self.image_processor_tester.num_channels
         ) + 2
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             for max_patch in self.image_processor_tester.max_patches:
                 # Test not batched input
@@ -238,7 +238,7 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             * self.image_processor_tester.num_channels
         ) + 2
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             for max_patch in self.image_processor_tester.max_patches:
                 # Test not batched input
@@ -271,7 +271,7 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             * self.image_processor_tester.num_channels
         ) + 2
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             for max_patch in self.image_processor_tester.max_patches:
                 # Test not batched input
@@ -305,7 +305,7 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             * self.image_processor_tester.num_channels
         ) + 2
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             for max_patch in self.image_processor_tester.max_patches:
                 # Test not batched input
@@ -376,7 +376,7 @@ class Kosmos2_5ImageProcessingTestFourChannels(ImageProcessingTestMixin, unittes
         return super().test_can_compile_torchvision_backend()
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_normalize"))
             self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
@@ -393,7 +393,7 @@ class Kosmos2_5ImageProcessingTestFourChannels(ImageProcessingTestMixin, unittes
             * (self.image_processor_tester.num_channels - 1)
         ) + 2
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             for max_patch in self.image_processor_tester.max_patches:
                 # Test not batched input

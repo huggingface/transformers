@@ -24,7 +24,11 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+
+
+if is_torch_available():
+    import torch
 
 
 if is_torchvision_available():

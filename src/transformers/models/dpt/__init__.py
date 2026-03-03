@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_dpt import *
-    from .feature_extraction_dpt import *
     from .image_processing_dpt import *
     from .image_processing_pil_dpt import *
     from .modeling_dpt import *

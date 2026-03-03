@@ -18,18 +18,8 @@ import torch
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import (
-    ChannelDimension,
-    group_images_by_shape,
-    reorder_images,
-    to_pil_image,
-)
-from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-)
+from ...image_transforms import group_images_by_shape, reorder_images, to_pil_image
+from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,

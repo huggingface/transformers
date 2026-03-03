@@ -106,7 +106,7 @@ class Siglip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Ignore copy
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "resample"))
@@ -120,7 +120,7 @@ class Siglip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Ignore copy
     def test_image_processor_from_dict_with_kwargs(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.max_num_patches, 256)
             self.assertEqual(image_processor.patch_size, 16)

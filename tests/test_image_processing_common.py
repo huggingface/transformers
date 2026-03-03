@@ -218,14 +218,14 @@ class ImageProcessingTestMixin:
             self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
 
     def test_image_processor_to_json_string(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             obj = json.loads(image_processor.to_json_string())
             for key, value in self.image_processor_dict.items():
                 self.assertEqual(obj[key], value)
 
     def test_image_processor_to_json_file(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor_first = image_processing_class(**self.image_processor_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -236,7 +236,7 @@ class ImageProcessingTestMixin:
             self.assertEqual(image_processor_second.to_dict(), image_processor_first.to_dict())
 
     def test_image_processor_from_and_save_pretrained(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor_first = image_processing_class(**self.image_processor_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -345,14 +345,14 @@ class ImageProcessingTestMixin:
                 )
 
     def test_init_without_params(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class()
             self.assertIsNotNone(image_processor)
 
     @require_torch
     @require_vision
     def test_cast_dtype_device(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             if self.test_cast_dtype is not None:
                 # Initialize image_processor
                 image_processor = image_processing_class(**self.image_processor_dict)
@@ -386,7 +386,7 @@ class ImageProcessingTestMixin:
                 self.assertEqual(encoding.input_ids.dtype, torch.long)
 
     def test_call_pil(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -407,7 +407,7 @@ class ImageProcessingTestMixin:
             )
 
     def test_call_numpy(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -428,7 +428,7 @@ class ImageProcessingTestMixin:
             )
 
     def test_call_pytorch(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -451,7 +451,7 @@ class ImageProcessingTestMixin:
             )
 
     def test_call_numpy_4_channels(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Test that can process images which have an arbitrary number of channels
             # Initialize image_processing
             image_processor = image_processing_class(**self.image_processor_dict)
@@ -487,7 +487,7 @@ class ImageProcessingTestMixin:
     def test_image_processor_preprocess_arguments(self):
         is_tested = False
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # validation done by _valid_processor_keys attribute

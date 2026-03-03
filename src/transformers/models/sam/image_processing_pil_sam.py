@@ -14,9 +14,10 @@
 """Image processor class for SAM."""
 
 import math
+from collections.abc import Iterable
 from copy import deepcopy
 from itertools import product
-from typing import Any, Iterable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 

@@ -94,7 +94,7 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "size"))
@@ -176,7 +176,7 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertEqual(processed_images.shape[-2:], (20, 20))
 
     def test_get_num_patches_without_images(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
             self.assertEqual(num_patches, 1)

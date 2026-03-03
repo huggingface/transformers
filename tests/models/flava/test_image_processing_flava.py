@@ -181,7 +181,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -204,7 +204,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "codebook_image_std"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 224, "width": 224})
             self.assertEqual(image_processor.crop_size, {"height": 224, "width": 224})
@@ -220,7 +220,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(image_processor.codebook_crop_size, {"height": 66, "width": 66})
 
     def test_call_pil(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -259,7 +259,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def _test_call_framework(self, instance_class, prepare_kwargs):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random tensors
@@ -357,7 +357,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self._test_call_framework(torch.Tensor, prepare_kwargs={"torchify": True})
 
     def test_masking(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             random.seed(1234)
             image_processing = image_processing_class(**self.image_processor_dict)
@@ -368,7 +368,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(encoded_images.bool_masked_pos.sum().item(), 75)
 
     def test_codebook_pixels(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -422,9 +422,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         reference_backend = backend_names[0]
         reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(
-                reference_encoding.pixel_values, encodings[backend_name].pixel_values
-            )
+            self._assert_tensors_equivalence(reference_encoding.pixel_values, encodings[backend_name].pixel_values)
             self._assert_tensors_equivalence(
                 reference_encoding.codebook_pixel_values, encodings[backend_name].codebook_pixel_values
             )

@@ -29,8 +29,19 @@ if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
 
-def _num_image_tokens(image_size: tuple[int, int], patch_size: tuple[int, int]) -> tuple[int, int]:
-    """Calculate the number of image tokens given the image size and patch size."""
+def _num_image_tokens(image_size: tuple[int, int], patch_size: tuple[int, int]) -> int:
+    """
+    Calculate the number of image tokens given the image size and patch size.
+
+    Args:
+        image_size (`tuple[int, int]`):
+            The size of the image as `(height, width)`.
+        patch_size (`tuple[int, int]`):
+            The patch size as `(height, width)`.
+
+    Returns:
+        `int`: The number of image tokens.
+    """
     height, width = image_size
     patch_height, patch_width = patch_size if isinstance(patch_size, (tuple, list)) else (patch_size, patch_size)
     num_width_tokens = (width - 1) // patch_width + 1
@@ -39,18 +50,38 @@ def _num_image_tokens(image_size: tuple[int, int], patch_size: tuple[int, int]) 
 
 
 def get_resize_output_image_size(
-    input_image,
-    size: int | tuple[int, int] | list[int],
-    patch_size: int | tuple[int, int] | list[int],
+    input_image: ImageInput,
+    size: int | tuple[int, int] | list[int] | tuple[int],
+    patch_size: int | tuple[int, int] | list[int] | tuple[int],
     input_data_format: str | ChannelDimension | None = None,
-) -> tuple[int, int]:
-    """Find the target (height, width) dimension of the output image after resizing."""
+) -> tuple:
+    """
+    Find the target (height, width) dimension of the output image after resizing given the input image and the desired
+    size.
+
+    Args:
+        input_image (`ImageInput`):
+            The image to resize.
+        size (`int` or `tuple[int, int]`):
+            Max image size an input image can be. Must be a dictionary with the key "longest_edge".
+        patch_size (`int` or `tuple[int, int]`):
+            The patch_size as `(height, width)` to use for resizing the image. If patch_size is an integer, `(patch_size, patch_size)`
+            will be used
+        input_data_format (`ChannelDimension`, *optional*):
+            The channel dimension format of the input image. If unset, will use the inferred format from the input.
+
+    Returns:
+        `tuple`: The target (height, width) dimension of the output image after resizing.
+    """
     max_height, max_width = size if isinstance(size, (tuple, list)) else (size, size)
     patch_height, patch_width = patch_size if isinstance(patch_size, (tuple, list)) else (patch_size, patch_size)
     height, width = get_image_size(input_image, input_data_format)
 
     ratio = max(height / max_height, width / max_width)
+
     if ratio > 1:
+        # Original implementation uses `round` which utilises bankers rounding, which can lead to surprising results
+        # Here we use floor to ensure the image is always smaller than the given "longest_edge"
         height = int(math.floor(height / ratio))
         width = int(math.floor(width / ratio))
 

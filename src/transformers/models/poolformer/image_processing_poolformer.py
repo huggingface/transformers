@@ -24,11 +24,15 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
 
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
+
+
+if is_torch_available():
+    import torch
 
 
 class PoolFormerImageProcessorKwargs(ImagesKwargs, total=False):

@@ -13,8 +13,6 @@
 # limitations under the License.
 """PIL Image processor class for Mllama."""
 
-from typing import Optional
-
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -249,7 +247,7 @@ class MllamaImageProcessorPil(PilBackend):
         image: np.ndarray,
         size: SizeDict,
         max_image_tiles: int,
-        resample: Optional[PILImageResampling] = None,
+        resample: PILImageResampling | None = None,
     ) -> tuple[np.ndarray, tuple[int, int]]:
         """
         Resizes an image to fit within a tiled canvas while maintaining its aspect ratio.
@@ -300,7 +298,7 @@ class MllamaImageProcessorPil(PilBackend):
         self,
         images: list[list[np.ndarray]],
         size: SizeDict,
-        resample: Optional[PILImageResampling],
+        resample: PILImageResampling | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

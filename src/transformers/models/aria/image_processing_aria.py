@@ -22,7 +22,14 @@ from collections.abc import Iterable
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_patch_output_size, select_best_resolution
-from ...image_transforms import PaddingMode, convert_to_rgb, pad, resize, to_channel_dimension_format
+from ...image_transforms import (
+    PaddingMode,
+    convert_to_rgb,
+    divide_to_patches,
+    pad,
+    resize,
+    to_channel_dimension_format,
+)
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
@@ -39,34 +46,6 @@ from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
-
-
-def divide_to_patches(image: np.ndarray, patch_size: int, input_data_format) -> list[np.ndarray]:
-    """
-    Divides an image into patches of a specified size.
-
-    Args:
-        image (`np.ndarray`):
-            The input image.
-        patch_size (`int`):
-            The size of each patch.
-        input_data_format (`ChannelDimension` or `str`):
-            The channel dimension format of the input image.
-
-    Returns:
-        list: A list of np.ndarray representing the patches.
-    """
-    patches = []
-    height, width = get_image_size(image, channel_dim=input_data_format)
-    for i in range(0, height, patch_size):
-        for j in range(0, width, patch_size):
-            if input_data_format == ChannelDimension.LAST:
-                patch = image[i : i + patch_size, j : j + patch_size]
-            else:
-                patch = image[:, i : i + patch_size, j : j + patch_size]
-            patches.append(patch)
-
-    return patches
 
 
 class AriaImageProcessor(BaseImageProcessor):

@@ -21,7 +21,6 @@ from transformers.utils.generic import TensorType
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     get_resize_output_image_size,
-    rescale,
     resize,
     to_channel_dimension_format,
 )
@@ -180,46 +179,18 @@ class VivitImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-    # Copied from transformers.models.efficientnet.image_processing_efficientnet.EfficientNetImageProcessor.rescale
+    # Copied from transformers.models.efficientnet.image_processing_pil_efficientnet.EfficientNetImageProcessorPil.rescale
     def rescale(
         self,
         image: np.ndarray,
-        scale: int | float,
-        offset: bool = True,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-        **kwargs,
-    ):
-        """
-        Rescale an image by a scale factor.
-
-        If `offset` is `True`, the image has its values rescaled by `scale` and then offset by 1. If `scale` is
-        1/127.5, the image is rescaled between [-1, 1].
-            image = image * scale - 1
-
-        If `offset` is `False`, and `scale` is 1/255, the image is rescaled between [0, 1].
-            image = image * scale
-
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
-            offset (`bool`, *optional*):
-                Whether to scale the image in both negative and positive directions.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
-        """
-        rescaled_image = rescale(
-            image, scale=scale, data_format=data_format, input_data_format=input_data_format, **kwargs
-        )
-
+        scale: float,
+        offset: bool = False,
+    ) -> np.ndarray:
+        """Rescale by scale; if offset=True then image = image * scale - 1."""
+        rescaled = super().rescale(image, scale=scale)
         if offset:
-            rescaled_image = rescaled_image - 1
-
-        return rescaled_image
+            rescaled -= 1
+        return rescaled
 
     def _preprocess_image(
         self,

@@ -55,6 +55,10 @@ from ..llava_next_video.modeling_llava_next_video import (
 logger = logging.get_logger(__name__)
 
 
+class LlavaOnevisionImageProcessorKwargs(LlavaNextImageProcessorKwargs):
+    pass
+
+
 class LlavaOnevisionImageProcessor(LlavaNextImageProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
@@ -114,7 +118,7 @@ class LlavaOnevisionImageProcessor(LlavaNextImageProcessor):
         return padded_images
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaNextImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionImageProcessorKwargs]) -> BatchFeature:
         if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
             # if the first element is a list, we assume that all elements are lists
             images = [x for x in images if x]  # handle text-only case
@@ -275,7 +279,7 @@ class LlavaOnevisionImageProcessorPil(LlavaNextImageProcessorPil):
         return result
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaNextImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionImageProcessorKwargs]) -> BatchFeature:
         if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
             # if the first element is a list, we assume that all elements are lists
             images = [x for x in images if x]  # handle text-only case
@@ -370,14 +374,14 @@ class LlavaOnevisionImageProcessorPil(LlavaNextImageProcessorPil):
         if do_pad:
             processed_images = self._pad_for_batching(processed_images)
 
-            return BatchFeature(
-                data={
-                    "pixel_values": processed_images,
-                    "image_sizes": image_sizes,
-                    "batch_num_images": batch_num_images,
-                },
-                tensor_type=return_tensors,
-            )
+        return BatchFeature(
+            data={
+                "pixel_values": processed_images,
+                "image_sizes": image_sizes,
+                "batch_num_images": batch_num_images,
+            },
+            tensor_type=return_tensors,
+        )
 
 
 class LlavaOnevisionModelOutputWithPast(LlavaNextVideoModelOutputWithPast):

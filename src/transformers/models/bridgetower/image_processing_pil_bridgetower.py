@@ -13,8 +13,6 @@
 # limitations under the License.
 """Image processor class for BridgeTower."""
 
-from typing import Union
-
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -22,10 +20,8 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
-    ChannelDimension,
     PILImageResampling,
     SizeDict,
-    get_image_size,
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available

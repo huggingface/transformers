@@ -102,7 +102,7 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processing(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -111,7 +111,7 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             self.assertTrue(hasattr(image_processing, "do_grayscale"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 480, "width": 640})
 
@@ -125,7 +125,7 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         pass
 
     def test_input_image_properly_converted_to_grayscale(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs()
             pre_processed_images = image_processor.preprocess(image_inputs)
@@ -153,7 +153,7 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 self.assertTrue(all_below_image_size)
                 self.assertTrue(all_above_zero)
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs()
             pre_processed_images = image_processor.preprocess(image_inputs, return_tensors="pt")

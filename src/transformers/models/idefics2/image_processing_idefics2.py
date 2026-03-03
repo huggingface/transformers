@@ -204,10 +204,6 @@ class Idefics2ImageProcessor(TorchvisionBackend):
 
         return image, pixel_mask
 
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Idefics2ImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
     def _preprocess(
         self,
         images: list[list["torch.Tensor"]],

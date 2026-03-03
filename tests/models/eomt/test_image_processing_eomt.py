@@ -124,7 +124,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -136,7 +136,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "resample"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 18})
 
@@ -144,7 +144,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(image_processor.size, {"shortest_edge": 42})
 
     def test_call_numpy(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -167,7 +167,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         pass
 
     def test_call_pil(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
             for image in image_inputs:
@@ -184,7 +184,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_pytorch(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
@@ -224,7 +224,9 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Check whether 99.9% of mask_labels values match or not.
             match_ratio = (reference_mask_labels[0] == encodings[backend_name].mask_labels[0]).float().mean().item()
             self.assertGreaterEqual(
-                match_ratio, 0.999, f"Mask labels do not match between {reference_backend} and {backend_name} image processors."
+                match_ratio,
+                0.999,
+                f"Mask labels do not match between {reference_backend} and {backend_name} image processors.",
             )
 
     def test_slow_fast_equivalence_batched(self):
@@ -255,13 +257,17 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
             for idx in range(len(dummy_maps)):
-                match_ratio = (reference_mask_labels[idx] == encodings[backend_name].mask_labels[idx]).float().mean().item()
+                match_ratio = (
+                    (reference_mask_labels[idx] == encodings[backend_name].mask_labels[idx]).float().mean().item()
+                )
                 self.assertGreaterEqual(
-                    match_ratio, 0.999, f"Mask labels do not match between {reference_backend} and {backend_name} image processors."
+                    match_ratio,
+                    0.999,
+                    f"Mask labels do not match between {reference_backend} and {backend_name} image processors.",
                 )
 
     def test_post_process_semantic_segmentation(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             processor = image_processing_class(**self.image_processor_dict)
             # Set longest_edge to None to test for semantic segmentatiom.
             processor.size = {"shortest_edge": 18, "longest_edge": None}
@@ -273,13 +279,15 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             target_sizes = [image.size[::-1]]
 
             # For semantic segmentation, the BS of output is 2 coz, two patches are created for the image.
-            outputs = self.image_processor_tester.prepare_fake_eomt_outputs(inputs["pixel_values"].shape[0], patch_offsets)
+            outputs = self.image_processor_tester.prepare_fake_eomt_outputs(
+                inputs["pixel_values"].shape[0], patch_offsets
+            )
             segmentation = processor.post_process_semantic_segmentation(outputs, target_sizes)
 
             self.assertEqual(segmentation[0].shape, (image.height, image.width))
 
     def test_post_process_panoptic_segmentation(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             processor = image_processing_class(**self.image_processor_dict)
             image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
 
@@ -297,7 +305,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertEqual(el["segmentation"].shape, (image.height, image.width))
 
     def test_post_process_instance_segmentation(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             processor = image_processing_class(**self.image_processor_dict)
             image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
 

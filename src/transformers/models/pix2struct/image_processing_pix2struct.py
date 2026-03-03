@@ -15,7 +15,7 @@
 
 import io
 import textwrap
-from typing import Optional, Union
+from typing import Union
 
 import torch
 import torchvision.transforms.v2.functional as tvF
@@ -347,7 +347,7 @@ class Pix2StructImageProcessor(TorchvisionBackend):
         header_text: str | list[str] | None = None,
         do_convert_rgb: bool = True,
         input_data_format: ChannelDimension = ChannelDimension.FIRST,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[Pix2StructImageProcessorKwargs],
     ) -> BatchFeature:
         """

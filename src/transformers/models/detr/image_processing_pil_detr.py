@@ -667,7 +667,6 @@ class DetrImageProcessorPil(PilBackend):
             ]
         return encoded_inputs
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_object_detection
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] | None = None
     ):
@@ -726,7 +725,6 @@ class DetrImageProcessorPil(PilBackend):
 
         return results
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_semantic_segmentation
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple[int, int]] | None = None):
         """
         Converts the output of [`DetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
@@ -779,7 +777,6 @@ class DetrImageProcessorPil(PilBackend):
 
         return semantic_segmentation
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_instance_segmentation
     def post_process_instance_segmentation(
         self,
         outputs,
@@ -868,7 +865,6 @@ class DetrImageProcessorPil(PilBackend):
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_panoptic_segmentation
     def post_process_panoptic_segmentation(
         self,
         outputs,

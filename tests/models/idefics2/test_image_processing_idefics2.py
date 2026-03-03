@@ -179,7 +179,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
             self.assertTrue(hasattr(image_processing, "do_resize"))
@@ -193,7 +193,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_image_splitting"))
 
     def test_call_numpy(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for sample_images in image_inputs:
@@ -211,7 +211,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_numpy_4_channels(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor_dict = self.image_processor_dict.copy()
             image_processor_dict["image_mean"] = [0.5, 0.5, 0.5, 0.5]
             image_processor_dict["image_std"] = [0.5, 0.5, 0.5, 0.5]
@@ -238,7 +238,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pil(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for images in image_inputs:
@@ -256,7 +256,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pytorch(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
@@ -276,7 +276,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_image_splitting(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor_dict = self.image_processor_dict.copy()
             image_processor_dict["do_image_splitting"] = True
             image_processing = image_processing_class(**image_processor_dict)
@@ -298,7 +298,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertEqual(result.pixel_values.shape[1], self.image_processor_tester.num_channels)
 
     def test_pixel_attention_mask(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor_dict = self.image_processor_dict.copy()
             image_processor_dict["do_pad"] = True
             image_processing = image_processing_class(**image_processor_dict)
@@ -320,7 +320,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertNotIn("pixel_attention_mask", result)
 
     def test_convert_rgb(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             rgba_image = Image.new("RGBA", (100, 100), (255, 0, 0, 128))
 
             image_processor_dict = self.image_processor_dict.copy()

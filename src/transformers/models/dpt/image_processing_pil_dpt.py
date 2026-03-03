@@ -38,7 +38,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from .image_processing_dpt import DPTImageProcessorKwargs, get_resize_output_image_size_dpt
+from .image_processing_dpt import DPTImageProcessorKwargs, get_resize_output_image_size
 
 
 if TYPE_CHECKING:
@@ -148,7 +148,7 @@ class DPTImageProcessorPil(PilBackend):
         """Resize with aspect ratio and multiple constraints."""
         if size.height is None or size.width is None:
             raise ValueError(f"Size must contain 'height' and 'width' keys. Got {size.keys()}")
-        output_size = get_resize_output_image_size_dpt(
+        output_size = get_resize_output_image_size(
             image,
             output_size=(size.height, size.width),
             keep_aspect_ratio=keep_aspect_ratio,

@@ -326,16 +326,10 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     """
     Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
     as is.
-    Args:
-        image (Image):
-            The image to convert.
     """
-
-    if not isinstance(image, Image.Image):
+    if not is_vision_available() or not isinstance(image, Image.Image):
         return image
 
-    # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background
-    # for transparent images. The call to `alpha_composite` handles this case
     if image.mode == "RGB":
         return image
 

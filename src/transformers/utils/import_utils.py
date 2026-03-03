@@ -2087,8 +2087,8 @@ class _LazyModule(ModuleType):
                         )
                         setattr(self, name, pil_value)
                         return pil_value
-                    except Exception:
-                        pass  # Fall through to the normal Placeholder/error behaviour
+                    except Exception as e:
+                        logger.debug(f"Could not load PIL fallback {pil_name}: {e}")
 
             class Placeholder(metaclass=DummyObject):
                 _backends = missing_backends
@@ -2231,13 +2231,37 @@ class _LazyModule(ModuleType):
             if name.endswith("ImageProcessorFast"):
                 fallback_name = name[:-4]  # Remove "Fast"
                 if fallback_name in self._class_to_module:
+                    logger.warning_once(
+                        f"`{name}` is deprecated. The `Fast` suffix for image processors has been removed; "
+                        f"use `{fallback_name}` instead."
+                    )
+                    if fallback_name in self._object_missing_backend:
+                        # The base processor requires backends that are not installed.
+                        # Do NOT silently fall back to PIL here — the PIL fallback is only
+                        # for backward compat when the base name is imported directly.
+                        # Return a Placeholder that raises at instantiation, consistent with
+                        # how missing backends are handled everywhere else.
+                        missing_backends = self._object_missing_backend[fallback_name]
+
+                        class Placeholder(metaclass=DummyObject):
+                            _backends = missing_backends
+
+                            def __init__(self, *args, **kwargs):
+                                requires_backends(self, missing_backends)
+
+                            def call(self, *args, **kwargs):
+                                pass
+
+                        Placeholder.__name__ = fallback_name
+                        module_name = self._class_to_module[fallback_name]
+                        Placeholder.__module__ = (
+                            module_name if module_name.startswith("transformers.") else f"transformers.{module_name}"
+                        )
+                        setattr(self, name, Placeholder)
+                        return Placeholder
                     try:
                         fb_module = self._get_module(self._class_to_module[fallback_name])
                         value = getattr(fb_module, fallback_name)
-                        logger.warning_once(
-                            f"`{name}` is deprecated. The `Fast` suffix for image processors has been removed; "
-                            f"use `{fallback_name}` instead."
-                        )
                         setattr(self, fallback_name, value)
                         setattr(self, name, value)
                         return value

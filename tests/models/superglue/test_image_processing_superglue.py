@@ -128,7 +128,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processing(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -137,7 +137,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_grayscale"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 480, "width": 640})
 
@@ -151,7 +151,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         pass
 
     def test_number_and_format_of_images_in_input(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
 
             # Cases where the number of images and the format of lists in the input is correct
@@ -199,7 +199,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         ],
     )
     def test_valid_image_shape_in_input(self, image_input, output):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             image_processed = image_processor.preprocess(image_input, return_tensors="pt")
             self.assertEqual(output, tuple(image_processed["pixel_values"].shape))
@@ -216,14 +216,14 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         ],
     )
     def test_invalid_image_shape_in_input(self, image_input):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             with self.assertRaises(ValueError) as cm:
                 image_processor(image_input, return_tensors="pt")
             self.assertEqual(ValueError, cm.exception.__class__)
 
     def test_input_images_properly_paired(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs()
             pre_processed_images = image_processor(image_inputs, return_tensors="pt")
@@ -231,14 +231,14 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(pre_processed_images["pixel_values"].shape[1], 2)
 
     def test_input_not_paired_images_raises_error(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(pairs=False)
             with self.assertRaises(ValueError):
                 image_processor(image_inputs[0])
 
     def test_input_image_properly_converted_to_grayscale(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs()
             pre_processed_images = image_processor(image_inputs, return_tensors="pt")
@@ -252,7 +252,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test overwritten because SuperGlueImageProcessor combines images by pair to feed it into SuperGlue
 
         # Initialize image_processing
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
             image_pairs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
@@ -282,7 +282,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test overwritten because SuperGlueImageProcessor combines images by pair to feed it into SuperGlue
 
         # Initialize image_processing
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
             image_pairs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
@@ -310,7 +310,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test overwritten because SuperGlueImageProcessor combines images by pair to feed it into SuperGlue
 
         # Initialize image_processing
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
             image_pairs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
@@ -337,7 +337,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image_processing(image_pairs, return_tensors="pt").pixel_values
 
     def test_image_processor_with_list_of_two_images(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
 
             image_pairs = self.image_processor_tester.prepare_image_inputs(
@@ -376,7 +376,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 all_scores_different_from_minus_one = torch.all(post_processed_output["matching_scores"] != -1)
                 self.assertTrue(all_scores_different_from_minus_one)
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs()
             pre_processed_images = image_processor.preprocess(image_inputs, return_tensors="pt")
@@ -404,7 +404,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         This tests the edge case where a match index points beyond the actual number of real keypoints,
         which would cause an out-of-bounds error without proper filtering.
         """
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
 
             # Create a specific scenario with intentional padding issues

@@ -13,7 +13,7 @@
 # limitations under the License.
 """PIL Image processor class for Janus."""
 
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 import numpy as np
 
@@ -76,7 +76,7 @@ class JanusImageProcessorPil(PilBackend):
         image: np.ndarray,
         size: SizeDict,
         min_size: int,
-        resample: Optional[PILImageResampling] = None,
+        resample: PILImageResampling | None = None,
         **kwargs,
     ) -> np.ndarray:
         """Resize so largest side becomes size, with min_size floor."""
@@ -140,7 +140,7 @@ class JanusImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: Optional[PILImageResampling],
+        resample: PILImageResampling | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

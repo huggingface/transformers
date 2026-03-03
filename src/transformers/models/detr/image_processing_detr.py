@@ -856,7 +856,6 @@ class DetrImageProcessor(TorchvisionBackend):
 
         return results
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_semantic_segmentation
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple[int, int]] | None = None):
         """
         Converts the output of [`DetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
@@ -904,7 +903,6 @@ class DetrImageProcessor(TorchvisionBackend):
 
         return semantic_segmentation
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_instance_segmentation
     def post_process_instance_segmentation(
         self,
         outputs,
@@ -988,7 +986,6 @@ class DetrImageProcessor(TorchvisionBackend):
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_panoptic_segmentation
     def post_process_panoptic_segmentation(
         self,
         outputs,

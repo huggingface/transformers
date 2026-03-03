@@ -87,7 +87,7 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -101,7 +101,7 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
             self.assertTrue(hasattr(image_processing, "prompt_scale_to_meter"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
@@ -110,7 +110,7 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
 
     def test_keep_aspect_ratio(self):
         size = {"height": 512, "width": 512}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
 
             image = np.zeros((489, 640, 3))
@@ -121,7 +121,7 @@ class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.
 
     def test_prompt_depth_processing(self):
         size = {"height": 756, "width": 756}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
 
             image = np.zeros((756, 1008, 3))

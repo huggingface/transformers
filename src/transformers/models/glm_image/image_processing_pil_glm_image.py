@@ -27,12 +27,8 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import PilBackend
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+from ...utils import TensorType, auto_docstring, is_torchvision_available
 from .image_processing_glm_image import GlmImageImageProcessorKwargs, smart_resize
-
-
-if is_torch_available():
-    pass
 
 
 if is_torchvision_available():
@@ -174,12 +170,6 @@ class GlmImageImageProcessorPil(PilBackend):
 
         pixel_values = np.concatenate(all_patches, axis=0)
         image_grid_thw = np.array(all_grids, dtype=np.int64)
-
-        if return_tensors == "pt":
-            import torch
-
-            pixel_values = torch.from_numpy(pixel_values)
-            image_grid_thw = torch.from_numpy(image_grid_thw)
 
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors

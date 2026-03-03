@@ -15,12 +15,12 @@
 
 import math
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import torch
 
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_base import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -28,19 +28,16 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    requires_backends,
-)
-from ..beit.image_processing_beit_fast import BeitImageProcessorFast
+from ...utils import TensorType, auto_docstring, is_torchvision_available, requires_backends
+from ..beit.image_processing_beit import BeitImageProcessor
 from .image_processing_dpt import DPTImageProcessorKwargs
 
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-import torchvision.transforms.v2.functional as tvF
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 
 def get_resize_output_image_size(
@@ -83,7 +80,7 @@ def get_resize_output_image_size(
 
 
 @auto_docstring
-class DPTImageProcessorFast(BeitImageProcessorFast):
+class DPTImageProcessor(BeitImageProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -105,7 +102,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"] = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         antialias: bool = True,
         ensure_multiple_of: int | None = 1,
         keep_aspect_ratio: bool = False,
@@ -139,9 +136,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
             keep_aspect_ratio=keep_aspect_ratio,
             multiple=ensure_multiple_of,
         )
-        return BaseImageProcessorFast.resize(
-            self, image, output_size, interpolation=interpolation, antialias=antialias
-        )
+        return TorchvisionBackend.resize(self, image, output_size, resample=resample, antialias=antialias)
 
     def pad_image(
         self,
@@ -177,7 +172,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         do_reduce_labels: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -204,7 +199,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
                 stacked_images = self.resize(
                     image=stacked_images,
                     size=size,
-                    interpolation=interpolation,
+                    resample=resample,
                     ensure_multiple_of=ensure_multiple_of,
                     keep_aspect_ratio=keep_aspect_ratio,
                 )
@@ -221,7 +216,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
             if do_pad:
                 stacked_images = self.pad_image(stacked_images, size_divisor)
             # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
+            stacked_images = self._rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images
@@ -271,4 +266,4 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         return results
 
 
-__all__ = ["DPTImageProcessorFast"]
+__all__ = ["DPTImageProcessor"]

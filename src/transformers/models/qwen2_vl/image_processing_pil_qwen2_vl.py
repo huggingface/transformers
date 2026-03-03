@@ -13,7 +13,7 @@
 # limitations under the License.
 """PIL Image processor class for Qwen2-VL."""
 
-from typing import Iterable
+from collections.abc import Iterable
 
 import numpy as np
 

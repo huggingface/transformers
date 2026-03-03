@@ -145,7 +145,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -156,7 +156,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
             self.assertTrue(hasattr(image_processing, "size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
             self.assertEqual(image_processor.do_pad, True)
@@ -173,7 +173,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
 
         target = {"image_id": 39769, "annotations": target}
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # encode them
             image_processing = image_processing_class()
             encoding = image_processing(images=image, annotations=target, return_tensors="pt")
@@ -220,7 +220,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
 
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # encode them
             image_processing = image_processing_class(format="coco_panoptic")
             encoding = image_processing(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
@@ -288,7 +288,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
         images = [image_0, image_1]
         annotations = [annotations_0, annotations_1]
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class()
             encoding = image_processing(
                 images=images,
@@ -409,7 +409,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
         images = [image_0, image_1]
         annotations = [annotation_0, annotation_1]
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # encode them
             image_processing = image_processing_class(format="coco_panoptic")
             encoding = image_processing(
@@ -506,7 +506,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
 
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_max_width_max_height_resizing_and_pad_strategy with Detr->DeformableDetr
     def test_max_width_max_height_resizing_and_pad_strategy(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_1 = torch.ones([200, 100, 3], dtype=torch.uint8)
 
             # do_pad=False, max_height=100, max_width=100, image=200x100 -> 100x50
@@ -553,7 +553,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
             self.assertEqual(inputs["pixel_values"].shape, torch.Size([2, 3, 150, 100]))
 
     def test_longest_edge_shortest_edge_resizing_strategy(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_1 = torch.ones([958, 653, 3], dtype=torch.uint8)
 
             # max size is set; width < height;

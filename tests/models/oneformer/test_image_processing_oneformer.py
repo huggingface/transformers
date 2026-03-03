@@ -176,7 +176,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_proc_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "image_mean"))
             self.assertTrue(hasattr(image_processor, "image_std"))
@@ -226,7 +226,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_with_segmentation_maps(self):
         def common(is_instance_map=False, segmentation_type=None):
-            for backend_name, image_processing_class in self.image_processing_classes.items():
+            for image_processing_class in self.image_processing_classes.values():
                 inputs = self.comm_get_image_processor_inputs(
                     with_segmentation_maps=True,
                     is_instance_map=is_instance_map,
@@ -263,7 +263,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(rle[1], 45)
 
     def test_post_process_semantic_segmentation(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             feature_extractor = image_processing_class(
                 num_labels=self.image_processor_tester.num_classes,
                 max_seq_length=77,
@@ -291,7 +291,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(segmentation[0].shape, target_sizes[0])
 
     def test_post_process_instance_segmentation(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(
                 num_labels=self.image_processor_tester.num_classes,
                 max_seq_length=77,
@@ -326,7 +326,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertEqual(el["segmentation"].shape, (1, 4))
 
     def test_post_process_panoptic_segmentation(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(
                 num_labels=self.image_processor_tester.num_classes,
                 max_seq_length=77,
@@ -355,7 +355,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             "2": {"isthing": 1, "name": "baz"},
         }
         metadata = prepare_metadata(class_info)
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             with tempfile.TemporaryDirectory() as tmpdirname:
                 metadata_path = os.path.join(tmpdirname, "metadata.json")
                 with open(metadata_path, "w") as f:

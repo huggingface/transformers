@@ -94,7 +94,7 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "size"))
@@ -104,7 +104,7 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
     def test_call_pil(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -121,7 +121,7 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), (70, 3, 30, 30))
 
     def test_call_numpy(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -138,7 +138,7 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), (70, 3, 30, 30))
 
     def test_call_pytorch(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -156,7 +156,7 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), (70, 3, 30, 30))
 
     def test_call_numpy_4_channels(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Test that can process images which have an arbitrary number of channels
             # Initialize image_processing
             image_processor = image_processing_class(**self.image_processor_dict)
@@ -193,7 +193,7 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         If row/column are swapped, the image would be resized to wrong dimensions and patches
         would not match the original content.
         """
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             patch_size = 64
             image_processor = image_processing_class(
                 do_resize=True,
@@ -269,7 +269,7 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         the expected grid layout. If rows/columns are swapped, the wrong grid would be
         chosen for asymmetric images.
         """
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             patch_size = 64
             image_processor = image_processing_class(
                 size={"height": patch_size, "width": patch_size},

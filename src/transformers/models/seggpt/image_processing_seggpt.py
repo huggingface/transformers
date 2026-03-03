@@ -188,7 +188,6 @@ class SegGptImageProcessor(BaseImageProcessor):
         """
         return mask_to_rgb(image, palette=palette, data_format=data_format)
 
-    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize with PILImageResampling.BILINEAR->PILImageResampling.BICUBIC
     def resize(
         self,
         image: np.ndarray,

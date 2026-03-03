@@ -124,7 +124,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_pil(self):
         """Override to handle Fuyu's custom output structure"""
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
@@ -140,7 +140,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_numpy(self):
         """Override to handle Fuyu's custom output structure"""
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
@@ -156,7 +156,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_pytorch(self):
         """Override to handle Fuyu's custom output structure"""
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
@@ -235,7 +235,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         )
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "size"))
@@ -249,7 +249,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_patches(self):
         """Test that patchify_image produces the expected number of patches."""
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             batch_size = 3
             channels = 3
@@ -308,7 +308,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         """Test preprocessing with numpy input."""
         sample_image = np.zeros((450, 210, 3), dtype=np.uint8)
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             transformed_image = image_processor.preprocess(sample_image).images[0][0]
             self.assertEqual(transformed_image.shape[1], 180)
@@ -319,7 +319,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         sample_image = np.zeros((450, 210, 3), dtype=np.uint8)
         sample_image_pil = Image.fromarray(sample_image)
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             transformed_image = image_processor.preprocess(sample_image_pil).images[0][0]
             self.assertEqual(transformed_image.shape[1], 180)
@@ -329,7 +329,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         """Test that preprocess returns correct output structure."""
         sample_image = np.zeros((450, 210, 3), dtype=np.uint8)
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             result = image_processor.preprocess(sample_image)
 
@@ -350,7 +350,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         sample_image_pil = Image.fromarray(sample_image)
         images = [sample_image, sample_image_pil]
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             result = image_processor.preprocess(images)
 
@@ -391,7 +391,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         image_unpadded_h = torch.tensor([[180], [180]])
         image_unpadded_w = torch.tensor([[360], [360]])
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
 
             result = image_processor.preprocess_with_tokenizer_info(

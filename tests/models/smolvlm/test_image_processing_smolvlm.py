@@ -171,7 +171,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
             self.assertTrue(hasattr(image_processing, "do_resize"))
@@ -188,7 +188,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_image_splitting"))
 
     def test_call_numpy(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -211,7 +211,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_numpy_4_channels(self):
         # SmolVLM always processes images as RGB, so it always returns images with 3 channels
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processor_dict = self.image_processor_dict
             image_processing = image_processing_class(**image_processor_dict)
@@ -235,7 +235,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pil(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -257,7 +257,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pytorch(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -292,12 +292,8 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
-            image_processor = image_processing_class(
-                **self.image_processor_dict, resample=PILImageResampling.BICUBIC
-            )
-            encodings[backend_name] = image_processor(
-                dummy_image, return_tensors="pt", return_row_col_info=True
-            )
+            image_processor = image_processing_class(**self.image_processor_dict, resample=PILImageResampling.BICUBIC)
+            encodings[backend_name] = image_processor(dummy_image, return_tensors="pt", return_row_col_info=True)
 
         backend_names = list(encodings.keys())
         reference_backend = backend_names[0]
@@ -334,21 +330,15 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
-            image_processor = image_processing_class(
-                **self.image_processor_dict, resample=PILImageResampling.BICUBIC
-            )
-            encodings[backend_name] = image_processor(
-                dummy_images, return_tensors="pt", return_row_col_info=True
-            )
+            image_processor = image_processing_class(**self.image_processor_dict, resample=PILImageResampling.BICUBIC)
+            encodings[backend_name] = image_processor(dummy_images, return_tensors="pt", return_row_col_info=True)
 
         backend_names = list(encodings.keys())
         reference_backend = backend_names[0]
         reference = encodings[reference_backend]
         for backend_name in backend_names[1:]:
             encoding = encodings[backend_name]
-            self._assert_tensors_equivalence(
-                reference.pixel_values, encoding.pixel_values, atol=3e-1
-            )
+            self._assert_tensors_equivalence(reference.pixel_values, encoding.pixel_values, atol=3e-1)
             self._assert_tensors_equivalence(
                 reference.pixel_attention_mask.float(), encoding.pixel_attention_mask.float()
             )
@@ -356,7 +346,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(reference.cols, encoding.cols)
 
     def test_get_num_patches_without_images(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             num_patches_and_row_cols = image_processing.get_number_of_image_patches(
                 height=100, width=100, images_kwargs={}

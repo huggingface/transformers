@@ -13,8 +13,9 @@
 # limitations under the License.
 """Image processor class for Flava."""
 
+from collections.abc import Iterable
 from functools import lru_cache
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 

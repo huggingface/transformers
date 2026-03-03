@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Union
+from typing import Union
 
 import torch
 import torch.nn as nn

@@ -33,7 +33,6 @@ from ...utils.generic import TensorType
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
-
 if is_cv2_available():
     import cv2
 

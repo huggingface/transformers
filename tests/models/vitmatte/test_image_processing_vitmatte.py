@@ -107,7 +107,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -126,7 +126,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test not batched input (image processor does not support batched inputs)
         image = image_inputs[0]
         trimap = np.random.randint(0, 3, size=image.shape[:2])
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
@@ -145,7 +145,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test not batched input (image processor does not support batched inputs)
         image = image_inputs[0]
         trimap = np.random.randint(0, 3, size=image.shape[1:])
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
@@ -165,7 +165,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertIsInstance(trimap_input, torch.Tensor)
         self.assertTrue(trimap_input.shape[1] == 1)
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
@@ -183,7 +183,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test not batched input (image processor does not support batched inputs)
         image = image_inputs[0]
         trimap = np.random.randint(0, 3, size=image.size[::-1])
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
@@ -202,7 +202,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test not batched input (image processor does not support batched inputs)
         image = image_inputs[0]
         trimap = np.random.randint(0, 3, size=image.shape[:2])
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processor(
                 images=image,
@@ -241,7 +241,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_image_processor_preprocess_arguments(self):
         is_tested = False
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # validation done by _valid_processor_keys attribute

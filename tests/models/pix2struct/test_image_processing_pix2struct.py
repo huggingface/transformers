@@ -147,7 +147,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].flattened_patches)
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_normalize"))
             self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
@@ -155,7 +155,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     def test_expected_patches(self):
         dummy_image = self.image_processor_tester.prepare_dummy_image()
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             max_patch = 2048
 
@@ -163,7 +163,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             torch.testing.assert_close(inputs.flattened_patches.mean(), torch.tensor(0.0606), rtol=1e-3, atol=1e-3)
 
     def test_call_pil(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processor
             image_processor = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -197,7 +197,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 )
 
     def test_call_vqa(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processor
             image_processor = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -240,7 +240,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 )
 
     def test_call_numpy(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processor
             image_processor = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -273,7 +273,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 )
 
     def test_call_numpy_4_channels(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processor
             image_processor = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -308,7 +308,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             self.image_processor_tester.num_channels = 3
 
     def test_call_pytorch(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processor
             image_processor = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -374,13 +374,13 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingTestMixin, unitte
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_normalize"))
             self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
     def test_call_pil(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processor
             image_processor = image_processing_class(**self.image_processor_dict)
             # create random PIL images

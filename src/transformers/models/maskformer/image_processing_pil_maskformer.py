@@ -14,7 +14,7 @@
 """Image processor class for MaskFormer."""
 
 import math
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -318,7 +318,7 @@ class MaskFormerImageProcessorPil(PilBackend):
     def _preprocess(
         self,
         images: list[np.ndarray],
-        segmentation_maps: Optional[list[np.ndarray]],
+        segmentation_maps: list[np.ndarray] | None,
         instance_id_to_semantic_id: dict[int, int] | None,
         do_resize: bool | None,
         size: SizeDict | None,
@@ -476,7 +476,6 @@ class MaskFormerImageProcessorPil(PilBackend):
 
         return semantic_segmentation
 
-    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.post_process_instance_segmentation
     def post_process_instance_segmentation(
         self,
         outputs,
@@ -640,7 +639,6 @@ class MaskFormerImageProcessorPil(PilBackend):
                   Multiple instances of the same class / label were fused and assigned a single `segment_id`.
                 - **score** -- Prediction score of segment with `segment_id`.
         """
-        requires_backends(self, "torch")
 
         if label_ids_to_fuse is None:
             logger.warning("`label_ids_to_fuse` unset. No instance will be fused.")

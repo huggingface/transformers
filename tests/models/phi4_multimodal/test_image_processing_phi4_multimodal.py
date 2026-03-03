@@ -121,7 +121,7 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -133,7 +133,7 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 100, "width": 100})
 
@@ -145,7 +145,7 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         pass
 
     def test_cast_dtype_device(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             if self.test_cast_dtype is not None:
                 # Initialize image_processor
                 image_processor = image_processing_class(**self.image_processor_dict)
@@ -179,7 +179,7 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
                 self.assertEqual(encoding.input_ids.dtype, torch.long)
 
     def test_call_pil(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -200,7 +200,7 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             )
 
     def test_call_numpy(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -221,7 +221,7 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             )
 
     def test_call_pytorch(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -246,7 +246,7 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
     def test_image_processor_preprocess_arguments(self):
         is_tested = False
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # validation done by _valid_processor_keys attribute
