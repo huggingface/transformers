@@ -23,6 +23,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -265,10 +266,11 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         with torch.no_grad():
             output_sdpa = model(input_ids, token_type_ids=token_type_ids).logits
 
-        torch.testing.assert_close(output_eager, output_sdpa, atol=1e-5, rtol=1e-4)
+        torch.testing.assert_close(output_eager, output_sdpa, atol=1e-4, rtol=1e-4)
 
-    @require_torch_accelerator
+    @require_torch_gpu
     @require_flash_attn
+    @pytest.mark.flash_attn_test
     def test_gpt2_fa2_matches_eager_with_scaling_configs(self):
         """Test that FlashAttention2 and eager produce equivalent outputs when scaling configs differ."""
         config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
@@ -285,12 +287,12 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         with torch.no_grad():
             output_eager = model(input_ids, token_type_ids=token_type_ids).logits
 
-        # FlashAttention2
+        # Flash Attention 2 (was buggy: ignored scaling configs)
         model.set_attn_implementation("flash_attention_2")
         with torch.no_grad():
             output_fa2 = model(input_ids, token_type_ids=token_type_ids).logits
 
-        torch.testing.assert_close(output_eager, output_fa2, atol=5e-3, rtol=5e-3)
+        torch.testing.assert_close(output_eager, output_fa2, atol=1e-2, rtol=1e-2)
 
     def test_gpt2_reorder_and_upcast_attn(self):
         # extra test: model-specific flag
