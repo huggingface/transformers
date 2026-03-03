@@ -154,9 +154,9 @@ class ZoeDepthConfig(PreTrainedConfig):
     bin_centers_type: str = "softplus"
     bin_configurations: list[dict] | None = None
     num_patch_transformer_layers: int | None = None
-    patch_transformer_hidden_size: int = None
-    patch_transformer_intermediate_size: int = None
-    patch_transformer_num_attention_heads: int = None
+    patch_transformer_hidden_size: int | None = None
+    patch_transformer_intermediate_size: int | None = None
+    patch_transformer_num_attention_heads: int | None = None
 
     def __post_init__(self, **kwargs):
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(

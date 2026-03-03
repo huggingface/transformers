@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
@@ -194,8 +193,6 @@ class OlmoHybridConfig(PreTrainedConfig):
             self.linear_key_head_dim = int(0.75 * self.hidden_size / self.linear_num_key_heads)
         if self.linear_value_head_dim is None:
             self.linear_value_head_dim = 2 * self.linear_key_head_dim
-        if self.head_dim is None:
-            self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 

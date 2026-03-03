@@ -24,6 +24,7 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
@@ -226,8 +227,10 @@ class OlmoHybridConfig(LlamaConfig):
             self.linear_key_head_dim = int(0.75 * self.hidden_size / self.linear_num_key_heads)
         if self.linear_value_head_dim is None:
             self.linear_value_head_dim = 2 * self.linear_key_head_dim
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        super().__post_init__(**kwargs)
+        PreTrainedConfig.__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

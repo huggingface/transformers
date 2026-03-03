@@ -1071,7 +1071,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         ]:
             d.pop(key_to_remove, None)
 
-        d["output_attentions"] = d.pop("_output_attentions", None)
+        if "_output_attentions" in d:
+            d["output_attentions"] = d.pop("_output_attentions")
 
         for value in d.values():
             if isinstance(value, dict):

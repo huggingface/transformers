@@ -208,7 +208,7 @@ class Data2VecAudioConfig(PreTrainedConfig):
     adapter_kernel_size: int = 3
     adapter_stride: int = 2
     num_adapter_layers: int = 3
-    output_hidden_size: int = None
+    output_hidden_size: int | None = None
 
     def __post_init__(self, **kwargs):
         self.output_hidden_size = self.output_hidden_size or self.hidden_size

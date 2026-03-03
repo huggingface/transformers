@@ -257,7 +257,7 @@ class Wav2Vec2ConformerConfig(PreTrainedConfig):
     adapter_kernel_size: int = 3
     adapter_stride: int = 2
     num_adapter_layers: int = 3
-    output_hidden_size: int = None
+    output_hidden_size: int | None = None
     position_embeddings_type: str | None = "relative"
     rotary_embedding_base: int = 10000
     max_source_positions: int = 5000
