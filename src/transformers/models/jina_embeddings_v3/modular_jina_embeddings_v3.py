@@ -50,7 +50,7 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 250002):
             Vocabulary size of the Jina-Embeddings-V3 model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`JinaEmbeddingsV3Model'`].
+            the `inputs_ids` passed when calling [`JinaEmbeddingsV3Model`].
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 24):
@@ -73,7 +73,7 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
             The vocabulary size of the `token_type_ids` passed when calling [`JinaEmbeddingsV3Model`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 1):
             Padding token id.
@@ -149,7 +149,7 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
         lora_rank: int | None = 4,
         lora_dropout_p: float | None = 0.0,
         lora_alpha: int | None = 1,
-        tie_word_embeddings=True,
+        tie_word_embeddings: bool | None = True,
         matryoshka_dimensions: list[int] | None = None,
         truncate_dim: int | None = None,
         **kwargs,
