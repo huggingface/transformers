@@ -1297,7 +1297,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
     @auto_docstring
     @can_return_tuple
     @merge_with_config_defaults
-    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

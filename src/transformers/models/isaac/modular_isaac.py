@@ -1596,7 +1596,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
     @auto_docstring
     @can_return_tuple
     @merge_with_config_defaults
-    @capture_outputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
