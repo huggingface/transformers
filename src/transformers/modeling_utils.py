@@ -70,7 +70,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import is_kernel, trust_remote_kernels
+from .integrations.hub_kernels import allow_hub_kernels, is_kernel
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
@@ -1261,7 +1261,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.config._attn_implementation,
             is_init_check=True,
             # We need to use this constant that is set through context manager as it cannot be forwarded in the model's __init__
-            load_kernels_from_hub=hub_kernels.TRUST_REMOTE_KERNELS,
+            load_kernels_from_hub=hub_kernels.ALLOW_HUB_KERNELS,
         )
         # Check the experts implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
@@ -1469,7 +1469,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if dtype is not None:
             init_contexts.append(local_torch_dtype(dtype, cls.__name__))
         if load_kernels_from_hub:
-            init_contexts.append(trust_remote_kernels())
+            init_contexts.append(allow_hub_kernels())
 
         needs_zero3_init = is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called
         if needs_zero3_init:
@@ -1865,7 +1865,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         applicable_attn_implementation, load_kernels_from_hub=load_kernels_from_hub
                     )
                 else:
-                    lazy_import_flash_attention(applicable_attn_implementation, load_kernels_from_hub=load_kernels_from_hub)
+                    lazy_import_flash_attention(
+                        applicable_attn_implementation, load_kernels_from_hub=load_kernels_from_hub
+                    )
 
                 # log that we used kernel fallback if successful
                 if requested_original_flash_attn:
@@ -3614,7 +3616,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         init_contexts = [local_torch_dtype(dtype, cls.__name__), init.no_tie_weights(), apply_patches()]
         # Needed as we cannot forward the `load_kernels_from_hub` arg in the model's __init__
         if load_kernels_from_hub:
-            init_contexts.append(trust_remote_kernels())
+            init_contexts.append(allow_hub_kernels())
         if is_deepspeed_zero3_enabled():
             import deepspeed
 

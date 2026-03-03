@@ -457,24 +457,25 @@ def use_kernelized_func(module_names: list[Callable] | Callable):
     return decorator
 
 
-TRUST_REMOTE_KERNELS = False
+# Whether to allow hub kernels coming from untrusted repos, i.e. repos outside `kernels-community`
+ALLOW_HUB_KERNELS = False
 
 
 @contextmanager
-def trust_remote_kernels():
+def allow_hub_kernels():
     """
-    Context manager used to adjust the value of the global `TRUST_REMOTE_KERNELS`. This is needed, as this argument
+    Context manager used to adjust the value of the global `ALLOW_HUB_KERNELS`. This is needed, as this argument
     cannot be forwarded directly to the `__init__` of the models, where we set the attention implementation.
     """
-    global TRUST_REMOTE_KERNELS
+    global ALLOW_HUB_KERNELS
 
     try:
-        TRUST_REMOTE_KERNELS = True
+        ALLOW_HUB_KERNELS = True
 
         yield
     finally:
         # Set back the original
-        TRUST_REMOTE_KERNELS = False
+        ALLOW_HUB_KERNELS = False
 
 
 __all__ = [
