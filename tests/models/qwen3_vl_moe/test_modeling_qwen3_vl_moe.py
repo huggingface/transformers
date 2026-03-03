@@ -66,24 +66,24 @@ class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("moe_intermediate_size", 16)
         kwargs.setdefault("num_experts_per_tok", 4)
         kwargs.setdefault("num_experts", 8)
+        kwargs.setdefault("depth", 2)
+        kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
+        kwargs.setdefault("num_heads", 4)
+        kwargs.setdefault("spatial_merge_size", 1)
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("num_position_embeddings", 16)
+        kwargs.setdefault("deepstack_visual_indexes", [0, 1])
+        kwargs.setdefault(
+            "rope_parameters", {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True}
+        )
+        kwargs.setdefault("decoder_sparse_step", 1)
         super().__init__(parent, **kwargs)
 
         # Qwen3 VL MoE-specific vision config attributes (computed from instance state)
-        self.depth = 2
         self.in_channels = self.num_channels
-        self.vision_hidden_act = "gelu_pytorch_tanh"
         self.out_hidden_size = self.hidden_size
         self.vision_hidden_size = self.hidden_size
         self.vision_intermediate_size = self.hidden_size
-        self.num_heads = 4
-        self.spatial_merge_size = 1
-        self.temporal_patch_size = 2
-        self.num_position_embeddings = 16
-        self.deepstack_visual_indexes = [0, 1]
-        self.rope_parameters = {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True}
-
-        # MoE-specific attributes
-        self.decoder_sparse_step = 1
 
     def create_pixel_values(self):
         """Qwen3 VL MoE expects flattened patches: (total_patches, channels * patch_size^2 * temporal_patch_size)"""
