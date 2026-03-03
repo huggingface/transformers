@@ -162,29 +162,9 @@ class MoonshineStreamingModelTest(ModelTesterMixin, PipelineTesterMixin, unittes
     def test_init_weights_can_init_buffers(self):
         self.skipTest("MoonshineStreaming uses special buffer initialization that conflicts with this test")
 
-    @unittest.skip(
-        reason="MoonshineStreaming test model's pos_emb layer exceeds model_split_percent, preventing device splitting"
-    )
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(
-        reason="MoonshineStreaming test model's pos_emb layer exceeds model_split_percent, preventing device splitting"
-    )
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(
-        reason="MoonshineStreaming test model's pos_emb layer exceeds model_split_percent, preventing device splitting"
-    )
-    def test_disk_offload_safetensors(self):
-        pass
-
-    @unittest.skip(
-        reason="MoonshineStreaming test model's pos_emb layer exceeds model_split_percent, preventing device splitting"
-    )
-    def test_model_parallelism(self):
-        pass
+    # MoonshineStreaming test model's pos_emb layer is large relative to total model size,
+    # requiring higher GPU allocation percentage to enable device splitting
+    model_split_percents = [0.5, 0.9, 0.95]
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
