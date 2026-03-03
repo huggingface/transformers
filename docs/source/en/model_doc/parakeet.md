@@ -203,51 +203,59 @@ with TimerContext("Fourth generation"):
 print(processor.batch_decode(outputs))
 ```
 
-### Training
+### CTC Training
 
 ```python
-from transformers import AutoModelForCTC, AutoProcessor
-from datasets import load_dataset, Audio
 import torch
+from datasets import Audio, load_dataset
+from transformers import AutoModelForCTC, AutoProcessor
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+model_id = "nvidia/parakeet-ctc-1.1b"
+NUM_SAMPLES = 5
 
-processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
-model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", dtype="auto", device_map=device)
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForCTC.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model.train()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-speech_samples = [el['array'] for el in ds["audio"][:5]]
-text_samples = [el for el in ds["text"][:5]]
+speech_samples = [el['array'] for el in ds["audio"][:NUM_SAMPLES]]
+text_samples = [el for el in ds["text"][:NUM_SAMPLES]]
 
 # passing `text` to the processor will prepare inputs' `labels` key
 inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
-inputs.to(device, dtype=model.dtype)
+inputs.to(device=model.device, dtype=model.dtype)
 
 outputs = model(**inputs)
+print("Loss:", outputs.loss.item())
 outputs.loss.backward()
 ```
 
 ### TDT Training
 
-The TDT model uses RNNT loss (requires `torchaudio`). Pass `text` to the processor to prepare labels — padding is automatically handled with `-100`.
-
 ```python
+from datasets import Audio, load_dataset
+import torch
 from transformers import AutoModelForTDT, AutoProcessor
-from datasets import load_dataset, Audio
 
-processor = AutoProcessor.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
-model = AutoModelForTDT.from_pretrained("nvidia/parakeet-tdt-0.6b-v3", dtype="auto", device_map="auto")
+model_id = "bezzam/parakeet-tdt-0.6b-v3-hf"
+NUM_SAMPLES = 3
+
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForTDT.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model.train()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-speech_samples = [el['array'] for el in ds["audio"][:5]]
-text_samples = [el for el in ds["text"][:5]]
+speech_samples = [el['array'] for el in ds["audio"][:NUM_SAMPLES]]
+text_samples = [el for el in ds["text"][:NUM_SAMPLES]]
 
+# passing `text` to the processor will prepare inputs' `labels` key
 inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
-inputs.to(model.device, dtype=model.dtype)
+inputs.to(device=model.device, dtype=model.dtype)
 
 outputs = model(**inputs)
+print("Loss:", outputs.loss.item())
 outputs.loss.backward()
 ```
 
