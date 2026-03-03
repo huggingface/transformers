@@ -116,17 +116,16 @@ class Qwen3ASRAudioEncoderConfig(PreTrainedConfig):
 class Qwen3ASRTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3ASRTextModel`]. It is used to instantiate a
-    Qwen3-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    Qwen3-ASR model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    Qwen3-VL-4B-Instruct [Qwen/Qwen3-VL-4B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct).
+    Qwen3-ASR-1.7B [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B)
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the Qwen3ASR model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Qwen3ASRModel`]
+            Vocabulary size of the model.
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 22016):
@@ -142,8 +141,7 @@ class Qwen3ASRTextConfig(PreTrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details, check out [this
             paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-        head_dim (`int`, *optional*, defaults to 128):
-            The dimension of the head. If not specified, will default to `hidden_size // num_attention_heads`.
+
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 128000):
@@ -159,20 +157,26 @@ class Qwen3ASRTextConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        attention_bias (`bool`, *optional*, defaults to `False`):
+        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        sliding_window (`int`, *optional*, defaults to 4096):
+            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         pad_token_id (`int`, *optional*):
-            The id of the padding token. If unset, the config is treated as not having a dedicated padding token.
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3ASRTextModel, Qwen3ASRTextConfig
 
-    >>> # Initializing a Qwen3ASR style configuration
+    >>> # Initializing a configuration
     >>> configuration = Qwen3ASRTextConfig()
 
-    >>> # Initializing a model from the Qwen3-VL-7B style configuration
+    >>> # Initializing a model with random weights
     >>> model = Qwen3ASRTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -180,7 +184,6 @@ class Qwen3ASRTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_asr_text"
-
     base_config_key = "text_config"
     default_theta = 500000.0
 
@@ -238,6 +241,46 @@ class Qwen3ASRTextConfig(PreTrainedConfig):
 
 
 class Qwen3ASRThinkerConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Qwen3ASRThinker`]. It is used to instantiate a
+    Qwen3-ASR-Thinker model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the thinker component of the Qwen3-Omni
+    architecture.
+
+    e.g. [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B)
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        audio_config (`dict`, *optional*):
+            The config dictionary of the audio backbone.
+        text_config (`dict`, *optional*):
+            The config dictionary of the text backbone.
+        audio_token_id (`int`, *optional*, defaults to 151646):
+            The audio token id to encode the audio prompt.
+        audio_start_token_id (`int`, *optional*, defaults to 151647):
+            The audio start token id to encode the audio prompt.
+        user_token_id (`int`, *optional*, defaults to 872):
+            The user token id to encode the user token.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+
+    Example:
+
+    ```python
+    >>> from transformers import Qwen3ASRThinkerModel, Qwen3ASRThinkerConfig
+
+    >>> # Initializing a default Qwen3ASRThinkerConfig
+    >>> configuration = Qwen3ASRThinkerConfig()
+
+    >>> # Initializing a model (with random weights) from the default configuration
+    >>> model = Qwen3ASRThinkerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "qwen3_asr_thinker"
 
     attribute_map = {}
@@ -276,6 +319,39 @@ class Qwen3ASRThinkerConfig(PretrainedConfig):
 
 
 class Qwen3ASRConfig(PretrainedConfig):
+    """
+    This is the configuration class to store the configuration of a [`Qwen3ASRForConditionalGeneration`]. It is used to instantiate a Qwen3ASR
+    model according to the specified sub-models configurations, defining the model architecture.
+
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
+        support_languages (`List[str]`, *optional*): The languages supported by the model.
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     Qwen3ASRThinkerConfig,
+    ...     Qwen3ASRForConditionalGeneration,
+    ...     Qwen3ASRConfig,
+    ... )
+
+    >>> # Initializing a Qwen3ASR style configuration
+    >>> configuration = Qwen3ASRConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = Qwen3ASRForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "qwen3_asr"
     sub_configs = {
         "thinker_config": Qwen3ASRThinkerConfig,
