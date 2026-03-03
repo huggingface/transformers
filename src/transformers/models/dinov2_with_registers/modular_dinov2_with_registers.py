@@ -31,7 +31,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import can_return_tuple
 
 
 logger = logging.get_logger(__name__)
@@ -351,7 +351,7 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
     def get_input_embeddings(self) -> Dinov2WithRegistersPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -411,7 +411,9 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
                 feature_maps.append(hidden_state)
 
         return BackboneOutput(
-            feature_maps=tuple(feature_maps), hidden_states=hidden_states if user_requested_hidden_states else None
+            feature_maps=tuple(feature_maps),
+            hidden_states=hidden_states if user_requested_hidden_states else None,
+            attentions=output.attentions
         )
 
 

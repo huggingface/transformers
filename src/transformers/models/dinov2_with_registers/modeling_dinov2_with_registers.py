@@ -574,7 +574,7 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
     def get_input_embeddings(self) -> Dinov2WithRegistersPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -634,7 +634,9 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
                 feature_maps.append(hidden_state)
 
         return BackboneOutput(
-            feature_maps=tuple(feature_maps), hidden_states=hidden_states if user_requested_hidden_states else None
+            feature_maps=tuple(feature_maps),
+            hidden_states=hidden_states if user_requested_hidden_states else None,
+            attentions=output.attentions,
         )
 
 
