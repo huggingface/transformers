@@ -912,6 +912,7 @@ def set_param_for_module(
         # Determine expected shape: for TP, use sharded shape; otherwise, use full shape
         if distributed_operation is not None:
             expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
+
         else:
             expected_shape = ref.shape
 
@@ -921,6 +922,8 @@ def set_param_for_module(
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
             setattr(module_obj, param_name, param_value)
+            if distributed_operation is not None:
+                distributed_operation.update_module_attributes(module_obj)
 
 
 def offload_and_maybe_resave_param(
