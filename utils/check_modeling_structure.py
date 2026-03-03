@@ -656,6 +656,9 @@ def check_no_split_modules_shape(
         value = assignments.get("_no_split_modules")
         if value is None:
             continue
+        # _no_split_modules = None is valid (means no modules to keep unsplit)
+        if isinstance(value, ast.Constant) and value.value is None:
+            continue
         if not isinstance(value, (ast.List, ast.Tuple)):
             violations.append(
                 Violation(
