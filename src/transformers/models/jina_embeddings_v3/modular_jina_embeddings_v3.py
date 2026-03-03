@@ -81,31 +81,14 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             End of stream token id.
-        position_embedding_type (`str`, *optional*, defaults to `"rotary"`):
-            The type of position embedding to use in the model.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
-        lora_adaptations (`list[str]`, *optional*):
-            List of task-specific LoRA adaptation names. Defaults to
-            `["retrieval.query", "retrieval.passage", "separation", "classification", "text-matching"]`.
-        task_instructions (`dict[str, str]`, *optional*):
-            Dictionary mapping task names to their instruction prompts.
-        lora_rank (`int`, *optional*, defaults to 4):
-            The rank of the LoRA adaptation matrices.
-        lora_dropout_p (`float`, *optional*, defaults to 0.0):
-            Dropout probability for LoRA layers.
-        lora_alpha (`int`, *optional*, defaults to 1):
-            Scaling factor for LoRA adaptations.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        matryoshka_dimensions (`list[int]`, *optional*):
-            List of supported dimensions for matryoshka representation learning.
-        truncate_dim (`int`, *optional*):
-            Dimension to truncate embeddings to.
 
     Examples:
 
@@ -141,42 +124,13 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
         pad_token_id: int | None = 1,
         bos_token_id: int | None = 0,
         eos_token_id: int | None = 2,
-        position_embedding_type: str | None = "rotary",
         rope_parameters: RopeParameters | dict | None = None,
         classifier_dropout: float | None = None,
-        lora_adaptations: list[str] | None = None,
-        task_instructions: dict[str, str] | None = None,
-        lora_rank: int | None = 4,
-        lora_dropout_p: float | None = 0.0,
-        lora_alpha: int | None = 1,
         tie_word_embeddings: bool | None = True,
-        matryoshka_dimensions: list[int] | None = None,
-        truncate_dim: int | None = None,
         **kwargs,
     ):
         if rope_parameters is None:
             rope_parameters = {"rope_theta": 20000.0}
-
-        if lora_adaptations is None:
-            lora_adaptations = [
-                "retrieval.query",
-                "retrieval.passage",
-                "separation",
-                "classification",
-                "text-matching",
-            ]
-
-        if task_instructions is None:
-            task_instructions = {
-                "retrieval.query": "Represent the query for retrieving evidence documents: ",
-                "retrieval.passage": "Represent the document for retrieval: ",
-                "separation": "",
-                "classification": "",
-                "text-matching": "",
-            }
-
-        if matryoshka_dimensions is None:
-            matryoshka_dimensions = [32, 64, 128, 256, 512, 768, 1024]
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -193,17 +147,9 @@ class JinaEmbeddingsV3Config(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-        self.position_embedding_type = position_embedding_type
         self.rope_parameters = rope_parameters
         self.classifier_dropout = classifier_dropout
-        self.lora_adaptations = lora_adaptations
-        self.lora_rank = lora_rank
-        self.lora_alpha = lora_alpha
-        self.lora_dropout_p = lora_dropout_p
         self.tie_word_embeddings = tie_word_embeddings
-        self.matryoshka_dimensions = matryoshka_dimensions
-        self.task_instructions = task_instructions
-        self.truncate_dim = truncate_dim
 
         super().__init__(**kwargs)
 
