@@ -234,7 +234,6 @@ class FP8Linear(nn.Linear):
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         if self.weight.element_size() > 1:
-            # QUESTION: not sure why we would want the fp8 linear to support non-fp8 weights
             return F.linear(input, self.weight, self.bias)
 
         if isinstance(self.weight, torch.distributed.tensor.DTensor):
@@ -247,7 +246,6 @@ class FP8Linear(nn.Linear):
         if self.activation_scheme == "dynamic":
             kernel = _get_triton_kernel()
             qinput, scale = kernel.fp8_act_quant(input, self.block_size[1])
-            # TODO: can be merged easily into the matmul kernel to save memory bandwidth when using the triton kernel
         elif self.activation_scheme == "static":
             scale = self.activation_scale.to(torch.float32)
             qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
