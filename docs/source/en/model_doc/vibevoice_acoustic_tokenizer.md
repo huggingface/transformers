@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-08-26 and added to Hugging Face Transformers on 2026-02-05.*
+*This model was released on 2025-08-26 and added to Hugging Face Transformers on 2026-01-22.*
 
 # VibeVoice Acoustic Tokenizer
 
@@ -154,6 +154,14 @@ print(f"Reconstructed audio saved to : {output_fp}")
 
 [[autodoc]] VibeVoiceAcousticTokenizerConfig
 
+## VibeVoiceAcousticTokenizerEncoderConfig
+
+[[autodoc]] VibeVoiceAcousticTokenizerEncoderConfig
+
+## VibeVoiceAcousticTokenizerDecoderConfig
+
+[[autodoc]] VibeVoiceAcousticTokenizerDecoderConfig
+
 ## VibeVoiceAcousticTokenizerFeatureExtractor
 
 [[autodoc]] VibeVoiceAcousticTokenizerFeatureExtractor
@@ -164,4 +172,14 @@ print(f"Reconstructed audio saved to : {output_fp}")
 [[autodoc]] VibeVoiceAcousticTokenizerModel
     - encode
     - decode
+    - forward
+
+## VibeVoiceAcousticTokenizerEncoderModel
+
+[[autodoc]] VibeVoiceAcousticTokenizerEncoderModel
+    - forward
+
+## VibeVoiceAcousticTokenizerDecoderModel
+
+[[autodoc]] VibeVoiceAcousticTokenizerDecoderModel
     - forward
