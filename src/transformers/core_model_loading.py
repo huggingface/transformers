@@ -858,11 +858,12 @@ def _compute_tp_elem_ranges(
     full_param = torch.empty(full_shape, device="meta")
     return compute_flattened_tensor_shard_slices(full_param, device_mesh, rank, dim, tensor_idx=None)
 
-def _materialize_copy(fetch: Tuple[torch.Tensor, Callable[int]], device=None, dtype=None) -> torch.Tensor:
+def _materialize_copy(fetch: torch.Tensor | Tuple[torch.Tensor, Callable[int]], device=None, dtype=None) -> torch.Tensor:
+    if isinstance(fetch, torch.Tensor):
+        return fetch.to(device=device, dtype=dtype)
     dst, fetch = fetch
     if fetch() <= 0:
         raise RuntimeError("Failed to fetch tensor")
-
     return dst
 
 def spawn_materialize(
