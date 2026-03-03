@@ -293,6 +293,24 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.layers.1"),
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
+        "nemotron_h": [
+            WeightRenaming("backbone.", "model."),
+            WeightRenaming("embedding.weight", "embeddings.weight"),
+            WeightConverter(
+                source_patterns=[
+                    "mixer.experts.*.up_proj.weight",
+                ],
+                target_patterns="mixer.experts.up_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "mixer.experts.*.down_proj.weight",
+                ],
+                target_patterns="mixer.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
         "jamba": [
             WeightConverter(
                 source_patterns=[
