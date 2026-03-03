@@ -436,9 +436,6 @@ class Trainer:
                 "https://huggingface.co/docs/transformers/model_doc/auto"
             )
 
-        if self.args.use_liger_kernel:
-            apply_liger_kernel(model, self.args.liger_kernel_config)
-
         validate_quantization_for_training(model)
 
         # ---- 4. Distributed strategy ------------------------------------------------
@@ -1365,6 +1362,9 @@ class Trainer:
             if self.place_model_on_device:
                 self._move_model_to_device(self.model, args.device)
             self.model_wrapped = self.model
+
+        if self.args.use_liger_kernel:
+            apply_liger_kernel(self.model, self.args.liger_kernel_config)
 
         # When fp16/bf16 full eval is enabled, __init__ skips device placement so that
         # evaluation_loop can cast dtype and move in one step. Move the model now for training.
