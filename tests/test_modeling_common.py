@@ -4163,6 +4163,10 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
+                if model_class.__name__ == "VideoMAEForPreTraining":
+                    # this model computes the loss unconditionally
+                    continue
+
                 if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
                 else:
@@ -5217,30 +5221,36 @@ class ModelTesterMixin:
                 outputs = model.get_audio_features(**inputs_dict)
 
             if return_dict in (True, None):
-                self.assertTrue(isinstance(outputs, ModelOutput), "get_audio_features() must return a BaseModelOutput")
+                self.assertTrue(
+                    isinstance(outputs, ModelOutput), "get_audio_features() must return a BaseModelOutputWithPooling"
+                )
                 self.assertTrue(
                     hasattr(outputs, "last_hidden_state"),
-                    "get_audio_features() must return a BaseModelOutput with last_hidden_state",
+                    "get_audio_features() must return a BaseModelOutputWithPooling with last_hidden_state",
                 )
                 self.assertTrue(
                     hasattr(outputs, "pooler_output"),
-                    "get_audio_features() must return a BaseModelOutput with pooler_output",
+                    "get_audio_features() must return a BaseModelOutputWithPooling with pooler_output",
                 )
                 self.assertTrue(
                     hasattr(outputs, "hidden_states"),
-                    "get_audio_features() must return a BaseModelOutput with hidden_states",
+                    "get_audio_features() must return a BaseModelOutputWithPooling with hidden_states",
                 )
                 if self.has_attentions:
                     self.assertTrue(
                         hasattr(outputs, "attentions"),
-                        "get_audio_features() must return a BaseModelOutput with attentions",
+                        "get_audio_features() must return a BaseModelOutputWithPooling with attentions",
                     )
 
                 if getattr(self, "skip_test_audio_features_output_shape", False):
                     return
 
                 last_hidden_state_shape = outputs.last_hidden_state.shape
-                batch_size = inputs_dict["input_features"].shape[0]
+
+                if "input_features" in inputs_dict:
+                    batch_size = inputs_dict["input_features"].shape[0]
+                else:
+                    batch_size = inputs_dict["input_values"].shape[0]
                 self.assertEqual(
                     last_hidden_state_shape[0],
                     batch_size,
