@@ -23,7 +23,7 @@ from transformers.configuration_utils import PretrainedConfig
 from ...utils import get_available_devices
 from ...utils.metrics import traced
 from .cache import PagedAttentionCache
-from .requests import TMP_TOKEN_ID, FutureRequestState, logger
+from .requests import TMP_TOKEN_ID, FutureRequestState
 from .utils import CudaGraphBuffer, aligned_divide, attn_mask_is_needed, build_attention_mask
 
 
