@@ -1293,10 +1293,6 @@ class IsaacModel(Qwen3PreTrainedModel):
     def embed_tokens(self, value: nn.Module) -> None:
         self.text_model.embed_tokens = value
 
-    @property
-    def vision_model(self) -> nn.Module:
-        return self.vision_embedding.vision_tower
-
     def embed_multimodal_inputs(
         self,
         input_ids: torch.Tensor,
