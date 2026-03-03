@@ -331,6 +331,19 @@ class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 class Qwen3ASRProcessor(AudioFlamingo3Processor):
+    r"""
+    Constructs a Qwen3ASR processor.
+    [`Qwen3ASRProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`], and [`Qwen2TokenizerFast`]. See the
+    [`~Qwen3ASRProcessor.__call__`] and [`~Qwen3ASRProcessor.decode`] for more information.
+
+    Args:
+        feature_extractor ([`WhisperFeatureExtractor`], *optional*):
+            The audio feature extractor.
+        tokenizer ([`Qwen2TokenizerFast`], *optional*):
+            The text tokenizer.
+        chat_template (`Optional[str]`, *optional*):
+            The Jinja template to use for formatting the conversation. If not provided, the default chat template is used.
+    """
     attributes = ["tokenizer", "feature_extractor"]
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
@@ -354,6 +367,21 @@ class Qwen3ASRProcessor(AudioFlamingo3Processor):
         audio: AudioInput = None,
         **kwargs,
     ) -> BatchFeature:
+        """
+        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
+        and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
+        the text. To prepare the audio(s), this method forwards the `audio` and `kwargs` arguments to
+        WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audio` is not `None`. Please refer to the doctsring
+        of the above two methods for more information.
+
+        Args:
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            audio (`np.ndarray`, `List[np.ndarray]`):
+                The audio or batch of audio to be prepared. Each audio can be a NumPy array.
+        """
         if text is None:
             raise ValueError("You need to specify either a `text` input to process.")
 
