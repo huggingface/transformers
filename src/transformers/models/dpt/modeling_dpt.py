@@ -720,7 +720,6 @@ class DPTPreTrainedModel(PreTrainedModel):
             init.zeros_(module.position_embeddings)
 
 
-# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2Encoder with Dinov2Config->DPTConfig, Dinov2->DPTViT, Dinov2PreTrainedModel->DPTPreTrainedModel
 class DPTViTEncoder(DPTPreTrainedModel):
     def __init__(self, config: DPTConfig):
         super().__init__(config)
