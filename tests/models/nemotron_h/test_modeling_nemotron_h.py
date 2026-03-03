@@ -47,10 +47,6 @@ if is_torch_available():
         NemotronHHybridDynamicCache,
     )
 
-    torch.use_deterministic_algorithms(True)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
 
 class NemotronHModelTester:
     def __init__(
@@ -419,6 +415,20 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.config_tester = ConfigTester(
             self, config_class=NemotronHConfig, common_properties=["hidden_size", "num_attention_heads"]
         )
+        # Save original settings
+        self._original_deterministic = torch.are_deterministic_algorithms_enabled()
+        self._original_cudnn_deterministic = torch.backends.cudnn.deterministic
+        self._original_cudnn_benchmark = torch.backends.cudnn.benchmark
+        # Apply deterministic settings for NemotronH tests
+        torch.use_deterministic_algorithms(True)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+    def tearDown(self):
+        # Restore original settings
+        torch.use_deterministic_algorithms(self._original_deterministic)
+        torch.backends.cudnn.deterministic = self._original_cudnn_deterministic
+        torch.backends.cudnn.benchmark = self._original_cudnn_benchmark
 
     @unittest.skip(reason="NemotronH needs at least 3 layers to test (mamba, moe, attention)")
     def test_num_layers_is_small(self):
@@ -825,6 +835,22 @@ class NemotronHModelIntegrationTest(unittest.TestCase):
         revision = "081dbac3061bb16c0c458c1798b1d9d7bc135c95"
         cls.model = NemotronHForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, revision=revision)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
+
+    def setUp(self):
+        # Save original settings
+        self._original_deterministic = torch.are_deterministic_algorithms_enabled()
+        self._original_cudnn_deterministic = torch.backends.cudnn.deterministic
+        self._original_cudnn_benchmark = torch.backends.cudnn.benchmark
+        # Apply deterministic settings for NemotronH tests
+        torch.use_deterministic_algorithms(True)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+    def tearDown(self):
+        # Restore original settings
+        torch.use_deterministic_algorithms(self._original_deterministic)
+        torch.backends.cudnn.deterministic = self._original_cudnn_deterministic
+        torch.backends.cudnn.benchmark = self._original_cudnn_benchmark
 
     @slow
     def test_simple_generate(self):
