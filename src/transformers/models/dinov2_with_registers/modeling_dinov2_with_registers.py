@@ -395,21 +395,6 @@ class Dinov2WithRegistersLayer(GradientCheckpointingLayer):
         return layer_output
 
 
-class Dinov2WithRegistersEncoder(nn.Module):
-    def __init__(self, config: Dinov2WithRegistersConfig):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([Dinov2WithRegistersLayer(config) for _ in range(config.num_hidden_layers)])
-
-    def forward(
-        self, hidden_states: torch.Tensor, output_hidden_states: bool = False, **kwargs: Unpack[TransformersKwargs]
-    ) -> BaseModelOutput:
-        for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states)
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
-
-
 @auto_docstring
 class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
     config: Dinov2WithRegistersConfig
@@ -446,6 +431,21 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
             init.constant_(module.lambda1, self.config.layerscale_value)
 
 
+class Dinov2WithRegistersEncoder(Dinov2WithRegistersPreTrainedModel):
+    def __init__(self, config: Dinov2WithRegistersConfig):
+        super().__init__(config)
+        self.layer = nn.ModuleList([Dinov2WithRegistersLayer(config) for _ in range(config.num_hidden_layers)])
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 @auto_docstring
 class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
     def __init__(self, config: Dinov2WithRegistersConfig):
@@ -463,8 +463,7 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
     def get_input_embeddings(self) -> Dinov2WithRegistersPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -607,8 +606,14 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        embedding_output = self.embeddings(pixel_values)
+        # Internally the model always needs to output hidden states, we control the output
+        # per user request on the final output
+        user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
+            self.config, "output_hidden_states", False
+        )
         kwargs["output_hidden_states"] = True
+
+        embedding_output = self.embeddings(pixel_values)
         output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
         hidden_states = output.hidden_states
 
@@ -627,7 +632,9 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps.append(hidden_state)
 
-        return BackboneOutput(feature_maps=tuple(feature_maps))
+        return BackboneOutput(
+            feature_maps=tuple(feature_maps), hidden_states=hidden_states if user_requested_hidden_states else None
+        )
 
 
 __all__ = [

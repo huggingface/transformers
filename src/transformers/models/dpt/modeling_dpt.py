@@ -440,22 +440,6 @@ class DPTViTLayer(GradientCheckpointingLayer):
         return layer_output
 
 
-# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2Encoder with Dinov2Config->DPTConfig, Dinov2->DPTViT
-class DPTViTEncoder(nn.Module):
-    def __init__(self, config: DPTConfig):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([DPTViTLayer(config) for _ in range(config.num_hidden_layers)])
-
-    def forward(
-        self, hidden_states: torch.Tensor, output_hidden_states: bool = False, **kwargs: Unpack[TransformersKwargs]
-    ) -> BaseModelOutput:
-        for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states)
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
-
-
 class DPTReassembleStage(nn.Module):
     """
     This class reassembles the hidden states of the backbone into image-like feature representations at various
@@ -736,6 +720,22 @@ class DPTPreTrainedModel(PreTrainedModel):
             init.zeros_(module.position_embeddings)
 
 
+# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2Encoder with Dinov2Config->DPTConfig, Dinov2->DPTViT, Dinov2PreTrainedModel->DPTPreTrainedModel
+class DPTViTEncoder(DPTPreTrainedModel):
+    def __init__(self, config: DPTConfig):
+        super().__init__(config)
+        self.layer = nn.ModuleList([DPTViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 @auto_docstring
 class DPTModel(DPTPreTrainedModel):
     def __init__(self, config: DPTConfig, add_pooling_layer: bool = True):
@@ -765,8 +765,7 @@ class DPTModel(DPTPreTrainedModel):
         else:
             return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

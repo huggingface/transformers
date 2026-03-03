@@ -421,9 +421,7 @@ class Dinov2Encoder(Dinov2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
-    def forward(
-        self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states)
 

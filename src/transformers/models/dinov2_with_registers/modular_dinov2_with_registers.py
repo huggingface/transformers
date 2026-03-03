@@ -270,10 +270,6 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         return embeddings
 
 
-class Dinov2WithRegistersEncoder(Dinov2Encoder):
-    pass
-
-
 class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
@@ -292,6 +288,10 @@ class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
             init.zeros_(module.register_tokens)
         elif isinstance(module, Dinov2WithRegistersLayerScale):  # noqa: F821
             init.constant_(module.lambda1, self.config.layerscale_value)
+
+
+class Dinov2WithRegistersEncoder(Dinov2Encoder):
+    pass
 
 
 class Dinov2WithRegistersModel(Dinov2Model):
@@ -384,8 +384,14 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        embedding_output = self.embeddings(pixel_values)
+        # Internally the model always needs to output hidden states, we control the output
+        # per user request on the final output
+        user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
+            self.config, "output_hidden_states", False
+        )
         kwargs["output_hidden_states"] = True
+
+        embedding_output = self.embeddings(pixel_values)
         output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
         hidden_states = output.hidden_states
 
@@ -404,7 +410,9 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps.append(hidden_state)
 
-        return BackboneOutput(feature_maps=tuple(feature_maps))
+        return BackboneOutput(
+            feature_maps=tuple(feature_maps), hidden_states=hidden_states if user_requested_hidden_states else None
+        )
 
 
 __all__ = [
