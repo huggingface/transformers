@@ -55,6 +55,20 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+Note that for attention kernels, anything that is not part of the `kernels-community` repository (which is trusted) will require
+an additional `load_kernels_from_hub=True` kwarg to be used (similar to the `trust_remote_code=True` kwarg for non-HF models). This is because loading a kernel can lead to arbitrary code execution on the host machine, and we cannot verify every repo, so you need to explicitly allow it.
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B",
+    attn_implementation="random-repo/random-attention",
+    load_kernels_from_hub=True,
+    device_map="cuda"
+)
+```
+
 Specific kernels, like attention, accept several formats.
 
 - `@v2.1.0` pins to a specific tag or branch.
