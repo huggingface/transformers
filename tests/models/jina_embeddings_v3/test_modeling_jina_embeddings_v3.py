@@ -271,7 +271,9 @@ class JinaEmbeddingsV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = JinaEmbeddingsV3Model.from_pretrained("jinaai/jina-embeddings-v3", revision = "refs/pr/137", dtype=torch.float32)
+        model = JinaEmbeddingsV3Model.from_pretrained(
+            "jinaai/jina-embeddings-v3", revision="refs/pr/137", dtype=torch.float32
+        )
         model.eval()
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
@@ -376,12 +378,12 @@ class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, torch.Size((1, 11, 1024)))
         expected_slice = torch.tensor(
             [
-                    [
-                        [-1.9793e00, 2.2602e00, -1.7995e-01],
-                        [-1.8780e00, 2.2660e00, -2.1822e-01],
-                        [-1.9202e00, 2.4457e00, -2.2832e-04],
-                    ]
+                [
+                    [-1.9793e00, 2.2602e00, -1.7995e-01],
+                    [-1.8780e00, 2.2660e00, -2.1822e-01],
+                    [-1.9202e00, 2.4457e00, -2.2832e-04],
                 ]
+            ]
         )
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
