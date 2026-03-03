@@ -1363,6 +1363,9 @@ class Trainer:
                 self._move_model_to_device(self.model, args.device)
             self.model_wrapped = self.model
 
+        if self.args.use_liger_kernel:
+            apply_liger_kernel(self.model, self.args.liger_kernel_config)
+
         # When fp16/bf16 full eval is enabled, __init__ skips device placement so that
         # evaluation_loop can cast dtype and move in one step. Move the model now for training.
         if (args.fp16_full_eval or args.bf16_full_eval) and not self.is_model_parallel and self.model_init is None:
@@ -1384,9 +1387,6 @@ class Trainer:
 
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
-
-        if self.args.use_liger_kernel:
-            apply_liger_kernel(self.model, self.args.liger_kernel_config)
 
         if DebugOption.UNDERFLOW_OVERFLOW in args.debug:
             if args.n_gpu > 1:
