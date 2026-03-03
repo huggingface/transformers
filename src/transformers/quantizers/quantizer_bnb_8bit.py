@@ -11,8 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from .._typing import BitsAndBytesConfigLike, Bnb8BitModelLike, TorchHpuLike, TorchNpuLike
 from .base import HfQuantizer
 
 
@@ -65,8 +66,9 @@ class Bnb8BitHfQuantizer(HfQuantizer):
 
         validate_bnb_backend_availability(raise_exception=True)
 
+        quantization_config = cast(BitsAndBytesConfigLike, self.quantization_config)
         device_map = kwargs.get("device_map")
-        if not self.quantization_config.llm_int8_enable_fp32_cpu_offload and isinstance(device_map, dict):
+        if not quantization_config.llm_int8_enable_fp32_cpu_offload and isinstance(device_map, dict):
             values = set(device_map.values())
             if values != {"cpu"} and ("cpu" in values or "disk" in values):
                 raise ValueError(
@@ -88,9 +90,9 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             if torch.cuda.is_available():
                 device_map = {"": torch.cuda.current_device()}
             elif is_torch_npu_available():
-                device_map = {"": f"npu:{torch.npu.current_device()}"}
+                device_map = {"": f"npu:{cast(TorchNpuLike, torch).npu.current_device()}"}
             elif is_torch_hpu_available():
-                device_map = {"": f"hpu:{torch.hpu.current_device()}"}
+                device_map = {"": f"hpu:{cast(TorchHpuLike, torch).hpu.current_device()}"}
             elif is_torch_xpu_available():
                 device_map = {"": torch.xpu.current_device()}
             else:
@@ -116,8 +118,9 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         return isinstance(module, bnb.nn.Linear8bitLt) and name != "bias"
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model.is_loaded_in_8bit = True
-        model.is_8bit_serializable = self.is_serializable()
+        bnb_model = cast(Bnb8BitModelLike, model)
+        bnb_model.is_loaded_in_8bit = True
+        bnb_model.is_8bit_serializable = self.is_serializable()
         return model
 
     def _process_model_before_weight_loading(
@@ -128,11 +131,12 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     ):
         from ..integrations import replace_with_bnb_linear
 
+        quantization_config = cast(BitsAndBytesConfigLike, self.quantization_config)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.llm_int8_skip_modules, model._keep_in_fp32_modules
+            model, quantization_config.llm_int8_skip_modules, model._keep_in_fp32_modules
         )
 
-        if self.quantization_config.llm_int8_enable_fp32_cpu_offload:
+        if quantization_config.llm_int8_enable_fp32_cpu_offload:
             if isinstance(device_map, dict):
                 keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
                 self.modules_to_not_convert.extend(keys_on_cpu)

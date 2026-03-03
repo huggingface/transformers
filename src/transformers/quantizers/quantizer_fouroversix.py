@@ -1,5 +1,6 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from .._typing import FourOverSixConfigLike
 from ..utils.import_utils import is_fouroversix_available
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -77,7 +78,8 @@ class FourOverSixHfQuantizer(HfQuantizer):
 
         # If the model has already been quantized, we need to delete the weight tensor here so that
         # it's not expected when parameters are loaded from the checkpoint.
-        if self.pre_quantized and not self.quantization_config.keep_master_weights:
+        quantization_config = cast(FourOverSixConfigLike, self.quantization_config)
+        if self.pre_quantized and not quantization_config.keep_master_weights:
             for _, module in model.named_modules():
                 if QuantizedModule.is_quantized_module_type(type(module)):
                     for parameter_name in module.parameters_to_quantize:
@@ -91,7 +93,7 @@ class FourOverSixHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
-        return self.quantization_config.keep_master_weights
+        return cast(FourOverSixConfigLike, self.quantization_config).keep_master_weights
 
     def get_quantize_ops(self):
         from ..integrations.fouroversix import FourOverSixQuantize

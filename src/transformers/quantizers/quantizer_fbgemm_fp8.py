@@ -11,8 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from .._typing import FbgemmFp8ConfigLike
 from .base import HfQuantizer
 
 
@@ -122,8 +123,9 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     ):
         from ..integrations import replace_with_fbgemm_fp8_linear
 
+        quantization_config = cast(FbgemmFp8ConfigLike, self.quantization_config)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+            model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_fbgemm_fp8_linear(
@@ -145,7 +147,8 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             if isinstance(m, (FbgemmFp8Linear, FbgemmFp8Llama4TextExperts)):
                 if hasattr(m, "input_scale_ub"):
                     # The model is now on the target device, so we can use fill_ directly.
-                    m.input_scale_ub.fill_(self.quantization_config.activation_scale_ub)
+                    quantization_config = cast(FbgemmFp8ConfigLike, self.quantization_config)
+                    m.input_scale_ub.fill_(quantization_config.activation_scale_ub)
         return model
 
     def update_tp_plan(self, config):

@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib.metadata
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from packaging import version
 
+from .._typing import AwqConfigLike
 from .base import HfQuantizer
 
 
@@ -65,8 +66,9 @@ class AwqQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import replace_quantization_scales, replace_with_awq_linear
 
+        quantization_config = cast(AwqConfigLike, self.quantization_config)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules, add_default_skips=True
+            model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules, add_default_skips=True
         )
 
         model = replace_with_awq_linear(
@@ -81,10 +83,12 @@ class AwqQuantizer(HfQuantizer):
     def _process_model_after_weight_loading(self, model, **kwargs):
         from gptqmodel.utils.model import hf_gptqmodel_post_init
 
-        hf_gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
+        quantization_config = cast(AwqConfigLike, self.quantization_config)
+        hf_gptqmodel_post_init(model, use_act_order=quantization_config.desc_act)
 
     def is_serializable(self):
-        if self.quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:
+        quantization_config = cast(AwqConfigLike, self.quantization_config)
+        if quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:
             logger.warning("You cannot save an AWQ model that uses Exllama backend!")
             return False
 

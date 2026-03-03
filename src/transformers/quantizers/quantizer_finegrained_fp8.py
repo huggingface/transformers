@@ -1,5 +1,6 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from .._typing import DequantizeWithModulesConfigLike
 from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -29,7 +30,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading an FP8 quantized model requires accelerate (`pip install accelerate`)")
 
-        if self.quantization_config.dequantize:
+        quantization_config = cast(DequantizeWithModulesConfigLike, self.quantization_config)
+        if quantization_config.dequantize:
             return
 
         if not torch.cuda.is_available() and not is_torch_xpu_available():
@@ -37,7 +39,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 logger.warning_once(
                     "Using FP8 quantized models requires a GPU or XPU, we will default to dequantizing the model to bf16 since no GPU or XPU is available"
                 )
-                self.quantization_config.dequantize = True
+                quantization_config.dequantize = True
                 return
             else:
                 raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for FP8 quantization.")
@@ -51,7 +53,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                     f", actual = `{major}.{minor}`. We will default to dequantizing the model to bf16. Feel free "
                     f"to use a different quantization method like bitsandbytes or torchao"
                 )
-                self.quantization_config.dequantize = True
+                quantization_config.dequantize = True
                 return
 
         device_map = kwargs.get("device_map")
@@ -99,8 +101,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     ):
         from ..integrations.finegrained_fp8 import replace_with_fp8_linear
 
+        quantization_config = cast(DequantizeWithModulesConfigLike, self.quantization_config)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+            model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_fp8_linear(
@@ -149,7 +152,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         from ..core_model_loading import WeightConverter
         from ..integrations.finegrained_fp8 import Fp8Dequantize
 
-        if self.pre_quantized and self.quantization_config.dequantize:
+        quantization_config = cast(DequantizeWithModulesConfigLike, self.quantization_config)
+        if self.pre_quantized and quantization_config.dequantize:
             return [
                 # either use the dollar sign, or permute the source patterns to start matching against the scales first
                 # We also collect the activation scales, they will not be used

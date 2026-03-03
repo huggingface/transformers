@@ -11,8 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from .._typing import HiggsConfigLike
 from ..utils.logging import tqdm
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -117,8 +118,9 @@ class HiggsHfQuantizer(HfQuantizer):
     ):
         from ..integrations import replace_with_higgs_linear
 
+        quantization_config = cast(HiggsConfigLike, self.quantization_config)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+            model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         replace_with_higgs_linear(
@@ -133,6 +135,7 @@ class HiggsHfQuantizer(HfQuantizer):
 
         from ..integrations import HiggsLinear
 
+        quantization_config = cast(HiggsConfigLike, self.quantization_config)
         flute_workspaces = {}
         flute_modules = {name: module for name, module in model.named_modules() if isinstance(module, HiggsLinear)}
         for name, module in tqdm(flute_modules.items(), desc="Repacking HIGGS modules", leave=False):
@@ -144,13 +147,13 @@ class HiggsHfQuantizer(HfQuantizer):
 
             # FLUTE weights are packed in a way that is optimized for a specific number of SMs (GPU streaming multiprocessors).
             # If the model is loaded on a different device than the one it was saved on, we need to repack the weights.
-            module.tune_metadata = TuneMetaData.from_dict(self.quantization_config.tune_metadata[name])
+            module.tune_metadata = TuneMetaData.from_dict(quantization_config.tune_metadata[name])
             module.weight.data, module.tune_metadata = maybe_tune_and_repack(
                 weight=module.weight.data,
                 scales=module.scales.data,
                 metadata=module.tune_metadata,
             )
-            self.quantization_config.tune_metadata[name] = module.tune_metadata.to_dict()
+            quantization_config.tune_metadata[name] = module.tune_metadata.to_dict()
 
     @property
     def is_trainable(self) -> bool:

@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from .._typing import HqqModelLike
 from ..integrations import prepare_for_hqq_linear
 from ..utils import is_hqq_available, is_torch_available, logging
 from .base import HfQuantizer
@@ -250,8 +251,9 @@ class HqqHfQuantizer(HfQuantizer):
         model = prepare_for_hqq_linear(model, quantization_config=self.quantization_config)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model.is_hqq_quantized = True
-        model.is_hqq_serializable = self.is_serializable()
+        hqq_model = cast(HqqModelLike, model)
+        hqq_model.is_hqq_quantized = True
+        hqq_model.is_hqq_serializable = self.is_serializable()
         return model
 
     def is_serializable(self):

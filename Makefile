@@ -7,7 +7,7 @@ check_dirs := examples tests src utils scripts benchmark benchmark_v2
 exclude_folders :=  ""
 
 # Directories to type-check with ty
-ty_check_dirs := src/transformers/utils src/transformers/generation
+ty_check_dirs := src/transformers/utils src/transformers/generation src/transformers/quantizers
 
 
 # this runs all linting/formatting scripts, most notably ruff

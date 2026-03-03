@@ -162,6 +162,174 @@ class GenerativePreTrainedModel(Protocol):
     def _supports_logits_to_keep(self) -> bool: ...
 
 
+class QuantizedModelLike(Protocol):
+    """Protocol for model-level quantization flags patched during load."""
+
+    is_quantized: bool
+    quantization_method: Any
+
+
+class Bnb4BitModelLike(Protocol):
+    """Protocol for bitsandbytes 4-bit runtime flags set on loaded models."""
+
+    is_loaded_in_4bit: bool
+    is_4bit_serializable: bool
+
+
+class Bnb8BitModelLike(Protocol):
+    """Protocol for bitsandbytes 8-bit runtime flags set on loaded models."""
+
+    is_loaded_in_8bit: bool
+    is_8bit_serializable: bool
+
+
+class HqqModelLike(Protocol):
+    """Protocol for HQQ runtime flags set on loaded models."""
+
+    is_hqq_quantized: bool
+    is_hqq_serializable: bool
+
+
+class LoadingAttributesConfigLike(Protocol):
+    """Protocol for quantization configs exposing loading-only attributes."""
+
+    def get_loading_attributes(self) -> dict[str, Any]: ...
+
+
+class BnbLoadIn8BitConfigLike(Protocol):
+    """Protocol for configs exposing bitsandbytes load mode switches."""
+
+    load_in_8bit: bool
+
+
+class AqlmConfigLike(Protocol):
+    """Protocol for AQLM config fields used by quantizers."""
+
+    linear_weights_not_to_quantize: list[str] | None
+
+
+class BitsAndBytesConfigLike(Protocol):
+    """Protocol for bitsandbytes config fields used by quantizers."""
+
+    llm_int8_enable_fp32_cpu_offload: bool
+    llm_int8_skip_modules: list[str] | None
+
+
+class ModulesToNotConvertConfigLike(Protocol):
+    """Protocol for configs exposing module skip lists."""
+
+    modules_to_not_convert: list[str] | None
+
+
+class AwqConfigLike(Protocol):
+    """Protocol for AWQ config fields used by quantizers."""
+
+    modules_to_not_convert: list[str] | None
+    desc_act: bool
+    backend: Any
+
+
+class BitNetConfigLike(Protocol):
+    """Protocol for BitNet config fields used by quantizers."""
+
+    modules_to_not_convert: list[str] | None
+    linear_class: str
+    quantization_mode: str
+
+
+class CompressedTensorsConfigLike(Protocol):
+    """Protocol for compressed-tensors config fields used by quantizers."""
+
+    is_quantization_compressed: bool
+    is_sparsification_compressed: bool
+
+
+class FbgemmFp8ConfigLike(Protocol):
+    """Protocol for FBGEMM FP8 config fields used by quantizers."""
+
+    modules_to_not_convert: list[str] | None
+    activation_scale_ub: float
+
+
+class DequantizeWithModulesConfigLike(Protocol):
+    """Protocol for configs with dequantize and module skip fields."""
+
+    dequantize: bool
+    modules_to_not_convert: list[str] | None
+
+
+class FourOverSixConfigLike(Protocol):
+    """Protocol for FourOverSix config fields used by quantizers."""
+
+    keep_master_weights: bool
+
+
+class FPQuantConfigLike(Protocol):
+    """Protocol for FP-Quant config fields used by quantizers."""
+
+    pseudoquantization: bool
+    store_master_weights: bool
+
+
+class GPTQConfigLike(Protocol):
+    """Protocol for GPTQ config fields used by quantizers."""
+
+    tokenizer: Any
+
+    def to_dict_optimum(self) -> dict[str, Any]: ...
+
+
+class HiggsConfigLike(Protocol):
+    """Protocol for HIGGS config fields used by quantizers."""
+
+    modules_to_not_convert: list[str] | None
+    tune_metadata: dict[str, Any]
+
+
+class QuantoConfigLike(Protocol):
+    """Protocol for Quanto config fields used by quantizers."""
+
+    weights: str
+    activations: Any
+    modules_to_not_convert: list[str] | None
+
+
+class QuarkConfigLike(Protocol):
+    """Protocol for Quark config fields used by quantizers."""
+
+    quant_config: Any
+    custom_mode: str
+
+
+class SinqConfigLike(Protocol):
+    """Protocol for SINQ config fields used by quantizers."""
+
+    method: str
+    modules_to_not_convert: list[str] | None
+
+
+class TorchAoConfigLike(Protocol):
+    """Protocol for TorchAO config fields used by quantizers."""
+
+    quant_type: Any
+    modules_to_not_convert: list[str] | None
+    include_input_output_embeddings: bool
+
+    def _get_ao_version(self) -> Any: ...
+
+
+class TorchNpuLike(Protocol):
+    """Protocol for torch module exposing the `npu` namespace."""
+
+    npu: Any
+
+
+class TorchHpuLike(Protocol):
+    """Protocol for torch module exposing the `hpu` namespace."""
+
+    hpu: Any
+
+
 class WhisperGenerationConfigLike(Protocol):
     """Protocol for Whisper-specific generation config fields accessed in generation internals."""
 

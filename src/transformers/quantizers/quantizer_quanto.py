@@ -11,8 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from .._typing import QuantoConfigLike
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -50,9 +51,11 @@ class QuantoHfQuantizer(HfQuantizer):
             "int4": 0.5,
             "int2": 0.25,
         }
-        self.quantized_param_size = map_to_param_size.get(self.quantization_config.weights, None)
+        quantization_config = cast(QuantoConfigLike, self.quantization_config)
+        self.quantized_param_size = map_to_param_size.get(quantization_config.weights, None)
 
     def validate_environment(self, *args, **kwargs):
+        quantization_config = cast(QuantoConfigLike, self.quantization_config)
         if not is_optimum_quanto_available():
             raise ImportError(
                 "Loading an optimum-quanto quantized model requires optimum-quanto library (`pip install optimum-quanto`)"
@@ -69,7 +72,7 @@ class QuantoHfQuantizer(HfQuantizer):
                     "This is not supported with quanto when the model is quantized on the fly. "
                     "Please remove the CPU or disk device from the device_map."
                 )
-        if self.quantization_config.activations is not None:
+        if quantization_config.activations is not None:
             raise ValueError(
                 "We don't support quantizing the activations with transformers library."
                 "Use quanto library for more complex use cases such as activations quantization, calibration and quantization aware training."
@@ -100,8 +103,9 @@ class QuantoHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import replace_with_quanto_layers
 
+        quantization_config = cast(QuantoConfigLike, self.quantization_config)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+            model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_quanto_layers(

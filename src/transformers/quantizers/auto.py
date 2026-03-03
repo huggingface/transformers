@@ -13,7 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from typing import cast
 
+from .._typing import BnbLoadIn8BitConfigLike, LoadingAttributesConfigLike
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
 from ..utils.quantization_config import (
@@ -181,7 +183,7 @@ class AutoHfQuantizer:
         # Again, we need a special care for bnb as we have a single quantization config
         # class for both 4-bit and 8-bit quantization
         if quant_method == QuantizationMethod.BITS_AND_BYTES:
-            if quantization_config.load_in_8bit:
+            if cast(BnbLoadIn8BitConfigLike, quantization_config).load_in_8bit:
                 quant_method += "_8bit"
             else:
                 quant_method += "_4bit"
@@ -249,11 +251,14 @@ class AutoHfQuantizer:
             )
             and quantization_config_from_args is not None
         ):
-            loading_attr_dict = quantization_config_from_args.get_loading_attributes()
+            loading_attr_dict = cast(
+                LoadingAttributesConfigLike, quantization_config_from_args
+            ).get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 setattr(quantization_config, attr, val)
 
-            warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
+            if loading_attr_dict:
+                warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
         if warning_msg != "" and not isinstance(quantization_config, (Mxfp4Config, MetalConfig, FineGrainedFP8Config)):
             warnings.warn(warning_msg)

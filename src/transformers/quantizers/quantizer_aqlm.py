@@ -11,11 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
-from typing import TYPE_CHECKING
+from importlib import metadata
+from typing import TYPE_CHECKING, cast
 
 from packaging import version
 
+from .._typing import AqlmConfigLike
 from .base import HfQuantizer
 
 
@@ -52,20 +53,22 @@ class AqlmHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
+        quantization_config = cast(AqlmConfigLike, self.quantization_config)
+        modules_to_not_convert = quantization_config.linear_weights_not_to_quantize
         replace_with_aqlm_linear(
             model,
+            modules_to_not_convert=modules_to_not_convert,
             quantization_config=self.quantization_config,
-            modules_to_not_convert=self.quantization_config.linear_weights_not_to_quantize,
         )
 
     @property
     def is_trainable(self) -> bool:
-        aqlm_supports_training = version.parse(importlib.metadata.version("aqlm")) >= version.parse("1.0.2")
+        aqlm_supports_training = version.parse(metadata.version("aqlm")) >= version.parse("1.0.2")
         if aqlm_supports_training:
             return True
         else:
             logger.warning(
-                f"Currently installed `aqlm` version ({importlib.metadata.version('aqlm')}) doesn't support training. If you wish to train a quantized model, please update `aqlm` with `pip install aqlm>=1.0.2`"
+                f"Currently installed `aqlm` version ({metadata.version('aqlm')}) doesn't support training. If you wish to train a quantized model, please update `aqlm` with `pip install aqlm>=1.0.2`"
             )
             return False
 

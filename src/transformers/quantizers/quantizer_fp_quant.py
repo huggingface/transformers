@@ -11,8 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, cast
 
+from .._typing import FPQuantConfigLike
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -42,17 +43,18 @@ class FPQuantHfQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, device_map, **kwargs):
+        quantization_config = cast(FPQuantConfigLike, self.quantization_config)
         if not torch.cuda.is_available() and not is_torch_xpu_available():
             raise NotImplementedError(
                 "FPQuant quantization is only supported on GPU or Intel XPU. Please use a different quantizer."
             )
 
-        if not is_qutlass_available() and not self.quantization_config.pseudoquantization:
+        if not is_qutlass_available() and not quantization_config.pseudoquantization:
             raise ImportError(
                 "Using `fp_quant` with real quantization requires a **Blackwell GPU** and qutlass: `git clone https://github.com/IST-DASLab/qutlass.git && cd qutlass && pip install --no-build-isolation .`. You can use `FPQuantConfig(pseudoquantization=True, ...)` to use Triton-based pseudo-quantization. It doesn't provide any speedups but emulates the quantization behavior of the real quantization."
             )
 
-        if self.quantization_config.pseudoquantization:
+        if quantization_config.pseudoquantization:
             logger.warning(
                 "Using pseudo-quantization for FP-Quant. This doesn't provide any speedups but emulates the quantization behavior of the real quantization."
             )
@@ -60,14 +62,14 @@ class FPQuantHfQuantizer(HfQuantizer):
         if not is_fp_quant_available():
             raise ImportError("Using `fp_quant` quantization requires fp_quant: `pip install fp_quant`")
 
-        if device_map is None and not self.quantization_config.pseudoquantization:
+        if device_map is None and not quantization_config.pseudoquantization:
             raise ValueError(
                 "You are attempting to load a FPQuant model without setting device_map."
                 " Please set device_map comprised of 'cuda' devices."
             )
         elif isinstance(device_map, dict):
             if (
-                not self.quantization_config.pseudoquantization
+                not quantization_config.pseudoquantization
                 and len(device_map) > 1
                 and "cpu" in device_map.values()
                 or "disk" in device_map.values()
@@ -111,7 +113,8 @@ class FPQuantHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
-        trainable = self.quantization_config.store_master_weights
+        quantization_config = cast(FPQuantConfigLike, self.quantization_config)
+        trainable = quantization_config.store_master_weights
         if not trainable:
             logger.warning(
                 "You are attempting to train a model with FPQuant quantization. This is only supported when `store_master_weights=True`. Please set `store_master_weights=True` to train the model."
@@ -130,8 +133,9 @@ class FPQuantHfQuantizer(HfQuantizer):
         from ..core_model_loading import WeightConverter
         from ..integrations.fp_quant import FpQuantDeserialize
 
+        quantization_config = cast(FPQuantConfigLike, self.quantization_config)
         if self.pre_quantized:
-            if self.quantization_config.pseudoquantization:
+            if quantization_config.pseudoquantization:
                 return [
                     WeightConverter(
                         source_patterns=[".dqweight"],

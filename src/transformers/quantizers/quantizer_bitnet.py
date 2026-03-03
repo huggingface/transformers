@@ -11,8 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from .._typing import BitNetConfigLike
 from .base import HfQuantizer
 
 
@@ -72,8 +73,9 @@ class BitNetHfQuantizer(HfQuantizer):
     ):
         from ..integrations import replace_with_bitnet_linear
 
+        quantization_config = cast(BitNetConfigLike, self.quantization_config)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+            model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_bitnet_linear(
@@ -91,27 +93,25 @@ class BitNetHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
+        quantization_config = cast(BitNetConfigLike, self.quantization_config)
         return (
-            self.quantization_config.linear_class == "autobitlinear"
-            and self.quantization_config.quantization_mode == "online"
+            quantization_config.linear_class == "autobitlinear" and quantization_config.quantization_mode == "online"
         )
 
     @property
     def is_qat_trainable(self) -> bool:
         """Flag indicating whether the quantized model can carry out quantization aware training"""
+        quantization_config = cast(BitNetConfigLike, self.quantization_config)
         return (
-            self.quantization_config.linear_class == "autobitlinear"
-            and self.quantization_config.quantization_mode == "online"
+            quantization_config.linear_class == "autobitlinear" and quantization_config.quantization_mode == "online"
         )
 
     def get_weight_conversions(self):
         from ..core_model_loading import WeightConverter
         from ..integrations.bitnet import BitNetDeserialize
 
-        if (
-            self.quantization_config.linear_class == "autobitlinear"
-            and self.quantization_config.quantization_mode == "offline"
-        ):
+        quantization_config = cast(BitNetConfigLike, self.quantization_config)
+        if quantization_config.linear_class == "autobitlinear" and quantization_config.quantization_mode == "offline":
             return [
                 WeightConverter(
                     source_patterns=["weight"],

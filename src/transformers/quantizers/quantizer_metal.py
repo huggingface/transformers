@@ -11,8 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
+from .._typing import DequantizeWithModulesConfigLike
 from ..utils import is_kernels_available, is_torch_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -42,7 +43,8 @@ class MetalHfQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, *args, **kwargs):
-        if self.quantization_config.dequantize:
+        quantization_config = cast(DequantizeWithModulesConfigLike, self.quantization_config)
+        if quantization_config.dequantize:
             return
 
         if not torch.backends.mps.is_available():
@@ -51,7 +53,7 @@ class MetalHfQuantizer(HfQuantizer):
                     "Metal quantization requires an Apple Silicon GPU (MPS), but none is available. "
                     "We will default to dequantizing the model to the original dtype."
                 )
-                self.quantization_config.dequantize = True
+                quantization_config.dequantize = True
                 return
             else:
                 raise RuntimeError("Metal quantization requires an Apple Silicon GPU (MPS). No MPS device found.")
@@ -90,8 +92,9 @@ class MetalHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations.metal_quantization import replace_with_metal_linear
 
+        quantization_config = cast(DequantizeWithModulesConfigLike, self.quantization_config)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+            model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_metal_linear(
@@ -117,7 +120,8 @@ class MetalHfQuantizer(HfQuantizer):
         from ..core_model_loading import WeightConverter
         from ..integrations.metal_quantization import MetalDequantize
 
-        if self.pre_quantized and self.quantization_config.dequantize:
+        quantization_config = cast(DequantizeWithModulesConfigLike, self.quantization_config)
+        if self.pre_quantized and quantization_config.dequantize:
             return [
                 WeightConverter(
                     source_patterns=["weight$", "scales", "qbiases"],

@@ -11,8 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from .._typing import DequantizeWithModulesConfigLike
 from .base import HfQuantizer
 
 
@@ -67,7 +68,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 "Please install the latest version of torch ( pip install --upgrade torch )"
             )
 
-        if self.quantization_config.dequantize:
+        quantization_config = cast(DequantizeWithModulesConfigLike, self.quantization_config)
+        if quantization_config.dequantize:
             return
 
         if not is_accelerate_available():
@@ -79,7 +81,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 logger.warning_once(
                     f"Using MXFP4 quantized models requires model on cuda/xpu/cpu, but found {device}, we will default to dequantizing the model to bf16. To use mxfp4, please disable the current accelerator."
                 )
-                self.quantization_config.dequantize = True
+                quantization_config.dequantize = True
                 return
             else:
                 raise RuntimeError(
@@ -107,14 +109,14 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200) or XPUs (e.g Intel® Data Center GPU Max Series) "
                     "We will default to dequantizing the model to bf16."
                 )
-                self.quantization_config.dequantize = True
+                quantization_config.dequantize = True
                 return
 
             if not kernels_available:
                 logger.warning_once(
                     "MXFP4 quantization requires Triton and kernels installed: CUDA requires Triton >= 3.4.0, XPU requires Triton >= 3.5.0, we will default to dequantizing the model to bf16"
                 )
-                self.quantization_config.dequantize = True
+                quantization_config.dequantize = True
                 return
         elif not is_device_supported_mxfp4:
             # we can't quantize the model in this case so we raise an error
@@ -172,17 +174,18 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 "You are using full precision kernels, we will dequantize the model to bf16. "
                 "To use the quantized model with quantization kernels, please set use_kernels=False"
             )
-            self.quantization_config.dequantize = True
+            cast(DequantizeWithModulesConfigLike, self.quantization_config).dequantize = True
 
         if not use_kernels and device.type in ["cpu"]:
             logger.warning_once(
                 "MXFP4 inference on CPU requires use_kernels=True, but use_kernels is disabled. "
                 "We will dequantize the model to bf16. To run MXFP4 natively on CPU, please set use_kernels=True."
             )
-            self.quantization_config.dequantize = True
+            cast(DequantizeWithModulesConfigLike, self.quantization_config).dequantize = True
 
+        quantization_config = cast(DequantizeWithModulesConfigLike, self.quantization_config)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+            model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_mxfp4_linear(
@@ -268,7 +271,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
     def get_weight_conversions(self):
         from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
 
-        if self.pre_quantized and self.quantization_config.dequantize:
+        quantization_config = cast(DequantizeWithModulesConfigLike, self.quantization_config)
+        if self.pre_quantized and quantization_config.dequantize:
             return [
                 WeightConverter(
                     source_patterns=["down_proj_blocks", "down_proj_scales"],

@@ -11,11 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
-from typing import TYPE_CHECKING
+from importlib import metadata
+from typing import TYPE_CHECKING, cast
 
 from packaging import version
 
+from .._typing import GPTQConfigLike
 from .base import HfQuantizer
 
 
@@ -48,7 +49,8 @@ class GptqHfQuantizer(HfQuantizer):
             raise ImportError("Loading a GPTQ quantized model requires optimum (`pip install optimum`)")
         from optimum.gptq import GPTQQuantizer
 
-        self.optimum_quantizer = GPTQQuantizer.from_dict(self.quantization_config.to_dict_optimum())
+        gptq_quantization_config = cast(GPTQConfigLike, self.quantization_config)
+        self.optimum_quantizer = GPTQQuantizer.from_dict(gptq_quantization_config.to_dict_optimum())
 
     def validate_environment(self, *args, **kwargs):
         if not is_optimum_available():
@@ -60,8 +62,8 @@ class GptqHfQuantizer(HfQuantizer):
         elif not is_gptqmodel_available():
             raise ImportError("Loading a GPTQ quantized model requires gptqmodel (`pip install gptqmodel`) library.")
         elif is_gptqmodel_available() and (
-            version.parse(importlib.metadata.version("gptqmodel")) < version.parse("1.4.3")
-            or version.parse(importlib.metadata.version("optimum")) < version.parse("1.23.99")
+            version.parse(metadata.version("gptqmodel")) < version.parse("1.4.3")
+            or version.parse(metadata.version("optimum")) < version.parse("1.23.99")
         ):
             raise ImportError("The gptqmodel version should be >= 1.4.3, optimum version should >= 1.24.0")
 
@@ -81,19 +83,20 @@ class GptqHfQuantizer(HfQuantizer):
 
         if self.pre_quantized:
             # compat: latest optimum has gptqmodel refactor
-            if version.parse(importlib.metadata.version("optimum")) <= version.parse("1.23.99"):
+            if version.parse(metadata.version("optimum")) <= version.parse("1.23.99"):
                 model = self.optimum_quantizer.convert_model(model)
             else:
                 model = self.optimum_quantizer.convert_model(model, **kwargs)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        gptq_quantization_config = cast(GPTQConfigLike, self.quantization_config)
         if self.pre_quantized:
             model = self.optimum_quantizer.post_init_model(model)
         else:
-            if self.quantization_config.tokenizer is None:
-                self.quantization_config.tokenizer = model.name_or_path
+            if gptq_quantization_config.tokenizer is None:
+                gptq_quantization_config.tokenizer = model.name_or_path
 
-            self.optimum_quantizer.quantize_model(model, self.quantization_config.tokenizer)
+            self.optimum_quantizer.quantize_model(model, gptq_quantization_config.tokenizer)
             model.config.quantization_config = GPTQConfig.from_dict(self.optimum_quantizer.to_dict())
 
     @property
