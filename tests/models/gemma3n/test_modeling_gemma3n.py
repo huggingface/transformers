@@ -36,6 +36,7 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_deterministic_for_xpu,
+    require_timm,
     require_torch,
     require_torch_accelerator,
     set_config_for_less_flaky_test,
@@ -774,6 +775,7 @@ class Gemma3nVision2TextModelTester:
 
 
 @require_torch
+@require_timm
 class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Gemma3nModel, Gemma3nForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Gemma3nForConditionalGeneration,) if is_torch_available() else ()
