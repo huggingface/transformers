@@ -23,12 +23,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="MBZUAI/swiftformer-xs")
 class SwiftFormerConfig(PreTrainedConfig):
     r"""
-    depths (`list[int]`, *optional*, defaults to `[3, 3, 6, 4]`):
-        Depth of each stage
     embed_dims (`list[int]`, *optional*, defaults to `[48, 56, 112, 220]`):
         The embedding dimension at each stage
-    mlp_ratio (`int`, *optional*, defaults to 4):
-        Ratio of size of the hidden dimensionality of an MLP to the dimensionality of its input.
     downsamples (`list[bool]`, *optional*, defaults to `[True, True, True, True]`):
         Whether or not to downsample inputs between two stages.
     down_patch_size (`int`, *optional*, defaults to 3):

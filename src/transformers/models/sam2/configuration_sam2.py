@@ -46,8 +46,6 @@ class Sam2HieraDetConfig(PreTrainedConfig):
         The window size per stage.
     global_attention_blocks (`list[int]`, *optional*, defaults to `[5, 7, 9]`):
         The blocks where global attention is used.
-    mlp_ratio (`float`, *optional*, defaults to 4.0):
-        The ratio of the MLP hidden dimension to the embedding dimension.
     """
 
     base_config_key = "backbone_config"

@@ -23,8 +23,6 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="Helsinki-NLP/opus-mt-en-de")
 class MarianConfig(PreTrainedConfig):
     r"""
-    scale_embedding (`bool`, *optional*, defaults to `False`):
-        Scale embeddings by diving by sqrt(d_model).
     share_encoder_decoder_embeddings (`bool`, *optional*, defaults to `True`):
         Whether to tie and share embeddings of encoder and decoder
     decoder_vocab_size (`int`, *optional*):

@@ -41,12 +41,6 @@ class FSMTConfig(PreTrainedConfig):
     tgt_vocab_size (`int`):
         Vocabulary size of the decoder. Defines the number of different tokens that can be represented by the
         `inputs_ids` passed to the forward method in the decoder.
-    scale_embedding (`bool`, *optional*, defaults to `True`):
-        Scale embeddings by diving by sqrt(d_model).
-    encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-        Google "layerdrop arxiv", as its not explainable in one line.
-    decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-        Google "layerdrop arxiv", as its not explainable in one line.
     num_beams (`int`, *optional*, defaults to 5):
         Number of beams for beam search that will be used by default in the `generate` method of the model. 1 means
         no beam search.

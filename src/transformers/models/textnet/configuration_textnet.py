@@ -42,8 +42,6 @@ class TextNetConfig(BackboneConfigMixin, PreTrainedConfig):
     conv_layer_strides (`list[list[int]]`, *optional*):
         A list of stage-wise strides. If `None`, defaults to:
         `[[1, 2, 1], [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1]]`.
-    hidden_sizes (`list[int]`, *optional*, defaults to `[64, 64, 128, 256, 512]`):
-        Dimensionality (hidden size) at each stage.
     batch_norm_eps (`float`, *optional*, defaults to 1e-05):
         The epsilon used by the batch normalization layers.
 

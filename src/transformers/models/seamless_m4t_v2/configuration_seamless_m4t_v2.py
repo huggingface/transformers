@@ -31,11 +31,6 @@ class SeamlessM4Tv2Config(PreTrainedConfig):
         Character vocabulary size of the SeamlessM4Tv2 model. Defines the number of different character tokens that
         can be represented by the `char_inputs_ids` passed when calling the Text-To-Units sub-model of
         [`~SeamlessM4Tv2Model`], [`~SeamlessM4Tv2ForSpeechToSpeech`] or [`~SeamlessM4Tv2ForTextToSpeech`].
-    scale_embedding (`bool`, *optional*, defaults to `True`):
-        Scale embeddings by diving by sqrt(d_model).
-    decoder_start_token_id (`int`, *optional*, defaults to 3):
-        If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token. Only
-        applied in the text decoder.
     max_new_tokens (`int`, *optional*, defaults to 256):
         The maximum numbers of text tokens to generate, ignoring the number of tokens in the prompt.
     speech_encoder_layers (`int`, *optional*, defaults to 24):

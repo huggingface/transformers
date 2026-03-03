@@ -1173,7 +1173,7 @@ class ConfigArgs:
 
     depths = {
         "description": """
-    Number of layers at each stage of the model.
+    Depth of each layer in the Transformer.
     """,
     }
 
@@ -1770,6 +1770,7 @@ class ConfigArgs:
     conv_kernel = conv_kernel_size
     use_absolute_embeddings = use_absolute_position_embeddings
     use_abs_pos = use_absolute_position_embeddings
+    use_rel_pos = use_relative_position_bias
     aux_loss_coef = router_aux_loss_coef
     embedding_dimension = embed_dim
     embedding_dim = embed_dim

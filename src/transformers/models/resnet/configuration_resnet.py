@@ -24,10 +24,6 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="microsoft/resnet-50")
 class ResNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    hidden_sizes (`list[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
-        Dimensionality (hidden size) at each stage.
-    depths (`list[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
-        Depth (number of layers) for each stage.
     layer_type (`str`, *optional*, defaults to `"bottleneck"`):
         The layer to use, it can be either `"basic"` (used for smaller models, like resnet-18 or resnet-34) or
         `"bottleneck"` (used for larger models like resnet-50 and above).

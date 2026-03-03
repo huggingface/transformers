@@ -30,10 +30,6 @@ class HieraConfig(BackboneConfigMixin, PreTrainedConfig):
         The stride of the patch.
     patch_padding (`list(int)`, *optional*, defaults to `[3, 3]`):
         The padding of the patch.
-    mlp_ratio (`float`, *optional*, defaults to 4.0):
-        The ratio of mlp hidden dim to embedding dim.
-    depths (`list(int)`, *optional*, defaults to `[2, 3, 16, 3]`):
-        Depth of each layer in the Transformer encoder.
     num_heads (`list(int)`, *optional*, defaults to `[1, 2, 4, 8]`):
         Number of attention heads in each layer of the Transformer encoder.
     embed_dim_multiplier (`float`, *optional*, defaults to 2.0):

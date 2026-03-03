@@ -75,8 +75,6 @@ class EomtDinov3Config(EomtConfig):
         Whether to use bias in value projection.
     proj_bias (`bool`, *optional*, defaults to `True`):
         Whether to use bias in output projection.
-    mlp_bias (`bool`, *optional*, defaults to `True`):
-        Whether to use bias in MLP layers.
     use_gated_mlp (`bool`, *optional*, defaults to `False`):
         Whether to use gated MLP layers.
     pos_embed_shift (`float`, *optional*):

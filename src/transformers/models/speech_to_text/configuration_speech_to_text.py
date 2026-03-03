@@ -23,10 +23,6 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="facebook/s2t-small-librispeech-asr")
 class Speech2TextConfig(PreTrainedConfig):
     r"""
-    decoder_start_token_id (`int`, *optional*, defaults to 2):
-        The initial token ID of the decoder when decoding sequences.
-    scale_embedding (`bool`, *optional*, defaults to `True`):
-        Whether the embeddings are scaled by the square root of `d_model`.
     max_source_positions (`int`, *optional*, defaults to 6000):
         The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
     max_target_positions (`int`, *optional*, defaults to 1024):

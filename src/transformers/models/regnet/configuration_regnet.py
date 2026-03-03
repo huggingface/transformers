@@ -23,10 +23,6 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="facebook/regnet-y-040")
 class RegNetConfig(PreTrainedConfig):
     r"""
-    hidden_sizes (`list[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
-        Dimensionality (hidden size) at each stage.
-    depths (`list[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
-        Depth (number of layers) for each stage.
     layer_type (`str`, *optional*, defaults to `"y"`):
         The layer to use, it can be either `"x" or `"y"`. An `x` layer is a ResNet's BottleNeck layer with
         `reduction` fixed to `1`. While a `y` layer is a `x` but with squeeze and excitation. Please refer to the

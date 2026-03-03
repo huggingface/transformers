@@ -29,8 +29,6 @@ class SegformerConfig(PreTrainedConfig):
         The number of layers in each encoder block.
     sr_ratios (`list[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
         Sequence reduction ratios in each encoder block.
-    hidden_sizes (`list[int]`, *optional*, defaults to `[32, 64, 160, 256]`):
-        Dimension of each of the encoder blocks.
     patch_sizes (`list[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
         Patch size before each encoder block.
     strides (`list[int]`, *optional*, defaults to `[4, 2, 2, 2]`):

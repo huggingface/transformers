@@ -27,10 +27,6 @@ class PoolFormerConfig(PreTrainedConfig):
         The stride of the input patch.
     pool_size (`int`, *optional*, defaults to 3):
         The size of the pooling window.
-    depths (`list`, *optional*, defaults to `[2, 2, 6, 2]`):
-        The depth of each encoder block.
-    hidden_sizes (`list`, *optional*, defaults to `[64, 128, 320, 512]`):
-        The hidden sizes of each encoder block.
     patch_sizes (`list`, *optional*, defaults to `[7, 3, 3, 3]`):
         The size of the input patch for each encoder block.
     strides (`list`, *optional*, defaults to `[4, 2, 2, 2]`):
