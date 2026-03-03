@@ -37,6 +37,7 @@ from transformers.testing_utils import (
     cleanup,
     require_deterministic_for_xpu,
     require_torch,
+    require_timm,
     require_torch_accelerator,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
@@ -638,7 +639,6 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
-
 class Gemma3nVision2TextModelTester:
     text_config = {"activation_sparsity_pattern": None}
     forced_config_args = ["text_config"]
@@ -769,6 +769,7 @@ class Gemma3nVision2TextModelTester:
 
 
 @require_torch
+@require_timm
 class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Gemma3nModel, Gemma3nForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Gemma3nForConditionalGeneration,) if is_torch_available() else ()
