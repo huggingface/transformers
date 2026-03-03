@@ -485,15 +485,7 @@ def pixel_shuffle_padded(
             - attention mask `(num_images, max_tokens)`
             - per-image valid token lengths `(num_images,)`
     """
-    if x.ndim != 3:
-        raise ValueError(f"`x` must be rank-3 (num_images, max_patches, hidden_size), got shape {tuple(x.shape)}.")
-    if token_grids.ndim != 2 or token_grids.shape[-1] != 2:
-        raise ValueError(f"`token_grids` must have shape (num_images, 2), got {tuple(token_grids.shape)}.")
-
     num_images, _, embed_dim = x.shape
-    scale_factor = int(scale_factor)
-    if scale_factor <= 0:
-        raise ValueError(f"`scale_factor` must be positive, got {scale_factor}.")
 
     output_lengths: list[int] = []
     for image_idx in range(num_images):
