@@ -287,12 +287,16 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
         and issubclass(processor_class, (PreTrainedTokenizerBase, AutoTokenizer))
     ):
         try:
+            # breakpoint()
             config = AutoConfig.from_pretrained(checkpoint)
         except Exception as e:
+            # breakpoint()
             logger.error(f"{e.__class__.__name__}: {e}")
             config = None
         if config is not None:
-            if not isinstance(config, config_class):
+            # TODO: sam2 (Sam2Config) from `facebook/sam2.1-hiera-tiny` will fail if we don't add `getattr(config, "tokenizer_class", None) is not None`
+            # (as we get `Sam2VideoConfig` instead of `Sam2Config`)
+            if getattr(config, "tokenizer_class", None) is not None and not isinstance(config, config_class):
                 raise ValueError(
                     f"`config` (which is of type {config.__class__.__name__}) should be an instance of `config_class`"
                     f" ({config_class.__name__})!"
@@ -338,7 +342,7 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
         #         try:
         #             attr_class_names = getattr(processor_class, f"{attr_name}_class")
         #         except:
-        #             breakpoint()
+        #             # breakpoint()
         #         if not isinstance(attr_class_names, tuple):
         #             attr_class_names = (attr_class_names,)
         #
@@ -384,6 +388,7 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
     return processor
 
 
+# TODO: Sam2Video will fail here
 def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     """Retrieve a tiny configuration from `config_class` using each model's `ModelTester`.
 
@@ -393,6 +398,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     Returns:
         An instance of `config_class` with tiny hyperparameters
     """
+    # breakpoint()
     model_type = config_class.model_type
 
     # For model type like `data2vec-vision` and `donut-swin`, we can't get the config/model file name directly via
@@ -401,6 +407,8 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     config_source_file = inspect.getsourcefile(config_class)
     # The modeling file name without prefix (`modeling_`) and postfix (`.py`)
     modeling_name = config_source_file.split(os.path.sep)[-1].replace("configuration_", "").replace(".py", "")
+    # TODO: remark: several configuration classes might be defined in the same modeling directory.
+    #   The test directory is still the same, so we are good here.
 
     try:
         print("Importing", model_type_to_module_name(model_type))
@@ -428,6 +436,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
         raise ValueError(error)
 
     if model_tester_class is None:
+        # breakpoint()
         error = f"Tiny config not created for {model_type} - no model tester is found in the testing module."
         raise ValueError(error)
 
@@ -450,6 +459,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             model_tester_kwargs_new = {k: v for k, v in model_tester_kwargs.items() if k != "vocab_size"}
             model_tester = model_tester_class(parent=None, **model_tester_kwargs_new)
 
+    # breakpoint()
     if hasattr(model_tester, "get_pipeline_config"):
         config = model_tester.get_pipeline_config()
     elif hasattr(model_tester, "prepare_config_and_inputs"):
@@ -464,6 +474,25 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             " necessary method to create config."
         )
         raise ValueError(error)
+
+    # recursively get the correct config
+    def _get_exact_config(_config, config_class):
+
+        if isinstance(_config, config_class):
+            return _config
+
+        keys = [x for x in _config.to_dict().keys() if x.endswith("_config")]
+        for key in keys:
+            sub_config = getattr(_config, key)
+            if sub_config is not None:
+                maybe_config = _get_exact_config(sub_config, config_class)
+                if isinstance(maybe_config, config_class):
+                    return maybe_config
+
+        return _config
+
+    # breakpoint()
+    config = _get_exact_config(config, config_class)
 
     # make sure this is long enough (some model tester has `20` for this attr.) to pass `text-generation`
     # pipeline tests.
@@ -596,6 +625,7 @@ def convert_processors(processors, tiny_config, output_folder, result):
         return fast_tokenizer, slow_tokenizer
 
     tokenizers = []
+    # breakpoint()
     feature_extractors = []
     for processor in processors:
         if isinstance(processor, PreTrainedTokenizerBase):
@@ -623,6 +653,7 @@ def convert_processors(processors, tiny_config, output_folder, result):
                 }:
                     feature_extractors.append(processor.feature_extractor)
 
+    # breakpoint()
     # check the built processors have the unique type
     num_types = len({x.__class__.__name__ for x in feature_extractors})
     # if num_types >= 2:
@@ -737,6 +768,7 @@ def convert_processors(processors, tiny_config, output_folder, result):
                 )
                 slow_tokenizer = None
 
+    # breakpoint()
     # update feature extractors using the tiny config
     try:
         feature_extractors = [convert_feature_extractor(p, tiny_config) for p in feature_extractors]
@@ -748,6 +780,7 @@ def convert_processors(processors, tiny_config, output_folder, result):
             )
         )
         feature_extractors = []
+    # breakpoint()
 
     if hasattr(tiny_config, "max_position_embeddings") and tiny_config.max_position_embeddings > 0:
         if fast_tokenizer is not None:
@@ -804,6 +837,7 @@ def build_model(model_arch, tiny_config, output_dir):
         tiny_config.is_encoder_decoder = False
         tiny_config.is_decoder = True
 
+    # breakpoint()
     model = model_arch(config=tiny_config)
     model.save_pretrained(checkpoint_dir)
     model.from_pretrained(checkpoint_dir)
@@ -821,7 +855,12 @@ def fill_result_with_error(result, error, trace, models_to_create):
         for model_arch in models_to_create["pytorch"]:
             result["pytorch"][model_arch.__name__] = {"model": None, "checkpoint": None, "error": error}
 
-    result["processor"] = {p.__class__.__name__: p.__class__.__name__ for p in result["processor"].values()}
+    # TODO: check what should we do with error/warning etc.
+    #   if we can't get any processor, we fill the report with the class name
+    #   otherwise, we could not build with these obtained processors, as we get the error
+    #   `error = f"No processor is returned by `convert_processors` for {config_class.__name__}."`
+    if len(result["processor"]) == 0:
+        result["processor"] = {p.__class__.__name__: p.__class__.__name__ for p in result["processor"].values()}
 
 
 def upload_model(model_dir, organization, token):
@@ -1123,6 +1162,7 @@ def build(config_class, models_to_create, output_dir):
             processor = build_processor(config_class, processor_class, allow_no_checkpoint=True)
             if processor is not None:
                 if type(processor) not in result["processor"]:
+                    # breakpoint()
                     result["processor"][type(processor)] = processor
         except Exception:
             # breakpoint()
@@ -1135,6 +1175,8 @@ def build(config_class, models_to_create, output_dir):
             # TODO: add trace and error anyway?
             # Let's return all what we could build
             # return result
+
+    # TODO: We might get some errors while still having some processors!
     if len(errors) > 0:
         error = "\n".join(errors)
         trace = "\n".join(traces)
@@ -1210,6 +1252,7 @@ def build(config_class, models_to_create, output_dir):
     if result["warnings"]:
         logger.warning(result["warnings"][0][0])
 
+    # breakpoint()
     # update `result["processor"]`
     result["processor"] = {type(p).__name__: p.__class__.__name__ for p in processors}
 
@@ -1255,12 +1298,20 @@ def build_tiny_model_summary(results, organization=None, token=None):
     for config_name in results:
         try:
             processors = [key for key, value in results[config_name]["processor"].items()]
+            # breakpoint()
+            # TODO: we update `fill_result_with_error`: at the end, with the cond `if len(result["processor"]) == 0`
+            #   But sometimes, in `def build`, we can't reach `result["processor"] = {type(p).__name__: p.__class__.__name__ for p in processors}`
+            #   (i.e. some other errors occur, like `Sam2VideoConfig`), and we need convert `results[config_name]["processor"]` to avid failure!
+            #   (for sam2_video, the error is `"Failed to get tiny config for Sam2VideoConfig: Tiny config not created for sam2_video - no model tester is found in the testing module.`)
+            processors = [p.__name__ for p in processors if not isinstance(p, str)]
+            results[config_name]["processor"] = {x: x for x in processors}
         except:
             # This happens for `VisionEncoderDecoderConfig` and `SpeechEncoderDecoderConfig`.
             # Not a prority however.
             print(config_name)
             print(results[config_name])
             print("******************************")
+        # breakpoint()
         tokenizer_classes = sorted([x for x in processors if x.endswith("TokenizerFast") or x.endswith("Tokenizer")])
         processor_classes = sorted([x for x in processors if x not in tokenizer_classes])
 
@@ -1461,6 +1512,9 @@ def create_tiny_models(
     # When using the items in this file to update the file `tests/utils/tiny_model_summary.json`, the model
     # architectures with `tokenizer_classes` and `processor_classes` being both empty should **NOT** be added to
     # `tests/utils/tiny_model_summary.json`.
+
+
+
     tiny_model_summary = build_tiny_model_summary(results, organization=organization, token=token)
     with open(os.path.join(report_path, "tiny_model_summary.json"), "w") as fp:
         json.dump(tiny_model_summary, fp, indent=4)
