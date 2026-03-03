@@ -175,7 +175,7 @@ class ContinuousBatchProcessor:
         )
 
     def __del__(self) -> None:
-        del self.inputs_and_outputs # clean up CUDA graphs in priority
+        del self.inputs_and_outputs  # clean up CUDA graphs in priority
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -187,10 +187,10 @@ class ContinuousBatchProcessor:
             if is_flash_attn_3(self.config._attn_implementation):
                 flash_attn_with_kvcache = lazy_import_paged_flash_attention(self.config._attn_implementation)[1]
                 conditions = [
-                        self.cache.num_sliding_attention_groups == 0,  # TODO: add support for sliding window layers
-                        torch.cuda.is_available(),  # Block table is only supported on CUDA
-                        flash_attn_with_kvcache is not None,  # The `flash_attn_with_kvcache` fn is needed
-                        self.compile_config is None,  # TODO: add support for the decode fast path with compile
+                    self.cache.num_sliding_attention_groups == 0,  # TODO: add support for sliding window layers
+                    torch.cuda.is_available(),  # Block table is only supported on CUDA
+                    flash_attn_with_kvcache is not None,  # The `flash_attn_with_kvcache` fn is needed
+                    self.compile_config is None,  # TODO: add support for the decode fast path with compile
                 ]
                 if not all(conditions):
                     logger.warning(
