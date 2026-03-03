@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import random
 import unittest
 
 import numpy as np
@@ -22,7 +23,7 @@ from transformers import TimesFm2_5Config, is_torch_available
 from transformers.testing_utils import require_flash_attn, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION, ModelTesterMixin
+from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION, ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
@@ -98,34 +99,6 @@ class TimesFm2_5ModelTester:
         inputs_dict = {"past_values": forecast_input}
         return config, inputs_dict
 
-    def create_and_check_loss_computation(self, config, forecast_input):
-        model = TimesFm2_5ModelForPrediction(config)
-        model.to(torch_device)
-        model.train()
-
-        for horizon in (config.horizon_length, config.horizon_length // 2):
-            future_values = torch.randn(forecast_input.shape[0], horizon, device=torch_device)
-            outputs = model(past_values=forecast_input, future_values=future_values)
-            self.parent.assertIsNotNone(outputs.loss)
-            self.parent.assertEqual(outputs.loss.shape, ())
-            self.parent.assertTrue(torch.isfinite(outputs.loss))
-            # Predictions should always be full horizon_length regardless of future_values length.
-            self.parent.assertEqual(outputs.mean_predictions.shape[1], config.horizon_length)
-            self.parent.assertEqual(outputs.full_predictions.shape[1], config.horizon_length)
-            self.parent.assertEqual(outputs.full_predictions.shape[2], len(config.quantiles) + 1)
-
-    def create_and_check_loss_backward(self, config, forecast_input):
-        model = TimesFm2_5ModelForPrediction(config)
-        model.to(torch_device)
-        model.train()
-
-        future_values = torch.randn(forecast_input.shape[0], config.horizon_length, device=torch_device)
-        outputs = model(past_values=forecast_input, future_values=future_values)
-        self.parent.assertIsNotNone(outputs.loss)
-        outputs.loss.backward()
-
-        has_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters() if p.requires_grad)
-        self.parent.assertTrue(has_grad, "No gradients were computed during backpropagation")
 
 
 @require_torch
@@ -302,20 +275,15 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
         if self.has_attentions and outputs.attentions is not None:
             self.assertIsNotNone(attentions.grad)
 
-    def test_training(self):
-        if not self.model_tester.is_training:
-            self.skipTest(reason="ModelTester is not configured to run training tests")
-
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_loss_backward(*config_and_inputs)
-
-    def test_loss_computation(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_loss_computation(*config_and_inputs)
-
-    def test_loss_backward(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_loss_backward(*config_and_inputs)
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        if return_labels:
+            batch_size = inputs_dict["past_values"].shape[0]
+            rng = random.Random(42)
+            inputs_dict["future_values"] = floats_tensor(
+                [batch_size, self.model_tester.horizon_length], rng=rng
+            )
+        return inputs_dict
 
 @require_torch
 @slow
