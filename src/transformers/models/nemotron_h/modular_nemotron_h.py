@@ -352,7 +352,9 @@ class NemotronHBlock(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ):
         if hidden_states.device.type == "cuda":
-            # Use torch.cuda.stream() to avoid NaN issues when using multiple GPUs
+            # Use cuda stream to avoid NaN when using multiple GPUs, which is caused by multi-GPU synchronization issue.
+            # Mamba might launch on the default cuda stream that not strictly respect the current Pytorch cuda stream.
+            # This leads to kernel reading uninitialized memory before the data transfer is complete.
             stream_context = torch.cuda.stream(torch.cuda.default_stream(hidden_states.device))
         else:
             stream_context = contextlib.nullcontext()
