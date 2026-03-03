@@ -154,9 +154,9 @@ else:
 try:
     from pyhmll import safetensors
     from pyhmll.torch import as_dtype, device_to_hmll
-    _HMLL_USE_PYHMLL = is_env_variable_true("HMLL_USE_PYHMLL")
+    _HF_USE_HMLL = is_env_variable_true("HF_USE_HMLL")
 except ImportError:
-    _HMLL_USE_PYHMLL = False
+    _HF_USE_HMLL = False
 
 
 logger = logging.get_logger(__name__)
@@ -4230,7 +4230,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Checkpoints are safetensors
             if state_dict is not None:
                 merged_state_dict = state_dict
-            elif checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors"):
+            elif _HF_USE_HMLL and checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors"):
                 # Hack to retrieve back index.json to leverage the optimized hmll path
                 if len(checkpoint_files) == 1:
                     source, is_shared = checkpoint_files[0], False
