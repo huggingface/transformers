@@ -55,8 +55,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Note that for attention kernels, anything that is not part of the `kernels-community` repository (which is trusted) will require
-an additional `allow_all_kernels=True` kwarg to be used (similar to the `trust_remote_code=True` kwarg for non-HF models). This is because loading a kernel can lead to arbitrary code execution on the host machine, and we cannot verify every repo, so you need to explicitly allow it.
+Note that for attention kernels, anything that is not part of the `kernels-community` repository (which is trusted - we may add more trusted repositories in the future) will require an additional `allow_all_kernels=True` kwarg to be used (similar to the `trust_remote_code=True` kwarg for non-HF models). This is because loading a kernel can lead to arbitrary code execution on the host machine, and we cannot verify every repo, so you need to explicitly allow it.
 
 ```py
 from transformers import AutoModelForCausalLM
