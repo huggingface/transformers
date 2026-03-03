@@ -171,7 +171,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("lighton_ocr", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("lilt", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
-        ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("luke", "LukeTokenizer"),
         ("lxmert", "LxmertTokenizer" if is_tokenizers_available() else None),
         ("m2m_100", "M2M100Tokenizer" if is_sentencepiece_available() else None),
@@ -346,15 +345,16 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "deepseek_vl_hybrid",
     "fuyu",
     "hyperclovax_vlm",
+    "internlm2",
     "janus",
     "jamba",
     "llava",
     "llava_next",
+    "longt5",
     "opencua",
     "phi3",
     "step3p5",
     "vipllava",
-    "internlm2",
 }
 
 for model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:

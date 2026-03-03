@@ -32,7 +32,8 @@ from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.models import BPE, Unigram
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
-
+from tokenizers.normalizers import Normalizer as NormalizerFast
+from tokenizers import normalizers
 from transformers.utils.hub import cached_file
 
 from .convert_slow_tokenizer import SpmConverter
@@ -137,7 +138,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             # when present (e.g. T5 tokenizers converted with SentencePiece >= 2.x).
             normalizer_config = tokenizer_json.get("normalizer")
             if normalizer_config:
-                if not isinstance(normalizer_config, list):
+                if normalizer_config.get("type", None) == "Sequence":
+                    normalizer_config = normalizer_config["normalizers"]
+                elif not isinstance(normalizer_config, list):
                     normalizer_config = [normalizer_config]
                 for normalizer in normalizer_config:
                     if normalizer.get("type") == "Precompiled" and "precompiled_charsmap" in normalizer:
