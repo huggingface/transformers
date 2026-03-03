@@ -23,7 +23,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 from ...test_processing_common import url_to_local_path
@@ -31,8 +31,6 @@ from ...test_processing_common import url_to_local_path
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import RTDetrImageProcessor, RTDetrImageProcessorFast
 
 if is_torch_available():
     import torch
@@ -96,9 +94,6 @@ class RTDetrImageProcessingTester:
 @require_torch
 @require_vision
 class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = RTDetrImageProcessor if is_vision_available() else None
-    fast_image_processing_class = RTDetrImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = RTDetrImageProcessingTester(self)
@@ -108,7 +103,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -118,7 +113,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "return_tensors"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 640, "width": 640})
 
@@ -130,7 +125,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         params = {"image_id": 39769, "annotations": target}
 
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # encode them
             image_processing = image_processing_class.from_pretrained("PekingU/rtdetr_r50vd")
 
@@ -167,7 +162,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         target = {"image_id": 39769, "annotations": target}
 
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # encode them
             image_processing = image_processing_class.from_pretrained("PekingU/rtdetr_r50vd")
             encoding = image_processing(images=image, annotations=target, return_tensors="pt")
@@ -207,7 +202,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_image_processor_outputs(self):
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
 
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processing = image_processing_class(**self.image_processor_dict)
             encoding = image_processing(images=image, return_tensors="pt")
 
@@ -236,7 +231,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image = load_image(url_to_local_path(url))
             images.append(image)
 
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             # apply image processing
             image_processing = image_processing_class(**self.image_processor_dict)
             encoding = image_processing(images=images, return_tensors="pt")
@@ -290,7 +285,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         images = [image_0, image_1]
         annotations = [annotations_0, annotations_1]
 
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processing = image_processing_class()
             encoding = image_processing(
                 images=images,
@@ -390,7 +385,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         target = {"image_id": 39769, "annotations": target}
 
-        processor = self.image_processor_list[1]()
+        processor = self.image_processing_classes.get("torchvision")()
         # 1. run processor on CPU
         encoding_cpu = processor(images=image, annotations=target, return_tensors="pt", device="cpu")
         # 2. run processor on accelerator

@@ -23,74 +23,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
+
 from collections.abc import Iterable
 
-import torch
+import numpy as np
 
-from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
+from .image_processing_paddleocr_vl import PaddleOCRVLImageProcessorKwargs, smart_resize
 
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
 
-class PaddleOCRVLImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    patch_size (`int`, *optional*, defaults to 14):
-        The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*, defaults to 1):
-        The temporal patch size of the vision encoder.
-    merge_size (`int`, *optional*, defaults to 2):
-        The merge size of the vision encoder to llm encoder.
-    """
-
-    min_pixels: int
-    max_pixels: int
-    patch_size: int
-    temporal_patch_size: int
-    merge_size: int
-
-
-def smart_resize(
-    height: int,
-    width: int,
-    factor: int = 28,
-    min_pixels: int = 384 * 384,
-    max_pixels: int = 1536 * 1536,
-):
-    if height < factor:
-        width = round((width * factor) / height)
-        height = factor
-
-    if width < factor:
-        height = round((height * factor) / width)
-        width = factor
-
-    if max(height, width) / min(height, width) > 200:
-        raise ValueError(
-            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
-        )
-    h_bar = round(height / factor) * factor
-    w_bar = round(width / factor) * factor
-    if h_bar * w_bar > max_pixels:
-        beta = math.sqrt((height * width) / max_pixels)
-        h_bar = max(factor, math.floor(height / beta / factor) * factor)
-        w_bar = max(factor, math.floor(width / beta / factor) * factor)
-    elif h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (height * width))
-        h_bar = math.ceil(height * beta / factor) * factor
-        w_bar = math.ceil(width * beta / factor) * factor
-    return h_bar, w_bar
-
-
 @auto_docstring
-class PaddleOCRVLImageProcessor(TorchvisionBackend):
+class PaddleOCRVLImageProcessorPil(PilBackend):
     do_resize = True
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 384 * 384, "longest_edge": 1536 * 1536}
@@ -148,7 +99,7 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
@@ -160,14 +111,14 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
         patch_size: int,
         temporal_patch_size: int,
         merge_size: int,
-        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            height, width = stacked_images.shape[-2:]
+        all_patches = []
+        all_grids = []
+
+        for image in images:
+            height, width = image.shape[-2:]
             if do_resize:
                 resized_height, resized_width = smart_resize(
                     height,
@@ -176,33 +127,34 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
                     min_pixels=size.shortest_edge,
                     max_pixels=size.longest_edge,
                 )
-                stacked_images = self.resize(
-                    image=stacked_images,
+                image = self.resize(
+                    image,
                     size=SizeDict(height=resized_height, width=resized_width),
                     resample=resample,
                 )
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+            else:
+                resized_height, resized_width = height, width
 
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        processed_grids = {}
-        for shape, stacked_images in grouped_images.items():
-            resized_height, resized_width = stacked_images.shape[-2:]
-            patches = self._rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+
+            patches = np.expand_dims(image, axis=0)
             if patches.ndim == 4:
-                patches = patches.unsqueeze(1)
+                patches = np.expand_dims(patches, axis=1)
             if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
+                repeats = np.repeat(
+                    patches[:, -1:], temporal_patch_size - (patches.shape[1] % temporal_patch_size), axis=1
+                )
+                patches = np.concatenate([patches, repeats], axis=1)
 
-            batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // temporal_patch_size
+            batch_size = 1
+            grid_t = patches.shape[1] // temporal_patch_size
+            channel = patches.shape[2]
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
-            patches = patches.view(
+            patches = patches.reshape(
                 batch_size,
                 grid_t,
                 temporal_patch_size,
@@ -212,16 +164,14 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
                 grid_w,
                 patch_size,
             )
-            patches = patches.permute(0, 1, 4, 6, 3, 2, 5, 7)
+            patches = patches.transpose(0, 1, 4, 6, 3, 2, 5, 7)
             flatten_patches = patches.reshape(batch_size, grid_t * grid_h * grid_w, channel, patch_size, patch_size)
 
-            processed_images_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            all_patches.append(flatten_patches.squeeze(0))
+            all_grids.append([grid_t, grid_h, grid_w])
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_grids = reorder_images(processed_grids, grouped_images_index)
-        pixel_values = torch.cat(processed_images, dim=0)
-        image_grid_thw = torch.tensor(processed_grids)
+        pixel_values = np.concatenate(all_patches, axis=0)
+        image_grid_thw = np.array(all_grids, dtype=np.int64)
 
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
@@ -254,4 +204,4 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
         return grid_h * grid_w
 
 
-__all__ = ["PaddleOCRVLImageProcessor"]
+__all__ = ["PaddleOCRVLImageProcessorPil"]

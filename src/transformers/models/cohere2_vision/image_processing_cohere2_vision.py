@@ -19,21 +19,24 @@
 # limitations under the License.
 
 from functools import lru_cache
-from typing import Optional
 
 import numpy as np
 import torch
-import torchvision.transforms.v2.functional as tvF
 
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, is_torchvision_available
 
 
-class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs, total=False):
-    """
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
+
+
+class Cohere2VisionImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
         `preprocess` method.
@@ -107,7 +110,8 @@ def get_optimal_tiled_canvas(
 
 
 @auto_docstring
-class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
+class Cohere2VisionImageProcessor(TorchvisionBackend):
+    valid_kwargs = Cohere2VisionImageProcessorKwargs
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -119,15 +123,10 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
     crop_to_patches = True
     min_patches = 1
     max_patches = 12
-    valid_kwargs = Cohere2VisionFastImageProcessorKwargs
     patch_size = 16
 
-    def __init__(self, **kwargs: Unpack[Cohere2VisionFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Cohere2VisionImageProcessorKwargs]):
         super().__init__(**kwargs)
-
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Cohere2VisionFastImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
 
     def crop_image_to_patches(
         self,
@@ -135,8 +134,8 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
         min_patches: int,
         max_patches: int,
         use_thumbnail: bool = True,
-        patch_size: tuple | int | dict | None = None,
-        interpolation: Optional["tvF.InterpolationMode"] = None,
+        patch_size: SizeDict | None = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
     ):
         """
         Crop the images to patches and return a list of cropped images.
@@ -153,12 +152,10 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
                 The maximum number of patches to be extracted from the image.
             use_thumbnail (`bool`, *optional*, defaults to `True`):
                 Whether to add a thumbnail image to the list of cropped patches.
-            patch_size (`int`, `tuple[int, int]`, `dict`, *optional*):
+            patch_size (`SizeDict`, *optional*):
                 The size of the output patches.
-                The format of the image data. If `None`, the format is inferred from the input image.
-
-        Returns:
-            list[`PIL.Image.Image`] or list[np.ndarray]: The list of cropped images.
+            resample (`PILImageResampling | tvF.InterpolationMode | int | None`, *optional*):
+                Resampling filter to use when resizing.
         """
         patch_size_height, patch_size_width = patch_size.height, patch_size.width
         original_height, original_width = images.shape[-2:]
@@ -173,9 +170,7 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
         num_blocks = num_columns * num_rows
 
         # resize the image so that each patch is of patch_size
-        resized_image = self.resize(
-            images, SizeDict(height=target_height, width=target_width), interpolation=interpolation
-        )
+        resized_image = self.resize(images, SizeDict(height=target_height, width=target_width), resample=resample)
         # split the image into patches
         processed_images = []
         for i in range(num_blocks):
@@ -192,7 +187,7 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
             processed_images.append(patch_image)
 
         if use_thumbnail and len(processed_images) != 1:
-            thumbnail_img = self.resize(images, patch_size, interpolation=interpolation)
+            thumbnail_img = self.resize(images, patch_size, resample=resample)
             processed_images.append(thumbnail_img)
 
         processed_images = torch.stack(processed_images, dim=0).transpose(0, 1).contiguous()
@@ -204,12 +199,7 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        crop_to_patches: bool,
-        min_patches: int,
-        max_patches: int,
-        interpolation: Optional["tvF.InterpolationMode"],
-        do_center_crop: bool,
-        crop_size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -217,6 +207,9 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
         image_std: float | list[float] | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
+        crop_to_patches: bool = False,
+        min_patches: int = 1,
+        max_patches: int = 12,
         **kwargs,
     ) -> BatchFeature:
         if crop_to_patches:
@@ -229,7 +222,7 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
                     min_patches,
                     max_patches,
                     patch_size=size,
-                    interpolation=interpolation,
+                    resample=resample,
                 )
                 processed_images_grouped[shape] = stacked_images
                 num_patches[shape] = [stacked_images.shape[1]] * stacked_images.shape[0]
@@ -244,7 +237,7 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+                stacked_images = self.resize(image=stacked_images, size=size, resample=resample)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -253,10 +246,7 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
-            if do_center_crop:
-                stacked_images = self.center_crop(stacked_images, crop_size)
-            # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
+            stacked_images = self._rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images
@@ -281,15 +271,21 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `int`: Number of patches per image.
         """
-        min_patches = images_kwargs.get("min_patches", self.min_patches)
-        max_patches = images_kwargs.get("max_patches", self.max_patches)
-        patch_size = images_kwargs.get("patch_size", self.size)
-        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
+        min_patches = images_kwargs.get("min_patches", self.min_patches) if images_kwargs else self.min_patches
+        max_patches = images_kwargs.get("max_patches", self.max_patches) if images_kwargs else self.max_patches
+        patch_size = images_kwargs.get("patch_size", self.size) if images_kwargs else self.size
+        crop_to_patches = (
+            images_kwargs.get("crop_to_patches", self.crop_to_patches) if images_kwargs else self.crop_to_patches
+        )
 
         num_patches = 1
         if crop_to_patches and max_patches > 1:
+            if isinstance(patch_size, dict):
+                patch_height, patch_width = patch_size["height"], patch_size["width"]
+            else:
+                patch_height, patch_width = patch_size.height, patch_size.width
             num_columns, num_rows = get_optimal_tiled_canvas(
-                (height, width), (patch_size["height"], patch_size["width"]), min_patches, max_patches
+                (height, width), (patch_height, patch_width), min_patches, max_patches
             )
             if num_columns * num_rows > 1:
                 num_patches += num_columns * num_rows
@@ -297,4 +293,4 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
         return num_patches
 
 
-__all__ = ["Cohere2VisionImageProcessorFast"]
+__all__ = ["Cohere2VisionImageProcessor"]

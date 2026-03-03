@@ -20,86 +20,88 @@
 import pathlib
 from typing import Any, Optional
 
+import numpy as np
 import torch
 import torchvision.transforms.v2.functional as tvF
 
-from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    SizeDict,
-    get_image_size_for_max_height_width,
-    get_max_height_width,
+from ...image_processing_backends import PilBackend
+from ...image_processing_utils import BatchFeature, SizeDict
+from ...image_transforms import (
+    PaddingMode,
+    center_to_corners_format,
+    corners_to_center_format,
+    get_size_with_aspect_ratio,
+    pad,
+    resize,
+    safe_squeeze,
 )
-from ...image_transforms import center_to_corners_format, corners_to_center_format, safe_squeeze
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     AnnotationFormat,
     AnnotationType,
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
     get_image_size,
+    get_image_size_for_max_height_width,
+    get_max_height_width,
     validate_annotations,
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, requires_backends
-from ...utils.import_utils import requires
-from .image_processing_rt_detr import RTDetrImageProcessorKwargs, get_size_with_aspect_ratio
+from .image_processing_rt_detr import RTDetrImageProcessorKwargs
 
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
-def prepare_coco_detection_annotation(
+def prepare_coco_detection_annotation_pil(
     image,
     target,
     return_segmentation_masks: bool = False,
     input_data_format: ChannelDimension | str | None = None,
 ):
     """
-    Convert the target in COCO format into the format expected by RT-DETR.
+    Convert the target in COCO format into the format expected by RTDETR.
     """
-    image_height, image_width = image.size()[-2:]
+    image_height, image_width = get_image_size(image, channel_dim=input_data_format)
 
     image_id = target["image_id"]
-    image_id = torch.as_tensor([image_id], dtype=torch.int64, device=image.device)
+    image_id = np.asarray([image_id], dtype=np.int64)
 
     # Get all COCO annotations for the given image.
     annotations = target["annotations"]
-    classes = []
-    area = []
-    boxes = []
-    keypoints = []
-    for obj in annotations:
-        if "iscrowd" not in obj or obj["iscrowd"] == 0:
-            classes.append(obj["category_id"])
-            area.append(obj["area"])
-            boxes.append(obj["bbox"])
-            if "keypoints" in obj:
-                keypoints.append(obj["keypoints"])
+    annotations = [obj for obj in annotations if "iscrowd" not in obj or obj["iscrowd"] == 0]
 
-    classes = torch.as_tensor(classes, dtype=torch.int64, device=image.device)
-    area = torch.as_tensor(area, dtype=torch.float32, device=image.device)
-    iscrowd = torch.zeros_like(classes, dtype=torch.int64, device=image.device)
+    classes = [obj["category_id"] for obj in annotations]
+    classes = np.asarray(classes, dtype=np.int64)
+
+    # for conversion to coco api
+    area = np.asarray([obj["area"] for obj in annotations], dtype=np.float32)
+    iscrowd = np.asarray([obj.get("iscrowd", 0) for obj in annotations], dtype=np.int64)
+
+    boxes = [obj["bbox"] for obj in annotations]
     # guard against no boxes via resizing
-    boxes = torch.as_tensor(boxes, dtype=torch.float32, device=image.device).reshape(-1, 4)
+    boxes = np.asarray(boxes, dtype=np.float32).reshape(-1, 4)
     boxes[:, 2:] += boxes[:, :2]
     boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=image_width)
     boxes[:, 1::2] = boxes[:, 1::2].clip(min=0, max=image_height)
 
     keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
 
-    new_target = {
-        "image_id": image_id,
-        "class_labels": classes[keep],
-        "boxes": boxes[keep],
-        "area": area[keep],
-        "iscrowd": iscrowd[keep],
-        "orig_size": torch.as_tensor([int(image_height), int(image_width)], dtype=torch.int64, device=image.device),
-    }
+    new_target = {}
+    new_target["image_id"] = image_id
+    new_target["class_labels"] = classes[keep]
+    new_target["boxes"] = boxes[keep]
+    new_target["area"] = area[keep]
+    new_target["iscrowd"] = iscrowd[keep]
+    new_target["orig_size"] = np.asarray([int(image_height), int(image_width)], dtype=np.int64)
 
-    if keypoints:
-        keypoints = torch.as_tensor(keypoints, dtype=torch.float32, device=image.device)
+    if annotations and "keypoints" in annotations[0]:
+        keypoints = [obj["keypoints"] for obj in annotations]
+        # Converting the filtered keypoints list to a numpy array
+        keypoints = np.asarray(keypoints, dtype=np.float32)
         # Apply the keep mask here to filter the relevant annotations
         keypoints = keypoints[keep]
         num_keypoints = keypoints.shape[0]
@@ -110,8 +112,7 @@ def prepare_coco_detection_annotation(
 
 
 @auto_docstring
-@requires(backends=("torchvision", "torch"))
-class RTDetrImageProcessorFast(BaseImageProcessorFast):
+class RTDetrImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -137,7 +138,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
 
     def prepare_annotation(
         self,
-        image: torch.Tensor,
+        image: np.ndarray,
         target: dict,
         format: AnnotationFormat | None = None,
         return_segmentation_masks: bool | None = None,
@@ -151,7 +152,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
 
         if format == AnnotationFormat.COCO_DETECTION:
             return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
-            target = prepare_coco_detection_annotation(
+            target = prepare_coco_detection_annotation_pil(
                 image, target, return_segmentation_masks, input_data_format=input_data_format
             )
         else:
@@ -160,17 +161,17 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
 
     def resize(
         self,
-        image: torch.Tensor,
+        image: np.ndarray,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"] = None,
+        resample: Optional["PILImageResampling"] = None,
         **kwargs,
-    ) -> torch.Tensor:
+    ) -> np.ndarray:
         """
         Resize the image to the given size. Size can be `min_size` (scalar) or `(height, width)` tuple. If size is an
         int, smaller edge of the image will be matched to this number.
 
         Args:
-            image (`torch.Tensor`):
+            image (`np.ndarray`):
                 Image to resize.
             size (`SizeDict`):
                 Size of the image's `(height, width)` dimensions after resizing. Available options are:
@@ -182,32 +183,32 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                     - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
                         aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
                         `max_width`.
-            interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use if resizing the image.
         """
-        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
+        resample = resample if resample is not None else self.resample
+
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
             new_size = get_size_with_aspect_ratio(
-                image.size()[-2:],
-                size["shortest_edge"],
-                size["longest_edge"],
+                image.shape[-2:],
+                size.shortest_edge,
+                size.longest_edge or size.shortest_edge,
             )
         elif size.max_height and size.max_width:
-            new_size = get_image_size_for_max_height_width(image.size()[-2:], size["max_height"], size["max_width"])
+            new_size = get_image_size_for_max_height_width(image.shape[-2:], size.max_height, size.max_width)
         elif size.height and size.width:
-            new_size = (size["height"], size["width"])
+            new_size = (size.height, size.width)
         else:
             raise ValueError(
-                "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
-                f" {size.keys()}."
+                f"Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got {size}."
             )
 
-        image = tvF.resize(
+        image = super().resize(
             image,
-            size=new_size,
-            interpolation=interpolation,
+            size=SizeDict(height=new_size[0], width=new_size[1]),
+            resample=resample,
             **kwargs,
         )
         return image
@@ -218,7 +219,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         orig_size: tuple[int, int],
         target_size: tuple[int, int],
         threshold: float = 0.5,
-        interpolation: Optional["tvF.InterpolationMode"] = None,
+        resample: Optional["PILImageResampling"] = PILImageResampling.NEAREST,
     ):
         """
         Resizes an annotation to a target size.
@@ -232,11 +233,11 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 The target size of the image, as returned by the preprocessing `resize` step.
             threshold (`float`, *optional*, defaults to 0.5):
                 The threshold used to binarize the segmentation masks.
-            resample (`InterpolationMode`, defaults to `tvF.InterpolationMode.NEAREST_EXACT`):
+            resample (`PILImageResampling`, defaults to `PILImageResampling.NEAREST`):
                 The resampling filter to use when resizing the masks.
         """
-        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.NEAREST_EXACT
-        ratio_height, ratio_width = [target / orig for target, orig in zip(target_size, orig_size)]
+        ratios = tuple(float(s) / float(s_orig) for s, s_orig in zip(target_size, orig_size))
+        ratio_height, ratio_width = ratios
 
         new_annotation = {}
         new_annotation["size"] = target_size
@@ -244,8 +245,8 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         for key, value in annotation.items():
             if key == "boxes":
                 boxes = value
-                scaled_boxes = boxes * torch.as_tensor(
-                    [ratio_width, ratio_height, ratio_width, ratio_height], dtype=torch.float32, device=boxes.device
+                scaled_boxes = boxes * np.asarray(
+                    [ratio_width, ratio_height, ratio_width, ratio_height], dtype=np.float32
                 )
                 new_annotation["boxes"] = scaled_boxes
             elif key == "area":
@@ -254,8 +255,8 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 new_annotation["area"] = scaled_area
             elif key == "masks":
                 masks = value[:, None]
-                masks = [tvF.resize(mask, target_size, interpolation=interpolation) for mask in masks]
-                masks = torch.stack(masks).to(torch.float32)
+                masks = np.array([resize(mask, target_size, resample=resample) for mask in masks])
+                masks = masks.astype(np.float32)
                 masks = masks[:, 0] > threshold
                 new_annotation["masks"] = masks
             elif key == "size":
@@ -272,9 +273,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             if key == "boxes":
                 boxes = value
                 boxes = corners_to_center_format(boxes)
-                boxes /= torch.as_tensor(
-                    [image_width, image_height, image_width, image_height], dtype=torch.float32, device=boxes.device
-                )
+                boxes /= np.asarray([image_width, image_height, image_width, image_height], dtype=np.float32)
                 norm_annotation[key] = boxes
             else:
                 norm_annotation[key] = value
@@ -298,16 +297,25 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         for key, value in annotation.items():
             if key == "masks":
                 masks = value
-                masks = tvF.pad(
+                masks = pad(
                     masks,
                     padding,
-                    fill=0,
+                    mode=PaddingMode.CONSTANT,
+                    constant_values=0,
+                    input_data_format=ChannelDimension.FIRST,
                 )
                 masks = safe_squeeze(masks, 1)
                 new_annotation["masks"] = masks
             elif key == "boxes" and update_bboxes:
                 boxes = value
-                boxes *= torch.as_tensor([ratio_width, ratio_height, ratio_width, ratio_height], device=boxes.device)
+                boxes *= np.asarray(
+                    [
+                        input_image_size[1] / output_image_size[1],
+                        input_image_size[0] / output_image_size[0],
+                        input_image_size[1] / output_image_size[1],
+                        input_image_size[0] / output_image_size[0],
+                    ]
+                )
                 new_annotation["boxes"] = boxes
             elif key == "size":
                 new_annotation["size"] = output_image_size
@@ -317,43 +325,70 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
 
     def pad(
         self,
-        image: torch.Tensor,
+        image: np.ndarray,
         padded_size: tuple[int, int],
         annotation: dict[str, Any] | None = None,
         update_bboxes: bool = True,
         fill: int = 0,
     ):
-        original_size = image.size()[-2:]
-        padding_bottom = padded_size[0] - original_size[0]
-        padding_right = padded_size[1] - original_size[1]
+        input_height, input_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+        output_height, output_width = padded_size
+        padding_bottom = output_height - input_height
+        padding_right = output_width - input_width
         if padding_bottom < 0 or padding_right < 0:
             raise ValueError(
                 f"Padding dimensions are negative. Please make sure that the padded size is larger than the "
-                f"original size. Got padded size: {padded_size}, original size: {original_size}."
+                f"original size. Got padded size: {padded_size}, original size: {(input_height, input_width)}."
             )
-        if original_size != padded_size:
-            padding = [0, 0, padding_right, padding_bottom]
-            image = tvF.pad(image, padding, fill=fill)
+        if (input_height, input_width) != padded_size:
+            padding = ((0, padding_bottom), (0, padding_right))
+            image = pad(
+                image,
+                padding,
+                mode=PaddingMode.CONSTANT,
+                constant_values=fill,
+                data_format=ChannelDimension.FIRST,
+                input_data_format=ChannelDimension.FIRST,
+            )
             if annotation is not None:
                 annotation = self._update_annotation_for_padded_image(
-                    annotation, original_size, padded_size, padding, update_bboxes
+                    annotation, (input_height, input_width), (output_height, output_width), padding, update_bboxes
                 )
 
         # Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
-        pixel_mask = torch.zeros(padded_size, dtype=torch.int64, device=image.device)
-        pixel_mask[: original_size[0], : original_size[1]] = 1
+        pixel_mask = np.zeros(padded_size, dtype=np.int64)
+        pixel_mask[:input_height, :input_width] = 1
 
         return image, pixel_mask, annotation
 
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        annotations: AnnotationType | list[AnnotationType] | None = None,
+        return_segmentation_masks: bool | None = None,
+        masks_path: str | pathlib.Path | None = None,
+        **kwargs: Unpack[RTDetrImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
+            Annotations to transform according to the padding that is applied to the images.
+        return_segmentation_masks (`bool`, *optional*, defaults to `self.return_segmentation_masks`):
+            Whether to return segmentation masks.
+        masks_path (`str` or `pathlib.Path`, *optional*):
+            Path to the directory containing the segmentation masks.
+        """
+        return super().preprocess(images, annotations, return_segmentation_masks, masks_path, **kwargs)
+
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         annotations: AnnotationType | list[AnnotationType] | None,
-        masks_path: str | pathlib.Path | None,
         return_segmentation_masks: bool,
+        masks_path: str | pathlib.Path | None,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -399,16 +434,19 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 )
 
             if do_resize:
-                resized_image = self.resize(image, size=size, interpolation=interpolation)
+                resized_image = self.resize(image, size=size, resample=resample)
                 if annotations is not None:
                     annotation = self.resize_annotation(
                         annotation,
-                        orig_size=image.size()[-2:],
-                        target_size=resized_image.size()[-2:],
+                        orig_size=image.shape[-2:],
+                        target_size=resized_image.shape[-2:],
                     )
                 image = resized_image
-            # Fused rescale and normalize
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
             if do_convert_annotations and annotations is not None:
                 annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
 
@@ -428,9 +466,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             padded_annotations = []
             for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
                 # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
-                if padded_size == image.size()[-2:]:
+                if padded_size == image.shape[-2:]:
                     padded_images.append(image)
-                    pixel_masks.append(torch.ones(padded_size, dtype=torch.int64, device=image.device))
+                    pixel_masks.append(np.ones(padded_size, dtype=np.int64))
                     padded_annotations.append(annotation)
                     continue
                 image, pixel_mask, annotation = self.pad(
@@ -441,9 +479,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 pixel_masks.append(pixel_mask)
             images = padded_images
             annotations = padded_annotations if annotations is not None else None
-            data.update({"pixel_mask": torch.stack(pixel_masks, dim=0)})
+            data.update({"pixel_mask": pixel_masks})
 
-        data.update({"pixel_values": torch.stack(images, dim=0)})
+        data.update({"pixel_values": images})
         encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
         if annotations is not None:
             encoded_inputs["labels"] = [
@@ -524,4 +562,4 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         return results
 
 
-__all__ = ["RTDetrImageProcessorFast"]
+__all__ = ["RTDetrImageProcessorPil"]

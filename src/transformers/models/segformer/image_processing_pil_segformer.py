@@ -18,13 +18,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
-
+import numpy as np
 import torch
 import torchvision.transforms.v2.functional as tvF
 
+from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -32,15 +31,21 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    is_torch_tensor,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, is_torch_available
 from .image_processing_segformer import SegformerImageProcessorKwargs
 
 
+if is_torch_available():
+    import torch.nn.functional as F
+
+
 @auto_docstring
-class SegformerImageProcessorFast(BaseImageProcessorFast):
+class SegformerImageProcessorPil(PilBackend):
+    """PIL backend for Segformer with reduce_label support."""
+
+    valid_kwargs = SegformerImageProcessorKwargs
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -52,21 +57,10 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_reduce_labels = False
-    valid_kwargs = SegformerImageProcessorKwargs
     rescale_factor = 1 / 255
 
     def __init__(self, **kwargs: Unpack[SegformerImageProcessorKwargs]):
         super().__init__(**kwargs)
-
-    def reduce_label(self, labels: list["torch.Tensor"]):
-        for idx in range(len(labels)):
-            label = labels[idx]
-            label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype), label)
-            label = label - 1
-            label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype), label)
-            labels[idx] = label
-
-        return labels
 
     @auto_docstring
     def preprocess(
@@ -87,19 +81,19 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Union[str, "torch.device"] | None = None,
-        **kwargs: Unpack[SegformerImageProcessorKwargs],
+        return_tensors: str | TensorType | None,
+        **kwargs,
     ) -> BatchFeature:
-        """
-        Preprocess image-like inputs.
-        """
+        """Handle extra inputs beyond images."""
         images = self._prepare_image_like_inputs(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format
         )
         images_kwargs = kwargs.copy()
         images_kwargs["do_reduce_labels"] = False
-        batch_feature = self._preprocess(images, **images_kwargs)
+        data = {}
+        data["pixel_values"] = self._preprocess(images, **images_kwargs)
 
+        # Prepare segmentation maps if provided
         if segmentation_maps is not None:
             processed_segmentation_maps = self._prepare_image_like_inputs(
                 images=segmentation_maps,
@@ -119,16 +113,30 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
             )
             processed_segmentation_maps = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
-            ).pixel_values
-            batch_feature["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
+            )
 
-        return batch_feature
+            # Convert to int64 and squeeze channel dimension
+            processed_segmentation_maps = [
+                processed_segmentation_map.squeeze(0).astype(np.int64)
+                for processed_segmentation_map in processed_segmentation_maps
+            ]
+            data["labels"] = processed_segmentation_maps
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def reduce_label(self, image: np.ndarray) -> np.ndarray:
+        """Reduce label values by 1, replacing 0 with 255."""
+        # Avoid using underflow conversion
+        image[image == 0] = 255
+        image = image - 1
+        image[image == 254] = 255
+        return image
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list["np.ndarray"],
         do_reduce_labels: bool,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,
@@ -136,39 +144,22 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         rescale_factor: float,
         image_mean: float | list[float],
         image_std: float | list[float],
-        disable_grouping: bool,
-        return_tensors: str | TensorType | None,
         **kwargs,
-    ) -> BatchFeature:  # Return type can be list if return_tensors=None
-        if do_reduce_labels:
-            images = self.reduce_label(images)  # Apply reduction if needed
+    ) -> list["np.ndarray"]:
+        """Custom preprocessing for Segformer."""
+        processed_images = []
+        for image in images:
+            if do_reduce_labels:
+                image = self.reduce_label(image)
+            if do_resize:
+                image = self.resize(image, size, resample)
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+            processed_images.append(image)
 
-        # Group images by size for batched resizing
-        resized_images = images
-        if do_resize:
-            grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-            resized_images_grouped = {}
-            for shape, stacked_images in grouped_images.items():
-                resized_stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
-                resized_images_grouped[shape] = resized_stacked_images
-            resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-
-        # Group images by size for further processing (rescale/normalize)
-        # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            processed_images_grouped[shape] = stacked_images
-
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-
-        # Stack images into a single tensor if return_tensors is set
-
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return processed_images
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """
@@ -186,6 +177,9 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
+        if not is_torch_available():
+            raise ImportError("PyTorch is required for post_process_semantic_segmentation")
+
         logits = outputs.logits
 
         # Resize logits and compute semantic segmentation maps
@@ -195,13 +189,13 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
 
-            if is_torch_tensor(target_sizes):
+            if isinstance(target_sizes, torch.Tensor):
                 target_sizes = target_sizes.numpy()
 
             semantic_segmentation = []
 
             for idx in range(len(logits)):
-                resized_logits = torch.nn.functional.interpolate(
+                resized_logits = F.interpolate(
                     logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
@@ -213,4 +207,4 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         return semantic_segmentation
 
 
-__all__ = ["SegformerImageProcessorFast"]
+__all__ = ["SegformerImageProcessorPil"]

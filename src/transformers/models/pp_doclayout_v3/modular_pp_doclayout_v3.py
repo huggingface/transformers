@@ -14,21 +14,17 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torchvision.transforms.v2.functional as tvF
 from torch import nn
 
 from ... import initialization as init
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    BatchFeature,
-)
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
     group_images_by_shape,
     reorder_images,
@@ -41,6 +37,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     is_cv2_available,
+    is_torchvision_available,
     logging,
     requires_backends,
 )
@@ -61,6 +58,9 @@ from ..rt_detr.modeling_rt_detr import (
     inverse_sigmoid,
 )
 
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 if is_cv2_available():
     import cv2
@@ -321,7 +321,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
 
 
 @auto_docstring
-class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
+class PPDocLayoutV3ImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
     image_mean = [0, 0, 0]
     image_std = [1, 1, 1]
@@ -336,7 +336,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -355,9 +355,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(
-                    image=stacked_images, size=size, interpolation=interpolation, antialias=False
-                )
+                stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=False)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -369,7 +367,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
             # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
+            stacked_images = self._rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images
@@ -1539,7 +1537,7 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
 
 __all__ = [
     "PPDocLayoutV3ForObjectDetection",
-    "PPDocLayoutV3ImageProcessorFast",
+    "PPDocLayoutV3ImageProcessor",
     "PPDocLayoutV3Config",
     "PPDocLayoutV3Model",
     "PPDocLayoutV3PreTrainedModel",

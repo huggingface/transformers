@@ -970,6 +970,11 @@ class SizeDict:
             return getattr(self, key)
         raise KeyError(f"Key {key} not found in SizeDict.")
 
+    def get(self, key, default=None):
+        if hasattr(self, key) and getattr(self, key) is not None:
+            return getattr(self, key)
+        return default
+
     def __iter__(self):
         # Yield only non-None (key, value) pairs so dict(self) excludes missing values.
         for f in fields(self):

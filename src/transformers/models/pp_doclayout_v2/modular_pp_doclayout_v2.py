@@ -43,7 +43,7 @@ from ..layoutlmv3.modeling_layoutlmv3 import (
     LayoutLMv3SelfOutput,
     LayoutLMv3TextEmbeddings,
 )
-from ..pp_doclayout_v3.image_processing_pp_doclayout_v3_fast import PPDocLayoutV3ImageProcessorFast
+from ..pp_doclayout_v3.image_processing_pp_doclayout_v3 import PPDocLayoutV3ImageProcessor
 from ..pp_doclayout_v3.modeling_pp_doclayout_v3 import PPDocLayoutV3GlobalPointer
 from ..rt_detr.modeling_rt_detr import (
     RTDetrForObjectDetection,
@@ -446,7 +446,7 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
-class PPDocLayoutV2ImageProcessorFast(PPDocLayoutV3ImageProcessorFast):
+class PPDocLayoutV2ImageProcessor(PPDocLayoutV3ImageProcessor):
     def extract_custom_vertices(self):
         raise AttributeError("Not needed for PPDocLayoutV2")
 
@@ -1153,7 +1153,7 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection):
 
 __all__ = [
     "PPDocLayoutV2ForObjectDetection",
-    "PPDocLayoutV2ImageProcessorFast",
+    "PPDocLayoutV2ImageProcessor",
     "PPDocLayoutV2Config",
     "PPDocLayoutV2Model",
     "PPDocLayoutV2PreTrainedModel",

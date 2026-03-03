@@ -54,7 +54,6 @@ INIT_SERVICE_KWARGS = [
 ]
 
 
-@auto_docstring
 class BaseImageProcessor(ImageProcessingMixin):
     r"""
     Base class for image processors with an inheritance-based backend architecture.
