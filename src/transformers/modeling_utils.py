@@ -1261,7 +1261,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.config._attn_implementation,
             is_init_check=True,
             # We need to use this constant that is set through context manager as it cannot be forwarded in the model's __init__
-            trust_remote_code=hub_kernels.TRUST_REMOTE_KERNELS,
+            load_kernels_from_hub=hub_kernels.TRUST_REMOTE_KERNELS,
         )
         # Check the experts implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
@@ -1463,12 +1463,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config._experts_implementation = kwargs.pop("experts_implementation")
 
         # Needed if the attn_implementation is an outside `kernels-community` kernel
-        trust_remote_code = kwargs.get("trust_remote_code")
+        load_kernels_from_hub = kwargs.get("load_kernels_from_hub", False)
 
         init_contexts = [apply_patches()]
         if dtype is not None:
             init_contexts.append(local_torch_dtype(dtype, cls.__name__))
-        if trust_remote_code:
+        if load_kernels_from_hub:
             init_contexts.append(trust_remote_kernels())
 
         needs_zero3_init = is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called
@@ -1788,7 +1788,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return True
 
     def _check_and_adjust_attn_implementation(
-        self, attn_implementation: str | None, is_init_check: bool = False, trust_remote_code: bool = False
+        self, attn_implementation: str | None, is_init_check: bool = False, load_kernels_from_hub: bool = False
     ) -> str:
         """
         Check that the `attn_implementation` exists and is supported by the models, and try to get the kernel from hub if
@@ -1802,6 +1802,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 fully instantiated. This is needed as we also check the devices of the weights, which are only available
                 later after __init__. This allows to raise proper exceptions early before instantiating the full models
                 if we know that the model does not support the requested attention.
+            load_kernels_from_hub (`bool`, optional):
+                Whether to load kernels from unverified hub repos, if `attn_implementation` is a custom kernel outside
+                of the `kernels-community` hub repository.
 
         Returns:
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
@@ -1859,10 +1862,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # preload flash attention here to allow compile with fullgraph
                 if is_paged:
                     lazy_import_paged_flash_attention(
-                        applicable_attn_implementation, trust_remote_code=trust_remote_code
+                        applicable_attn_implementation, load_kernels_from_hub=load_kernels_from_hub
                     )
                 else:
-                    lazy_import_flash_attention(applicable_attn_implementation, trust_remote_code=trust_remote_code)
+                    lazy_import_flash_attention(applicable_attn_implementation, load_kernels_from_hub=load_kernels_from_hub)
 
                 # log that we used kernel fallback if successful
                 if requested_original_flash_attn:
@@ -1992,7 +1995,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # heuristic -> if we the use_experts_implementation decorator is used, then we can set it
         return "@use_experts_implementation" in code
 
-    def set_attn_implementation(self, attn_implementation: str | dict, trust_remote_code: bool = False):
+    def set_attn_implementation(self, attn_implementation: str | dict, load_kernels_from_hub: bool = False):
         """
         Set the requested `attn_implementation` for this model.
 
@@ -2001,9 +2004,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 The attention implementation to set for this model. It can be either a `str`, in which case it will be
                 dispatched to all submodels if relevant, or a `dict` where keys are the sub_configs name, in which case each
                 submodel will dispatch the corresponding value.
-            trust_remote_code (`bool`, optional):
-                Whether to trust remote code, if `attn_implementation` is a custom kernel outside of the `kernels-community`
-                hub repository.
+            load_kernels_from_hub (`bool`, optional):
+                Whether to load kernels from unverified hub repos, if `attn_implementation` is a custom kernel outside
+                of the `kernels-community` hub repository.
         """
         requested_implementation = (
             attn_implementation
@@ -2021,7 +2024,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
             else:
                 requested_implementation = self._check_and_adjust_attn_implementation(
-                    requested_implementation, is_init_check=False, trust_remote_code=trust_remote_code
+                    requested_implementation, is_init_check=False, load_kernels_from_hub=load_kernels_from_hub
                 )
                 # Apply the change (on the internal attr, to avoid setting it recursively)
                 self.config._attn_implementation_internal = requested_implementation
@@ -3605,12 +3608,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @classmethod
     def get_init_context(
-        cls, dtype: torch.dtype, is_quantized: bool, _is_ds_init_called: bool, trust_remote_code: bool | None
+        cls, dtype: torch.dtype, is_quantized: bool, _is_ds_init_called: bool, load_kernels_from_hub: bool | None
     ):
         # Need to instantiate with correct dtype
         init_contexts = [local_torch_dtype(dtype, cls.__name__), init.no_tie_weights(), apply_patches()]
-        # Needed as we cannot forward the `trust_remote_code` arg in the model's __init__
-        if trust_remote_code:
+        # Needed as we cannot forward the `load_kernels_from_hub` arg in the model's __init__
+        if load_kernels_from_hub:
             init_contexts.append(trust_remote_kernels())
         if is_deepspeed_zero3_enabled():
             import deepspeed
@@ -3935,6 +3938,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        load_kernels_from_hub = kwargs.pop("load_kernels_from_hub", False)
         use_kernels = kwargs.pop("use_kernels", False)
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
@@ -4083,7 +4087,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
 
         config.name_or_path = pretrained_model_name_or_path
-        model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called, trust_remote_code)
+        model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called, load_kernels_from_hub)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         with ContextManagers(model_init_context):

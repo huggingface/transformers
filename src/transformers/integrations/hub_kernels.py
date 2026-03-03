@@ -298,7 +298,7 @@ def is_kernel(attn_implementation: str | None) -> bool:
 
 
 def load_and_register_attn_kernel(
-    attn_implementation: str, attention_wrapper: Callable | None = None, trust_remote_code: bool = False
+    attn_implementation: str, attention_wrapper: Callable | None = None, load_kernels_from_hub: bool = False
 ) -> ModuleType | None:
     """
     Load and register the kernel associated to `attn_implementation`.
@@ -309,9 +309,9 @@ def load_and_register_attn_kernel(
             have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
             They just prepare the arguments properly. This is mostly used for continious batching, where we
             want the `paged` wrapper, which calls the paged cache.
-        trust_remote_code (`bool`, optional):
-            Whether to trust remote code, if `attn_implementation` is a custom kernel outside of the `kernels-community`
-            hub repository.
+        load_kernels_from_hub (`bool`, optional):
+            Whether to load kernels from unverified hub repos, if `attn_implementation` is a custom kernel outside
+            of the `kernels-community` hub repository.
     """
     from ..masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
     from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -340,7 +340,7 @@ def load_and_register_attn_kernel(
 
     # Load the kernel from hub
     try:
-        kernel = get_kernel(repo_id, revision=rev, trust_remote_code=trust_remote_code)
+        kernel = get_kernel(repo_id, revision=rev, load_kernels_from_hub=load_kernels_from_hub)
     except Exception as e:
         raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
     # correctly wrap the kernel
@@ -409,7 +409,7 @@ def get_kernel(
     kernel_name: str,
     revision: str | None = None,
     version: int | str | None = None,
-    trust_remote_code: bool = False,
+    load_kernels_from_hub: bool = False,
 ) -> ModuleType:
     from .. import __version__
 
@@ -418,9 +418,9 @@ def get_kernel(
 
     repo_parent = kernel_name.split("/")[0]
     # all `kernels-community` repos are trusted by default!
-    if repo_parent != "kernels-community" and not trust_remote_code:
+    if repo_parent != "kernels-community" and not load_kernels_from_hub:
         raise ValueError(
-            "You need to specify `trust_remote_code=True` to use kernels outside of the `kernels-community` repository"
+            "You need to specify `load_kernels_from_hub=True` to use kernels outside of the `kernels-community` repository"
         )
 
     user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
