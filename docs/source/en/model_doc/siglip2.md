@@ -49,7 +49,7 @@ from transformers import pipeline
 image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 
-pipeline = pipeline(task="zero-shot-image-classification", model="google/siglip2-base-patch16-224", device=0, torch_dtype=torch.bfloat16)
+pipeline = pipeline(task="zero-shot-image-classification", model="google/siglip2-base-patch16-224", device=0, dtype=torch.bfloat16)
 pipeline(image, candidate_labels=candidate_labels)
 ```
 
