@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 from torch import nn
+from typing import Callable, Optional
 
 from transformers.audio_utils import AudioInput
 from transformers.cache_utils import Cache, DynamicCache
@@ -17,7 +18,7 @@ from transformers.modeling_outputs import (
     MoeCausalLMOutputWithPast,
 )
 from transformers.configuration_utils import PretrainedConfig
-from transformers.modeling_utils import PreTrainedModel
+from transformers.modeling_utils import PreTrainedModel, ALL_ATTENTION_FUNCTIONS
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.tokenization_utils_base import TextInput
 from transformers.utils import auto_docstring, can_return_tuple
@@ -41,6 +42,8 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerTextRMSNorm,
     Qwen3OmniMoeThinkerTextRotaryEmbedding,
     _get_feat_extract_output_lengths,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
 )
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeAttention
 from ..qwen3.modeling_qwen3 import Qwen3DecoderLayer
@@ -549,12 +552,6 @@ class Qwen3ASRAudioEncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
 
 
 
-@auto_docstring(
-    custom_intro="""
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`Qwen3ASRAudioEncoderLayer`].
-    """
-)
 class Qwen3ASRAudioEncoder(Qwen3OmniMoeAudioEncoder):
     #def forward(
     #    self,
@@ -580,8 +577,6 @@ class Qwen3ASRAudioEncoder(Qwen3OmniMoeAudioEncoder):
 
 
 
-
-x
 class Qwen3ASRThinkerTextRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding):
     def __init__(self, config: Qwen3ASRConfig, device=None):
         super().__init__()
@@ -589,7 +584,7 @@ class Qwen3ASRThinkerTextRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding)
         self.mrope_section = config.rope_scaling.get("mrope_section", [24, 20, 20])
 
     def compute_default_rope_parameters(
-        config: Qwen3OmniMoeTextConfig | None = None,
+        config: Qwen3ASRTextConfig | None = None,
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:

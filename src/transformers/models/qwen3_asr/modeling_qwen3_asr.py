@@ -19,7 +19,7 @@ from transformers.generation import GenerationMixin
 from transformers.masking_utils import create_causal_mask
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 from transformers.modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast
-from transformers.modeling_utils import PreTrainedModel
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
 from transformers.utils import auto_docstring, can_return_tuple
 from transformers.utils.deprecation import deprecate_kwarg
@@ -30,7 +30,6 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from .configuration_qwen3_asr import (
     Qwen3ASRAudioEncoderConfig,
@@ -114,7 +113,7 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
+    **kwargs,
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -819,7 +818,7 @@ class Qwen3ASRThinkerTextRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Qwen3OmniMoeTextConfig | None = None,
+        config: Qwen3ASRTextConfig | None = None,
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
