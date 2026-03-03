@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import re
 from collections import OrderedDict
 from math import ceil
 
@@ -36,17 +37,32 @@ class CudaGraphBuffer:
             self._storage.move_to_end((q_len, kv_len))
         return graph
 
-    def set_graph(self, q_len: int, kv_len: int, graph: torch.cuda.CUDAGraph) -> None:
-        if len(self._storage) >= self.max_size:
+    def plan_for_new_graph(self) -> None:
+        while len(self._storage) >= self.max_size:
             evicted_key, evicted_graph = self._storage.popitem(last=False)
             logger.info(f"Evicting graph for {evicted_key = }")
             evicted_graph.reset()
+
+    def set_graph(self, q_len: int, kv_len: int, graph: torch.cuda.CUDAGraph) -> None:
+        # In our use case, this should not have any effect because we plan for a new graph before it is captured
+        self.plan_for_new_graph()
         self._storage[(q_len, kv_len)] = graph
 
+    def __del__(self) -> None:
+        original_max_size = self.max_size
+        self.max_size = 1  # 0 would cause an infinite loop, 1 is enough to clear all graphs
+        self.plan_for_new_graph()
+        self.max_size = original_max_size
 
 def attn_mask_is_needed(config: PretrainedConfig) -> bool:
     """Checks if attention mask is needed for the given (config)."""
     return config._attn_implementation in ["paged|eager", "paged|sdpa"]
+
+
+def is_flash_attn_3(attn_implementation: str) -> bool:
+    if not isinstance(attn_implementation, str):
+        return False
+    return re.match(r".*flash[ ._-]?(attention|attn)[ ._-]?3", attn_implementation) is not None
 
 
 def pad_to_interval(size: int, interval_size: int, max_value: int) -> int:

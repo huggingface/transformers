@@ -128,7 +128,8 @@ class RequestState:
         status (RequestStatus): The status of the request: can be one of PENDING, PREFILLING, PREFILLING_SPLIT,
                                 SPLIT_PENDING_REMAINDER, DECODING, FINISHED, FAILED
         max_new_tokens (int | None): The maximum number of new tokens to generate.
-        eos_token_id (int): The ID of the end-of-sequence token.
+        eos_token_id (None | int | list[int]): The ID(s) of the end-of-sequence tokens. Only used in post-init.
+        _eos_token_ids (set[int]): The IDs of the end-of-sequence tokens, formatted as a set.
         streaming (bool): Whether to stream tokens as they're generated
         created_time (float): The time the request was created.
         error (Optional[str]): Any error message associated with the request. When None, has had no error yet.
@@ -150,7 +151,8 @@ class RequestState:
     position_offset: int = 0  # Current position in the sequence for position_ids
     _status: RequestStatus = RequestStatus.PENDING  # Status of the request, hidden behind a property
     max_new_tokens: int | None = 20  # Maximum number of new tokens to generate. None means no limit. Default to 20.
-    eos_token_id: int = -1  # ID of the end-of-sequence token
+    eos_token_id: int | list[int] | None = None  # ID(s) of the end-of-sequence tokens. Only used in post-init.
+    _eos_token_ids: set[int] = field(default_factory=set)  # IDs of the end-of-sequence tokens, formatted as a set
     streaming: bool = False  # Whether to stream tokens as they're generated
     created_time: float = field(default_factory=time.perf_counter)  # Time the request was created
     error: str | None = None  # Error message if the request failed
@@ -163,7 +165,20 @@ class RequestState:
     def __post_init__(self):
         # If no max length is set, we set an absurdly high value which will never be reached
         self._new_tokens_limit = 2147483647 if self.max_new_tokens is None else self.max_new_tokens
+        # Keep a copy of the initial tokens to process
         self.remaining_prefill_tokens = self.initial_tokens[:]
+        # Format the EOS token ID(s) as a set of ints. If there is no EOS token ID, it's an empty set
+        if self.eos_token_id is None:
+            pass
+        # If there is a single EOS token ID, add it to the set only if the ID is valid, ie. non-negative
+        elif isinstance(self.eos_token_id, int):
+            if self.eos_token_id >= 0:
+                self._eos_token_ids.add(self.eos_token_id)
+        # If there are multiple EOS token IDs, add them to the set only if they are valid, ie. non-negative
+        else:
+            for token_id in self.eos_token_id:
+                if token_id >= 0:
+                    self._eos_token_ids.add(token_id)
 
     @property
     def status(self) -> RequestStatus:
@@ -219,7 +234,7 @@ class RequestState:
             self._timestamps.append(time.perf_counter())
 
         # Stop if we reached an EOS token
-        is_eos = token_id == self.eos_token_id and self.eos_token_id != -1
+        is_eos = token_id in self._eos_token_ids
         current_len = self.generated_len()
 
         # Replace the temporary token if we're not finishing due to max length

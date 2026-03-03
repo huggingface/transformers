@@ -11,7 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import inspect
 from math import floor, gcd, sqrt
+from typing import Any
 
 import torch
 
@@ -145,8 +147,8 @@ class PagedAttentionCache:
         head_dim = getattr(config, "head_dim", None)
         self.head_dim: int = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
 
-        # Extract cache dimensions
-        self.block_size = getattr(generation_config, "block_size", 32)
+        # Extract cache dimensions. Default used to be 32, now it's 256 to be compatible with flash_with_kvcache.
+        self.block_size = getattr(generation_config, "block_size", 256)
 
         # Group layers depending on the attention mix
         layer_groups, group_types = group_layers_by_attn_type(config)
@@ -207,6 +209,17 @@ class PagedAttentionCache:
             f"{self.max_batch_tokens = } {num_attention_masks = }"
         )
 
+        # If max_blocks_per_request is not set, the default value is 16 max blocks. With default block size of 256, this
+        # means a max sequence length of 4096 tokens for the fast decode path.
+        max_blocks_per_request = getattr(generation_config, "max_blocks_per_request", None)
+        if max_blocks_per_request is None:
+            max_blocks_per_request = 0
+            # logger.info( TODO: uncomment when we have good defaults
+            #     f"max_blocks_per_request was not set, using {max_blocks_per_request}. This means max sequence "
+            #     f"length for the decode fast path is {max_blocks_per_request * self.block_size}."
+            # )
+        self.max_blocks_per_request = max_blocks_per_request
+
         # Initialize the cache
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
@@ -244,6 +257,9 @@ class PagedAttentionCache:
         self.use_prefix_sharing = allow_block_sharing and group_types == ["full_attention"]
         self._block_manager = BlockManager(num_blocks, self.block_size)
         self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
+
+        # For block table support, we lazy init the name of the block table key
+        self._block_table_key = None
 
     def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> bool:
         """Returns a boolean indicating if the allocation of (num_requested_blocks) blocks will be successful. The
@@ -307,6 +323,12 @@ class PagedAttentionCache:
             read_indices.extend(indices)
             indices = cm.get_write_indices(request_id, past_length, query_length)
             write_indices.extend(indices)
+
+    def fill_block_table(
+        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
+    ) -> None:
+        for i, cm in enumerate(self.group_cache_managers):
+            cm.fill_block_table(request_id, past_length, query_length, block_table[i])
 
     @traced
     def get_seqlens_k(self, past_length: int, query_length: int) -> dict[str, int]:
@@ -372,6 +394,21 @@ class PagedAttentionCache:
 
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
+
+    def get_block_table_key(self, flash_attn_with_kvcache_fn: Any) -> str:
+        """A function to get the name of the block table key for the given flash_attn_with_kvcache_fn. The function's
+        signature is only inspected once."""
+        if self._block_table_key is None:
+            kwarg_names = inspect.signature(flash_attn_with_kvcache_fn).parameters.keys()
+            if "block_table" in kwarg_names:
+                self._block_table_key = "block_table"
+            elif "page_table" in kwarg_names:
+                self._block_table_key = "page_table"
+            else:
+                raise ValueError(
+                    f"flash_attn_with_kvcache_fn does not have a block_table or page_table argument: {inspect.signature(flash_attn_with_kvcache_fn)}"
+                )
+        return self._block_table_key
 
     def search_prefix_match(self, request_id: str, prompt_ids: list[int]) -> int:
         """Searches for a prefix match in the cache for the given (prompts_ids). If one is found, we reference the
