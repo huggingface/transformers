@@ -923,7 +923,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         output.pop("kwargs", None)
 
         def to_list(value):
-            if isinstance(value, (tuple, set)):
+            if isinstance(value, tuple):
                 value = [to_list(item) for item in value]
             return value
 
@@ -935,7 +935,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
             # Some models have defaults as tuples because dataclass
             # doesn't allow mutables. Let's convert back to `list``
-            elif isinstance(value, (tuple, set)):
+            elif isinstance(value, tuple):
                 value = to_list(value)
 
             output[key] = value
@@ -1059,24 +1059,20 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         Runs recursive check on the dict, to remove from all sub configs.
         """
 
-        if "_is_quantized" in d:
-            del d["_is_quantized"]
-        if "_auto_class" in d:
-            del d["_auto_class"]
-        if "_output_attentions" in d:
-            d["output_attentions"] = d.pop("_output_attentions")
-        if "_commit_hash" in d:
-            del d["_commit_hash"]
-        if "_attn_implementation_internal" in d:
-            del d["_attn_implementation_internal"]
-        if "_experts_implementation_internal" in d:
-            del d["_experts_implementation_internal"]
-        # Do not serialize `base_model_tp_plan` for now
-        if "base_model_tp_plan" in d:
-            del d["base_model_tp_plan"]
-        # Do not serialize `base_model_pp_plan` for now
-        if "base_model_pp_plan" in d:
-            del d["base_model_pp_plan"]
+        for key_to_remove in [
+            "_is_quantized",
+            "_auto_class",
+            "_commit_hash",
+            "_attn_implementation_internal",
+            "_experts_implementation_internal",
+            "ignore_keys_at_rope_validation",
+            "base_model_tp_plan",
+            "base_model_pp_plan",
+        ]:
+            d.pop(key_to_remove, None)
+
+        d["output_attentions"] = d.pop("_output_attentions", None)
+
         for value in d.values():
             if isinstance(value, dict):
                 self._remove_keys_not_serialized(value)
