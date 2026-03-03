@@ -136,10 +136,6 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip("Requires torch>=2.9.0 for grouped MM")
-    def test_eager_matches_batched_and_grouped_inference(self):
-        pass
-
     @unittest.skip("DSA indexer mask shape mismatch with static cache")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass

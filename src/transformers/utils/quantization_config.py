@@ -62,6 +62,7 @@ class QuantizationMethod(str, Enum):
     FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
+    METAL = "metal"
     FOUR_OVER_SIX = "fouroversix"
     SINQ = "sinq"
 
@@ -1908,6 +1909,49 @@ class Mxfp4Config(QuantizationConfigMixin):
             `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         return {"quant_method": self.quant_method, "modules_to_not_convert": self.modules_to_not_convert}
+
+
+class MetalConfig(QuantizationConfigMixin):
+    """
+    Configuration class for Metal affine quantization targeting Apple Silicon (MPS) devices.
+
+    This quantization method uses the ``mlx-quantization-metal-kernels`` Metal kernels from the Hugging Face Hub
+    to perform affine quantization (scales + qbiases) with configurable bit-width and group size.
+    The quantized weights are packed into ``uint32`` tensors and the forward pass uses fused
+    dequantization + matmul Metal kernels.
+    """
+
+    def __init__(
+        self,
+        bits: int = 4,
+        group_size: int = 64,
+        modules_to_not_convert: list | None = None,
+        dequantize: bool = False,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.METAL
+        self.bits = bits
+        self.group_size = group_size
+        self.modules_to_not_convert = modules_to_not_convert
+        self.dequantize = dequantize
+        self.post_init()
+
+    def post_init(self):
+        if self.bits not in (2, 4, 8):
+            raise ValueError(f"Metal quantization only supports bits in {{2, 4, 8}}, got {self.bits}")
+        if self.group_size <= 0:
+            raise ValueError(f"group_size must be positive, got {self.group_size}")
+
+    def get_loading_attributes(self):
+        return {"dequantize": self.dequantize}
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "quant_method": self.quant_method,
+            "bits": self.bits,
+            "group_size": self.group_size,
+            "modules_to_not_convert": self.modules_to_not_convert,
+        }
 
 
 @dataclass
