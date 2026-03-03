@@ -1102,6 +1102,11 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             # token_logits: (batch, T, U+1, vocab_size+1)
             # duration_logits: (batch, T, U+1, num_duration_bins)
 
+            # move labels to correct device to enable pipeline parallelism
+            labels = labels.to(token_logits.device)
+            encoder_lengths = encoder_lengths.to(token_logits.device)
+            target_lengths = target_lengths.to(token_logits.device)
+
             loss = tdt_loss(
                 token_logits=token_logits.float(),
                 duration_logits=duration_logits.float(),

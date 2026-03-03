@@ -423,7 +423,7 @@ class ParakeetForTDTModelTester:
         vocab_size=128,
         decoder_hidden_size=64,
         num_decoder_layers=1,
-        num_duration_bins=5,
+        durations=None,
         hidden_act="relu",
         max_symbols_per_step=10,
         pad_token_id=128,
@@ -445,7 +445,7 @@ class ParakeetForTDTModelTester:
         self.vocab_size = vocab_size
         self.decoder_hidden_size = decoder_hidden_size
         self.num_decoder_layers = num_decoder_layers
-        self.num_duration_bins = num_duration_bins
+        self.durations = durations if durations is not None else [0, 1, 2, 3, 4]
         self.hidden_act = hidden_act
         self.max_symbols_per_step = max_symbols_per_step
         self.pad_token_id = pad_token_id
@@ -460,7 +460,7 @@ class ParakeetForTDTModelTester:
             vocab_size=self.vocab_size,
             decoder_hidden_size=self.decoder_hidden_size,
             num_decoder_layers=self.num_decoder_layers,
-            num_duration_bins=self.num_duration_bins,
+            durations=self.durations,
             hidden_act=self.hidden_act,
             max_symbols_per_step=self.max_symbols_per_step,
             encoder_config=self.encoder_model_tester.get_config().to_dict(),
