@@ -253,20 +253,44 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         config.scale_attn_weights = False
         config.scale_attn_by_inverse_layer_idx = True
 
+        model = GPT2LMHeadModel(config).to(torch_device).eval()
+
         # Eager attention (known-correct reference)
-        config._attn_implementation = "eager"
-        model_eager = GPT2LMHeadModel(config).to(torch_device).eval()
+        model.set_attn_implementation("eager")
         with torch.no_grad():
-            output_eager = model_eager(input_ids, token_type_ids=token_type_ids).logits
+            output_eager = model(input_ids, token_type_ids=token_type_ids).logits
 
         # SDPA attention (was buggy: ignored scaling configs)
-        config._attn_implementation = "sdpa"
-        model_sdpa = GPT2LMHeadModel(config).to(torch_device).eval()
-        model_sdpa.load_state_dict(model_eager.state_dict())
+        model.set_attn_implementation("sdpa")
         with torch.no_grad():
-            output_sdpa = model_sdpa(input_ids, token_type_ids=token_type_ids).logits
+            output_sdpa = model(input_ids, token_type_ids=token_type_ids).logits
 
         torch.testing.assert_close(output_eager, output_sdpa, atol=1e-5, rtol=1e-4)
+
+    @require_torch_accelerator
+    @require_flash_attn
+    def test_gpt2_fa2_matches_eager_with_scaling_configs(self):
+        """Test that FlashAttention2 and eager produce equivalent outputs when scaling configs differ."""
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
+        config, input_ids, token_type_ids, _, _, _, _ = config_and_inputs
+        config.scale_attn_weights = False
+        config.scale_attn_by_inverse_layer_idx = True
+
+        model = GPT2LMHeadModel(config).to(torch_device).eval().to(torch.float16)
+        input_ids = input_ids.to(torch_device)
+        token_type_ids = token_type_ids.to(torch_device)
+
+        # Eager attention (known-correct reference)
+        model.set_attn_implementation("eager")
+        with torch.no_grad():
+            output_eager = model(input_ids, token_type_ids=token_type_ids).logits
+
+        # FlashAttention2
+        model.set_attn_implementation("flash_attention_2")
+        with torch.no_grad():
+            output_fa2 = model(input_ids, token_type_ids=token_type_ids).logits
+
+        torch.testing.assert_close(output_eager, output_fa2, atol=5e-3, rtol=5e-3)
 
     def test_gpt2_reorder_and_upcast_attn(self):
         # extra test: model-specific flag
