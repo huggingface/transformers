@@ -22,6 +22,7 @@ from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_kernels_available, is_torch_available, logging
 from .hub_kernels import get_kernel
+from .moe import ALL_EXPERTS_FUNCTIONS, use_experts_implementation
 
 
 logger = logging.get_logger(__name__)
@@ -290,24 +291,25 @@ def fp8_batched_mm_experts_forward(
     selected_hidden_states = hidden_states[token_idx]
 
     # --- Up projection per expert (FP8 batched) ---
-    gate_up_out = kernel.w8a8_block_fp8_matmul_batched(
+    proj_out = kernel.w8a8_block_fp8_matmul_batched(
         selected_hidden_states,
-        self.gate_up_proj,
-        self.gate_up_proj_scale_inv,
-        expert_ids,
-        self.block_size,
+        self.gate_up_proj if self.has_gate else self.up_proj,
+        self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
+        expert_ids=expert_ids,
+        block_size=self.block_size,
     )  # (S, 2 * intermediate_dim)
 
-    # Apply gating
-    gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
+    # Apply gating or activation
+    if self.has_gate:
+        # for gated experts we apply the custom/default gating mechanism
+        proj_out = self._apply_gate(proj_out)  # (S, intermediate_dim)
+    else:
+        # for non-gated experts we just apply the activation function
+        proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 batched) ---
     out_per_sample = kernel.w8a8_block_fp8_matmul_batched(
-        gated_out,
-        self.down_proj,
-        self.down_proj_scale_inv,
-        expert_ids,
-        self.block_size,
+        proj_out, self.down_proj, self.down_proj_scale_inv, expert_ids=expert_ids, block_size=self.block_size
     )  # (S, hidden_dim)
 
     # Apply routing weights
@@ -356,21 +358,26 @@ def fp8_grouped_mm_experts_forward(
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (FP8 grouped) ---
-    gate_up_out = kernel.w8a8_block_fp8_matmul_grouped(
+    proj_out = kernel.w8a8_block_fp8_matmul_grouped(
         selected_hidden_states_g,
-        self.gate_up_proj,
-        self.gate_up_proj_scale_inv,
+        self.gate_up_proj if self.has_gate else self.up_proj,
+        self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
     )  # (S, 2 * intermediate_dim)
 
-    # Apply gating
-    gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
+    # Apply gating or activation
+    if self.has_gate:
+        # for gated experts we apply the custom/default gating mechanism
+        proj_out = self._apply_gate(proj_out)  # (S, intermediate_dim)
+    else:
+        # for non-gated experts we just apply the activation function
+        proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 grouped) ---
-    out_per_sample_g = kernel.w8a8_block_fp8_matmul_grouped(
-        gated_out,
+    proj_out = kernel.w8a8_block_fp8_matmul_grouped(
+        proj_out,
         self.down_proj,
         self.down_proj_scale_inv,
         tokens_per_expert=tokens_per_expert,
@@ -379,7 +386,7 @@ def fp8_grouped_mm_experts_forward(
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    out_per_sample_g = out_per_sample_g * sample_weights_g.to(out_per_sample_g.dtype).unsqueeze(-1)  # (S, hidden_dim)
+    out_per_sample_g = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
     # Restore original order
     out_per_sample = out_per_sample_g[inv_perm]
@@ -391,11 +398,16 @@ def fp8_grouped_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
-class FP8Expert(nn.Module):
-    def __init__(self, config, block_size, dtype=torch.float8_e4m3fn):
+ALL_EXPERTS_FUNCTIONS["batched_mm"] = fp8_batched_mm_experts_forward
+ALL_EXPERTS_FUNCTIONS["grouped_mm"] = fp8_grouped_mm_experts_forward
+
+
+class FP8Experts(nn.Module):
+    def __init__(self, config, block_size, has_gate=True, dtype=torch.float8_e4m3fn):
         super().__init__()
 
         self.config = config
+        self.has_gate = has_gate
         self.block_size = block_size
         self.hidden_dim = config.hidden_size
         self.num_experts = config.num_local_experts if hasattr(config, "num_local_experts") else config.num_experts
@@ -403,77 +415,84 @@ class FP8Expert(nn.Module):
             config.moe_intermediate_size if hasattr(config, "moe_intermediate_size") else config.intermediate_size
         )
 
-        Wg_out, Wg_in = 2 * self.intermediate_dim, self.hidden_dim
-        Wd_out, Wd_in = self.hidden_dim, self.intermediate_dim
+        block_n, block_k = block_size[0], block_size[1]
 
-        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, Wg_out, Wg_in, dtype=dtype))
-        self.down_proj = nn.Parameter(torch.zeros(self.num_experts, Wd_out, Wd_in, dtype=dtype))
+        if self.has_gate:
+            self.gate_up_proj = nn.Parameter(
+                torch.zeros(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim, dtype=dtype)
+            )
+            self.gate_up_proj_scale_inv = nn.Parameter(
+                torch.zeros(
+                    self.num_experts,
+                    triton.cdiv(2 * self.intermediate_dim, block_n),
+                    triton.cdiv(self.hidden_dim, block_k),
+                    dtype=torch.float32,
+                )
+            )
+            self.register_parameter("gate_up_proj_bias", None)
+        else:
+            self.up_proj = nn.Parameter(
+                torch.zeros(self.num_experts, self.hidden_dim, self.intermediate_dim, dtype=dtype)
+            )
+            self.up_proj_scale_inv = nn.Parameter(
+                torch.zeros(
+                    self.num_experts,
+                    triton.cdiv(self.hidden_dim, block_k),
+                    triton.cdiv(self.intermediate_dim, block_n),
+                    dtype=torch.float32,
+                )
+            )
+            self.register_parameter("up_proj_bias", None)
 
-        bo, bi = self.block_size
-
-        # gate_up_proj tiles: ceil(Wg_out/bo) x ceil(Wg_in/bi)
-        gu_scale_o = triton.cdiv(Wg_out, bo)
-        gu_scale_i = triton.cdiv(Wg_in, bi)
-        self.gate_up_proj_scale_inv = nn.Parameter(
-            torch.zeros(self.num_experts, gu_scale_o, gu_scale_i, dtype=torch.float32)
+        self.down_proj = nn.Parameter(
+            torch.zeros(self.num_experts, self.intermediate_dim, self.hidden_dim, dtype=dtype)
         )
-
-        # down tiles: ceil(Wd_out/bo) x ceil(Wd_in/bi)
-        dp_scale_o = triton.cdiv(Wd_out, bo)
-        dp_scale_i = triton.cdiv(Wd_in, bi)
         self.down_proj_scale_inv = nn.Parameter(
-            torch.zeros(self.num_experts, dp_scale_o, dp_scale_i, dtype=torch.float32)
+            torch.zeros(
+                self.num_experts,
+                triton.cdiv(self.hidden_dim, block_k),
+                triton.cdiv(self.intermediate_dim, block_n),
+                dtype=torch.float32,
+            )
         )
+        self.register_parameter("down_proj_bias", None)
 
-        # (Optional) bias per projection — many MoEs omit bias; keep None to match your FP8Linear default
-        self.register_parameter("gate_up_bias", None)
-        self.register_parameter("down_bias", None)
-
-        # Activation used in the MLP (same as your config / ACT2FN)
         self.act_fn = ACT2FN[config.hidden_act]
 
     def _apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up_out.chunk(2, dim=-1)
         return self.act_fn(gate) * up
 
-    # We follow the mixtral "eager" moe implementation at
-    # https://github.com/huggingface/transformers/blob/457048fbfdba9a7dee8bd03328c62f49e57b95f9/src/transformers/models/mixtral/modular_mixtral.py#L148
-    # The core changes in this FP8 version should only relate to how we call the linear projections
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        if self.config._experts_implementation == "grouped_mm":
-            return fp8_grouped_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights)
-        elif self.config._experts_implementation == "batched_mm":
-            return fp8_batched_mm_experts_forward(self, hidden_states, top_k_index, top_k_weights)
-        elif self.config._experts_implementation != "eager":
-            raise ValueError(f"Unsupported experts implementation: {self.config._experts_implementation}")
-
         # index_add_ will accumulate using the dtype of the tensor we write into
         # so we use float32 for the accumulation to avoid numerical issues in bf16/fp16
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
+
         with torch.no_grad():
             expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero().squeeze()
 
         for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
             if expert_idx == self.gate_up_proj.size(0):
                 continue
+
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate_up = self.linear(
-                current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scale_inv[expert_idx]
+            current_hidden_states = self.linear(
+                current_state,
+                self.gate_up_proj[expert_idx] if self.has_gate else self.up_proj[expert_idx],
+                self.gate_up_proj_scale_inv[expert_idx] if self.has_gate else self.up_proj_scale_inv[expert_idx],
             )
-            current_hidden_states = self._apply_gate(gate_up)
+            if self.has_gate:
+                current_hidden_states = self._apply_gate(current_hidden_states)
+            else:
+                current_hidden_states = self.act_fn(current_hidden_states)
             current_hidden_states = self.linear(
                 current_hidden_states, self.down_proj[expert_idx], self.down_proj_scale_inv[expert_idx]
             )
-
             routing_weights = top_k_weights[token_idx, top_k_pos, None]
             current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -482,7 +501,6 @@ class FP8Expert(nn.Module):
 
     def linear(self, input: torch.Tensor, weight: torch.Tensor, weight_scale_inv: torch.Tensor) -> torch.Tensor:
         if weight.element_size() > 1:
-            # QUESTION: not sure why we would want the fp8 experts to support a fallback to fp16/bf16/fp32
             return F.linear(input, weight, None)
 
         kernel = _get_triton_kernel()
@@ -522,15 +540,19 @@ def replace_with_fp8_linear(
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
+
         # we need this to correctly materialize the weights during quantization
         module_kwargs = {} if pre_quantized else {"dtype": None}
         new_module = None
         with torch.device("meta"):
             if module_name.endswith(".experts"):
-                new_module = FP8Expert(
-                    config=model.config.get_text_config(),
-                    block_size=quantization_config.weight_block_size,
-                    **module_kwargs,
+                # these are added by @use_experts_implementation
+                config = getattr(module, "config", model.config.get_text_config())
+                has_gate = getattr(module, "has_gate", True)
+                # we wrap the class here to have access to has_gate and has_bias
+                new_class = use_experts_implementation(experts_class=FP8Experts, has_gate=has_gate)
+                new_module = new_class(
+                    config=config, block_size=quantization_config.weight_block_size, has_gate=has_gate, **module_kwargs
                 )
             elif isinstance(module, nn.Linear):
                 new_module = FP8Linear(

@@ -134,28 +134,29 @@ def batched_mm_experts_forward(
         selected_biases = self.up_proj_bias[expert_ids] if self.has_bias else None
 
     # --- Up projection per expert (batched) ---
-    up_proj_out = _batched_linear(
+    proj_out = _batched_linear(
         selected_hidden_states, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
 
-    # Apply gating or just activation
+    # Apply gating or activation
     if self.has_gate:
-        up_proj_out = self._apply_gate(up_proj_out)  # (S, intermediate_dim)
+        # for gated experts we apply the custom/default gating mechanism
+        proj_out = self._apply_gate(proj_out)  # (S, intermediate_dim)
     else:
         # for non-gated experts we just apply the activation function
-        up_proj_out = self.act_fn(up_proj_out)  # (S, intermediate_dim)
+        proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # Select down projection weights and biases for selected samples
     selected_weights = self.down_proj[expert_ids]
     selected_biases = self.down_proj_bias[expert_ids] if self.has_bias else None
 
     # --- Down projection per expert (batched) ---
-    down_proj_out = _batched_linear(
-        up_proj_out, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
+    proj_out = _batched_linear(
+        proj_out, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
     # Apply routing weights and zero out invalid expert contributions
-    weighted_out = down_proj_out * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out = proj_out * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
     weighted_out.masked_fill_(invalid_mask.unsqueeze(-1), 0.0)  # Zero out invalid expert contributions
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
@@ -385,28 +386,29 @@ def grouped_mm_experts_forward(
         selected_biases = self.up_proj_bias[expert_ids_g] if self.has_bias else None
 
     # --- Up projection per expert (grouped) ---
-    up_proj_out = _grouped_linear(
+    proj_out = _grouped_linear(
         selected_hidden_states_g, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
 
-    # Apply gating or just activation
+    # Apply gating or activation
     if self.has_gate:
-        up_proj_out = self._apply_gate(up_proj_out)  # (S, intermediate_dim)
+        # for gated experts we apply the custom/default gating mechanism
+        proj_out = self._apply_gate(proj_out)  # (S, intermediate_dim)
     else:
         # for non-gated experts we just apply the activation function
-        up_proj_out = self.act_fn(up_proj_out)  # (S, intermediate_dim)
+        proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # Select down projection weights and biases
     selected_weights = self.down_proj
     selected_biases = self.down_proj_bias[expert_ids_g] if self.has_bias else None
 
     # --- Down projection per expert (grouped) ---
-    down_proj_out = _grouped_linear(
-        up_proj_out, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
+    proj_out = _grouped_linear(
+        proj_out, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    weighted_out = down_proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
 
     # Restore original order
     weighted_out = weighted_out[inv_perm]  # (S, hidden_dim)
