@@ -38,17 +38,16 @@ from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWit
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from .configuration_ernie4_5_vl_moe import (
-    Ernie4_5_VL_MoeConfig,
-    Ernie4_5_VL_MoeTextConfig,
-    Ernie4_5_VL_MoeVisionConfig,
-)
+from .configuration_ernie4_5_vl_moe import Ernie4_5_VLMoeConfig, Ernie4_5_VLMoeTextConfig, Ernie4_5_VLMoeVisionConfig
 
 
-class Ernie4_5_VL_MoeTextRotaryEmbedding(nn.Module):
+logger = logging.get_logger(__name__)
+
+
+class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config, device=None):
@@ -71,7 +70,7 @@ class Ernie4_5_VL_MoeTextRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Ernie4_5_VL_MoeTextConfig | None = None,
+        config: Ernie4_5_VLMoeTextConfig | None = None,
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
@@ -210,10 +209,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class Ernie4_5_VL_MoeTextAttention(nn.Module):
+class Ernie4_5_VLMoeTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Ernie4_5_VL_MoeConfig, layer_idx: int):
+    def __init__(self, config: Ernie4_5_VLMoeConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -274,10 +273,10 @@ class Ernie4_5_VL_MoeTextAttention(nn.Module):
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class Ernie4_5_VL_MoeRMSNorm(nn.Module):
+class Ernie4_5_VLMoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
-        Ernie4_5_VL_MoeRMSNorm is equivalent to T5LayerNorm
+        Ernie4_5_VLMoeRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -294,7 +293,7 @@ class Ernie4_5_VL_MoeRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Ernie4_5_VL_MoeMLP(nn.Module):
+class Ernie4_5_VLMoeMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
@@ -311,7 +310,7 @@ class Ernie4_5_VL_MoeMLP(nn.Module):
         return down_proj
 
 
-class Ernie4_5_VL_MoeMoeStatics(nn.Module):
+class Ernie4_5_VLMoeMoeStatics(nn.Module):
     """
     Stores MoE (Mixture of Experts) statistics
         - Bias for the gating
@@ -338,11 +337,11 @@ class Ernie4_5_VL_MoeMoeStatics(nn.Module):
         return hidden_states + self.e_score_correction_bias.squeeze()
 
 
-class Ernie4_5_VL_MoeMoeTopKRouter(nn.Module):
+class Ernie4_5_VLMoeMoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.weight = nn.Parameter(torch.zeros(config.moe_num_experts, config.hidden_size, dtype=torch.float32))
-        self.moe_statics = Ernie4_5_VL_MoeMoeStatics(config)
+        self.moe_statics = Ernie4_5_VLMoeMoeStatics(config)
         self.top_k = config.moe_k
         self.norm_min = config.moe_norm_min
 
@@ -366,7 +365,7 @@ class Ernie4_5_VL_MoeMoeTopKRouter(nn.Module):
 
 
 @use_experts_implementation
-class Ernie4_5_VL_MoeMoeExperts(nn.Module):
+class Ernie4_5_VLMoeMoeExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config, intermediate_size=None):
@@ -405,14 +404,14 @@ class Ernie4_5_VL_MoeMoeExperts(nn.Module):
         return final_hidden_states
 
 
-class Ernie4_5_VL_MoeSparseMoeBlock(nn.Module):
+class Ernie4_5_VLMoeSparseMoeBlock(nn.Module):
     def __init__(self, config, intermediate_size):
         super().__init__()
         self.hidden_dim = config.hidden_size
         self.num_experts = config.moe_num_experts
         self.top_k = config.moe_k
-        self.gate = Ernie4_5_VL_MoeMoeTopKRouter(config)
-        self.experts = Ernie4_5_VL_MoeMoeExperts(config, intermediate_size)
+        self.gate = Ernie4_5_VLMoeMoeTopKRouter(config)
+        self.experts = Ernie4_5_VLMoeMoeExperts(config, intermediate_size)
 
     def forward(
         self,
@@ -427,7 +426,7 @@ class Ernie4_5_VL_MoeSparseMoeBlock(nn.Module):
         return final_hidden_states.flatten(), router_logits.flatten()
 
 
-class Ernie4_5_VL_MoeMoeBlock(nn.Module):
+class Ernie4_5_VLMoeMoeBlock(nn.Module):
     """
     Similar to `Ernie4_5_Moe` where we have modality isolated experts:
         - A set of text experts that are only run on text tokens
@@ -440,12 +439,12 @@ class Ernie4_5_VL_MoeMoeBlock(nn.Module):
         super().__init__()
         self.num_experts = config.moe_num_experts
 
-        self.text_moe = Ernie4_5_VL_MoeSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[0])
-        self.vision_moe = Ernie4_5_VL_MoeSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[1])
+        self.text_moe = Ernie4_5_VLMoeSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[0])
+        self.vision_moe = Ernie4_5_VLMoeSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[1])
 
         self.shared_experts = None
         if config.moe_num_shared_experts > 0:
-            self.shared_experts = Ernie4_5_VL_MoeMLP(
+            self.shared_experts = Ernie4_5_VLMoeMLP(
                 config, config.moe_intermediate_size[0] * config.moe_num_shared_experts
             )
 
@@ -492,20 +491,20 @@ class Ernie4_5_VL_MoeMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-class Ernie4_5_VL_MoeDecoderLayer(GradientCheckpointingLayer):
+class Ernie4_5_VLMoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = Ernie4_5_VL_MoeTextAttention(config, layer_idx)
+        self.self_attn = Ernie4_5_VLMoeTextAttention(config, layer_idx)
 
         if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = Ernie4_5_VL_MoeMoeBlock(config)
+            self.mlp = Ernie4_5_VLMoeMoeBlock(config)
         else:
-            self.mlp = Ernie4_5_VL_MoeMLP(config)
+            self.mlp = Ernie4_5_VLMoeMLP(config)
 
-        self.input_layernorm = Ernie4_5_VL_MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Ernie4_5_VL_MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.input_layernorm = Ernie4_5_VLMoeRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Ernie4_5_VLMoeRMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(
         self,
@@ -537,7 +536,7 @@ class Ernie4_5_VL_MoeDecoderLayer(GradientCheckpointingLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        if isinstance(self.mlp, Ernie4_5_VL_MoeMoeBlock):
+        if isinstance(self.mlp, Ernie4_5_VLMoeMoeBlock):
             hidden_states, _ = self.mlp(hidden_states, moe_mm_token_type_ids)
         else:
             hidden_states = self.mlp(hidden_states)
@@ -567,8 +566,8 @@ def apply_rotary_pos_emb_vision(
     return q_embed, k_embed
 
 
-class Ernie4_5_VL_MoeVisionAttention(nn.Module):
-    def __init__(self, config: Ernie4_5_VL_MoeVisionConfig) -> None:
+class Ernie4_5_VLMoeVisionAttention(nn.Module):
+    def __init__(self, config: Ernie4_5_VLMoeVisionConfig) -> None:
         super().__init__()
         self.dim = config.hidden_size
         self.num_heads = config.num_heads
@@ -650,13 +649,13 @@ class Ernie4_5_VL_MoeVisionAttention(nn.Module):
         return attn_output
 
 
-class Ernie4_5_VL_MoeVisionBlock(GradientCheckpointingLayer):
+class Ernie4_5_VLMoeVisionBlock(GradientCheckpointingLayer):
     def __init__(self, config) -> None:
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
         self.norm2 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
-        self.attn = Ernie4_5_VL_MoeVisionAttention(config=config)
+        self.attn = Ernie4_5_VLMoeVisionAttention(config=config)
         self.mlp = Ernie4_5VLVisionMLP(
             dim=config.hidden_size,
             hidden_dim=config.intermediate_size,
@@ -683,12 +682,12 @@ class Ernie4_5_VL_MoeVisionBlock(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class Ernie4_5_VL_MoePreTrainedModel(PreTrainedModel):
-    config: Ernie4_5_VL_MoeConfig
+class Ernie4_5_VLMoePreTrainedModel(PreTrainedModel):
+    config: Ernie4_5_VLMoeConfig
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Ernie4_5_VL_MoeDecoderLayer", "Ernie4_5_VL_MoeVisionBlock"]
+    _no_split_modules = ["Ernie4_5_VLMoeDecoderLayer", "Ernie4_5_VLMoeVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -696,40 +695,40 @@ class Ernie4_5_VL_MoePreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Ernie4_5_VL_MoeMoeBlock, index=1),
-        "hidden_states": Ernie4_5_VL_MoeDecoderLayer,
-        "attentions": Ernie4_5_VL_MoeTextAttention,
+        "router_logits": OutputRecorder(Ernie4_5_VLMoeMoeBlock, index=1),
+        "hidden_states": Ernie4_5_VLMoeDecoderLayer,
+        "attentions": Ernie4_5_VLMoeTextAttention,
     }
     _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Ernie4_5_VL_MoeMoeTopKRouter):
+        if isinstance(module, Ernie4_5_VLMoeMoeTopKRouter):
             init.zeros_(module.moe_statics.e_score_correction_bias)
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Ernie4_5_VL_MoeMoeExperts):
+        elif isinstance(module, Ernie4_5_VLMoeMoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Ernie4_5_VL_MoeVisionRotaryEmbedding):
+        elif isinstance(module, Ernie4_5_VLMoeVisionRotaryEmbedding):
             inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
             init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring
-class Ernie4_5_VL_MoeTextModel(Ernie4_5_VL_MoePreTrainedModel):
-    config: Ernie4_5_VL_MoeTextConfig
+class Ernie4_5_VLMoeTextModel(Ernie4_5_VLMoePreTrainedModel):
+    config: Ernie4_5_VLMoeTextConfig
 
-    def __init__(self, config: Ernie4_5_VL_MoeTextConfig):
+    def __init__(self, config: Ernie4_5_VLMoeTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [Ernie4_5_VL_MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Ernie4_5_VLMoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = Ernie4_5_VL_MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Ernie4_5_VL_MoeTextRotaryEmbedding(config=config)
+        self.norm = Ernie4_5_VLMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Ernie4_5_VLMoeTextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -833,7 +832,7 @@ class Ernie4_5VLVisionMLP(nn.Module):
         return self.fc2(self.act(self.fc1(x)))
 
 
-class Ernie4_5_VL_MoePatchEmbed(nn.Module):
+class Ernie4_5_VLMoePatchEmbed(nn.Module):
     def __init__(
         self,
         patch_size: int = 14,
@@ -851,7 +850,7 @@ class Ernie4_5_VL_MoePatchEmbed(nn.Module):
         return self.proj(hidden_states.to(target_dtype))
 
 
-class Ernie4_5_VL_MoeVisionRotaryEmbedding(nn.Module):
+class Ernie4_5_VLMoeVisionRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
@@ -868,31 +867,31 @@ class Ernie4_5_VL_MoeVisionRotaryEmbedding(nn.Module):
 
 
 @auto_docstring
-class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VL_MoePreTrainedModel):
-    config: Ernie4_5_VL_MoeVisionConfig
+class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Ernie4_5_VLMoePreTrainedModel):
+    config: Ernie4_5_VLMoeVisionConfig
     input_modalities = ("image", "video")
-    _no_split_modules = ["Ernie4_5_VL_MoeVisionBlock"]
+    _no_split_modules = ["Ernie4_5_VLMoeVisionBlock"]
     _input_embed_layer = "patch_embed"
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Ernie4_5_VL_MoeMoeBlock, index=1),
-        "hidden_states": Ernie4_5_VL_MoeVisionBlock,
-        "attentions": Ernie4_5_VL_MoeVisionAttention,
+        "router_logits": OutputRecorder(Ernie4_5_VLMoeMoeBlock, index=1),
+        "hidden_states": Ernie4_5_VLMoeVisionBlock,
+        "attentions": Ernie4_5_VLMoeVisionAttention,
     }
 
     def __init__(self, config) -> None:
         super().__init__(config)
         self.spatial_merge_size = config.spatial_merge_size
 
-        self.patch_embed = Ernie4_5_VL_MoePatchEmbed(
+        self.patch_embed = Ernie4_5_VLMoePatchEmbed(
             patch_size=config.patch_size,
             in_channels=config.in_channels,
             embed_dim=config.hidden_size,
         )
 
         head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Ernie4_5_VL_MoeVisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Ernie4_5_VLMoeVisionRotaryEmbedding(head_dim // 2)
 
-        self.blocks = nn.ModuleList([Ernie4_5_VL_MoeVisionBlock(config) for _ in range(config.depth)])
+        self.blocks = nn.ModuleList([Ernie4_5_VLMoeVisionBlock(config) for _ in range(config.depth)])
         self.gradient_checkpointing = False
 
         self.ln = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -963,7 +962,7 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VL_MoePreTrainedM
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
-class Ernie4_5_VL_MoeVisionMLP(nn.Module):
+class Ernie4_5_VLMoeVisionMLP(nn.Module):
     def __init__(self, config, in_dim, out_dim):
         super().__init__()
 
@@ -980,8 +979,8 @@ class Ernie4_5_VL_MoeVisionMLP(nn.Module):
         return hidden_states
 
 
-class Ernie4_5_VL_MoeVariableResolutionResamplerModel(nn.Module):
-    def __init__(self, config: Ernie4_5_VL_MoeConfig):
+class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):
+    def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__()
         self.config = config
 
@@ -995,11 +994,11 @@ class Ernie4_5_VL_MoeVariableResolutionResamplerModel(nn.Module):
         # compress 3d conv(video) to 1d
         self.temporal_dim = self.in_dim * self.spatial_merge_size**2 * self.temporal_merge_size
 
-        self.spatial_linear = Ernie4_5_VL_MoeVisionMLP(config, self.spatial_dim, self.spatial_dim)
-        self.temporal_linear = Ernie4_5_VL_MoeVisionMLP(config, self.temporal_dim, self.spatial_dim)
+        self.spatial_linear = Ernie4_5_VLMoeVisionMLP(config, self.spatial_dim, self.spatial_dim)
+        self.temporal_linear = Ernie4_5_VLMoeVisionMLP(config, self.temporal_dim, self.spatial_dim)
 
         self.mlp = nn.Linear(self.spatial_dim, self.out_dim)
-        self.after_norm = Ernie4_5_VL_MoeRMSNorm(self.out_dim, config.text_config.rms_norm_eps)
+        self.after_norm = Ernie4_5_VLMoeRMSNorm(self.out_dim, config.text_config.rms_norm_eps)
 
     def _temporal_slicing(self, hidden_states, grid_thw):
         """
@@ -1082,20 +1081,20 @@ class Ernie4_5_VL_MoeVariableResolutionResamplerModel(nn.Module):
 
 
 @auto_docstring
-class Ernie4_5_VL_MoeModel(Ernie4_5_VL_MoePreTrainedModel):
+class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
     base_model_prefix = "model"
     _checkpoint_conversion_mapping = {"^norm": "language_model.norm"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    config: Ernie4_5_VL_MoeConfig
-    _no_split_modules = ["Ernie4_5_VL_MoeDecoderLayer", "Ernie4_5_VL_MoeVisionBlock"]
+    config: Ernie4_5_VLMoeConfig
+    _no_split_modules = ["Ernie4_5_VLMoeDecoderLayer", "Ernie4_5_VLMoeVisionBlock"]
 
-    def __init__(self, config: Ernie4_5_VL_MoeConfig):
+    def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__(config)
-        self.language_model = Ernie4_5_VL_MoeTextModel._from_config(config.text_config)
+        self.language_model = Ernie4_5_VLMoeTextModel._from_config(config.text_config)
         self.rope_deltas = None  # cache rope_deltas here
-        self.vision_tower = Ernie4_5_VL_MoeVisionTransformerPretrainedModel._from_config(config.vision_config)
-        self.resampler_model = Ernie4_5_VL_MoeVariableResolutionResamplerModel(config)
+        self.vision_tower = Ernie4_5_VLMoeVisionTransformerPretrainedModel._from_config(config.vision_config)
+        self.resampler_model = Ernie4_5_VLMoeVariableResolutionResamplerModel(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1564,7 +1563,7 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VL_MoePreTrainedModel, GenerationMixin):
+class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {"^model.norm": "model.language_model.norm"}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
@@ -1572,7 +1571,7 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VL_MoePreTrainedModel, Ge
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = Ernie4_5_VL_MoeModel(config)
+        self.model = Ernie4_5_VLMoeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
@@ -1932,6 +1931,58 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VL_MoePreTrainedModel, Ge
         return input_ids, model_kwargs
 
 
+# Keep aliases for BC
+class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VLMoeForConditionalGeneration):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeForConditionalGeneration` is deprecated; "
+            "please use `Ernie4_5_VLMoeForConditionalGeneration` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
+    def post_init(self):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoePreTrainedModel` is deprecated; please use `Ernie4_5_VLMoePreTrainedModel` instead.",
+        )
+        super().post_init()
+
+
+class Ernie4_5_VL_MoeModel(Ernie4_5_VLMoeModel):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeModel` is deprecated; please use `Ernie4_5_VLMoeModel` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeTextModel(Ernie4_5_VLMoeTextModel):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeTextModel` is deprecated; please use `Ernie4_5_VLMoeTextModel` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VLMoeVisionTransformerPretrainedModel):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeVisionTransformerPretrainedModel` is deprecated; "
+            "please use `Ernie4_5_VLMoeVisionTransformerPretrainedModel` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+class Ernie4_5_VL_MoeVariableResolutionResamplerModel(Ernie4_5_VLMoeVariableResolutionResamplerModel):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeVariableResolutionResamplerModel` is deprecated; "
+            "please use `Ernie4_5_VLMoeVariableResolutionResamplerModel` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
 __all__ = [
     "Ernie4_5_VL_MoePreTrainedModel",
     "Ernie4_5_VL_MoeForConditionalGeneration",
@@ -1939,4 +1990,10 @@ __all__ = [
     "Ernie4_5_VL_MoeTextModel",
     "Ernie4_5_VL_MoeVisionTransformerPretrainedModel",
     "Ernie4_5_VL_MoeVariableResolutionResamplerModel",
+    "Ernie4_5_VLMoePreTrainedModel",
+    "Ernie4_5_VLMoeForConditionalGeneration",
+    "Ernie4_5_VLMoeModel",
+    "Ernie4_5_VLMoeTextModel",
+    "Ernie4_5_VLMoeVisionTransformerPretrainedModel",
+    "Ernie4_5_VLMoeVariableResolutionResamplerModel",
 ]
