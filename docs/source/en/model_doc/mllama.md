@@ -113,10 +113,12 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ## MllamaImageProcessor
 
 [[autodoc]] MllamaImageProcessor
+    - preprocess
 
 ## MllamaImageProcessorPil
 
 [[autodoc]] MllamaImageProcessorPil
+    - preprocess
 
 ## MllamaForConditionalGeneration
 

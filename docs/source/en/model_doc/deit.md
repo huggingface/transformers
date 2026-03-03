@@ -127,10 +127,6 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] DeiTImageProcessor
     - preprocess
 
-## DeiTImageProcessorFast
-
-[[autodoc]] DeiTImageProcessorFast
-    - preprocess
 
 ## DeiTModel
 

@@ -249,9 +249,9 @@ inputs = tokenizer(
 [[autodoc]] Siglip2ImageProcessor
     - preprocess
 
-## Siglip2ImageProcessorFast
+## Siglip2ImageProcessorPil
 
-[[autodoc]] Siglip2ImageProcessorFast
+[[autodoc]] Siglip2ImageProcessorPil
     - preprocess
 
 ## Siglip2Processor

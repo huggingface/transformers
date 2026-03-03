@@ -32,7 +32,7 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, is_vision_available
 from .image_processing_sam import SamImageProcessorKwargs
 
 
@@ -42,6 +42,9 @@ if is_torch_available():
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
+
+if is_vision_available():
+    import PIL
 
 
 def get_resize_output_image_size(
@@ -248,7 +251,7 @@ class SamImageProcessorPil(PilBackend):
 
     def generate_crop_boxes(
         self,
-        image: np.ndarray,
+        image: "np.ndarray | PIL.Image.Image | torch.Tensor",
         target_size,
         crop_n_layers: int = 0,
         overlap_ratio: float = 512 / 1500,
@@ -260,7 +263,7 @@ class SamImageProcessorPil(PilBackend):
         Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
 
         Args:
-            image (`np.ndarray`):
+            image (`np.ndarray | PIL.Image.Image | torch.Tensor`):
                 Input original image
             target_size (`int`):
                 Target size of the resized image
@@ -277,6 +280,7 @@ class SamImageProcessorPil(PilBackend):
             device (`torch.device`, *optional*, defaults to None):
                 Device to use for the computation. If None, cpu will be used.
         """
+        image = self.process_image(image)
         crop_boxes, points_per_crop, cropped_images, input_labels = _generate_crop_boxes(
             image,
             target_size,

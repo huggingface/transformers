@@ -35,11 +35,14 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring, is_torchvision_available, is_vision_available
 
 
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
+
+if is_vision_available():
+    import PIL
 
 
 class SamImageProcessorKwargs(ImagesKwargs, total=False):
@@ -249,7 +252,7 @@ class SamImageProcessor(TorchvisionBackend):
 
     def generate_crop_boxes(
         self,
-        image: "torch.Tensor",
+        image: "np.ndarray | PIL.Image.Image | torch.Tensor",
         target_size,
         crop_n_layers: int = 0,
         overlap_ratio: float = 512 / 1500,
@@ -278,6 +281,7 @@ class SamImageProcessor(TorchvisionBackend):
             device (`torch.device`, *optional*, defaults to None):
                 Device to use for the computation. If None, cpu will be used.
         """
+        image = self.process_image(image)
         crop_boxes, points_per_crop, cropped_images, input_labels = _generate_crop_boxes(
             image,
             target_size,

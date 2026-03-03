@@ -210,10 +210,12 @@ for i, image in enumerate(images['pixel_values']):
 ## JanusImageProcessor
 
 [[autodoc]] JanusImageProcessor
+    - preprocess
 
 ## JanusImageProcessorPil
 
 [[autodoc]] JanusImageProcessorPil
+    - preprocess
 
 ## JanusVisionModel
 
