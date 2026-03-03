@@ -374,7 +374,7 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
 
 ### AI-assisted and agentic contributions
 
-AI-assisted contributions are welcome, but they must be coordinated, scoped, and verfied to keep review load manageable.
+AI-assisted contributions are welcome, but they must be coordinated, scoped, and verified to keep review load manageable.
 
 - Do not submit "pure agent" PRs. The human submitter is responsible for reviewing all changed lines, validating behavior end-to-end, and running relevant tests.
 - If AI tools were used, disclose this in the PR description and include: coordination link, differentiation from existing PRs (if applicable), and test commands/results.
