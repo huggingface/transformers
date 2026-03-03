@@ -15,8 +15,6 @@ import socket
 import tempfile
 from abc import ABC, abstractmethod
 
-from torchao.quantization import Float8WeightOnlyConfig
-
 from transformers import TorchAoConfig, set_seed
 from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
 from transformers.testing_utils import (
@@ -24,6 +22,10 @@ from transformers.testing_utils import (
     is_torch_available,
 )
 from transformers.utils import is_torch_greater_or_equal, is_torchao_available
+
+
+if is_torchao_available():
+    from torchao.quantization import Float8WeightOnlyConfig
 
 
 if is_torch_available():
