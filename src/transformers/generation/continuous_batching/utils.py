@@ -47,12 +47,6 @@ class CudaGraphBuffer:
         self.plan_for_new_graph()
         self._storage[(q_len, kv_len)] = graph
 
-    def __del__(self) -> None:
-        original_max_size = self.max_size
-        self.max_size = 1  # 0 would cause an infinite loop, 1 is enough to clear all graphs
-        self.plan_for_new_graph()
-        self.max_size = original_max_size
-
 
 def attn_mask_is_needed(config: PretrainedConfig) -> bool:
     """Checks if attention mask is needed for the given (config)."""

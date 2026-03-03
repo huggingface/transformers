@@ -470,20 +470,7 @@ class ContinuousBatchingIOs:
 
         if self.attention_mask is None:
             kwargs.attention_mask = None
-
-        kwargs_dict = kwargs.asdict()
-        return kwargs_dict
-
-    def get_graph(self) -> torch.cuda.CUDAGraph | None:
-        graph = self.graphs.get_graph(self.num_q_tokens, self.max_kv_read)
-        # If this point is reached, it means the next step will be a new graph capture
-        if graph is None:
-            self.graphs.plan_for_new_graph()
-            logger.info(f"Creating graph for {(self.num_q_tokens, self.max_kv_read) = }")
-        return graph
-
-    def set_graph(self, graph: torch.cuda.CUDAGraph) -> None:
-        self.graphs.set_graph(self.num_q_tokens, self.max_kv_read, graph)
+        return kwargs.asdict()  # TODO: this is imperfect, check if there is no better way to juggle dict / dataclass
 
     def get_graph(self) -> torch.cuda.CUDAGraph | None:
         graph = self.graphs.get_graph(self.num_q_tokens, self.max_kv_read)
