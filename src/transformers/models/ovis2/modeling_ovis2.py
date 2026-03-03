@@ -598,7 +598,6 @@ class Ovis2Model(Ovis2PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            return_dict=True,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
@@ -692,7 +691,6 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )

@@ -145,9 +145,9 @@ class LayoutLMv2SelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        output_attentions=False,
         rel_pos=None,
         rel_2d_pos=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_length, _ = hidden_states.shape
         query, key, value = self.compute_qkv(hidden_states)
@@ -177,8 +177,7 @@ class LayoutLMv2SelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-        return outputs
+        return context_layer, attention_probs
 
 
 class LayoutLMv2Attention(nn.Module):
@@ -191,20 +190,20 @@ class LayoutLMv2Attention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        output_attentions=False,
         rel_pos=None,
         rel_2d_pos=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        self_outputs = self.self(
+        residual = hidden_states
+        attention_output, _ = self.self(
             hidden_states,
             attention_mask,
-            output_attentions,
             rel_pos=rel_pos,
             rel_2d_pos=rel_2d_pos,
+            **kwargs,
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        attention_output = self.output(attention_output, residual)
+        return attention_output
 
 
 class LayoutLMv2SelfOutput(nn.Module):
@@ -268,24 +267,20 @@ class LayoutLMv2Layer(GradientCheckpointingLayer):
         output_attentions=False,
         rel_pos=None,
         rel_2d_pos=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        self_attention_outputs = self.attention(
+        attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
-            output_attentions=output_attentions,
             rel_pos=rel_pos,
             rel_2d_pos=rel_2d_pos,
         )
-        attention_output = self_attention_outputs[0]
-
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        outputs = (layer_output,) + outputs
 
-        return outputs
+        return layer_output
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -410,21 +405,17 @@ class LayoutLMv2Encoder(nn.Module):
         position_ids=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        output_attentions = kwargs.get("output_attentions", getattr(self.config, "output_attentions", False))
-
         rel_pos = self._calculate_1d_position_embeddings(position_ids) if self.has_relative_attention_bias else None
         rel_2d_pos = self._calculate_2d_position_embeddings(bbox) if self.has_spatial_attention_bias else None
 
-        for i, layer_module in enumerate(self.layer):
-            layer_outputs = layer_module(
+        for layer_module in self.layer:
+            hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
-                output_attentions,
                 rel_pos=rel_pos,
                 rel_2d_pos=rel_2d_pos,
+                **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
@@ -566,7 +557,7 @@ class LayoutLMv2Pooler(nn.Module):
 
 @auto_docstring
 class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
-    _can_record_outputs = {"hidden_states": LayoutLMv2Layer, "attentions": LayoutLMv2Attention}
+    _can_record_outputs = {"hidden_states": LayoutLMv2Layer, "attentions": LayoutLMv2SelfAttention}
 
     def __init__(self, config):
         requires_backends(self, "detectron2")

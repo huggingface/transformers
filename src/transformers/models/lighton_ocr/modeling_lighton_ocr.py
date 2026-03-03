@@ -248,7 +248,6 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
