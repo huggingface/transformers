@@ -162,19 +162,27 @@ class MoonshineStreamingModelTest(ModelTesterMixin, PipelineTesterMixin, unittes
     def test_init_weights_can_init_buffers(self):
         self.skipTest("MoonshineStreaming uses special buffer initialization that conflicts with this test")
 
-    @unittest.skip(reason="MoonshineStreaming test model is too small to be split across GPU and CPU")
+    @unittest.skip(
+        reason="MoonshineStreaming test model's pos_emb layer exceeds model_split_percent, preventing device splitting"
+    )
     def test_cpu_offload(self):
         pass
 
-    @unittest.skip(reason="MoonshineStreaming test model is too small to be split across GPU and CPU")
+    @unittest.skip(
+        reason="MoonshineStreaming test model's pos_emb layer exceeds model_split_percent, preventing device splitting"
+    )
     def test_disk_offload_bin(self):
         pass
 
-    @unittest.skip(reason="MoonshineStreaming test model is too small to be split across GPU and CPU")
+    @unittest.skip(
+        reason="MoonshineStreaming test model's pos_emb layer exceeds model_split_percent, preventing device splitting"
+    )
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip(reason="MoonshineStreaming test model is too small to be split across GPU and CPU")
+    @unittest.skip(
+        reason="MoonshineStreaming test model's pos_emb layer exceeds model_split_percent, preventing device splitting"
+    )
     def test_model_parallelism(self):
         pass
 
