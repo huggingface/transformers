@@ -259,10 +259,6 @@ class GlmOcrTextDecoderLayer(Glm4vTextDecoderLayer):
 
 
 class GlmOcrPreTrainedModel(Glm4vPreTrainedModel):
-    _can_record_outputs = {
-        "hidden_states": GlmOcrTextDecoderLayer,
-        "attentions": GlmOcrTextAttention,
-    }
     _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.16.*"]
 
 

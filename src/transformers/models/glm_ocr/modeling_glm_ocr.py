@@ -335,10 +335,6 @@ class GlmOcrPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": GlmOcrTextDecoderLayer,
-        "attentions": GlmOcrTextAttention,
-    }
     _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.16.*"]
 
     def _init_weights(self, module):

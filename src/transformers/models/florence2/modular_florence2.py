@@ -1691,7 +1691,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )

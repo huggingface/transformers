@@ -313,7 +313,7 @@ class CohereForCausalLM(LlamaForCausalLM):
         hidden_states = outputs.last_hidden_state
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
-        logits = logits * self.logit_scale
+        logits = logits * self.logit_scale  # main diff from Llama
 
         loss = None
         if labels is not None:

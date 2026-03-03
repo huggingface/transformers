@@ -1183,7 +1183,7 @@ class BigBirdAttention(nn.Module):
         if to_mask is not None:
             to_mask = to_mask.to(hidden_states.dtype)
         if self.attention_type == "original_full":
-            self_outputs = self.self(
+            attention_output, attn_weights = self.self(
                 hidden_states,
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
@@ -1195,12 +1195,12 @@ class BigBirdAttention(nn.Module):
         else:
             if encoder_hidden_states is not None:
                 raise ValueError("BigBird cannot be used as a decoder when config.attention_type != 'original_full'")
-            self_outputs = self.self(
+            attention_output, attn_weights = self.self(
                 hidden_states, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, **kwargs
             )
 
-        attention_output = self.output(self_outputs[0], hidden_states)
-        return attention_output, self_outputs[1]
+        attention_output = self.output(attention_output, hidden_states)
+        return attention_output, attn_weights
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->BigBird

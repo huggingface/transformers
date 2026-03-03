@@ -451,13 +451,10 @@ class DPTViTEncoder(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, output_hidden_states: bool = False, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutput:
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states)
-            if all_hidden_states is not None:
-                all_hidden_states = all_hidden_states + (hidden_states,)
 
-        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class DPTReassembleStage(nn.Module):
@@ -982,10 +979,13 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
+        # Internally the model always needs to output hidden states, we control the output
+        # per user request on the final output
         user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
             self.config, "output_hidden_states", False
         )
         kwargs["output_hidden_states"] = True
+
         if self.backbone is not None:
             outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
             hidden_states = outputs.feature_maps
@@ -1117,10 +1117,13 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
+        # Internally the model always needs to output hidden states, we control the output
+        # per user request on the final output
         user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
             self.config, "output_hidden_states", False
         )
         kwargs["output_hidden_states"] = True
+
         outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(pixel_values, **kwargs)
         hidden_states = outputs.hidden_states
 

@@ -23,8 +23,6 @@ from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
 from .configuration_fuyu import FuyuConfig
 
 
@@ -43,7 +41,6 @@ class FuyuPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _no_split_modules = []
     _skip_keys_device_placement = "past_key_values"
-    _can_record_outputs = {}
 
 
 @auto_docstring(
@@ -153,8 +150,7 @@ class FuyuModel(FuyuPreTrainedModel):
         )
         return special_image_mask
 
-    @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

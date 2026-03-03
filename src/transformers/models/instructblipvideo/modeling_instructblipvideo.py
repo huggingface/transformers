@@ -1324,7 +1324,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
                 )
 
         else:
-            kwargs["return_dict"] = True
             outputs = self.language_model(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
