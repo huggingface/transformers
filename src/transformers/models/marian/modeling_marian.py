@@ -561,7 +561,7 @@ class MarianDecoder(MarianPreTrainedModel):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         # Important to apply outside of the above `if`, in case user passes `embeds`
         inputs_embeds = inputs_embeds * self.embed_scale

@@ -567,7 +567,7 @@ class MBartEncoder(MBartPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        embed_pos = self.embed_positions(input)
+        embed_pos = self.embed_positions(input_ids)
 
         hidden_states = inputs_embeds + embed_pos.to(inputs_embeds.device)
         hidden_states = self.layernorm_embedding(hidden_states)
@@ -703,7 +703,7 @@ class MBartDecoder(MBartPreTrainedModel):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         # initialize `past_key_values`
         if use_cache and past_key_values is None:

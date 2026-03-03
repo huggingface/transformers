@@ -546,7 +546,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
