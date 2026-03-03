@@ -167,8 +167,10 @@
       title: Accelerator selection
     - local: accelerate
       title: Accelerate
+    - local: ddp
+      title: DDP
     - local: fsdp
-      title: FullyShardedDataParallel
+      title: FSDP
     - local: deepspeed
       title: DeepSpeed
     - local: debugging

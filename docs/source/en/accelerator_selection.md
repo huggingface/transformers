@@ -16,49 +16,16 @@ rendered properly in your Markdown viewer.
 
 # Accelerator selection
 
-During distributed training, you can specify the number and order of accelerators (CUDA, XPU, MPS, HPU, etc.) to use. This can be useful when you have accelerators with different computing power and you want to use the faster accelerator first. Or you could only use a subset of the available accelerators. The selection process works for both [DistributedDataParallel](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) and [DataParallel](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html). You don't need Accelerate or [DeepSpeed integration](./main_classes/deepspeed).
-
-This guide will show you how to select the number of accelerators to use and the order to use them in.
-
-## Number of accelerators
-
-For example, if there are 4 accelerators and you only want to use the first 2, run the command below.
-
-<hfoptions id="select-accelerator">
-<hfoption id="torchrun">
-
-Use the `--nproc_per_node` to select how many accelerators to use.
-
-```bash
-torchrun --nproc_per_node=2  trainer-program.py ...
-```
-
-</hfoption>
-<hfoption id="Accelerate">
-
-Use `--num_processes` to select how many accelerators to use.
-
-```bash
-accelerate launch --num_processes 2 trainer-program.py ...
-```
-
-</hfoption>
-<hfoption id="DeepSpeed">
-
-Use `--num_gpus` to select how many GPUs to use.
-
-```bash
-deepspeed --num_gpus 2 trainer-program.py ...
-```
-
-</hfoption>
-</hfoptions>
+You can control which accelerators (CUDA, XPU, MPS, HPU, etc.) PyTorch sees and in what order during distributed training. Prioritize faster devices or limit training to a subset of available hardware. It works with both [DistributedDataParallel](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) and [DataParallel](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html), and doesn't require Accelerate or the [DeepSpeed integration](./main_classes/deepspeed).
 
 ## Order of accelerators
 
-To select specific accelerators to use and their order, use the environment variable appropriate for your hardware. This is often set on the command line for each run, but can also be added to your `~/.bashrc` or other startup config file.
+Use the hardware-specific environment variable to select accelerators and set their order. Set it on the command line per run, or add it to `~/.bashrc` or another startup config file.
 
-For example, if there are 4 accelerators (0, 1, 2, 3) and you only want to run accelerators 0 and 2:
+> [!WARNING]
+> Avoid exporting environment variables instead of setting them on the command line. If you forget a previously exported value, you may silently train on the wrong accelerators. Set the environment variable on the same command line as the training run.
+
+For example, to select accelerators 0 and 2 out of four:
 
 <hfoptions id="accelerator-type">
 <hfoption id="CUDA">
@@ -67,8 +34,7 @@ For example, if there are 4 accelerators (0, 1, 2, 3) and you only want to run a
 CUDA_VISIBLE_DEVICES=0,2 torchrun trainer-program.py ...
 ```
 
-Only GPUs 0 and 2 are "visible" to PyTorch and are mapped to `cuda:0` and `cuda:1` respectively.  
-To reverse the order (use GPU 2 as `cuda:0` and GPU 0 as `cuda:1`):
+PyTorch sees only GPUs 0 and 2, which are mapped to `cuda:0` and `cuda:1`. To reverse the order (use GPU 2 as `cuda:0` and GPU 0 as `cuda:1`):
 
 ```bash
 CUDA_VISIBLE_DEVICES=2,0 torchrun trainer-program.py ...
@@ -80,7 +46,7 @@ To run without any GPUs:
 CUDA_VISIBLE_DEVICES= python trainer-program.py ...
 ```
 
-You can also control the order of CUDA devices using `CUDA_DEVICE_ORDER`:
+Control the order of CUDA devices with `CUDA_DEVICE_ORDER`.
 
 - Order by PCIe bus ID (matches `nvidia-smi`):
 
@@ -101,23 +67,19 @@ You can also control the order of CUDA devices using `CUDA_DEVICE_ORDER`:
 ZE_AFFINITY_MASK=0,2 torchrun trainer-program.py ...
 ```
 
-Only XPUs 0 and 2 are "visible" to PyTorch and are mapped to `xpu:0` and `xpu:1` respectively.  
-To reverse the order (use XPU 2 as `xpu:0` and XPU 0 as `xpu:1`):
+PyTorch sees only XPUs 0 and 2, which are mapped to `xpu:0` and `xpu:1`. To reverse the order (use XPU 2 as `xpu:0` and XPU 0 as `xpu:1`):
 
 ```bash
 ZE_AFFINITY_MASK=2,0 torchrun trainer-program.py ...
 ```
 
-You can also control the order of Intel XPUs with:
+Control the order of Intel XPUs with:
 
 ```bash
 export ZE_ENABLE_PCI_ID_DEVICE_ORDER=1
 ```
 
-For more information about device enumeration and sorting on Intel XPU, please refer to the [Level Zero](https://github.com/oneapi-src/level-zero/blob/master/README.md?plain=1#L87) documentation.
+For more on device enumeration and sorting on Intel XPU, see the [Level Zero](https://github.com/oneapi-src/level-zero/blob/master/README.md?plain=1#L87) documentation.
 
 </hfoption>
 </hfoptions>
-
-> [!WARNING]
-> Environment variables can be exported instead of being added to the command line. This is not recommended because it can be confusing if you forget how the environment variable was set up and you end up using the wrong accelerators. Instead, it is common practice to set the environment variable for a specific training run on the same command line.
