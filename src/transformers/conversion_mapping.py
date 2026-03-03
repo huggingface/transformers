@@ -68,6 +68,10 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "zamba": [
+            WeightRenaming(r"layers.(\d+).mamba(?!_decoder)", r"layers.\1.mamba_decoder.mamba"),
+            WeightRenaming(r"layers.(\d+).input_layernorm", r"layers.\1.mamba_decoder.input_layernorm"),
+        ],
         "timesfm2_5": [
             WeightRenaming("ff0", "fc1"),
             WeightRenaming("ff1", "fc2"),

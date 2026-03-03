@@ -1430,10 +1430,6 @@ class xLSTMModel(xLSTMPreTrainedModel):
         output_hidden_states = kwargs.get("output_hidden_states")
         if output_hidden_states is None:
             output_hidden_states = self.config.output_hidden_states
-        if self.training and use_cache:
-            use_cache = False
-        if self.gradient_checkpointing and self.training and use_cache:
-            use_cache = False
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")

@@ -996,19 +996,6 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                 If `use_cache` is True, `past_key_values` key value states are returned and can be used to speed up
                 decoding (see `past_key_values`).
         """
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-            )
-            use_cache = False
-
-        if self.gradient_checkpointing and use_cache:
-            logger.warning(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-            )
-            use_cache = False
-
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
