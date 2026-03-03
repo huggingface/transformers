@@ -36,8 +36,8 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_deterministic_for_xpu,
-    require_torch,
     require_timm,
+    require_torch,
     require_torch_accelerator,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
@@ -638,6 +638,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             torch.testing.assert_close(yarn_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
+
 
 class Gemma3nVision2TextModelTester:
     text_config = {"activation_sparsity_pattern": None}
