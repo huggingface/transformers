@@ -692,11 +692,7 @@ class IsaacModel(PreTrainedModel):
 
     def __init__(self, config: IsaacConfig):
         Qwen3PreTrainedModel.__init__(self, config)
-
-        text_cfg_source = config.text_config
-        text_cfg = copy.deepcopy(text_cfg_source)
-        self.text_model = Qwen3Model._from_config(text_cfg)
-        self.text_model.config = config  # Ensure downstream callers observe the composed config
+        self.text_model = Qwen3Model._from_config(config.text_config)
 
         self.rotary_emb = IsaacRotaryEmbedding(config, device=self.device)
 
