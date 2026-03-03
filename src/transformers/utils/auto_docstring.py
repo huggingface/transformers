@@ -807,14 +807,14 @@ class ConfigArgs:
 
     scale_embedding = {
         "description": """
-    Whether to scale embeddings by diving by sqrt(d_model).
+    Whether to scale embeddings by dividing by sqrt(d_model).
     """,
     }
 
     forced_eos_token_id = {
         "description": """
     The id of the token to force as the last generated token when `max_length` is reached. Usually set to
-    eos_token_id`.
+    `eos_token_id`.
     """,
     }
 
@@ -859,7 +859,7 @@ class ConfigArgs:
 
     topk_group = {
         "description": """
-    Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
+    Number of selected groups for each token (for each token, ensuring the selected experts is only within `topk_group` groups).
     """,
     }
 
