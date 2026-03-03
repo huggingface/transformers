@@ -4237,18 +4237,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 else:
                     source, is_shared = Path(checkpoint_files[0]).parent.joinpath("model.safetensors.index.json"), True
                 meta_model_state_dict = model.state_dict()
+                device_map = load_config.device_map
                 device = (
                     get_device(device_map, next(iter(meta_model_state_dict)))
                     if device_map
                     else torch.device("cuda" if torch.cuda.is_available() else "cpu")
                 )
+
                 with safetensors(source, device_to_hmll(device), is_shared) as registry:
                     merged_state_dict = {}
-                    weight_mapping_list = weight_mapping or []
-                    renamings = [e for e in weight_mapping_list if isinstance(e, WeightRenaming)]
-                    converters = [e for e in weight_mapping_list if isinstance(e, WeightConverter)]
+                    weight_mapping = load_config.weight_mapping or []
+                    renamings = [e for e in weight_mapping if isinstance(e, WeightRenaming)]
+                    converters = [e for e in weight_mapping if isinstance(e, WeightConverter)]
                     prefix = model.base_model_prefix
+
                     tp_plan = getattr(model, "_tp_plan", None)
+                    device_mesh = load_config.device_mesh
                     rank = device_mesh.get_local_rank() if device_mesh is not None else 0
 
                     for (name, specs) in registry.items():
@@ -4293,6 +4297,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                 # todo(mfuntowicz): wtf
                                 except ValueError:
                                     continue
+                            else:
+                                # Replicated parameter (not in TP plan): load full tensor on every rank
+                                dst = torch.empty(full_shape, dtype=dtype_torch, device=device)
+                                merged_state_dict[original_key] = HmllLoadSpec(
+                                    registry=registry,
+                                    name=original_key,
+                                    ranges=[],
+                                    dst=dst,
+                                    nbytes=dst.numel() * elem_size_bytes,
+                                )
                         else:
                             # todo(mfuntowicz): potentially refactor this to unify
                             dst = torch.empty(

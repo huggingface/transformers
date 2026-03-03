@@ -818,17 +818,22 @@ class NativeLoadSpec(DeferredLoadSpec):
 @dataclass(slots=True, frozen=True)
 class HmllLoadSpec(DeferredLoadSpec):
     """
-    Deferred load of tensor slices via hmll fetchv.
-    Used for TP when each rank loads only its shard; no partial, execute() runs the fetch.
+    Deferred load via hmll.
+    - If ranges is non-empty: uses fetchv for TP slice-based loading (each rank loads its shard).
+    - If ranges is empty: uses fetch for full-tensor loading (replicated parameters).
     """
 
     registry: Any  # SafetensorsAccessor
     name: str
-    ranges: list[tuple[int, int]]  # element (start, end) per slice
+    ranges: list[tuple[int, int]]  # element (start, end) per slice; empty means full fetch
     dst: torch.Tensor
+    nbytes: int = 0  # total bytes to read; required when ranges is empty
 
     def execute(self) -> torch.Tensor:
-        nread = self.registry.fetchv(self.name, self.ranges, self.dst.data_ptr())
+        if self.ranges:
+            nread = self.registry.fetchv(self.name, self.ranges, self.dst.data_ptr())
+        else:
+            nread = self.registry.fetch(self.name, self.dst.data_ptr(), self.nbytes)
         if nread <= 0:
             raise RuntimeError("Failed to fetch tensor")
         return self.dst
@@ -1258,24 +1263,30 @@ def convert_and_load_state_dict_in_model(
             if device_mesh:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
-                    if getattr(mapping, "distributed_operation", None) is None:
-                        tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
-                        mapping.distributed_operation = tp_layer(
-                            device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
+
+                    if isinstance(tensor, HmllLoadSpec):
+                        future_or_tensor = spawn_materialize(
+                            thread_pool, tensor, device_map[""], _dtype
                         )
-                    shard_index = (
-                        len(mapping.collected_tensors.get(source_pattern, []))
-                        if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
-                        else None
-                    )
-                    future_or_tensor = spawn_tp_materialize(
-                        thread_pool,
-                        tensor,
-                        mapping.distributed_operation,
-                        shard_index,
-                        device_map[""],
-                        _dtype,
-                    )
+                    else:
+                        if getattr(mapping, "distributed_operation", None) is None:
+                            tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
+                            mapping.distributed_operation = tp_layer(
+                                device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
+                            )
+                        shard_index = (
+                            len(mapping.collected_tensors.get(source_pattern, []))
+                            if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
+                            else None
+                        )
+                        future_or_tensor = spawn_tp_materialize(
+                            thread_pool,
+                            tensor,
+                            mapping.distributed_operation,
+                            shard_index,
+                            device_map[""],
+                            _dtype,
+                        )
 
             if future_or_tensor is None:
                 param_device = get_device(device_map, renamed_key, valid_torch_device=True)
