@@ -128,6 +128,7 @@ class CHMv2Config(PreTrainedConfig):
                 "out_indices": [5, 11, 17, 23],
                 "reshape_hidden_states": True,
                 "apply_layernorm": True,
+                "layer_norm_eps": 1e-6,
             }
 
         backbone_config, kwargs = consolidate_backbone_kwargs_to_config(

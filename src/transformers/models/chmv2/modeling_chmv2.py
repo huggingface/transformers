@@ -754,16 +754,8 @@ class CHMv2ForCanopyHeightEstimation(CHMv2PreTrainedModel):
         # Pass (feature_map, cls_token) tuples to the head
         head_output = self.head(hidden_states_with_cls, patch_height, patch_width)
 
-        # Interpolate to padded image size (matching DINOv3 behavior)
-        depth_logits = nn.functional.interpolate(
-            head_output,
-            (padded_height, padded_width),
-            mode="bilinear",
-            align_corners=True,
-        )
-
-        # Convert logits to depth values
-        predicted_depth = self.features_to_depth(depth_logits)
+        # Convert logits to depth values (using native head output size)
+        predicted_depth = self.features_to_depth(head_output)
         predicted_depth = predicted_depth.squeeze(dim=1)
 
         if not return_dict:
