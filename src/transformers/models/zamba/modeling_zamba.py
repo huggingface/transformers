@@ -701,7 +701,9 @@ class ZambaMambaDecoderLayer(GradientCheckpointingLayer):
 
 
 class ZambaMixedLayer(GradientCheckpointingLayer):
-    def __init__(self, shared_transf: ZambaAttentionDecoderLayer | None, linear: nn.Linear | None, mamba: ZambaMambaDecoderLayer):
+    def __init__(
+        self, shared_transf: ZambaAttentionDecoderLayer | None, linear: nn.Linear | None, mamba: ZambaMambaDecoderLayer
+    ):
         super().__init__()
         self.shared_transf = shared_transf
         self.linear = linear

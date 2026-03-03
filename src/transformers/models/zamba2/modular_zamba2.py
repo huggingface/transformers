@@ -717,7 +717,7 @@ class Zamba2MambaMixer(nn.Module):
         hidden_states,
         cache_params: Zamba2HybridDynamicCache | None = None,
         attention_mask: torch.Tensor | None = None,
-        **kwargs
+        **kwargs,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
@@ -1065,7 +1065,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
-                **kwargs
+                **kwargs,
             )
 
         hidden_states = self.final_layernorm(hidden_states)
