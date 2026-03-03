@@ -30,7 +30,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_vibevoice_asr import VibeVoiceAsrConfig
 
@@ -54,100 +54,6 @@ class VibeVoiceAsrRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class VibeVoiceAsrConv1dPaddingCache:
-    """
-    Padding cache for VibeVoiceAsrConv1d causal convolutions in order to support streaming via cache padding.
-    See: https://huggingface.co/papers/2005.06720 & https://huggingface.co/papers/2204.07064
-
-    A padding cache is a list of cached partial hidden states for each convolution layer.
-    Hidden states are cached from the previous call to the VibeVoiceAsrConv1d forward pass, given the padding size.
-    """
-
-    def __init__(
-        self,
-        num_layers: int,
-        per_layer_padding: list[int],
-        per_layer_padding_mode: list[str],
-        per_layer_in_channels: list[int],
-    ):
-        # ensure correct number of layers for each arg
-        from_args_num_layers = {len(per_layer_padding), len(per_layer_padding_mode), len(per_layer_in_channels)}
-
-        if len(from_args_num_layers) != 1 or from_args_num_layers.pop() != num_layers:
-            raise ValueError(
-                f"Expected `num_layers` ({num_layers}) values in `per_layer_padding`, `per_layer_padding_mode` and `per_layer_in_channels`"
-            )
-
-        self.per_layer_padding = per_layer_padding
-        self.per_layer_padding_mode = per_layer_padding_mode
-        self.per_layer_in_channels = per_layer_in_channels
-
-        self.padding_cache = [None] * num_layers
-
-    def _cache_init(self, hidden_states: torch.Tensor, layer_idx: int):
-        """
-        Initialize the cache for a specific layer.
-
-        Parameters:
-            hidden_states (`torch.Tensor`):
-                The hidden states to initialize the cache with.
-            layer_idx (`int`):
-                The index of the layer to initialize the cache for.
-        Returns:
-            `torch.Tensor`, the initialized cache.
-        """
-        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
-        padding, padding_mode, in_channels = (
-            self.per_layer_padding[layer_idx],
-            self.per_layer_padding_mode[layer_idx],
-            self.per_layer_in_channels[layer_idx],
-        )
-
-        if padding_mode == "constant":
-            current_cache = torch.zeros(batch_size, in_channels, padding, device=device, dtype=dtype)
-        elif padding_mode == "replicate":
-            current_cache = (
-                torch.ones(batch_size, in_channels, padding, device=device, dtype=dtype) * hidden_states[..., :1]
-            )
-        else:
-            raise NotImplementedError(f"Padding mode {padding_mode} not supported")
-
-        return current_cache
-
-    def update(self, hidden_states: torch.Tensor, layer_idx: int):
-        """
-        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
-
-        Parameters:
-            hidden_states (`torch.Tensor`):
-                The hidden states to be partially cached.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-        Returns:
-            `torch.Tensor` or `None`, the current padding cache.
-        """
-        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
-        padding, in_channels = self.per_layer_padding[layer_idx], self.per_layer_in_channels[layer_idx]
-
-        if self.padding_cache[layer_idx] is None:
-            current_cache = self._cache_init(hidden_states, layer_idx)
-        else:
-            current_cache = self.padding_cache[layer_idx]
-
-        # update the cache
-        if padding > 0:
-            shortfall = max(0, padding - hidden_states.shape[-1])
-            if shortfall > 0:
-                padding_states = torch.cat([current_cache[:, :, -shortfall:], hidden_states], dim=-1)
-            else:
-                padding_states = hidden_states[:, :, -padding:]
-        else:
-            padding_states = torch.empty(batch_size, in_channels, 0, dtype=dtype, device=device)
-
-        self.padding_cache[layer_idx] = padding_states
-        return current_cache
 
 
 class VibeVoiceAsrMultiModalProjector(nn.Module):
@@ -188,6 +94,66 @@ class VibeVoiceAsrFeedForward(nn.Module):
 
     def forward(self, hidden_states):
         return self.linear2(self.activation(self.linear1(hidden_states)))
+
+
+class VibeVoiceAsrConv1dCacheLayer:
+    def __init__(self):
+        self.cache: torch.Tensor | None = None
+        self.is_initialized: bool = False
+
+    def lazy_initialization(self, hidden_states, conv_module):
+        self.left_pad = conv_module.left_pad
+        self.in_channels = conv_module.in_channels
+        self.cache = torch.zeros(
+            hidden_states.shape[0],
+            self.in_channels,
+            self.left_pad,
+            device=hidden_states.device,
+            dtype=hidden_states.dtype,
+        )
+
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.cache)
+
+        self.is_initialized = True
+
+    def update(self, hidden_states, conv_module=None):
+        if not self.is_initialized and conv_module is not None:
+            self.lazy_initialization(hidden_states, conv_module)
+        elif not self.is_initialized:
+            raise ValueError(
+                "VibeVoiceAsrConv1dCacheLayer is not initialized. Make sure to provide conv_module to the update method."
+            )
+
+        # get the padding states
+        if self.left_pad > 0:
+            shortfall = max(0, self.left_pad - hidden_states.shape[-1])
+            if shortfall > 0:
+                padding_states = torch.cat([self.cache[:, :, -shortfall:], hidden_states], dim=-1)
+            else:
+                padding_states = hidden_states[:, :, -self.left_pad :]
+        else:
+            padding_states = torch.empty(
+                hidden_states.shape[0], self.in_channels, 0, dtype=hidden_states.dtype, device=hidden_states.device
+            )
+
+        current_cache = self.cache.clone()
+        self.cache.copy_(padding_states)
+
+        return current_cache
+
+
+class VibeVoiceAsrConv1dPaddingCache:
+    def __init__(self):
+        self.layers = {}
+
+    def update(self, hidden_states, cache_key, conv_module):
+        if cache_key not in self.layers:
+            self.layers[cache_key] = VibeVoiceAsrConv1dCacheLayer()
+
+        padding_states = self.layers[cache_key].update(hidden_states, conv_module)
+        padded_hidden_states = torch.cat([padding_states, hidden_states], dim=-1)
+        return padded_hidden_states
 
 
 # TODO: @eustlb, @ebezzam this should be latter factorized with other causalconv1d (e.g. VoxtralRealtimeCausalConv1d)
