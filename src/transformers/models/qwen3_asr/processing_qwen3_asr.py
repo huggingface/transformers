@@ -17,17 +17,13 @@ from transformers.tokenization_utils_base import TextInput
 class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding": True,
+            "padding": False,
+            "padding_side": "left",
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
-            "chunk_length": 30.0,
+            "padding": True,
             "return_attention_mask": True,
-            "padding": "max_length",
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-            "padding_side": "left",
         },
     }
 
@@ -45,17 +41,26 @@ def _get_feat_extract_output_lengths(input_lengths):
 
 class Qwen3ASRProcessor(ProcessorMixin):
     r"""
-    Constructs a Qwen3ASR processor.
-    [`Qwen3ASRProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`], and [`Qwen2TokenizerFast`]. See the
-    [`~Qwen3ASRProcessor.__call__`] and [`~Qwen3ASRProcessor.decode`] for more information.
+    Constructs an Qwen3ASR processor which wraps an Qwen3ASR feature extractor and an Qwen3ASR
+    tokenizer into a single processor.
+
+    [`Qwen3ASRProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`] and
+    [`Qwen2TokenizerFast`]. See the [`~Qwen3ASRProcessor.__call__`] for more information.
 
     Args:
-        feature_extractor ([`WhisperFeatureExtractor`], *optional*):
-            The audio feature extractor.
-        tokenizer ([`Qwen2TokenizerFast`], *optional*):
-            The text tokenizer.
-        chat_template (`Optional[str]`, *optional*):
-            The Jinja template to use for formatting the conversation. If not provided, the default chat template is used.
+            feature_extractor ([`WhisperFeatureExtractor`]):
+                The feature extractor is a required input.
+            tokenizer ([`Qwen2TokenizerFast`]):
+                The tokenizer is a required input.
+            chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
+                template will be used.
+            audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
+                Special token used to represent audio inputs in the chat template.
+            default_transcription_prompt (`str`, *optional*, defaults to `"Transcribe the input speech."`):
+                Default prompt to use for transcription tasks when applying transcription requests.
+            max_audio_len (`int`, *optional*, defaults to 600):
+                Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
     """
 
     attributes = ["tokenizer", "feature_extractor"]
@@ -74,22 +79,26 @@ class Qwen3ASRProcessor(ProcessorMixin):
         audio: AudioInput = None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
-        and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the audio(s), this method forwards the `audio` and `kwargs` arguments to
-        WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audio` is not `None`. Please refer to the doctsring
-        of the above two methods for more information.
+        r"""
+        Main method to prepare one or several text sequence(s) and audio waveform(s) for the model. This
+        method expands `<sound>` placeholders in the text based on the post-pool frame counts of the
+        audio windows, then tokenizes the provided strings as-is, and extracts log-mel features
+        with [`WhisperFeatureExtractor`]. If `audio` is `None`, no audio processing is performed and
+        the text is tokenized as-is (LM-only behavior).
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audio (`np.ndarray`, `List[np.ndarray]`):
-                The audio or batch of audio to be prepared. Each audio can be a NumPy array.
-        """
+            text (`str` or `list[str]`):
+                Input sequence or batch of sequences.
+            audio (`np.ndarray` or `list[np.ndarray]`):
+                Input audio or batch of audios as NumPy arrays. If provided, there must be as many `text` inputs as
+                `audio` inputs.
+            output_labels (bool, *optional*, default=False):
+                Whether to return labels for training.
 
+        Returns:
+            [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
+            audio features (`input_features`, `input_features_mask`).
+        """
         if text is None:
             raise ValueError("You need to specify either a `text` input to process.")
 
