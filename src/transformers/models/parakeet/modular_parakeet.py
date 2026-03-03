@@ -31,7 +31,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchaudio_available,
     logging,
 )
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
@@ -727,6 +726,119 @@ class ParakeetTDTDecoder(nn.Module):
         return decoder_output, hidden_state, cell_state
 
 
+def tdt_loss(
+    token_logits: torch.Tensor,
+    duration_logits: torch.Tensor,
+    targets: torch.Tensor,
+    logit_lengths: torch.Tensor,
+    target_lengths: torch.Tensor,
+    blank: int,
+    durations: list[int],
+    sigma: float = 0.0,
+    reduction: str = "mean",
+) -> torch.Tensor:
+    """
+    Compute TDT (Token-and-Duration Transducer) loss.
+
+    Ported from NeMo's `TDTLossPytorch`. Unlike standard RNNT loss, this loss trains both
+    the token prediction head and the duration prediction head.
+
+    Args:
+        token_logits: Token logits of shape `(batch, T, U+1, vocab_size+1)`.
+        duration_logits: Duration logits of shape `(batch, T, U+1, num_durations)`.
+        targets: Target labels of shape `(batch, U)`.
+        logit_lengths: Encoder output lengths of shape `(batch,)`.
+        target_lengths: Target lengths of shape `(batch,)`.
+        blank: Blank token id.
+        durations: List of duration values (e.g., `[0, 1, 2, 3, 4]`).
+        sigma: Logit undernormalization constant (see TDT paper). Defaults to `0.0`.
+        reduction: Loss reduction method. One of `"mean"`, `"sum"`, or `"none"`. Defaults to `"mean"`.
+
+    Returns:
+        Scalar loss tensor (or per-example losses if `reduction="none"`).
+
+    Reference:
+        *Token-and-Duration Transducer (TDT)* — https://arxiv.org/abs/2304.06795
+    """
+    device = token_logits.device
+    batch_size, max_t, max_u, _ = token_logits.shape
+
+    # Apply log-softmax to get log probabilities
+    token_log_probs = torch.log_softmax(token_logits, dim=-1) - sigma
+    duration_log_probs = torch.log_softmax(duration_logits, dim=-1)
+
+    # Forward variable: log_alpha[b, t, u] = log P(y_{1:u} | x_{1:t})
+    log_alpha = torch.full((batch_size, max_t, max_u), -1000.0, device=device)
+    log_alpha[:, 0, 0] = 0.0
+    batch_idx = torch.arange(batch_size, device=device)
+
+    for t in range(max_t):
+        for u in range(max_u):
+            if t == 0 and u == 0:
+                continue
+
+            # Accumulate log-probabilities from all incoming arcs
+            candidates = []
+
+            for n, dur in enumerate(durations):
+                t_prev = t - dur
+                if t_prev < 0:
+                    continue
+
+                # Blank arc (duration > 0): same label position, skip `dur` frames
+                if dur > 0:
+                    blank_contribution = (
+                        log_alpha[:, t_prev, u]
+                        + token_log_probs[:, t_prev, u, blank]
+                        + duration_log_probs[:, t_prev, u, n]
+                    )
+                    candidates.append(blank_contribution)
+
+                # Label arc (u > 0): emit label y_u from position (t_prev, u-1)
+                if u > 0:
+                    label_contribution = (
+                        log_alpha[:, t_prev, u - 1]
+                        + token_log_probs[batch_idx, t_prev, u - 1, targets[:, u - 1]]
+                        + duration_log_probs[:, t_prev, u - 1, n]
+                    )
+                    candidates.append(label_contribution)
+
+            if candidates:
+                log_alpha[:, t, u] = torch.logsumexp(torch.stack(candidates, dim=0), dim=0)
+
+    # Terminal probability: sum over blank arcs that reach (T, U) from (T-dur, U)
+    log_probs = torch.full((batch_size,), -1000.0, device=device)
+    for n, dur in enumerate(durations):
+        if dur == 0:
+            continue
+        # For each example, check if act_lens[b] - dur >= 0
+        t_final = logit_lengths - dur
+        valid = t_final >= 0
+        if not valid.any():
+            continue
+
+        t_clamped = t_final.clamp(min=0)
+        terminal = (
+            log_alpha[batch_idx, t_clamped, target_lengths]
+            + token_log_probs[batch_idx, t_clamped, target_lengths, blank]
+            + duration_log_probs[batch_idx, t_clamped, target_lengths, n]
+        )
+        # Only update valid entries
+        combined = torch.stack([log_probs, terminal], dim=0)
+        log_probs = torch.where(valid, torch.logsumexp(combined, dim=0), log_probs)
+
+    losses = -log_probs
+
+    if reduction == "mean":
+        return (losses / target_lengths.float()).mean()
+    elif reduction == "sum":
+        return losses.sum()
+    elif reduction == "none":
+        return losses
+    else:
+        return (losses / target_lengths.float()).mean()
+
+
 class ParakeetTDTJointNetwork(nn.Module):
     """Joint network that combines encoder and decoder outputs to predict tokens and durations."""
 
@@ -802,18 +914,6 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if not is_torchaudio_available():
-                raise ImportError(
-                    "torchaudio is required for TDT loss computation. Install it with: pip install torchaudio"
-                )
-            from torchaudio.functional import rnnt_loss
-
-            logger.warning_once(
-                "Training uses standard RNNT loss from torchaudio, which does not train the duration head. "
-                "The model will be trained as a regular RNNT. To train with TDT loss (including duration "
-                "prediction), use NeMo's TDT loss implementation."
-            )
-
             # Compute encoder output lengths
             attention_mask = (
                 attention_mask
@@ -843,18 +943,21 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             # Compute joint output for all (T, U+1) pairs via broadcasting
             # encoder: (batch, T, 1, encoder_hidden) -> projected to (batch, T, 1, decoder_hidden_size)
             # decoder: (batch, 1, U+1, decoder_hidden_size)
-            token_logits, _ = self.joint(
+            token_logits, duration_logits = self.joint(
                 encoder_hidden_states_trimmed.unsqueeze(2),
                 decoder_output.unsqueeze(1),
             )
             # token_logits: (batch, T, U+1, vocab_size+1)
+            # duration_logits: (batch, T, U+1, num_duration_bins)
 
-            loss = rnnt_loss(
-                logits=token_logits.float(),
+            loss = tdt_loss(
+                token_logits=token_logits.float(),
+                duration_logits=duration_logits.float(),
                 targets=labels.int(),
                 logit_lengths=encoder_lengths.int(),
                 target_lengths=target_lengths.int(),
                 blank=self.config.pad_token_id,
+                durations=self.config.durations,
                 reduction="mean",
             )
 
