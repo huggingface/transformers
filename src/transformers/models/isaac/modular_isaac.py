@@ -649,41 +649,13 @@ class IsaacVisionEmbedding(nn.Module):
 
     def forward(
         self,
-        vision_tokens: tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor | None],
-    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        if len(vision_tokens) == 2:
-            vision_patches, token_grids = vision_tokens
-            vision_patch_attention_mask = None
-        else:
-            vision_patches, token_grids, vision_patch_attention_mask = vision_tokens
-
-        return_packed = vision_patches.ndim == 2
-        if return_packed:
-            # Compatibility path while callers migrate to padded top-level tensors.
-            patch_counts = torch.prod(token_grids.to(torch.long), dim=-1)
-            if patch_counts.numel() == 0:
-                return vision_patches.new_zeros((0, self.multimodal_projector.backbone_hidden_size))
-            patches_per_image = patch_counts.tolist()
-            chunks = vision_patches.split(patches_per_image, dim=0)
-            vision_patches = nn.utils.rnn.pad_sequence(chunks, batch_first=True)
-            max_patches = int(vision_patches.shape[1])
-            vision_patch_attention_mask = torch.zeros(
-                (len(patches_per_image), max_patches), device=vision_patches.device, dtype=torch.long
-            )
-            for image_idx, patch_count in enumerate(patches_per_image):
-                vision_patch_attention_mask[image_idx, :patch_count] = 1
-
+        vision_tokens: tuple[torch.Tensor, torch.Tensor, torch.Tensor | None],
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        vision_patches, token_grids, vision_patch_attention_mask = vision_tokens
         hidden_states, token_attention_mask, token_lengths = self.vision_tower(
             (vision_patches, token_grids, vision_patch_attention_mask)
         )
         projected = self.multimodal_projector(hidden_states)
-
-        if return_packed:
-            packed_chunks = [projected[i, :length] for i, length in enumerate(token_lengths.tolist()) if length > 0]
-            if not packed_chunks:
-                return projected.new_zeros((0, projected.shape[-1]))
-            return torch.cat(packed_chunks, dim=0)
-
         return projected, token_attention_mask, token_lengths
 
 
@@ -1398,18 +1370,9 @@ class IsaacModel(Qwen3PreTrainedModel):
         flat_lengths = lengths[valid_images]
         flat_batch_indices = valid_images.nonzero(as_tuple=False)[:, 0]
 
-        vision_outputs = self.vision_embedding((flat_vision_patches, flat_token_grids, flat_patch_attention_mask))
-        if isinstance(vision_outputs, tuple):
-            vision_embeddings, _, per_image_lengths = vision_outputs
-        else:
-            # Compatibility fallback for older packed outputs.
-            vision_embeddings = vision_outputs
-            per_image_lengths = torch.full(
-                (flat_vision_patches.shape[0],),
-                vision_embeddings.shape[1],
-                device=vision_embeddings.device,
-                dtype=torch.long,
-            )
+        vision_embeddings, _, per_image_lengths = self.vision_embedding(
+            (flat_vision_patches, flat_token_grids, flat_patch_attention_mask)
+        )
 
         embeds = embeds.clone()
         num_batches = modality.shape[0]
