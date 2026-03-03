@@ -43,6 +43,7 @@ from transformers.models.isaac.modeling_isaac import (
     IsaacVisionAttention,
     IsaacVisionConfig,
 )
+from transformers.models.isaac.modular_isaac import IsaacVisionEmbedding
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import (
     require_flash_attn,
