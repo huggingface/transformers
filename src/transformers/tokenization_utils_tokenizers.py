@@ -210,6 +210,17 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 if hasattr(cls, "convert_from_spm_model"):
                     local_kwargs = cls.convert_from_spm_model(**local_kwargs)
 
+                # Pass precompiled charsmap so model-specific tokenizers (e.g. SeamlessM4T, T5) that
+                # rebuild the backend from vocab can match the normalizer of the generic
+                # TokenizersBackend built from the same .model.
+                if (
+                    hasattr(extractor.proto, "normalizer_spec")
+                    and extractor.proto.normalizer_spec.precompiled_charsmap
+                ):
+                    local_kwargs["_spm_precompiled_charsmap"] = bytes(
+                        extractor.proto.normalizer_spec.precompiled_charsmap
+                    )
+
                 # 3. For non-model specific tokenizers (e.g. TokenizersBackend used
                 #    for MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS), build a _tokenizer
                 #    from the proto so normalizer/decoder are configured correctly.
