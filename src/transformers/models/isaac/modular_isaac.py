@@ -45,7 +45,8 @@ from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import TensorType, auto_docstring
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from ...utils.generic import TransformersKwargs, can_return_tuple, check_model_inputs, maybe_autocast
+from ...utils.generic import TransformersKwargs, can_return_tuple, maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ...utils.import_utils import (
     is_torch_available,
     is_torchdynamo_compiling,
@@ -335,7 +336,8 @@ class IsaacVisionEmbeddings(Siglip2VisionEmbeddings):
         )
         nn.init.normal_(self.position_embedding)
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(self, seq_patches: torch.Tensor, spatial_shapes: torch.Tensor) -> torch.Tensor:
         # Rebatch packed variable-resolution patches to resize per-image position embeddings
         # and track lengths for varlen attention metadata.
@@ -1470,7 +1472,8 @@ class IsaacModel(Qwen3PreTrainedModel):
         return position_ids, rope_deltas
 
     @auto_docstring
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1592,7 +1595,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
 
     @auto_docstring
     @can_return_tuple
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

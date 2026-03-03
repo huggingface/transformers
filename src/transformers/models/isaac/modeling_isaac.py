@@ -40,11 +40,12 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, OutputRecorder, PreTraine
 from ...models.qwen3.modeling_qwen3 import Qwen3Attention, Qwen3Model, Qwen3PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, torch_compilable_check
-from ...utils.generic import TransformersKwargs, can_return_tuple, check_model_inputs, maybe_autocast
+from ...utils.generic import TransformersKwargs, can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import (
     is_torch_available,
     is_torchdynamo_compiling,
 )
+from ...utils.output_capturing import capture_outputs
 from .configuration_isaac import IsaacConfig, IsaacVisionConfig
 
 
@@ -166,7 +167,8 @@ class IsaacVisionEmbeddings(nn.Module):
 
         return resulted_positional_embeddings
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(self, seq_patches: torch.Tensor, spatial_shapes: torch.Tensor) -> torch.Tensor:
         """
         Args:
@@ -934,7 +936,8 @@ class IsaacModel(PreTrainedModel):
         return position_ids, rope_deltas
 
     @auto_docstring
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1293,7 +1296,8 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
 
     @auto_docstring
     @can_return_tuple
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
