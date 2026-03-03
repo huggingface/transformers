@@ -27,9 +27,8 @@ from transformers import (
     AutoImageProcessor,
     CLIPConfig,
     CLIPImageProcessor,
-    CLIPImageProcessorFast,
     ViTImageProcessor,
-    ViTImageProcessorFast,
+    ViTImageProcessorPil,
 )
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_torchvision, require_vision
 
@@ -47,7 +46,7 @@ class AutoImageProcessorTest(unittest.TestCase):
     @require_torchvision
     def test_image_processor_from_model_shortcut(self):
         config = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
-        self.assertIsInstance(config, CLIPImageProcessorFast)
+        self.assertIsInstance(config, CLIPImageProcessor)
 
     @require_torchvision
     def test_image_processor_from_local_directory_from_key(self):
@@ -61,7 +60,7 @@ class AutoImageProcessorTest(unittest.TestCase):
             json.dump({"model_type": "clip"}, open(config_tmpfile, "w"))
 
             config = AutoImageProcessor.from_pretrained(tmpdirname)
-            self.assertIsInstance(config, CLIPImageProcessorFast)
+            self.assertIsInstance(config, CLIPImageProcessor)
 
     @require_torchvision
     def test_image_processor_from_local_directory_from_feature_extractor_key(self):
@@ -78,7 +77,7 @@ class AutoImageProcessorTest(unittest.TestCase):
             json.dump({"model_type": "clip"}, open(config_tmpfile, "w"))
 
             config = AutoImageProcessor.from_pretrained(tmpdirname)
-            self.assertIsInstance(config, CLIPImageProcessorFast)
+            self.assertIsInstance(config, CLIPImageProcessor)
 
     @require_torchvision
     def test_image_processor_from_new_filename(self):
@@ -93,7 +92,7 @@ class AutoImageProcessorTest(unittest.TestCase):
 
             config = AutoImageProcessor.from_pretrained(tmpdirname)
             # Now loading fast image processor by default
-            self.assertIsInstance(config, CLIPImageProcessorFast)
+            self.assertIsInstance(config, CLIPImageProcessor)
 
     @require_torchvision
     def test_image_processor_from_local_directory_from_config(self):
@@ -125,7 +124,7 @@ class AutoImageProcessorTest(unittest.TestCase):
             dict_as_saved = json.loads(config.to_json_string())
             self.assertTrue("_processor_class" not in dict_as_saved)
 
-        self.assertIsInstance(config, CLIPImageProcessorFast)
+        self.assertIsInstance(config, CLIPImageProcessor)
 
     @require_torchvision
     def test_image_processor_from_local_file(self):
@@ -137,7 +136,7 @@ class AutoImageProcessorTest(unittest.TestCase):
             )
 
             config = AutoImageProcessor.from_pretrained(processor_tmpfile)
-            self.assertIsInstance(config, CLIPImageProcessorFast)
+            self.assertIsInstance(config, CLIPImageProcessor)
 
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
@@ -165,15 +164,15 @@ class AutoImageProcessorTest(unittest.TestCase):
 
         # Fast image processor is selected by default
         image_processor = AutoImageProcessor.from_pretrained(checkpoint)
-        self.assertIsInstance(image_processor, ViTImageProcessorFast)
+        self.assertIsInstance(image_processor, ViTImageProcessor)
 
         # Fast image processor is selected when use_fast=True
         image_processor = AutoImageProcessor.from_pretrained(checkpoint, use_fast=True)
-        self.assertIsInstance(image_processor, ViTImageProcessorFast)
+        self.assertIsInstance(image_processor, ViTImageProcessor)
 
         # Slow image processor is selected when use_fast=False
         image_processor = AutoImageProcessor.from_pretrained(checkpoint, use_fast=False)
-        self.assertIsInstance(image_processor, ViTImageProcessor)
+        self.assertIsInstance(image_processor, ViTImageProcessorPil)
 
     def test_from_pretrained_dynamic_image_processor(self):
         # If remote code is not set, we will time out when asking whether to load the model.

@@ -104,24 +104,17 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
 
     def __init__(self, **kwargs: Unpack[Qwen3VLVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
-        if self.size is not None and (
-            self.size.get("shortest_edge", None) is None or self.size.get("longest_edge", None) is None
-        ):
-            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-    def _standardize_kwargs(
-        self,
-        size: SizeDict | None = None,
-        **kwargs,
-    ) -> dict:
+    def _standardize_kwargs(self, **kwargs) -> dict:
         """
         Update kwargs that need further processing before being validated
         Can be overridden by subclasses to customize the processing of kwargs.
         """
-        if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
+        kwargs = super()._standardize_kwargs(**kwargs)
+        size = kwargs.get("size", self.size)
+        if not size.shortest_edge or not size.longest_edge:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-
-        return super()._standardize_kwargs(size=size, **kwargs)
+        return kwargs
 
     def sample_frames(
         self,

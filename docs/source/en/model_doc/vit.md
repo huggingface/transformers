@@ -99,6 +99,11 @@ print(f"The predicted class label is: {predicted_class_label}")
 [[autodoc]] ViTImageProcessor
     - preprocess
 
+## ViTImageProcessorPil
+
+[[autodoc]] ViTImageProcessorPil
+    - preprocess
+
 
 ## ViTModel
 

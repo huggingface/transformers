@@ -952,7 +952,7 @@ def validate_kwargs(valid_processor_keys: list[str], captured_kwargs: list[str])
         logger.warning(f"Unused or unrecognized kwargs: {unused_key_str}.")
 
 
-@dataclass(frozen=True)
+@dataclass()
 class SizeDict:
     """
     Hashable dictionary to store image size information.
@@ -981,6 +981,17 @@ class SizeDict:
             val = getattr(self, f.name)
             if val is not None:
                 yield f.name, val
+
+    def __hash__(self):
+        return hash((self.height, self.width, self.longest_edge, self.shortest_edge, self.max_height, self.max_width))
+
+    def __contains__(self, key):
+        return hasattr(self, key) and getattr(self, key) is not None
+
+    def __setitem__(self, key, value):
+        if not hasattr(self, key):
+            raise KeyError(f"Key {key} is not a valid field of SizeDict.")
+        object.__setattr__(self, key, value)
 
     def __eq__(self, other):
         if isinstance(other, dict):

@@ -113,12 +113,12 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "image_std"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 20, "width": 20})
 
             image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, backend=backend_name, size={"height": 42, "width": 42}
+                self.image_processor_dict, size={"height": 42, "width": 42}
             )
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
@@ -252,7 +252,7 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @require_vision
     @require_torch
-    def test_slow_fast_equivalence_batched(self):
+    def test_backends_equivalence_batched(self):
         """VitPose requires boxes parameter for batched preprocessing."""
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")

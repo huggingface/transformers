@@ -13,13 +13,10 @@
 # limitations under the License.
 """Image processor class for SegGPT."""
 
-from typing import Union
-
 import numpy as np
 
-from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -28,8 +25,9 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
+from .image_processing_seggpt import SegGptImageProcessorKwargs, build_palette
 
 
 if is_torch_available():
@@ -39,42 +37,8 @@ if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
 
-# See https://huggingface.co/papers/2212.02499 at 3.1 Redefining Output Spaces as "Images" - Semantic Segmentation
-# Taken from https://github.com/Abdullah-Meda/Painter/blob/main/Painter/data/coco_semseg/gen_color_coco_panoptic_segm.py#L31
-def build_palette(num_labels: int) -> list[tuple[int, int, int]]:
-    base = int(num_labels ** (1 / 3)) + 1
-    margin = 256 // base
-
-    # class_idx 0 is the background which is mapped to black
-    color_list = [(0, 0, 0)]
-    for location in range(num_labels):
-        num_seq_r = location // base**2
-        num_seq_g = (location % base**2) // base
-        num_seq_b = location % base
-
-        R = 255 - num_seq_r * margin
-        G = 255 - num_seq_g * margin
-        B = 255 - num_seq_b * margin
-
-        color_list.append((R, G, B))
-
-    return color_list
-
-
-class SegGptImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    num_labels (`int`, *optional*):
-        Number of classes in the segmentation task (excluding the background). If specified, a palette will be
-        built, assuming that class_idx 0 is the background, to map the prompt mask from a plain segmentation map
-        to a 3-channel RGB image. Not specifying this will result in the prompt mask being duplicated across the
-        channel dimension when `do_convert_rgb` is `True`.
-    """
-
-    num_labels: int
-
-
 @auto_docstring
-class SegGptImageProcessor(TorchvisionBackend):
+class SegGptImageProcessorPil(PilBackend):
     valid_kwargs = SegGptImageProcessorKwargs
 
     resample = PILImageResampling.BICUBIC
@@ -156,7 +120,6 @@ class SegGptImageProcessor(TorchvisionBackend):
         if all(v is None for v in [images, prompt_images, prompt_masks]):
             raise ValueError("At least one of images, prompt_images, prompt_masks must be specified.")
 
-        # Pass an empty list as sentinel when images is None; _preprocess_image_like_inputs handles it
         _images_input = images if images is not None else []
         return super().preprocess(_images_input, prompt_images, prompt_masks, **kwargs)
 
@@ -168,7 +131,6 @@ class SegGptImageProcessor(TorchvisionBackend):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
-        device: Union[str, "torch.device"] | None = None,
         num_labels: int | None = None,
         **kwargs,
     ) -> BatchFeature:
@@ -179,14 +141,14 @@ class SegGptImageProcessor(TorchvisionBackend):
         _images_provided = not (isinstance(images, list) and len(images) == 0)
         if _images_provided:
             prepared_images = self._prepare_image_like_inputs(
-                images=images, do_convert_rgb=False, input_data_format=input_data_format, device=device
+                images=images, do_convert_rgb=False, input_data_format=input_data_format
             )
             data["pixel_values"] = self._preprocess(prepared_images, **kwargs)
 
         # Process prompt images (same as regular images)
         if prompt_images is not None:
             prepared_prompt_images = self._prepare_image_like_inputs(
-                images=prompt_images, do_convert_rgb=False, input_data_format=input_data_format, device=device
+                images=prompt_images, do_convert_rgb=False, input_data_format=input_data_format
             )
             data["prompt_pixel_values"] = self._preprocess(prepared_prompt_images, **kwargs)
 
@@ -199,23 +161,13 @@ class SegGptImageProcessor(TorchvisionBackend):
                     expected_ndims=2,
                     do_convert_rgb=False,
                     input_data_format=ChannelDimension.FIRST,
-                    device=device,
                 )
                 palette = self.get_palette(num_labels) if num_labels is not None else None
-                converted = []
-                for mask_tensor in prepared_masks:
-                    mask_np = mask_tensor.squeeze(0).numpy()
-                    rgb_np = self.mask_to_rgb(mask_np, palette=palette)
-                    converted.append(torch.from_numpy(rgb_np.astype(np.float32)))
-                prepared_masks = converted
+                prepared_masks = [self.mask_to_rgb(mask, palette=palette) for mask in prepared_masks]
             else:
                 # Already 3-channel RGB masks
                 prepared_masks = self._prepare_image_like_inputs(
-                    images=prompt_masks,
-                    expected_ndims=3,
-                    do_convert_rgb=False,
-                    input_data_format=input_data_format,
-                    device=device,
+                    images=prompt_masks, expected_ndims=3, do_convert_rgb=False, input_data_format=input_data_format
                 )
 
             masks_kwargs = dict(kwargs)
@@ -226,7 +178,7 @@ class SegGptImageProcessor(TorchvisionBackend):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
@@ -235,26 +187,19 @@ class SegGptImageProcessor(TorchvisionBackend):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
-        disable_grouping: bool | None,
         **kwargs,
-    ) -> list["torch.Tensor"]:
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+    ) -> list[np.ndarray]:
+        processed_images = []
+        for image in images:
             if do_resize:
-                stacked_images = self.resize(stacked_images, size, resample)
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+                image = self.resize(image, size, resample)
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+            processed_images.append(image)
 
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            stacked_images = self._rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            processed_images_grouped[shape] = stacked_images
-
-        return reorder_images(processed_images_grouped, grouped_images_index)
+        return processed_images
 
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: list[tuple[int, int]] | None = None, num_labels: int | None = None
@@ -280,14 +225,9 @@ class SegGptImageProcessor(TorchvisionBackend):
 
         requires_backends(self, ["torch"])
 
-        # batch_size x num_channels x 2*height x width
         masks = outputs.pred_masks
-
-        # Predicted mask and prompt are concatenated in the height dimension
-        # batch_size x num_channels x height x width
         masks = masks[:, :, masks.shape[2] // 2 :, :]
 
-        # Unnormalize: permute to channel-last, apply std/mean, permute back
         std = torch.tensor(self.image_std).to(masks.device)
         mean = torch.tensor(self.image_mean).to(masks.device)
         masks = masks.permute(0, 2, 3, 1) * std + mean
@@ -326,4 +266,4 @@ class SegGptImageProcessor(TorchvisionBackend):
         return semantic_segmentation
 
 
-__all__ = ["SegGptImageProcessor"]
+__all__ = ["SegGptImageProcessorPil"]

@@ -177,7 +177,7 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     # Override as GLPN image processors don't support heterogeneous batching (use equal_resolution=True)
     @require_vision
     @require_torch
-    def test_slow_fast_equivalence_batched(self):
+    def test_backends_equivalence_batched(self):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 

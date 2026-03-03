@@ -53,12 +53,21 @@ if is_torch_available():
 
 class DPTImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
+    ensure_multiple_of (`int`, *optional*, defaults to 1):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
+        by `ensure_multiple_of` in `preprocess`.
+    keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
+        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
+        be overridden by `keep_aspect_ratio` in `preprocess`.
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
         Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
         is used for background, and background itself is not included in all classes of a dataset (e.g.
         ADE20k). The background label will be replaced by 255.
     """
 
+    ensure_multiple_of: int
+    size_divisor: int
+    keep_aspect_ratio: bool
     do_reduce_labels: bool
 
 
@@ -211,7 +220,6 @@ class DPTImageProcessor(TorchvisionBackend):
         do_pad: bool,
         size_divisor: int | None,
         disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for DPT."""
@@ -249,7 +257,8 @@ class DPTImageProcessor(TorchvisionBackend):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+        return processed_images
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """

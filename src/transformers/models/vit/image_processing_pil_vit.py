@@ -13,11 +13,11 @@
 # limitations under the License.
 """Image processor class for ViT."""
 
-from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_backends import PilBackend
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
 
 
-class ViTImageProcessor(TorchvisionBackend):
+class ViTImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -27,4 +27,4 @@ class ViTImageProcessor(TorchvisionBackend):
     do_normalize = True
 
 
-__all__ = ["ViTImageProcessor"]
+__all__ = ["ViTImageProcessorPil"]

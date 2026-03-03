@@ -13,40 +13,15 @@
 # limitations under the License.
 """Image processor class for Idefics."""
 
-from collections.abc import Callable
-
-from ...image_processing_backends import TorchvisionBackend
-from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-    make_flat_list_of_images,
-)
-from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available
-
-
-IDEFICS_STANDARD_MEAN = [0.48145466, 0.4578275, 0.40821073]
-IDEFICS_STANDARD_STD = [0.26862954, 0.26130258, 0.27577711]
-
-
-class IdeficsImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    transform (`Callable`, *optional*, defaults to `None`):
-        A custom transform function that accepts a single image can be passed for training. For example,
-        `torchvision.Compose` can be used to compose multiple transforms. If `None` - an inference mode is
-        assumed - and then a preset of inference-specific transforms will be applied to the images.
-    image_size (`int`, *optional*, defaults to `self.image_size`):
-        Resize to image size. This is a backward-compatible alias for `size`. When provided, it overrides
-        `size` and sets it to `{"height": image_size, "width": image_size}`.
-    """
-
-    transform: Callable | None
-    image_size: int
+from ...image_processing_backends import PilBackend
+from ...image_utils import ImageInput, PILImageResampling, make_flat_list_of_images
+from ...processing_utils import Unpack
+from ...utils import auto_docstring, is_torch_available
+from .image_processing_idefics import IDEFICS_STANDARD_MEAN, IDEFICS_STANDARD_STD, IdeficsImageProcessorKwargs
 
 
 @auto_docstring
-class IdeficsImageProcessor(TorchvisionBackend):
+class IdeficsImageProcessorPil(PilBackend):
     valid_kwargs = IdeficsImageProcessorKwargs
     resample = PILImageResampling.BICUBIC
     image_mean = IDEFICS_STANDARD_MEAN
@@ -69,7 +44,12 @@ class IdeficsImageProcessor(TorchvisionBackend):
         self,
         images: ImageInput,
         **kwargs: Unpack[IdeficsImageProcessorKwargs],
-    ) -> "TensorType | BatchFeature":
+    ):
+        r"""
+        transform (`Callable`, *optional*, defaults to `None`):
+            A custom transform function that accepts a single image can be passed for training. If `None`,
+            inference-mode transforms are applied.
+        """
         transform = kwargs.pop("transform", None)
         if transform is not None:
             if not is_torch_available():
@@ -83,4 +63,4 @@ class IdeficsImageProcessor(TorchvisionBackend):
         return super().preprocess(images, **kwargs).pixel_values
 
 
-__all__ = ["IdeficsImageProcessor"]
+__all__ = ["IdeficsImageProcessorPil"]

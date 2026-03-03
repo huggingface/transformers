@@ -390,7 +390,7 @@ class BaseImageProcessor(ImageProcessingMixin):
 
         return self._preprocess_image_like_inputs(images, *args, **kwargs)
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         processor_dict = super().to_dict()
 
         # Filter out None values that are class defaults

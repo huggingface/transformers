@@ -66,7 +66,7 @@ else:
             ("aimv2_vision_model", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("align", {"torchvision": "EfficientNetImageProcessor", "pil": "EfficientNetImageProcessorPil"}),
             ("altclip", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
-            ("aria", {"pil": "AriaImageProcessorPil"}),
+            ("aria", {"torchvision": "AriaImageProcessor", "pil": "AriaImageProcessorPil"}),
             ("aya_vision", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
             ("beit", {"torchvision": "BeitImageProcessor", "pil": "BeitImageProcessorPil"}),
             ("bit", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
@@ -137,7 +137,7 @@ else:
             ),
             ("groupvit", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("hiera", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
-            ("idefics", {"pil": "IdeficsImageProcessorPil"}),
+            ("idefics", {"torchvision": "IdeficsImageProcessor", "pil": "IdeficsImageProcessorPil"}),
             ("idefics2", {"torchvision": "Idefics2ImageProcessor", "pil": "Idefics2ImageProcessorPil"}),
             ("idefics3", {"torchvision": "Idefics3ImageProcessor", "pil": "Idefics3ImageProcessorPil"}),
             ("ijepa", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
@@ -220,7 +220,7 @@ else:
             ("sam3_video", {"torchvision": "Sam3ImageProcessor"}),
             ("sam_hq", {"torchvision": "SamImageProcessor", "pil": "SamImageProcessorPil"}),
             ("segformer", {"torchvision": "SegformerImageProcessor", "pil": "SegformerImageProcessorPil"}),
-            ("seggpt", {"pil": "SegGptImageProcessorPil"}),
+            ("seggpt", {"torchvision": "SegGptImageProcessor", "pil": "SegGptImageProcessorPil"}),
             ("shieldgemma2", {"torchvision": "Gemma3ImageProcessor", "pil": "Gemma3ImageProcessorPil"}),
             ("siglip", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
             ("siglip2", {"torchvision": "Siglip2ImageProcessor", "pil": "Siglip2ImageProcessorPil"}),
@@ -243,7 +243,7 @@ else:
             ("upernet", {"torchvision": "SegformerImageProcessor", "pil": "SegformerImageProcessorPil"}),
             ("video_llama_3", {"torchvision": "VideoLlama3ImageProcessor", "pil": "VideoLlama3ImageProcessorPil"}),
             ("video_llava", {"pil": "VideoLlavaImageProcessorPil"}),
-            ("videomae", {"pil": "VideoMAEImageProcessorPil"}),
+            ("videomae", {"torchvision": "VideoMAEImageProcessor", "pil": "VideoMAEImageProcessorPil"}),
             ("vilt", {"torchvision": "ViltImageProcessor", "pil": "ViltImageProcessorPil"}),
             ("vipllava", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("vit", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
@@ -681,12 +681,6 @@ class AutoImageProcessor:
             base_class_name = image_processor_type[:-4] if is_legacy_fast else image_processor_type
             image_processor_class = _load_backend_class(base_class_name, backend, is_legacy_fast)
 
-            if image_processor_class is None:
-                raise ValueError(
-                    f"Could not find image processor class `{image_processor_type}`. "
-                    "Please check that the class exists and is properly registered."
-                )
-
         # Handle remote code
         has_remote_code = image_processor_auto_map is not None
         has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
@@ -796,7 +790,8 @@ class AutoImageProcessor:
                     f"Image processor class for backend '{backend_key}' must inherit from `BaseImageProcessor`. "
                     f"Got: {processor_class}"
                 )
-
+        print("image_processor_classes", image_processor_classes)
+        print("config_class", config_class)
         IMAGE_PROCESSOR_MAPPING.register(config_class, image_processor_classes, exist_ok=exist_ok)
 
 

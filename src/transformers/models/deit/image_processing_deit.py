@@ -13,13 +13,13 @@
 # limitations under the License.
 """Image processor class for DeiT."""
 
-from ...image_processing_utils import BaseImageProcessor
+from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
 from ...utils import auto_docstring
 
 
 @auto_docstring
-class DeiTImageProcessor(BaseImageProcessor):
+class DeiTImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD

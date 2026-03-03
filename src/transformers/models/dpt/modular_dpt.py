@@ -28,9 +28,9 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, auto_docstring, is_torchvision_available, requires_backends
 from ..beit.image_processing_beit import BeitImageProcessor
-from .image_processing_dpt import DPTImageProcessorKwargs
 
 
 if TYPE_CHECKING:
@@ -77,6 +77,26 @@ def get_resize_output_image_size(
     new_width = constrain_to_multiple_of(scale_width * input_width, multiple=multiple)
 
     return SizeDict(height=new_height, width=new_width)
+
+
+class DPTImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    ensure_multiple_of (`int`, *optional*, defaults to 1):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
+        by `ensure_multiple_of` in `preprocess`.
+    keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
+        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
+        be overridden by `keep_aspect_ratio` in `preprocess`.
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    ensure_multiple_of: int
+    size_divisor: int
+    keep_aspect_ratio: bool
+    do_reduce_labels: bool
 
 
 @auto_docstring
@@ -185,7 +205,6 @@ class DPTImageProcessor(BeitImageProcessor):
         do_pad: bool,
         size_divisor: int | None,
         disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         if do_reduce_labels:
@@ -222,7 +241,8 @@ class DPTImageProcessor(BeitImageProcessor):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+        return processed_images
 
     def post_process_depth_estimation(
         self,

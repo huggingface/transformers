@@ -18,7 +18,6 @@ from typing import Any, Optional
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.nn import LayerNorm
 
 from ... import initialization as init
@@ -1494,7 +1493,7 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -1525,7 +1524,7 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
                 stacked_videos = self.resize(
                     image=stacked_videos,
                     size=SizeDict(height=resized_height, width=resized_width),
-                    interpolation=interpolation,
+                    resample=resample,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
@@ -1539,7 +1538,7 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
             resized_height, resized_width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
 
             # Fused rescale and normalize
-            stacked_videos = self.rescale_and_normalize(
+            stacked_videos = self._rescale_and_normalize(
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             patches = stacked_videos

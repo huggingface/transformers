@@ -180,7 +180,7 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
-    def test_slow_fast_equivalence_batched(self):
+    def test_backends_equivalence_batched(self):
         """Swin2SR requires equal-resolution images for batched processing (returns stacked tensor)."""
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")

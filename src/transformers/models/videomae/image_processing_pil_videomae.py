@@ -11,11 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for VideoMAE."""
+"""PIL image processor class for VideoMAE."""
 
-from ...image_processing_backends import TorchvisionBackend
+import numpy as np
+
+from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -25,18 +26,15 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+from ...utils import TensorType, auto_docstring, is_torchvision_available
 
-
-if is_torch_available():
-    import torch
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
 
 @auto_docstring
-class VideoMAEImageProcessor(TorchvisionBackend):
+class VideoMAEImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -66,7 +64,7 @@ class VideoMAEImageProcessor(TorchvisionBackend):
 
     def _preprocess(
         self,
-        images: list[list["torch.Tensor"]],
+        images: list[list[np.ndarray]],
         do_resize: bool,
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
@@ -77,36 +75,24 @@ class VideoMAEImageProcessor(TorchvisionBackend):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
-        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(
-            images, is_nested=True, disable_grouping=disable_grouping
-        )
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_resize:
-                stacked_images = self.resize(stacked_images, size, resample)
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index, is_nested=True)
-
-        grouped_images, grouped_images_index = group_images_by_shape(
-            resized_images, is_nested=True, disable_grouping=disable_grouping
-        )
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_center_crop:
-                stacked_images = self.center_crop(stacked_images, crop_size)
-            stacked_images = self._rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            processed_images_grouped[shape] = stacked_images
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
-
-        # Stack frames per video: list[list[Tensor(C,H,W)]] → list[Tensor(num_frames,C,H,W)]
-        pixel_values = [torch.stack(video_frames) for video_frames in processed_images]
+        pixel_values = []
+        for video_frames in images:
+            processed_frames = []
+            for image in video_frames:
+                if do_resize:
+                    image = self.resize(image, size, resample)
+                if do_center_crop:
+                    image = self.center_crop(image, crop_size)
+                if do_rescale:
+                    image = self.rescale(image, rescale_factor)
+                if do_normalize:
+                    image = self.normalize(image, image_mean, image_std)
+                processed_frames.append(image)
+            pixel_values.append(processed_frames)
         return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
 
 
-__all__ = ["VideoMAEImageProcessor"]
+__all__ = ["VideoMAEImageProcessorPil"]

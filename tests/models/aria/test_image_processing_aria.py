@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import ChannelDimension, PILImageResampling
+from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -26,9 +26,6 @@ from ...test_image_processing_common import ImageProcessingTestMixin
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import AriaImageProcessor
-
 
 if is_torch_available():
     import torch
@@ -152,8 +149,6 @@ class AriaImageProcessingTester:
 @require_torch
 @require_vision
 class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = AriaImageProcessor if is_vision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = AriaImageProcessingTester(self)
@@ -163,19 +158,19 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-        self.assertTrue(hasattr(image_processing, "max_image_size"))
-        self.assertTrue(hasattr(image_processing, "min_image_size"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "split_image"))
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
+            self.assertTrue(hasattr(image_processing, "max_image_size"))
+            self.assertTrue(hasattr(image_processing, "min_image_size"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "split_image"))
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
-            image_processing = self.image_processing_class(**self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for sample_images in image_inputs:
@@ -196,10 +191,9 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_numpy_4_channels(self):
         # Aria always processes images as RGB, so it always returns images with 3 channels
-        for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor_dict = self.image_processor_dict
-            image_processing = self.image_processing_class(**image_processor_dict)
+            image_processing = image_processing_class(**image_processor_dict)
             # create random numpy tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
 
@@ -220,9 +214,8 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
-            image_processing = self.image_processing_class(**self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
             for images in image_inputs:
@@ -242,9 +235,8 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_list:
-            # Initialize image_processing
-            image_processing = self.image_processing_class(**self.image_processor_dict)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
@@ -266,15 +258,9 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_pad_for_patching(self):
-        for image_processing_class in self.image_processor_list:
-            if image_processing_class == self.fast_image_processing_class:
-                numpify = False
-                torchify = True
-                input_data_format = image_processing_class.data_format
-            else:
-                numpify = True
-                torchify = False
-                input_data_format = ChannelDimension.LAST
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            numpify = backend_name == "pil"
+            torchify = backend_name == "torchvision"
             image_processing = image_processing_class(**self.image_processor_dict)
             # Create odd-sized images
             image_input = self.image_processor_tester.prepare_image_inputs(
@@ -287,24 +273,22 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )[0][0]
             self.assertIn(image_input.shape, [(3, 400, 400), (400, 400, 3)])
 
+            # Both backends use channels-first internally; transpose if numpify returned HWC
+            if numpify:
+                image_input = image_input.transpose(2, 0, 1)
+
             # Test odd-width
             image_shape = (400, 601)
-            encoded_images = image_processing._pad_for_patching(image_input, image_shape, input_data_format)
-            encoded_image_shape = (
-                encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
-            )
-            self.assertEqual(encoded_image_shape, image_shape)
+            encoded_images = image_processing._pad_for_patching(image_input, image_shape)
+            self.assertEqual(encoded_images.shape[-2:], image_shape)
 
             # Test odd-height
             image_shape = (503, 400)
-            encoded_images = image_processing._pad_for_patching(image_input, image_shape, input_data_format)
-            encoded_image_shape = (
-                encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
-            )
-            self.assertEqual(encoded_image_shape, image_shape)
+            encoded_images = image_processing._pad_for_patching(image_input, image_shape)
+            self.assertEqual(encoded_images.shape[-2:], image_shape)
 
     def test_get_num_patches_without_images(self):
-        for image_processing_class in self.image_processor_list:
+        for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processing = image_processing_class(**self.image_processor_dict)
             num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
             self.assertEqual(num_patches, 1)

@@ -13,7 +13,9 @@
 # limitations under the License.
 """Image processor class for Aria."""
 
-from ...image_processing_backends import TorchvisionBackend
+import numpy as np
+
+from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_transforms import divide_to_patches
 from ...image_utils import (
@@ -22,37 +24,17 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+from ...processing_utils import Unpack
+from ...utils import TensorType, auto_docstring, is_torchvision_available
+from .image_processing_aria import AriaImageProcessorKwargs
 
-
-if is_torch_available():
-    import torch
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
 
-class AriaImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    max_image_size (`int`, *optional*, defaults to `self.max_image_size`):
-        Maximum image size. Must be either 490 or 980.
-    min_image_size (`int`, *optional*, defaults to `self.min_image_size`):
-        Minimum image size. Images smaller than this in any dimension will be scaled up.
-    split_resolutions (`list[list[int]]`, *optional*, defaults to `self.split_resolutions`):
-        A list of possible resolutions as (height, width) pairs for splitting high-resolution images into patches.
-    split_image (`bool`, *optional*, defaults to `self.split_image`):
-        Whether to split the image into patches using the best matching resolution from `split_resolutions`.
-    """
-
-    max_image_size: int
-    min_image_size: int
-    split_resolutions: list[list[int]]
-    split_image: bool
-
-
 @auto_docstring
-class AriaImageProcessor(TorchvisionBackend):
+class AriaImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "pixel_mask", "num_crops"]
     valid_kwargs = AriaImageProcessorKwargs
 
@@ -73,46 +55,48 @@ class AriaImageProcessor(TorchvisionBackend):
             kwargs["split_resolutions"] = [[el[0] * 490, el[1] * 490] for el in default_resolutions]
         super().__init__(**kwargs)
 
-    def _get_padding_size(self, original_resolution: tuple, target_resolution: tuple) -> list[int]:
-        """Get padding size for patching, returns [left, top, right, bottom] for tvF.pad."""
+    def _get_padding_size(self, original_resolution: tuple, target_resolution: tuple):
+        """Get padding size for patching, returns ((before_h, after_h), (before_w, after_w)) for np.pad."""
         original_height, original_width = original_resolution
         target_height, target_width = target_resolution
         paste_x, r_x = divmod(target_width - original_width, 2)
         paste_y, r_y = divmod(target_height - original_height, 2)
-        return [paste_x, paste_y, paste_x + r_x, paste_y + r_y]
+        return (paste_y, paste_y + r_y), (paste_x, paste_x + r_x)
 
     def _resize_for_patching(
         self,
-        image: "torch.Tensor",
+        image: np.ndarray,
         target_resolution: tuple,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-    ) -> "torch.Tensor":
+    ) -> np.ndarray:
         """Resize an image to a target resolution while maintaining aspect ratio."""
         new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format=ChannelDimension.FIRST)
         return self.resize(image, SizeDict(height=new_height, width=new_width), resample)
 
     def _pad_for_patching(
         self,
-        image: "torch.Tensor",
+        image: np.ndarray,
         target_resolution: tuple,
-    ) -> "torch.Tensor":
+    ) -> np.ndarray:
         """Pad an image to a target resolution while maintaining aspect ratio."""
         new_resolution = get_patch_output_size(image, target_resolution, input_data_format=ChannelDimension.FIRST)
-        padding = self._get_padding_size(new_resolution, target_resolution)
-        return tvF.pad(image, padding=padding)
+        padding_hw = self._get_padding_size(new_resolution, target_resolution)
+        # CHW format: pad channel dim with zeros, then height/width
+        padding = ((0, 0), padding_hw[0], padding_hw[1])
+        return np.pad(image, padding, mode="constant", constant_values=0)
 
     def get_image_patches(
         self,
-        image: "torch.Tensor",
+        image: np.ndarray,
         grid_pinpoints: list[list[int]],
         patch_size: int,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-    ) -> list["torch.Tensor"]:
+    ) -> list[np.ndarray]:
         """
         Process an image with variable resolutions by dividing it into patches.
 
         Args:
-            image (`torch.Tensor`):
+            image (`np.ndarray`):
                 The input image to be processed (channels-first format).
             grid_pinpoints (`list[list[int]]`):
                 A list of possible resolutions as (height, width) pairs.
@@ -122,7 +106,7 @@ class AriaImageProcessor(TorchvisionBackend):
                 Resampling filter to use when resizing.
 
         Returns:
-            `list[torch.Tensor]`: A list of image patches in channels-first format.
+            `list[np.ndarray]`: A list of image patches in channels-first format.
         """
         if not isinstance(grid_pinpoints, list):
             raise TypeError("grid_pinpoints must be a list of possible resolutions.")
@@ -136,13 +120,12 @@ class AriaImageProcessor(TorchvisionBackend):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
-        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         max_image_size: int = 980,
         min_image_size: int = 336,
@@ -154,8 +137,8 @@ class AriaImageProcessor(TorchvisionBackend):
         if max_image_size not in [490, 980]:
             raise ValueError("max_image_size must be either 490 or 980")
 
+        pixel_values = []
         pixel_masks = []
-        processed_crops = []
         num_crops = None
 
         for image in images:
@@ -181,23 +164,25 @@ class AriaImageProcessor(TorchvisionBackend):
 
                 padding_bottom = max_image_size - new_h
                 padding_right = max_image_size - new_w
-                crop_image = tvF.pad(crop_image, [0, 0, padding_right, padding_bottom])
+                crop_image = np.pad(
+                    crop_image, ((0, 0), (0, padding_bottom), (0, padding_right)), mode="constant", constant_values=0
+                )
 
-                pixel_mask = torch.zeros((max_image_size, max_image_size), dtype=torch.bool)
+                pixel_mask = np.zeros((max_image_size, max_image_size), dtype=bool)
                 pixel_mask[:new_h, :new_w] = True
                 pixel_masks.append(pixel_mask)
-                processed_crops.append(crop_image)
 
-        stacked_images = torch.stack(processed_crops, dim=0)
-        stacked_images = self._rescale_and_normalize(
-            stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-        )
-        stacked_masks = torch.stack(pixel_masks, dim=0)
+                if do_rescale:
+                    crop_image = self.rescale(crop_image, rescale_factor)
+                if do_normalize:
+                    crop_image = self.normalize(crop_image, image_mean, image_std)
+
+                pixel_values.append(crop_image)
 
         return BatchFeature(
             data={
-                "pixel_values": stacked_images,
-                "pixel_mask": stacked_masks,
+                "pixel_values": np.stack(pixel_values, axis=0),
+                "pixel_mask": np.stack(pixel_masks, axis=0),
                 "num_crops": num_crops,
             },
             tensor_type=return_tensors,
@@ -226,4 +211,4 @@ class AriaImageProcessor(TorchvisionBackend):
         return num_patches
 
 
-__all__ = ["AriaImageProcessor"]
+__all__ = ["AriaImageProcessorPil"]
