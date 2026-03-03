@@ -141,7 +141,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         return False
 
     @property
-    def is_compileable(self):
+    def is_compileable(self) -> bool:
         return True
 
     def get_quantize_ops(self):
