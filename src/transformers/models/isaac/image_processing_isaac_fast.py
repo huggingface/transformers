@@ -183,10 +183,6 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     def _validate_preprocess_kwargs(self, **kwargs):
         # Allow callers to omit resize-related placeholders that BaseImageProcessorFast checks for.
         kwargs.pop("do_resize", None)
-        kwargs.pop("size", None)
-        kwargs.pop("do_center_crop", None)
-        kwargs.pop("crop_size", None)
-        kwargs.pop("disable_grouping", None)
         return super()._validate_preprocess_kwargs(**kwargs)
 
     def resize(
