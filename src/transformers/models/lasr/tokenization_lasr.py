@@ -21,8 +21,9 @@
 import itertools
 import re
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
+from tokenizers.normalizers import Replace
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
 
@@ -121,7 +122,9 @@ class LasrTokenizer(TokenizersBackend):
         )
 
         if _spm_precompiled_charsmap is not None:
-            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
+            self._tokenizer.normalizer = normalizers.Sequence(
+                [normalizers.Precompiled(_spm_precompiled_charsmap), Replace(pattern=Regex(" {2,}"), content=" ")]
+            )
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
@@ -147,6 +150,9 @@ class LasrTokenizer(TokenizersBackend):
                 ("</s>", self.eos_token_id),
             ],
         )
+
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
 
     def get_sentinel_tokens(self):
         """Get the list of sentinel tokens (extra_id tokens) from additional_special_tokens."""

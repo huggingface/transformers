@@ -16,7 +16,7 @@ import itertools
 from collections.abc import Callable
 
 import torch
-from tokenizers import Tokenizer
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import Unigram
 from torch import nn
 
@@ -71,6 +71,17 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
                 byte_fallback=False,
             )
         )
+
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
+
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
+            ]
+        )
+        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
     def _decode(
         self,
