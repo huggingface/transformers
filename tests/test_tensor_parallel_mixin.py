@@ -32,6 +32,7 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
     import torch.multiprocessing as mp
+    from torch.multiprocessing.spawn import ProcessRaisedException
 
 
 def _find_free_port():
@@ -88,15 +89,22 @@ def _global_wrapper(rank, func, tp, port, func_args, func_kwargs):
     dist.destroy_process_group()
 
 
-def _init_distributed(tp: int):
+def _init_distributed(tp: int, max_retries: int = 5):
     """Decorator to initialize distributed environment and spawn processes."""
 
     def _init_distributed_inner(func):
         def wrapper(*args, **kwargs):
             world_size = tp
-            port = _find_free_port()
-            spawn_args = (func, tp, port, args, kwargs)
-            mp.spawn(_global_wrapper, args=spawn_args, nprocs=world_size)
+            for attempt in range(max_retries):
+                port = _find_free_port()
+                spawn_args = (func, tp, port, args, kwargs)
+                try:
+                    mp.spawn(_global_wrapper, args=spawn_args, nprocs=world_size)
+                    return
+                except ProcessRaisedException as e:
+                    if "EADDRINUSE" in str(e) and attempt < max_retries - 1:
+                        continue
+                    raise
 
         return wrapper
 
