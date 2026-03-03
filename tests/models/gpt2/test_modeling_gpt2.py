@@ -248,7 +248,10 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         result.loss.backward()
 
     def test_gpt2_sdpa_matches_eager_with_scaling_configs(self):
-        """Test that SDPA and eager produce equivalent outputs when scaling configs differ from defaults."""
+        """Test that SDPA and eager produce equivalent outputs when scaling configs differ from defaults.
+
+        Regression test for https://github.com/huggingface/transformers/issues/44380
+        """
         config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
         config, input_ids, token_type_ids, _, _, _, _ = config_and_inputs
         config.scale_attn_weights = False
@@ -272,7 +275,10 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
     @require_flash_attn
     @pytest.mark.flash_attn_test
     def test_gpt2_fa2_matches_eager_with_scaling_configs(self):
-        """Test that FlashAttention2 and eager produce equivalent outputs when scaling configs differ."""
+        """Test that FlashAttention2 and eager produce equivalent outputs when scaling configs differ.
+
+        Regression test for https://github.com/huggingface/transformers/issues/44380
+        """
         config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
         config, input_ids, token_type_ids, _, _, _, _ = config_and_inputs
         config.scale_attn_weights = False
