@@ -23,7 +23,7 @@ You can control which accelerators (CUDA, XPU, MPS, HPU, etc.) PyTorch sees and 
 Use the hardware-specific environment variable to select accelerators and set their order. Set it on the command line per run, or add it to `~/.bashrc` or another startup config file.
 
 > [!WARNING]
-> Avoid exporting environment variables instead of setting them on the command line. If you forget a previously exported value, you may silently train on the wrong accelerators. Set the environment variable on the same command line as the training run.
+> Avoid exporting environment variables because if you forget a previously exported value, you may silently train on the wrong accelerators. Set the environment variable on the same command line as the training run.
 
 For example, to select accelerators 0 and 2 out of four:
 
