@@ -93,6 +93,16 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
         "semantic_model_config": AutoConfig,
     }
 
+    _default_acoustic_model_config_kwargs = {
+        "encoder_hidden_size": 64,
+        # NOTE: original DAC uses [2, 4, 8, 8] `downsampling ratios`, namely reverse of `upsampling_ratios`
+        # (not sure if intentional by HiggsAudioV2Tokenizer but we keep it)
+        "downsampling_ratios": [8, 5, 4, 2],
+        "decoder_hidden_size": 1024,
+        "upsampling_ratios": [8, 5, 4, 2],
+        "hidden_size": 256,
+    }
+
     target_bandwidths: list[float | int] | None = None
 
     sample_rate: int = 24000

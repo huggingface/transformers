@@ -208,17 +208,17 @@ class GlmImageTextConfig(PreTrainedConfig):
     ignore_keys_at_rope_validation = {"mrope_section"}
 
     vocab_size: int = 168064
-    hidden_size: int | None = 4096
-    intermediate_size: int | None = 13696
-    num_hidden_layers: int | None = 40
-    num_attention_heads: int | None = 32
+    hidden_size: int = 4096
+    intermediate_size: int = 13696
+    num_hidden_layers: int = 40
+    num_attention_heads: int = 32
     num_key_value_heads: int | None = 2
-    hidden_act: str | None = "silu"
+    hidden_act: str = "silu"
     max_position_embeddings: int = 131072
-    initializer_range: float | None = 0.02
-    rms_norm_eps: float | None = 1e-05
-    use_cache: bool | None = True
-    attention_dropout: float | int | None = 0.0
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-05
+    use_cache: bool = True
+    attention_dropout: float | int = 0.0
     rope_parameters: RopeParameters | dict | None = None
     pad_token_id: int = 167841
     vision_vocab_size: int = 16512

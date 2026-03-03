@@ -282,15 +282,17 @@ class PaddleOCRVLConfig(PreTrainedConfig):
         elif self.vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
 
+        # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
+        text_params = inspect.signature(self.sub_configs["text_config"].__init__).parameters.keys()
+        text_params = list(text_params) + ["rope_parameters", "rope_scaling", "rope_theta"]
+        text_kwargs = {key: kwargs.pop(key) for key in text_params if key in kwargs}
+
         if isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         elif self.text_config is None:
             # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
-            text_params = inspect.signature(self.sub_configs["text_config"].__init__).parameters.keys()
-            text_params = list(text_params) + ["rope_scaling", "rope_theta"]
-            text_config = {key: kwargs.pop(key) for key in text_params if key in kwargs}
-            text_config["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
-            self.text_config = self.sub_configs["text_config"](**text_config)
+            text_kwargs["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
+            self.text_config = self.sub_configs["text_config"](**text_kwargs)
 
         super().__post_init__(**kwargs)
 
