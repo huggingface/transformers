@@ -18,12 +18,6 @@ limitations under the License.
 
 Training a 4B parameter model in mixed precision on a batch size of 16 requires roughly 85GB of GPU memory. Understanding what occupies GPU memory and the compute operations that occur during training help identify where you can reduce your memory usage.
 
-You can think of it in terms of stored tensors and ops.
-
-## Tensors
-
-Training requires and produces many tensor types that need to be stored.
-
 ```text
 ┌─────────────────────────── TENSORS ──────────────────────────────────┐
 │                                                                      │
@@ -42,6 +36,7 @@ Training requires and produces many tensor types that need to be stored.
 │  ACTIVATIONS         ████ varies — batch × seq_len × depth × hidden  │
 │  (forward cache)     └── cached for backward; can OOM even if model  │
 │                          fits (long seqs / large batches)            │
+│                          bf16/fp16 if using mixed precision          │
 │                                                                      │
 │  TEMPORARY TENSORS   ▓ short-lived (softmax, matmul scratch)         │
 │                      └── peak spikes can cause OOM                   │
@@ -50,7 +45,13 @@ Training requires and produces many tensor types that need to be stored.
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-- Model weights are stored on the GPU. In mixed precision training, two copies of the weights are required - one in fp16 for the forward/backward pass and one if fp32 as the "main copy" for stable weight updates. This equates to 6 bytes per parameter.
+GPU memory holds two categories of things: stored tensors and the ops that process them.
+
+## Tensors
+
+Training requires and produces many tensor types that need to be stored.
+
+- Model weights are stored on the GPU. In mixed precision training, two copies of the weights are required - one in fp16 for the forward/backward pass and one in fp32 as the "main copy" for stable weight updates. This equates to 6 bytes per parameter.
 
 - Optimizer states such as Adam store two extra tensors per parameter, the momentum and variance, which are both in fp32. That's an additional 8 bytes per parameter.
 
@@ -58,11 +59,11 @@ Training requires and produces many tensor types that need to be stored.
 
 - Gradient tensors are computed for each parameter in the backward pass. This is kept in fp32 so that's 4 bytes per parameter.
 
-- Forward activations are computed in the forward pass and cached for the backward pass to compute the gradients. The size of these activations are variable and scales with batch size, sequence length, model depth, and hidden size. This is why batch size or sequence length can exhaust GPU memory even if the model itself fits.
+- Forward activations are computed in the forward pass and cached for the backward pass to compute the gradients. These activations vary in size with batch size, sequence length, model depth, and hidden size. This is why batch size or sequence length can exhaust GPU memory even if the model itself fits.
 
 - Temporary tensors are created by ops like softmax and matrix multiplications and released after each op. If the peak of a single op is very intensive, it can create a temporary spike that causes you to run out of memory.
 
-- Some features add their own overhead. For example, beam search maintains multiple outputs or embedding tables for large models can be very large.
+- Some features add their own overhead. For example, beam search maintains multiple outputs, and embedding tables for large vocabularies can be very large.
 
 ## Ops
 
@@ -70,7 +71,7 @@ There are three main types of training ops.
 
 - Matrix multiplications (matmuls) are the main op type, covering linear layers, QKV projections, attention output projections, and FFN layers. The main memory hogs are the attention score matrices which grow with the square of the sequence length. This is why long sequences are so expensive and different [attention backends](./attention_interface) exist to avoid materializing the full matrix in memory.
 
-- Reduction ops, like softmax and layer norm, read a full tensor, computes a statistic across a dimension, and then reads the tensor again to apply it. This requires accessing memory multiple times per operation.
+- Reduction ops, like softmax and layer norm, read a full tensor, compute a statistic across a dimension, and then read the tensor again to apply it. This requires accessing memory multiple times per operation.
 
 - Element-wise ops, like activations and dropout, apply a function to each element independently and their memory usage is proportional to tensor size.
 
