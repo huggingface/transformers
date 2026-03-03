@@ -315,7 +315,6 @@ class IdeficsVisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([IdeficsVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -336,6 +335,7 @@ class IdeficsVisionEncoder(nn.Module):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
+
         """
         hidden_states = inputs_embeds
         for idx, encoder_layer in enumerate(self.layers):

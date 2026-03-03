@@ -406,14 +406,14 @@ class MarkupLMAttention(nn.Module):
         attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        self_outputs = self.self(
+        residual = hidden_states
+        hidden_states, _ = self.self(
             hidden_states,
             attention_mask=attention_mask,
             **kwargs,
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        hidden_states = self.output(hidden_states, residual)
+        return hidden_states
 
 
 # Copied from transformers.models.align.modeling_align.AlignTextLayer with AlignText->MarkupLM
@@ -432,20 +432,17 @@ class MarkupLMLayer(GradientCheckpointingLayer):
         attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        self_attention_outputs = self.attention(
+        hidden_states = self.attention(
             hidden_states,
             attention_mask=attention_mask,
             **kwargs,
         )
-        attention_output = self_attention_outputs[0]
 
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+        hidden_states = apply_chunking_to_forward(
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, hidden_states
         )
-        outputs = (layer_output,) + outputs
 
-        return outputs
+        return hidden_states
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -459,7 +456,6 @@ class MarkupLMEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([MarkupLMLayer(config) for i in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -467,14 +463,12 @@ class MarkupLMEncoder(nn.Module):
         attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutput:
-        for i, layer_module in enumerate(self.layer):
-            layer_outputs = layer_module(
+        for layer_module in self.layer:
+            hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
                 **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
