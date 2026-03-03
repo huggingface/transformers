@@ -306,12 +306,12 @@ def fp8_batched_mm_experts_forward(
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 batched) ---
-    out_per_sample = kernel.w8a8_block_fp8_matmul_batched(
+    proj_out = kernel.w8a8_block_fp8_matmul_batched(
         proj_out, self.down_proj, self.down_proj_scale_inv, expert_ids=expert_ids, block_size=self.block_size
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    out_per_sample = out_per_sample * sample_weights.to(out_per_sample.dtype).unsqueeze(-1)  # (S, hidden_dim)
+    out_per_sample = proj_out * sample_weights.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
