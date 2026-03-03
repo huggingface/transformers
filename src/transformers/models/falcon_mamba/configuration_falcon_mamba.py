@@ -44,10 +44,10 @@ class FalconMambaConfig(PreTrainedConfig):
     mixer_rms_eps (`float`, *optional*, defaults to 1e-06):
         The RMS norm epsilon value that is used in the Mixer RMS norm for B, C and dt states.
     use_associative_scan (`bool`, *optional*, defaults to `True`):
-         Whether to use PyTorch's `torch._higher_order_ops.associative_scan` for the parallel scan instead of the naive
-         sequential implementation. The associative scan is only active during `torch.compile` tracing and
-         requires torch >= 2.9.0. Both paths are tested to produce numerically identical results (see
-         `test_associative_scan_matches_sequential`). Set to `False` to fall back to the sequential loop.
+        Whether to use PyTorch's `torch._higher_order_ops.associative_scan` for the parallel scan instead of the naive
+        sequential implementation. The associative scan is only active during `torch.compile` tracing and
+        requires torch >= 2.9.0. Both paths are tested to produce numerically identical results (see
+        `test_associative_scan_matches_sequential`). Set to `False` to fall back to the sequential loop.
 
     Example:
 

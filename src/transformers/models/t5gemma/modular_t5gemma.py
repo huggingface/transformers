@@ -153,6 +153,7 @@ class T5GemmaConfig(PreTrainedConfig):
 
     Example:
 
+    ```python
     >>> from transformers import T5GemmaConfig, T5GemmaModel
     >>> t5gemma_config = T5GemmaConfig.from_pretrained("google/t5gemma-2b-2b-prefixlm-it")
     >>> model = T5GemmaModel(t5gemma_config)
