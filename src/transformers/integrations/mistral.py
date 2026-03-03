@@ -76,7 +76,6 @@ class MistralConverter:
 def convert_tekken_tokenizer(tokenizer_file: str):
     """Convert Mistral's Tekken tokenizer format to [`TokenizersBackend`].
 
-    Tekken is Mistral's proprietary tokenizer format.
     """
     # Mistral Tekken format -- converts using the MistralConverter
 
