@@ -226,7 +226,7 @@ def _build_peft_weight_mapping(
             new_weight_conversions.append(orig_conversion)
             continue
 
-        if orig_conversion.target_patterns == ["mlp.experts.gate_up_proj"]:
+        if len(orig_conversion.target_patterns) == 1 and orig_conversion.target_patterns[0].endswith("gate_up_proj"):
             # gate_up_proj requires both merging the experts and concatenating for the fusion of w1 and w3
             for lora in ("lora_A", "lora_B"):  # TODO: lora_embedding_A and lora_embedding_B
                 # deal with operations
@@ -262,11 +262,11 @@ def _build_peft_weight_mapping(
                     target_patterns=new_target_patterns,
                     distributed_operation=orig_conversion.distributed_operation,
                     quantization_operation=orig_conversion.quantization_operation,
-                    operations=new_weight_conversions,
+                    operations=peft_weight_operations,
                 )
                 new_weight_conversions.append(new_conversion)
 
-        elif orig_conversion.target_patterns == ["mlp.experts.down_proj"]:
+        elif len(orig_conversion.target_patterns) == 1 and orig_conversion.target_patterns[0].endswith("down_proj"):
             # down_proj only requires merging of experts
             for lora in ("lora_A", "lora_B"):  # TODO: lora_embedding_A and lora_embedding_B
                 peft_weight_operations = []
@@ -301,7 +301,7 @@ def _build_peft_weight_mapping(
                     target_patterns=new_target_patterns,
                     distributed_operation=orig_conversion.distributed_operation,
                     quantization_operation=orig_conversion.quantization_operation,
-                    operations=new_weight_conversions,
+                    operations=peft_weight_operations,
                 )
                 new_weight_conversions.append(new_conversion)
 
