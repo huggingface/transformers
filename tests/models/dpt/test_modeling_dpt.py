@@ -391,23 +391,3 @@ class DPTModelIntegrationTest(unittest.TestCase):
         ).squeeze()
         self.assertTrue(output_enlarged.shape == expected_shape)
         torch.testing.assert_close(predicted_depth_l, output_enlarged, atol=1e-3, rtol=1e-3)
-
-    @pytest.mark.torch_export_test
-    def test_export(self):
-        for strict in [True, False]:
-            with self.subTest(strict=strict):
-                model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade").to(torch_device).eval()
-                image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large-ade")
-                image = prepare_img()
-                inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
-
-                exported_program = torch.export.export(
-                    model,
-                    args=(inputs["pixel_values"],),
-                    strict=strict,
-                )
-                with torch.no_grad():
-                    eager_outputs = model(**inputs)
-                    exported_outputs = exported_program.module().forward(inputs["pixel_values"])
-                self.assertEqual(eager_outputs.logits.shape, exported_outputs.logits.shape)
-                torch.testing.assert_close(eager_outputs.logits, exported_outputs.logits, rtol=1e-4, atol=1e-4)

@@ -118,40 +118,50 @@ def batched_mm_experts_forward(
 
     # Handle invalid expert IDs from Expert Parallelism (EP)
     # When EP is enabled, tokens assigned to experts on other devices are marked with sentinel value >= num_experts
-    valid_mask = expert_ids < self.num_experts
-    expert_ids_clamped = expert_ids.clamp(0, self.num_experts - 1)
+    invalid_mask = expert_ids >= self.num_experts
+    expert_ids = expert_ids.clamp(0, self.num_experts - 1)
 
     # Get current hidden states for selected samples
     selected_hidden_states = hidden_states[token_idx]
 
-    # Select expert weights and biases for selected samples (using clamped IDs for safe indexing)
-    selected_gate_up = self.gate_up_proj[expert_ids_clamped]
-    selected_down = self.down_proj[expert_ids_clamped]
-    selected_gate_up_bias = self.gate_up_proj_bias[expert_ids_clamped] if self.has_bias else None
-    selected_down_bias = self.down_proj_bias[expert_ids_clamped] if self.has_bias else None
+    # Select gate_up or just up projection weights and biases
+    if self.has_gate:
+        selected_weights = self.gate_up_proj[expert_ids]
+        selected_biases = self.gate_up_proj_bias[expert_ids] if self.has_bias else None
+    else:
+        selected_weights = self.up_proj[expert_ids]
+        selected_biases = self.up_proj_bias[expert_ids] if self.has_bias else None
 
     # --- Up projection per expert (batched) ---
-    gate_up_out = _batched_linear(
-        selected_hidden_states, selected_gate_up, selected_gate_up_bias, is_transposed=self.is_transposed
-    )  # (S, 2 * intermediate_dim)
+    up_proj_out = _batched_linear(
+        selected_hidden_states, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
+    )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
 
-    # Apply gating
-    gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
+    # Apply gating or just activation
+    if self.has_gate:
+        up_proj_out = self._apply_gate(up_proj_out)  # (S, intermediate_dim)
+    else:
+        # for non-gated experts we just apply the activation function
+        up_proj_out = self.act_fn(up_proj_out)  # (S, intermediate_dim)
+
+    # Select down projection weights and biases for selected samples
+    selected_weights = self.down_proj[expert_ids]
+    selected_biases = self.down_proj_bias[expert_ids] if self.has_bias else None
 
     # --- Down projection per expert (batched) ---
-    out_per_sample = _batched_linear(
-        gated_out, selected_down, selected_down_bias, is_transposed=self.is_transposed
+    down_proj_out = _batched_linear(
+        up_proj_out, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
     # Apply routing weights and zero out invalid expert contributions
-    if sample_weights.shape != expert_ids_clamped.shape:
-        sample_weights = sample_weights.gather(0, expert_ids_clamped)
-    out_per_sample = out_per_sample * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
-    out_per_sample = out_per_sample * valid_mask.unsqueeze(-1).to(out_per_sample.dtype)
+    weighted_out = down_proj_out * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out.masked_fill_(invalid_mask.unsqueeze(-1), 0.0)  # Zero out invalid expert contributions
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
-    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
-    final_hidden_states = out_per_sample.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+    # index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd
+    # index_add_ accumulates in-place using the dtype of the output tensor (fp16/bf16)
+    # reshape+sum accumulates in fp32 which is more stable for low precision training/inference.
+    final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
 
     return final_hidden_states.to(hidden_states.dtype)
 
@@ -352,16 +362,6 @@ def grouped_mm_experts_forward(
     sample_weights_g = sample_weights[perm]
     selected_hidden_states_g = selected_hidden_states[perm]
 
-    # Select expert weights and biases for selected samples
-    # NOTE: We keep all experts here and rely on offsets to target the active ones.
-    # I have already implemented a version that only passes the active experts, but
-    # to do so I had to use torch.unique which breaks the graph capture (data-dependent).
-    # Also there were no speedup gains from it in my experiments, even in eager mode.
-    selected_gate_up = self.gate_up_proj
-    selected_down = self.down_proj
-    selected_gate_up_bias = self.gate_up_proj_bias[expert_ids_g] if self.has_bias else None
-    selected_down_bias = self.down_proj_bias[expert_ids_g] if self.has_bias else None
-
     # Compute offsets for grouped_mm
     # using histc instead of bincount to avoid cuda graph issues
     # With deterministic algorithms, CPU only supports float input, CUDA only supports int input.
@@ -369,36 +369,50 @@ def grouped_mm_experts_forward(
     num_tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
-    # --- Up projection per expert (grouped) ---
-    gate_up_out = _grouped_linear(
-        selected_hidden_states_g,
-        selected_gate_up,
-        offs=offsets,
-        bias=selected_gate_up_bias,
-        is_transposed=self.is_transposed,
-    )  # (S, 2 * intermediate_dim)
+    # Select expert weights and biases
+    # NOTE: We keep all experts here and rely on offsets to target the active ones.
+    # I have already implemented a version that only passes the active experts, but
+    # to do so I had to use torch.unique which breaks the graph capture (data-dependent).
+    # Also there were no speedup gains from it in my experiments, even in eager mode.
+    if self.has_gate:
+        selected_weights = self.gate_up_proj
+        selected_biases = self.gate_up_proj_bias[expert_ids_g] if self.has_bias else None
+    else:
+        selected_weights = self.up_proj
+        selected_biases = self.up_proj_bias[expert_ids_g] if self.has_bias else None
 
-    # Apply gating
-    gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
+    # --- Up projection per expert (grouped) ---
+    up_proj_out = _grouped_linear(
+        selected_hidden_states_g, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
+    )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
+
+    # Apply gating or just activation
+    if self.has_gate:
+        up_proj_out = self._apply_gate(up_proj_out)  # (S, intermediate_dim)
+    else:
+        # for non-gated experts we just apply the activation function
+        up_proj_out = self.act_fn(up_proj_out)  # (S, intermediate_dim)
+
+    # Select down projection weights and biases
+    selected_weights = self.down_proj
+    selected_biases = self.down_proj_bias[expert_ids_g] if self.has_bias else None
 
     # --- Down projection per expert (grouped) ---
-    out_per_sample_g = _grouped_linear(
-        gated_out,
-        selected_down,
-        offs=offsets,
-        bias=selected_down_bias,
-        is_transposed=self.is_transposed,
+    down_proj_out = _grouped_linear(
+        up_proj_out, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    out_per_sample_g = out_per_sample_g * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out = down_proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
 
     # Restore original order
-    out_per_sample = out_per_sample_g[inv_perm]
+    weighted_out = weighted_out[inv_perm]  # (S, hidden_dim)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
-    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
-    final_hidden_states = out_per_sample.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+    # index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd
+    # index_add_ accumulates in-place using the dtype of the output tensor (fp16/bf16)
+    # reshape+sum accumulates in fp32 which is more stable for low precision training/inference.
+    final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
 
     return final_hidden_states.to(hidden_states.dtype)
 
@@ -444,7 +458,11 @@ def _default_apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
 
 
 def use_experts_implementation(
-    experts_class: type[torch.nn.Module] | None = None, *, is_transposed: bool = False, has_bias: bool = False
+    experts_class: type[torch.nn.Module] | None = None,
+    *,
+    is_transposed: bool = False,
+    has_bias: bool = False,
+    has_gate: bool = True,
 ) -> type[torch.nn.Module]:
     """Decorator to modify experts class to support different experts implementations.
 
@@ -468,6 +486,7 @@ def use_experts_implementation(
         def __init__(self, config, *args, **kwargs):
             original_init(self, config, *args, **kwargs)
             self.config = config
+            self.has_gate = has_gate
             self.has_bias = has_bias
             self.is_transposed = is_transposed
 
@@ -480,6 +499,7 @@ def use_experts_implementation(
 
         if not hasattr(experts_class, "_apply_gate"):
             experts_class._apply_gate = _default_apply_gate
+
         experts_class.__init__ = __init__
         experts_class.forward = forward
         return experts_class
