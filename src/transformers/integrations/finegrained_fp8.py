@@ -456,7 +456,7 @@ class FP8Experts(nn.Module):
         with torch.no_grad():
             expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero().squeeze()
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False).view(-1)
 
         for expert_idx in expert_hit:
             if expert_idx == self.gate_up_proj.size(0):
