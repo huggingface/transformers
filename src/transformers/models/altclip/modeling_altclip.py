@@ -221,9 +221,6 @@ class AltRobertaSelfAttention(nn.Module):
         attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        output_attentions = kwargs.get(
-            "output_attentions", self.config.output_attentions
-        )  # TODO can't find a workaround here yet
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.attention_head_size)
 
@@ -252,9 +249,7 @@ class AltRobertaSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
+        return context_layer, attention_probs
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput
@@ -289,14 +284,13 @@ class AltRobertaAttention(nn.Module):
         attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        self_outputs = self.self(
+        attention_output, _ = self.self(
             hidden_states,
             attention_mask=attention_mask,
             **kwargs,
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        attention_output = self.output(attention_output, hidden_states)
+        return attention_output
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaIntermediate with Roberta->AltRoberta
@@ -839,7 +833,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
     config: AltCLIPTextConfig
     _can_record_outputs = {
         "hidden_states": AltRobertaLayer,
-        "attentions": AltRobertaAttention,
+        "attentions": AltRobertaSelfAttention,
     }
 
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->AltRoberta
