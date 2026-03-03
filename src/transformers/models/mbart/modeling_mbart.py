@@ -567,7 +567,7 @@ class MBartEncoder(MBartPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        embed_pos = self.embed_positions(input_ids)
+        embed_pos = self.embed_positions(inputs_embeds[..., -1])  # just for the shape
 
         hidden_states = inputs_embeds + embed_pos.to(inputs_embeds.device)
         hidden_states = self.layernorm_embedding(hidden_states)

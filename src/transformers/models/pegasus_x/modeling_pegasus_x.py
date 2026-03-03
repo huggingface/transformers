@@ -315,7 +315,7 @@ class PegasusXGlobalLocalAttention(nn.Module):
         token_hidden_states: torch.Tensor,
         global_hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
         dim = DimensionInfo(
@@ -396,10 +396,7 @@ class PegasusXGlobalLocalAttention(nn.Module):
         # [batch_size, padded_seq_len, hidden_dim]
         local_attn_output = self.out_proj(local_attn_output)
 
-        if output_attentions:
-            attn_probs = {"global": global_attn_probs, "local": local_attn_probs}
-        else:
-            attn_probs = None
+        attn_probs = {"global": global_attn_probs, "local": local_attn_probs}
 
         return local_attn_output, global_attn_output, attn_probs
 
@@ -536,7 +533,7 @@ class PegasusXEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         global_hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        output_attentions: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Args:
@@ -565,7 +562,7 @@ class PegasusXEncoderLayer(GradientCheckpointingLayer):
             token_hidden_states=hidden_states,
             global_hidden_states=global_hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
+            **kwargs,
         )
 
         if self.stagger_blocks_this_layer:

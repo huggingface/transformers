@@ -862,7 +862,7 @@ class Kosmos2TextBlock(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
@@ -874,7 +874,6 @@ class Kosmos2TextBlock(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         # Cross-Attention Block
-        cross_attn_weights = None
         if encoder_hidden_states is not None:
             if not hasattr(self, "encoder_attn"):
                 raise ValueError(
@@ -885,7 +884,7 @@ class Kosmos2TextBlock(GradientCheckpointingLayer):
             residual = hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
-            hidden_states, cross_attn_weights = self.encoder_attn(
+            hidden_states, _ = self.encoder_attn(
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
@@ -906,11 +905,7 @@ class Kosmos2TextBlock(GradientCheckpointingLayer):
         hidden_states = self.ffn(hidden_states)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
-        return outputs
+        return hidden_states
 
 
 class Kosmos2TextTransformer(Kosmos2PreTrainedModel):
