@@ -13,7 +13,7 @@
 # limitations under the License.
 """Tokenization classes for Big Bird model."""
 
-from tokenizers import Tokenizer, decoders, normalizers, processors
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_python import AddedToken
@@ -113,9 +113,15 @@ class BigBirdTokenizer(TokenizersBackend):
             unk_id = vocab.index((str(unk_token), 0.0)) if (str(unk_token), 0.0) in vocab else 100
 
         self._tokenizer = Tokenizer(Unigram(vocab, unk_id=unk_id, byte_fallback=False))
-        self._tokenizer.normalizer = normalizers.Sequence([normalizers.Replace(" ", SPIECE_UNDERLINE)])
-        self._tokenizer.pre_tokenizer = None
-        self._tokenizer.decoder = decoders.Sequence([decoders.Replace(SPIECE_UNDERLINE, " ")])
+        self._tokenizer.normalizer = normalizers.Sequence(
+            [normalizers.Strip(left=False, right=False), normalizers.Replace(Regex(r" {2,}"), SPIECE_UNDERLINE)]
+        )
+
+        prepend_scheme = "always" if add_prefix_space else "never"
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+            replacement="▁", prepend_scheme=prepend_scheme, split=True
+        )
+        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme, split=True)
 
         super().__init__(
             bos_token=bos_token,
@@ -136,8 +142,9 @@ class BigBirdTokenizer(TokenizersBackend):
         sep_token_id = self.sep_token_id
 
         self._tokenizer.post_processor = processors.TemplateProcessing(
-            single="$A:0",
-            pair="$A:0 $B:1",
+            single=f"{cls_token_str}:0 $A:0 {sep_token_str}:0",
+            pair=f"{cls_token_str}:0 $A:0 {sep_token_str}:0 $B:1 {sep_token_str}:1",
+            special_tokens=[(cls_token_str, cls_token_id), (sep_token_str, sep_token_id)],
         )
 
 

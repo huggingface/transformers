@@ -79,7 +79,7 @@ class BertTokenizer(TokenizersBackend):
     def __init__(
         self,
         vocab: str | dict[str, int] | None = None,
-        do_lower_case: bool = True,
+        do_lower_case: bool = False,
         unk_token: str = "[UNK]",
         sep_token: str = "[SEP]",
         pad_token: str = "[PAD]",
