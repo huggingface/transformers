@@ -13,8 +13,8 @@
 # limitations under the License.
 
 import math
-from dataclasses import dataclass
 from collections.abc import Container
+from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
@@ -26,19 +26,13 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_peft_available,
-    logging,
-    torch_compilable_check,
-)
+from ...utils import (TransformersKwargs, auto_docstring, can_return_tuple,
+                      is_peft_available, logging, torch_compilable_check)
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel, AutoModelForCausalLM
-from .configuration_granite_speech import GraniteSpeechConfig, GraniteSpeechEncoderConfig
-
+from .configuration_granite_speech import (GraniteSpeechConfig,
+                                           GraniteSpeechEncoderConfig)
 
 logger = logging.get_logger(__name__)
 
