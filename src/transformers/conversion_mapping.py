@@ -289,7 +289,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.layers.1"),
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
-        "nemotron_h":[
+        "nemotron_h": [
             WeightRenaming("backbone.", "model."),
             WeightRenaming("embedding.weight", "embeddings.weight"),
             WeightConverter(
