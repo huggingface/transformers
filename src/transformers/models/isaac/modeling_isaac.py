@@ -757,33 +757,17 @@ class IsaacModel(PreTrainedModel):
             else token_grids.prod(-1).div(reduction_factor, rounding_mode="floor").to(dtype=torch.long)
         )
 
-        valid_images = image_attention_mask.bool()
-        if not torch.any(valid_images):
-            if torch.any(image_token_mask):
-                raise ValueError("Image placeholders are present but no valid images were provided.")
-            return embeds, modality
-
-        flat_vision_patches = vision_patches[valid_images]
-        flat_patch_attention_mask = patch_attention_mask[valid_images]
-        flat_token_grids = token_grids[valid_images]
-        flat_offsets = offsets[valid_images]
-        flat_lengths = lengths[valid_images]
+        flat_vision_patches = vision_patches[image_attention_mask]
+        flat_patch_attention_mask = patch_attention_mask[image_attention_mask]
+        flat_token_grids = token_grids[image_attention_mask]
+        flat_offsets = offsets[image_attention_mask]
+        flat_lengths = lengths[image_attention_mask]
 
         vision_embeddings, _, per_image_lengths = self.vision_embedding(
             (flat_vision_patches, flat_token_grids, flat_patch_attention_mask)
         )
 
-        if torch.any(flat_offsets < 0) or torch.any(flat_lengths < 0):
-            raise ValueError("`vision_token_offsets` and `vision_token_lengths` must be non-negative.")
-        if torch.any(flat_offsets + flat_lengths > per_image_lengths):
-            raise ValueError("Requested vision token slices exceed available per-image vision embeddings.")
-
         max_chunk_length = int(flat_lengths.max().item()) if flat_lengths.numel() > 0 else 0
-        if max_chunk_length == 0:
-            if torch.any(image_token_mask):
-                raise ValueError("Image placeholders are present but all selected vision chunks are empty.")
-            return embeds, modality
-
         token_positions = torch.arange(max_chunk_length, device=embeds.device, dtype=torch.long)
         gather_positions = flat_offsets[:, None] + token_positions[None, :]
         gather_mask = token_positions[None, :] < flat_lengths[:, None]
@@ -791,14 +775,6 @@ class IsaacModel(PreTrainedModel):
             torch.arange(vision_embeddings.shape[0], device=embeds.device, dtype=torch.long)[:, None],
             gather_positions,
         ][gather_mask]
-        image_features = image_features.to(device=embeds.device, dtype=embeds.dtype)
-
-        expected_image_tokens = int(image_token_mask.sum().item())
-        if image_features.shape[0] != expected_image_tokens:
-            raise ValueError(
-                f"Image features and image placeholders do not match: tokens={expected_image_tokens}, features={image_features.shape[0]}."
-            )
-
         scatter_mask = image_token_mask.unsqueeze(-1).expand_as(embeds)
         embeds = embeds.masked_scatter(scatter_mask, image_features)
 
