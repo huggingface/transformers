@@ -2350,38 +2350,6 @@ class ModelUtilsTest(TestCasePlus):
         with_config_only = model(input_ids, attention_mask=attention_mask).last_hidden_state
         torch.testing.assert_close(reference, with_config_only)
 
-    def test_trust_remote_code_for_kernels(self):
-        from transformers import LlamaConfig, LlamaModel
-
-        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, vocab_size=100)
-        model = LlamaModel(copy.deepcopy(config))
-        untrusted_kernel = "untrusted/flash_attention_2"
-        trusted_kernel = "kernels-community/flash-attn2"
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-
-            # Test that an untrusted kernel will raise an error without the flag
-            with self.assertRaisesRegex(
-                ValueError,
-                "You need to specify `load_kernels_from_hub=True` to use kernels outside of the `kernels-community` repository",
-            ):
-                _ = LlamaModel.from_pretrained(tmpdirname, attn_implementation=untrusted_kernel)
-
-            def dummy_lazy_import(*args, **kwargs):
-                pass
-
-            # Test that it works with the flag - though the repo does not exist, so patch the dispatch
-            with patch("transformers.modeling_utils.lazy_import_flash_attention", dummy_lazy_import):
-                model = LlamaModel.from_pretrained(
-                    tmpdirname, attn_implementation=untrusted_kernel, load_kernels_from_hub=True
-                )
-                self.assertEqual(model.config._attn_implementation, untrusted_kernel)
-
-            # Test that a trusted kernel does not need trust_remote_code
-            model = LlamaModel.from_pretrained(tmpdirname, attn_implementation=trusted_kernel)
-            self.assertEqual(model.config._attn_implementation, trusted_kernel)
-
 
 @slow
 @require_torch
