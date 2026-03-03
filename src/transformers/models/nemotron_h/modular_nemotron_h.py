@@ -24,12 +24,6 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...conversion_mapping import (
-    MergeModulelist,
-    WeightConverter,
-    WeightRenaming,
-    register_checkpoint_conversion_mapping,
-)
 from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -49,41 +43,6 @@ from .configuration_nemotron_h import NemotronHConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-def register_nemotron_h_conversion_mapping():
-    """
-    Register the conversion mapping for Nemotron-H models.
-
-    Note: This is done here instead of in the global `conversion_mapping.py` to avoid applying
-    dynamic conversion to models that use remote code (when `trust_remote_code=True`).
-    If the mapping were in the global file, it would force conversion even for remote code models
-    that don't require it. By placing it here, it only applies when this specific library implementation
-    is loaded and used.
-    """
-
-    register_checkpoint_conversion_mapping(
-        "nemotron_h",
-        [
-            WeightRenaming("backbone.", "model."),
-            WeightRenaming("embedding.weight", "embeddings.weight"),
-            WeightConverter(
-                source_patterns=[
-                    "mixer.experts.*.up_proj.weight",
-                ],
-                target_patterns="mixer.experts.up_proj",
-                operations=[MergeModulelist(dim=0)],
-            ),
-            WeightConverter(
-                source_patterns=[
-                    "mixer.experts.*.down_proj.weight",
-                ],
-                target_patterns="mixer.experts.down_proj",
-                operations=[MergeModulelist(dim=0)],
-            ),
-        ],
-        overwrite=True,
-    )
 
 
 class NemotronHHybridDynamicCache(Zamba2HybridDynamicCache):
@@ -571,8 +530,6 @@ class NemotronHForCausalLM(ZambaForCausalLM):
     def __init__(self, config):
         super().__init__(config)
         del self._tied_weights_keys
-
-        register_nemotron_h_conversion_mapping()  # TODO @ArthurZucker should not be here
 
     @can_return_tuple
     @auto_docstring

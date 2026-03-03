@@ -31,12 +31,6 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...conversion_mapping import (
-    MergeModulelist,
-    WeightConverter,
-    WeightRenaming,
-    register_checkpoint_conversion_mapping,
-)
 from ...generation import GenerationMixin
 from ...integrations import (
     lazy_load_kernel,
@@ -1272,41 +1266,6 @@ class NemotronHModel(NemotronHPreTrainedModel):
         return mamba_mask
 
 
-def register_nemotron_h_conversion_mapping():
-    """
-    Register the conversion mapping for Nemotron-H models.
-
-    Note: This is done here instead of in the global `conversion_mapping.py` to avoid applying
-    dynamic conversion to models that use remote code (when `trust_remote_code=True`).
-    If the mapping were in the global file, it would force conversion even for remote code models
-    that don't require it. By placing it here, it only applies when this specific library implementation
-    is loaded and used.
-    """
-
-    register_checkpoint_conversion_mapping(
-        "nemotron_h",
-        [
-            WeightRenaming("backbone.", "model."),
-            WeightRenaming("embedding.weight", "embeddings.weight"),
-            WeightConverter(
-                source_patterns=[
-                    "mixer.experts.*.up_proj.weight",
-                ],
-                target_patterns="mixer.experts.up_proj",
-                operations=[MergeModulelist(dim=0)],
-            ),
-            WeightConverter(
-                source_patterns=[
-                    "mixer.experts.*.down_proj.weight",
-                ],
-                target_patterns="mixer.experts.down_proj",
-                operations=[MergeModulelist(dim=0)],
-            ),
-        ],
-        overwrite=True,
-    )
-
-
 # Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->NemotronH, JAMBA->NEMOTRON_H
 class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
@@ -1316,8 +1275,6 @@ class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
         self.model = NemotronHModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        register_nemotron_h_conversion_mapping()  # TODO @ArthurZucker should not be here
 
         # Initialize weights and apply final processing
         self.post_init()
