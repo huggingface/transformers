@@ -1129,9 +1129,7 @@ def convert_and_load_state_dict_in_model(
         )
         if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
             # Key should probably not have been renamed :)
-            renamed_key, source_pattern = rename_source_key(
-                original_key, [], [], prefix, meta_model_state_dict
-            )
+            renamed_key, source_pattern = rename_source_key(original_key, [], [], prefix, meta_model_state_dict)
 
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
