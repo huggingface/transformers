@@ -558,6 +558,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
         "attentions": LongcatFlashMLA,
     }
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
+    _keep_in_fp32_modules = ["classifier.weight"]
 
     @torch.no_grad()
     def _init_weights(self, module):
