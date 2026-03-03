@@ -110,8 +110,6 @@ class ParakeetEncoderConfig(PreTrainedConfig):
         subsampling_factor=8,
         subsampling_conv_channels=256,
         num_mel_bins=80,
-        hop_length=160,
-        sampling_rate=16000,
         subsampling_conv_kernel_size=3,
         subsampling_conv_stride=2,
         dropout=0.1,
@@ -140,8 +138,6 @@ class ParakeetEncoderConfig(PreTrainedConfig):
         self.subsampling_factor = subsampling_factor
         self.subsampling_conv_channels = subsampling_conv_channels
         self.num_mel_bins = num_mel_bins
-        self.hop_length = hop_length
-        self.sampling_rate = sampling_rate
 
         self.dropout = dropout
         self.dropout_positions = dropout_positions
@@ -164,19 +160,19 @@ class ParakeetCTCConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-            vocab_size (`int`, *optional*, defaults to 1025):
-                Vocabulary size of the model.
-            ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
-                Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-                instance of [`ParakeetForCTC`].
-            ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
-                Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
-                occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-                of [`ParakeetForCTC`].
-            encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
-                The config object or dictionary of the encoder.
-            pad_token_id (`int`, *optional*, defaults to 1024):
-                Padding token id. Also used as blank token id.
+        vocab_size (`int`, *optional*, defaults to 1025):
+            Vocabulary size of the model.
+        ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
+            Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
+            instance of [`ParakeetForCTC`].
+        ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
+            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+            of [`ParakeetForCTC`].
+        encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
+            The config object or dictionary of the encoder.
+        pad_token_id (`int`, *optional*, defaults to 1024):
+            Padding token id. Also used as blank token id.
 
     Example:
         ```python
@@ -311,12 +307,6 @@ class ParakeetTDTConfig(PreTrainedConfig):
         self.pad_token_id = pad_token_id
 
         super().__init__(**kwargs)
-
-    @property
-    def frame_rate(self):
-        return self.encoder_config.sampling_rate / (
-            self.encoder_config.hop_length * self.encoder_config.subsampling_factor
-        )
 
     @classmethod
     def from_encoder_config(cls, encoder_config: ParakeetEncoderConfig, **kwargs):

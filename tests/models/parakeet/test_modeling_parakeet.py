@@ -311,7 +311,7 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         inputs.to(torch_device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
-        predicted_transcripts = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
+        predicted_transcripts = self.processor.decode(predicted_ids, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
     @slow
@@ -333,7 +333,7 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         inputs.to(torch_device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
-        predicted_transcripts = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
+        predicted_transcripts = self.processor.decode(predicted_ids, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
 
@@ -531,7 +531,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         inputs.to(torch_device, dtype=self.dtype)
         output = model.generate(**inputs, return_dict_in_generate=True)
         torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
-        predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
+        predicted_transcripts = self.processor.decode(output.sequences, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
     @slow
@@ -553,7 +553,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         inputs.to(torch_device, dtype=self.dtype)
         output = model.generate(**inputs, return_dict_in_generate=True)
         torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
-        predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
+        predicted_transcripts = self.processor.decode(output.sequences, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
     @slow
@@ -568,7 +568,8 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
             raw_data = json.load(f)
         EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
-        EXPECTED_TIMESTAMPS = torch.tensor(raw_data["token_timestamps"])
+        EXPECTED_START_TIMESTAMPS = raw_data["start_timestamps"]
+        EXPECTED_END_TIMESTAMPS = raw_data["end_timestamps"]
         EXPECTED_DURATIONS = raw_data["token_durations"]
 
         # Use larger precision for testing token durations and timestamps
@@ -580,13 +581,20 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         inputs.to(torch_device, dtype=model.dtype)
         output = model.generate(**inputs, return_dict_in_generate=True, return_timestamps=True)
         torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
-        predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
+        predicted_transcripts, predicted_timestamps = self.processor.decode(
+            output.sequences,
+            token_timestamps=output.token_timestamps,
+            token_durations=output.token_durations,
+            skip_special_tokens=True
+        )
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
         # Check timestamps and durations
         self.assertIsNotNone(
             output.token_timestamps, "token_timestamps should be returned when return_timestamps=True"
         )
-        # Relax tolerance for timestamps due to potential internal precision differences
-        torch.testing.assert_close(output.token_timestamps.cpu(), EXPECTED_TIMESTAMPS, atol=0.4, rtol=1e-6)
+        predicted_start_times = [[entry['start'] for entry in el] for el in predicted_timestamps]
+        predicted_end_times = [[entry['end'] for entry in el] for el in predicted_timestamps]
+        torch.testing.assert_close(predicted_start_times, EXPECTED_START_TIMESTAMPS)
+        torch.testing.assert_close(predicted_end_times, EXPECTED_END_TIMESTAMPS)
         self.assertListEqual(output.token_durations.cpu().tolist(), EXPECTED_DURATIONS)

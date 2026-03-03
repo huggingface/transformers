@@ -303,17 +303,9 @@ def convert_tdt_config(nemo_config, encoder_config):
     durations = decoding_config.get("durations", [0, 1, 2, 3, 4])
     num_duration_bins = len(durations)
 
-    preprocessor = nemo_config.get("preprocessor", {})
-    sample_rate = preprocessor.get("sample_rate", 16000)
-    window_stride = preprocessor.get("window_stride", 0.01)
-    hop_length = int(window_stride * sample_rate)
-    subsampling_factor = encoder_config.subsampling_factor
-    seconds_per_frame = (hop_length * subsampling_factor) / sample_rate
-
     print(
         f"TDT config: vocab_size={vocab_size}, decoder_hidden={decoder_hidden_size}, "
         f"decoder_layers={num_decoder_layers}, num_durations={num_duration_bins}, "
-        f"seconds_per_frame={seconds_per_frame}"
     )
 
     return ParakeetTDTConfig(
@@ -323,7 +315,6 @@ def convert_tdt_config(nemo_config, encoder_config):
         num_duration_bins=num_duration_bins,
         hidden_act="relu",
         max_symbols_per_step=10,
-        seconds_per_frame=seconds_per_frame,
         encoder_config=encoder_config.to_dict(),
         pad_token_id=vocab_size,
     )
@@ -399,7 +390,7 @@ def write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_t
 
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    ParakeetForTDT.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+    ParakeetForTDT.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
 

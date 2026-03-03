@@ -1203,13 +1203,13 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         token_timestamps = None
         token_durations = None
         if return_timestamps:
-            token_timestamps = torch.full((batch_size, max_len), 0.0, dtype=torch.float, device=device)
+            token_timestamps = torch.full((batch_size, max_len), 0.0, dtype=torch.long, device=device)
             token_durations = torch.full((batch_size, max_len), 0, dtype=torch.long, device=device)
             for i in range(batch_size):
                 num_tokens = len(token_frame_indices[i])
                 if num_tokens > 0:
-                    token_timestamps[i, :num_tokens] = (
-                        torch.tensor(token_frame_indices[i], dtype=torch.float, device=device) / self.config.frame_rate
+                    token_timestamps[i, :num_tokens] = torch.tensor(
+                        token_frame_indices[i], dtype=torch.long, device=device
                     )
                     token_durations[i, :num_tokens] = torch.tensor(
                         token_durations_list[i], dtype=torch.long, device=device
