@@ -847,7 +847,7 @@ class ParakeetTDTJointNetwork(nn.Module):
         self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.decoder_hidden_size)
         self.activation = ACT2FN[config.hidden_act]
         self.token_head = nn.Linear(config.decoder_hidden_size, config.vocab_size + 1)
-        self.duration_head = nn.Linear(config.decoder_hidden_size, config.num_duration_bins)
+        self.duration_head = nn.Linear(config.decoder_hidden_size, len(config.durations))
 
     def forward(
         self,

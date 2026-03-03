@@ -301,18 +301,15 @@ def convert_tdt_config(nemo_config, encoder_config):
     num_decoder_layers = prednet.get("pred_rnn_layers", 2)
 
     durations = decoding_config.get("durations", [0, 1, 2, 3, 4])
-    num_duration_bins = len(durations)
-
     print(
         f"TDT config: vocab_size={vocab_size}, decoder_hidden={decoder_hidden_size}, "
-        f"decoder_layers={num_decoder_layers}, num_durations={num_duration_bins}, "
+        f"decoder_layers={num_decoder_layers}, durations={durations}, "
     )
 
     return ParakeetTDTConfig(
         vocab_size=vocab_size,
         decoder_hidden_size=decoder_hidden_size,
         num_decoder_layers=num_decoder_layers,
-        num_duration_bins=num_duration_bins,
         durations=durations,
         hidden_act="relu",
         max_symbols_per_step=10,
@@ -321,7 +318,7 @@ def convert_tdt_config(nemo_config, encoder_config):
     )
 
 
-def load_and_convert_tdt_state_dict(model_files, vocab_size, num_duration_bins):
+def load_and_convert_tdt_state_dict(model_files, vocab_size):
     """Load NeMo TDT state dict and convert keys to HF format, splitting combined head."""
     state_dict = torch.load(model_files["model_weights"], map_location="cpu", weights_only=True)
     converted_state_dict = {}
@@ -361,9 +358,7 @@ def write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_t
     model_config = convert_tdt_config(nemo_config, encoder_config)
     print(f"Converted TDT config: {model_config}")
 
-    converted_state_dict = load_and_convert_tdt_state_dict(
-        model_files, model_config.vocab_size, model_config.num_duration_bins
-    )
+    converted_state_dict = load_and_convert_tdt_state_dict(model_files, model_config.vocab_size)
 
     print("Loading the checkpoint in a Parakeet TDT model.")
     with torch.device("meta"):
