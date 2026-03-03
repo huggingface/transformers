@@ -35,7 +35,7 @@ Ciò introduce due modifiche sostanziali:
 
 ##### Come ottenere lo stesso comportamento di v3.x in v4.x
 
-- Le pipeline ora contengono funzionalità aggiuntive pronte all'uso. Vedi la [pipeline di classificazione dei token con il flag `grouped_entities`](main_classes/pipelines#transformers.TokenClassificationPipeline).
+- Le pipeline ora contengono funzionalità aggiuntive pronte all'uso. Vedi la [pipeline di classificazione dei token con il parametro `aggregation_strategy`](main_classes/pipelines#transformers.TokenClassificationPipeline).
 - Gli auto-tokenizer ora restituiscono tokenizer rust. Per ottenere invece i tokenizer python, l'utente deve usare il flag `use_fast` impostandolo `False`:
 
 Nella versione `v3.x`:

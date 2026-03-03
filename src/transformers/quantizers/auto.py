@@ -26,6 +26,7 @@ from ..utils.quantization_config import (
     EetqConfig,
     FbgemmFp8Config,
     FineGrainedFP8Config,
+    FourOverSixConfig,
     FPQuantConfig,
     GPTQConfig,
     HiggsConfig,
@@ -51,6 +52,7 @@ from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+from .quantizer_fouroversix import FourOverSixHfQuantizer
 from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
@@ -72,6 +74,7 @@ AUTO_QUANTIZER_MAPPING = {
     "aqlm": AqlmHfQuantizer,
     "quanto": QuantoHfQuantizer,
     "quark": QuarkHfQuantizer,
+    "fouroversix": FourOverSixHfQuantizer,
     "fp_quant": FPQuantHfQuantizer,
     "eetq": EetqHfQuantizer,
     "higgs": HiggsHfQuantizer,
@@ -97,6 +100,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
     "quark": QuarkConfig,
+    "fouroversix": FourOverSixConfig,
     "fp_quant": FPQuantConfig,
     "hqq": HqqConfig,
     "compressed-tensors": CompressedTensorsConfig,

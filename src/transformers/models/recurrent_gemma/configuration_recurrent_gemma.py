@@ -84,6 +84,7 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         w_init_variance_scale (`float`, *optional*, defaults to 0.01): weight initialization variance.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
+
     ```python
     >>> from transformers import RecurrentGemmaModel, RecurrentGemmaConfig
 
@@ -152,7 +153,6 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-
         super().__init__(**kwargs)
 
     @property
