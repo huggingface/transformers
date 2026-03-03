@@ -1143,7 +1143,9 @@ ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 # =============================================================================
 
 
-def gather_full_tensor(local_tensor: torch.Tensor, shard_dim: int, device_mesh) -> torch.Tensor:
+def gather_full_tensor(
+    local_tensor: torch.Tensor, shard_dim: int, device_mesh: dist.device_mesh.DeviceMesh
+) -> torch.Tensor:
     """
     All-gather a sharded tensor along the specified dimension to reconstruct the full tensor.
 
@@ -1157,7 +1159,7 @@ def gather_full_tensor(local_tensor: torch.Tensor, shard_dim: int, device_mesh) 
     """
     world_size = device_mesh.size()
     # In case of TP+DP configuration, the TP group should be used for gathering, not the full DP group
-    process_group = device_mesh.get_group("tp") if "tp" in device_mesh.mesh_dim_names else None
+    process_group = device_mesh.get_group("tp") if "tp" in (device_mesh.mesh_dim_names or {}) else None
 
     # Normalize negative dimension
     if shard_dim < 0:
