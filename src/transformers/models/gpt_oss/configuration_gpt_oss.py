@@ -71,7 +71,7 @@ class GptOssConfig(PreTrainedConfig):
         },
         attention_dropout: float | None = 0.0,
         num_experts_per_tok: int | None = 4,
-        router_aux_loss_coef: float | None = 0.9,
+        router_aux_loss_coef: float | None = 0.001,
         output_router_logits: bool | None = False,
         use_cache: bool | None = True,
         layer_types: list[str] | None = None,

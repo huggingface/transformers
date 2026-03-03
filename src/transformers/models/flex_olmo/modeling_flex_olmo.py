@@ -634,7 +634,6 @@ class FlexOlmoForCausalLM(FlexOlmoPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_router_logits: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -662,11 +661,6 @@ class FlexOlmoForCausalLM(FlexOlmoPreTrainedModel, GenerationMixin):
         'Hey, are you conscious? Can you talk to me?\nI’m not sure if you’re conscious of this, but I’m'
         ```
         """
-
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
-
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
@@ -675,8 +669,8 @@ class FlexOlmoForCausalLM(FlexOlmoPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_router_logits=output_router_logits,
             cache_position=cache_position,
+            return_dict=True,
             **kwargs,
         )
 
@@ -690,7 +684,7 @@ class FlexOlmoForCausalLM(FlexOlmoPreTrainedModel, GenerationMixin):
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         aux_loss = None
-        if output_router_logits:
+        if outputs.router_logits is not None:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,

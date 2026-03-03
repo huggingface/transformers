@@ -665,7 +665,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         inputs_embeds: torch.FloatTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_router_logits: bool | None = False,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | Seq2SeqMoEOutput:
@@ -674,7 +673,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                output_router_logits=output_router_logits,
                 **kwargs,
             )
 
@@ -693,7 +691,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             cache_position=cache_position,
-            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -712,7 +709,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         decoder_z_loss = None
         decoder_aux_loss = None
 
-        if output_router_logits:
+        if encoder_outputs[-1] is not None:
             # Compute the router loss (z_loss + auxiliary loss) for each router in the encoder and decoder
             if self.encoder.config.encoder_sparse_step > 1:
                 encoder_router_logits, encoder_expert_indexes = self._unpack_router_logits(encoder_outputs[-1])
@@ -738,7 +735,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             labels = labels.to(lm_logits.device)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 
-            if output_router_logits:
+            if encoder_outputs[-1] is not None:
                 z_loss = self.router_z_loss_coef * (encoder_z_loss + decoder_z_loss)
                 aux_loss = self.router_aux_loss_coef * (encoder_aux_loss + decoder_aux_loss)
                 loss = loss + z_loss + aux_loss

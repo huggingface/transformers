@@ -906,6 +906,16 @@ def merge_with_config_defaults(func):
             self.config.is_causal = is_causal
             kwargs["is_causal"] = is_causal
 
+        # Maybe temporarily enable collecting router logits for aux loss during training
+        original_output_router_logits = None
+        if (
+            self.training
+            and (router_aux_loss_coef := getattr(self.config, "router_aux_loss_coef", None))
+            and router_aux_loss_coef != 0
+        ):
+            original_output_router_logits = self.config.output_router_logits
+            self.config.output_router_logits = True
+
         # Call the original forward with the updated kwargs/config
         try:
             if kwargs.get("debug_io", False):
@@ -922,6 +932,9 @@ def merge_with_config_defaults(func):
                     self.config.is_causal = is_causal_original_value
                 else:
                     del self.config.is_causal
+
+            if original_output_router_logits is not None:
+                self.config.output_router_logits = original_output_router_logits
 
         return output
 
