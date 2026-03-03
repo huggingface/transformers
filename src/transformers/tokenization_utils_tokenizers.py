@@ -207,10 +207,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 if hasattr(cls, "convert_from_spm_model"):
                     local_kwargs = cls.convert_from_spm_model(**local_kwargs)
 
-                # 3. For classes without a custom __init__ (e.g. TokenizersBackend used
-                #    for MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS), build a tokenizer_object
+                # 3. For non-model specific tokenizers (e.g. TokenizersBackend used
+                #    for MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS), build a _tokenizer
                 #    from the proto so normalizer/decoder are configured correctly.
-                #    Tokenizer subclasses with their own __init__ build tokenizer from vocab/merges.
                 if "tokenizer_object" not in local_kwargs and (
                     cls is TokenizersBackend or "__init__" not in cls.__dict__
                 ):
@@ -231,6 +230,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                             local_kwargs.setdefault("bos_token", proto_spec.bos_piece or "<s>")
                         if proto_spec.eos_id >= 0:
                             local_kwargs.setdefault("eos_token", proto_spec.eos_piece or "</s>")
+                        if proto_spec.unk_id >= 0:
+                            local_kwargs.setdefault("unk_token", proto_spec.unk_piece or "<unk>")
 
             except Exception as e:  # TODO only catch deserialization error here!
                 logger.warning(
