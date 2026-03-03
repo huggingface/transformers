@@ -175,7 +175,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
     @slow
     def test_speculative_generation(self):
         EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% natural and organic, and I love to use it to make my own sauces."
+            "My favourite condiment is 100% natural, organic, gluten-free, vegan, and vegetarian. I have been making"
         )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B", use_fast=False)
