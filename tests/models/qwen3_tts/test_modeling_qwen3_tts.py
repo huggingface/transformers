@@ -317,9 +317,8 @@ class Qwen3TTSIntegrationTest(unittest.TestCase):
         text = "Hello, how are you doing today?"
         inputs = processor(text=text, return_tensors="pt").to(torch_device)
 
-        # generate() expects a list of 1-D / 2-D token tensors
         codes_list, _ = model.generate(
-            input_ids=[inputs["input_ids"][0]],
+            input_ids=[inputs["input_ids"]],
             languages=["auto"],
             do_sample=False,
             subtalker_dosample=False,
@@ -337,18 +336,18 @@ class Qwen3TTSIntegrationTest(unittest.TestCase):
         self.assertEqual(codes.shape[-1], num_code_groups)
         # All code tokens must be in [0, vocab_size)
         self.assertTrue(codes.ge(0).all() and codes.lt(vocab_size).all())
-        # Must have generated at least a few frames
-        self.assertGreater(codes.shape[0], 1)
+        self.assertEqual(codes.shape, torch.Size([99, 16]))
 
         # fmt: off
-        # NOTE: Update these expected values by running:
-        #   codes_list, _ = model.generate(input_ids=[inputs["input_ids"][0]], languages=["auto"],
-        #                                  do_sample=False, subtalker_dosample=False, max_new_tokens=100)
-        #   print(codes_list[0][:5].tolist())
-        EXPECTED_FIRST_5_FRAMES = None  # Replace with actual values once weights are available
+        EXPECTED_FIRST_5_FRAMES = [
+            [391, 597, 132, 143, 783, 1051, 1463, 609, 73, 661, 357, 574, 1234, 364, 1098, 57],
+            [1517, 1334, 610, 1746, 487, 1387, 1542, 584, 1420, 1816, 906, 95, 1389, 1160, 236, 247],
+            [1032, 1412, 130, 793, 289, 233, 1772, 1555, 130, 281, 1991, 925, 696, 133, 77, 47],
+            [1032, 667, 848, 859, 1981, 2000, 50, 767, 567, 1816, 297, 1354, 277, 351, 681, 279],
+            [1032, 1209, 1967, 1975, 440, 1826, 1542, 512, 231, 1031, 445, 1507, 1263, 402, 240, 137],
+        ]
         # fmt: on
-        if EXPECTED_FIRST_5_FRAMES is not None:
-            torch.testing.assert_close(codes[:5].cpu(), torch.tensor(EXPECTED_FIRST_5_FRAMES))
+        torch.testing.assert_close(codes[:5].cpu(), torch.tensor(EXPECTED_FIRST_5_FRAMES))
 
     @slow
     def test_small_model_integration_batch(self):
@@ -363,7 +362,7 @@ class Qwen3TTSIntegrationTest(unittest.TestCase):
         inputs_1 = processor(text=texts[1], return_tensors="pt").to(torch_device)
 
         codes_list, _ = model.generate(
-            input_ids=[inputs_0["input_ids"][0], inputs_1["input_ids"][0]],
+            input_ids=[inputs_0["input_ids"], inputs_1["input_ids"]],
             languages=["auto", "auto"],
             do_sample=False,
             subtalker_dosample=False,
@@ -371,12 +370,28 @@ class Qwen3TTSIntegrationTest(unittest.TestCase):
         )
 
         self.assertEqual(len(codes_list), 2)
-        num_code_groups = model.talker.config.num_code_groups
 
-        for codes in codes_list:
-            self.assertEqual(codes.dim(), 2)
-            self.assertEqual(codes.shape[-1], num_code_groups)
-            self.assertGreater(codes.shape[0], 1)
+        self.assertEqual(codes_list[0].shape, torch.Size([99, 16]))
+        self.assertEqual(codes_list[1].shape, torch.Size([99, 16]))
+
+        # fmt: off
+        EXPECTED_FIRST_5_FRAMES_0 = [
+            [259, 1052, 1643, 1357, 346, 747, 559, 1091, 541, 122, 373, 1415, 343, 418, 395, 759],
+            [415, 574, 651, 1091, 1833, 237, 1244, 424, 1828, 811, 624, 612, 1348, 480, 1013, 726],
+            [1029, 462, 1081, 672, 740, 712, 1244, 537, 202, 422, 1851, 1118, 534, 125, 1487, 417],
+            [663, 1875, 479, 1931, 297, 79, 573, 270, 8, 1166, 425, 1127, 528, 1166, 1581, 548],
+            [695, 1658, 1666, 328, 1206, 1214, 948, 270, 8, 1281, 499, 410, 1715, 999, 1710, 648],
+        ]
+        EXPECTED_FIRST_5_FRAMES_1 = [
+            [391, 855, 73, 382, 783, 980, 590, 609, 714, 25, 982, 1185, 16, 97, 615, 767],
+            [415, 937, 651, 382, 648, 267, 696, 609, 3, 1788, 1720, 306, 360, 241, 151, 480],
+            [1029, 1045, 1425, 1448, 121, 267, 1087, 536, 826, 810, 550, 1624, 1146, 765, 808, 861],
+            [1029, 590, 1090, 158, 423, 1185, 1967, 1913, 1067, 116, 297, 55, 2041, 55, 722, 368],
+            [1029, 348, 1730, 160, 1684, 1533, 1706, 1986, 830, 463, 593, 214, 176, 1668, 182, 1200],
+        ]
+        # fmt: on
+        torch.testing.assert_close(codes_list[0][:5].cpu(), torch.tensor(EXPECTED_FIRST_5_FRAMES_0))
+        torch.testing.assert_close(codes_list[1][:5].cpu(), torch.tensor(EXPECTED_FIRST_5_FRAMES_1))
 
     @slow
     def test_small_model_integration_with_speaker(self):
@@ -392,7 +407,7 @@ class Qwen3TTSIntegrationTest(unittest.TestCase):
         inputs = processor(text=text, return_tensors="pt").to(torch_device)
 
         codes_list, _ = model.generate(
-            input_ids=[inputs["input_ids"][0]],
+            input_ids=[inputs["input_ids"]],
             languages=["auto"],
             speakers=[speaker],
             do_sample=False,
