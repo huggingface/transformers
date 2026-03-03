@@ -19,7 +19,7 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -310,6 +310,7 @@ class Qwen3TTSIntegrationTest(unittest.TestCase):
         return model, processor
 
     @slow
+    @require_torch_accelerator
     def test_small_model_integration_text_to_codes(self):
         """Text -> acoustic codec codes; checks output shape and token range."""
         model, processor = self._load_model_and_processor()
@@ -350,6 +351,7 @@ class Qwen3TTSIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(codes[:5].cpu(), torch.tensor(EXPECTED_FIRST_5_FRAMES))
 
     @slow
+    @require_torch_accelerator
     def test_small_model_integration_batch(self):
         """Batch: two texts → two independent code sequences."""
         model, processor = self._load_model_and_processor()
@@ -394,6 +396,7 @@ class Qwen3TTSIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(codes_list[1][:5].cpu(), torch.tensor(EXPECTED_FIRST_5_FRAMES_1))
 
     @slow
+    @require_torch_accelerator
     def test_small_model_integration_with_speaker(self):
         """TTS with a named speaker (requires model to expose speaker list)."""
         model, processor = self._load_model_and_processor()
