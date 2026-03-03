@@ -75,3 +75,11 @@ These benchmarks were run on an [AWS EC2 g5.2xlarge instance](https://aws.amazon
 ## BaseImageProcessorFast
 
 [[autodoc]] image_processing_utils_fast.BaseImageProcessorFast
+
+## PilBackend
+
+[[autodoc]] PilBackend
+
+## TorchvisionBackend
+
+[[autodoc]] TorchvisionBackend

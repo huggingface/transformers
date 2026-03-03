@@ -288,4 +288,4 @@ class Kosmos2_5ImageProcessor(TorchvisionBackend):
         return kwargs
 
 
-__all__ = ["Kosmos2_5ImageProcessor", "Kosmos2_5ImageProcessorKwargs"]
+__all__ = ["Kosmos2_5ImageProcessor"]

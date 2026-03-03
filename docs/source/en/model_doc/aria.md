@@ -147,6 +147,11 @@ print(response)
 [[autodoc]] AriaImageProcessor
     - preprocess
 
+## AriaImageProcessorPil
+
+[[autodoc]] AriaImageProcessorPil
+    - preprocess
+
 ## AriaProcessor
 
 [[autodoc]] AriaProcessor

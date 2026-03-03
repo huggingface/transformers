@@ -149,4 +149,4 @@ class GLPNImageProcessor(TorchvisionBackend):
         return results
 
 
-__all__ = ["GLPNImageProcessor", "GLPNImageProcessorKwargs"]
+__all__ = ["GLPNImageProcessor"]

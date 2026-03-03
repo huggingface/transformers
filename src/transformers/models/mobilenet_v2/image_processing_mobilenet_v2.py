@@ -211,4 +211,4 @@ class MobileNetV2ImageProcessor(TorchvisionBackend):
         return semantic_segmentation
 
 
-__all__ = ["MobileNetV2ImageProcessor", "MobileNetV2ImageProcessorKwargs"]
+__all__ = ["MobileNetV2ImageProcessor"]

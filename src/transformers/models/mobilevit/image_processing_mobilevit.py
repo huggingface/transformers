@@ -233,4 +233,4 @@ class MobileViTImageProcessor(TorchvisionBackend):
         return semantic_segmentation
 
 
-__all__ = ["MobileViTImageProcessor", "MobileVitImageProcessorKwargs"]
+__all__ = ["MobileViTImageProcessor"]

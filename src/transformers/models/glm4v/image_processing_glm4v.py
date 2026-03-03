@@ -263,4 +263,4 @@ class Glm4vImageProcessor(TorchvisionBackend):
         return grid_h * grid_w
 
 
-__all__ = ["Glm4vImageProcessor", "smart_resize"]
+__all__ = ["Glm4vImageProcessor"]

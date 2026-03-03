@@ -531,4 +531,4 @@ class FuyuImageProcessor(TorchvisionBackend):
         return kwargs
 
 
-__all__ = ["FuyuImageProcessor", "FuyuBatchFeature", "FuyuImagesKwargs"]
+__all__ = ["FuyuImageProcessor"]

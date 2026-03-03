@@ -75,7 +75,6 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] Mask2FormerImageProcessor
     - preprocess
-    - encode_inputs
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
