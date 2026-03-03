@@ -37,8 +37,8 @@ from transformers import (
     PythonBackend,
     is_torch_available,
 )
-from transformers.masking_utils import create_bidirectional_mask
 from transformers.image_utils import load_image
+from transformers.masking_utils import create_bidirectional_mask
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
 from transformers.models.isaac.modeling_isaac import (
     IsaacVisionAttention,
@@ -278,6 +278,24 @@ def create_isaac_processor(
         tokenizer=tokenizer,
         **processor_params,
     )
+
+
+def to_model_multimodal_inputs(processor_output, device):
+    keys = (
+        "modality_tensor",
+        "position_ids",
+        "vision_patches",
+        "vision_patch_attention_mask",
+        "vision_token_grids",
+        "vision_token_offsets",
+        "vision_token_lengths",
+        "vision_image_attention_mask",
+    )
+    return {
+        key: (value.to(device) if isinstance(value, torch.Tensor) else value)
+        for key, value in processor_output.items()
+        if key in keys
+    }
 
 
 @lru_cache(maxsize=1)
@@ -709,7 +727,6 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
     def _generate_from_messages(self, messages, images, num_tokens=None):
         prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
         processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
-        packed_inputs = processor_output["packed_inputs"]
         input_ids = processor_output["input_ids"].to(self.device)
         attention_mask = processor_output.get("attention_mask")
         if attention_mask is None:
@@ -719,16 +736,13 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
             attention_mask = processor_output["input_ids"].ne(pad_id).long()
         attention_mask = attention_mask.to(self.device)
         prompt_len = input_ids.shape[1]
-        packed_inputs = {
-            key: (value.to(self.device) if isinstance(value, torch.Tensor) else value)
-            for key, value in packed_inputs.items()
-        }
+        multimodal_inputs = to_model_multimodal_inputs(processor_output, self.device)
 
         with torch.no_grad():
             outputs = self.model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                packed_inputs=packed_inputs,
+                **multimodal_inputs,
                 max_new_tokens=num_tokens or self.max_new_tokens,
                 do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,
@@ -803,16 +817,13 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         input_ids = input_ids.to(self.device)
         attention_mask = attention_mask.to(self.device)
 
-        packed_inputs = {
-            k: (v.to(self.device) if isinstance(v, torch.Tensor) else v)
-            for k, v in processor_output["packed_inputs"].items()
-        }
+        multimodal_inputs = to_model_multimodal_inputs(processor_output, self.device)
 
         with torch.no_grad():
             outputs = self.model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                packed_inputs=packed_inputs,
+                **multimodal_inputs,
                 max_new_tokens=num_tokens or self.max_new_tokens,
                 do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,
@@ -843,17 +854,15 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         ]
         prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
         processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
-        packed_inputs = processor_output["packed_inputs"]
         input_ids = processor_output["input_ids"]
         device = next(self.model.parameters()).device
         input_ids = input_ids.to(device)
-        # Move packed tensors to model device
-        packed_inputs = {k: (v.to(device) if isinstance(v, torch.Tensor) else v) for k, v in packed_inputs.items()}
+        multimodal_inputs = to_model_multimodal_inputs(processor_output, device)
 
         with torch.no_grad():
             outputs = self.model.generate(
                 input_ids=input_ids,
-                packed_inputs=packed_inputs,
+                **multimodal_inputs,
                 max_new_tokens=num_tokens or self.max_new_tokens,
                 do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,
@@ -945,22 +954,16 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         ]
         batch_outputs = self.processor(text=prompts, images=images_list, return_tensors="pt")
         batch_input_ids = batch_outputs["input_ids"]
-        batch_packed = batch_outputs["packed_inputs"]
+        batch_packed = batch_outputs
 
         sample_lengths = [output["input_ids"].squeeze(0).shape[0] for output in per_sample_outputs]
         max_length = max(sample_lengths)
-
-        expected_vision_patches = []
-        expected_vision_grids = []
-        expected_vision_offsets = []
-        expected_vision_lengths = []
-        expected_vision_batch_indices = []
 
         for i, (single_output, batch_ids, single_len) in enumerate(
             zip(per_sample_outputs, batch_input_ids, sample_lengths)
         ):
             single_ids = single_output["input_ids"].squeeze(0)
-            single_packed = single_output["packed_inputs"]
+            single_packed = single_output
 
             torch.testing.assert_close(batch_ids[-single_len:], single_ids)
 
@@ -982,11 +985,22 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
             torch.testing.assert_close(batch_positions_row, expected_positions)
 
             if single_packed["vision_patches"] is not None:
-                expected_vision_patches.append(single_packed["vision_patches"])
-                expected_vision_grids.append(single_packed["vision_token_grids"])
-                expected_vision_offsets.append(single_packed["vision_token_offsets"])
-                expected_vision_lengths.append(single_packed["vision_token_lengths"])
-                expected_vision_batch_indices.append(torch.full_like(single_packed["vision_token_batch_indices"], i))
+                expected_image_count = int(single_packed["vision_image_attention_mask"].sum().item())
+                batch_image_count = int(batch_packed["vision_image_attention_mask"][i].sum().item())
+                assert batch_image_count == expected_image_count
+                if expected_image_count > 0:
+                    torch.testing.assert_close(
+                        batch_packed["vision_token_grids"][i, :expected_image_count],
+                        single_packed["vision_token_grids"][0, :expected_image_count],
+                    )
+                    torch.testing.assert_close(
+                        batch_packed["vision_token_offsets"][i, :expected_image_count],
+                        single_packed["vision_token_offsets"][0, :expected_image_count],
+                    )
+                    torch.testing.assert_close(
+                        batch_packed["vision_token_lengths"][i, :expected_image_count],
+                        single_packed["vision_token_lengths"][0, :expected_image_count],
+                    )
 
             if single_len == max_length:
                 continue
@@ -998,20 +1012,11 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
             assert not torch.any(attention_mask[: max_length - single_len]), f"sample {i} mask ones inside left pad"
             assert torch.all(attention_mask[-single_len:]), f"sample {i} mask zeros inside content"
 
-        if expected_vision_patches:
-            torch.testing.assert_close(batch_packed["vision_patches"], torch.cat(expected_vision_patches, dim=0))
-            torch.testing.assert_close(batch_packed["vision_token_grids"], torch.cat(expected_vision_grids, dim=0))
-            torch.testing.assert_close(batch_packed["vision_token_offsets"], torch.cat(expected_vision_offsets, dim=0))
-            torch.testing.assert_close(batch_packed["vision_token_lengths"], torch.cat(expected_vision_lengths, dim=0))
-            torch.testing.assert_close(
-                batch_packed["vision_token_batch_indices"], torch.cat(expected_vision_batch_indices, dim=0)
-            )
-        else:
-            assert batch_packed["vision_patches"] is None
-            assert batch_packed["vision_token_grids"] is None
-            assert batch_packed["vision_token_offsets"] is None
-            assert batch_packed["vision_token_lengths"] is None
-            assert batch_packed["vision_token_batch_indices"] is None
+        assert batch_packed["vision_patches"] is not None
+        assert batch_packed["vision_token_grids"] is not None
+        assert batch_packed["vision_token_offsets"] is not None
+        assert batch_packed["vision_token_lengths"] is not None
+        assert batch_packed["vision_image_attention_mask"] is not None
 
         batch_texts = self._generate_batch(prompts, images_list, num_tokens=100)
         assert len(batch_texts) == len(single_texts) == 3
@@ -1065,18 +1070,14 @@ class IsaacBoxPointingIntegrationTest(unittest.TestCase):
         messages, images = document_to_messages(document, vision_token=self.hf_config.vision_token)
         prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
         processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
-        packed_inputs = processor_output["packed_inputs"]
         input_ids = processor_output["input_ids"].to(self.device)
         prompt_len = input_ids.shape[1]
-        packed_inputs = {
-            key: (value.to(self.device) if isinstance(value, torch.Tensor) else value)
-            for key, value in packed_inputs.items()
-        }
+        multimodal_inputs = to_model_multimodal_inputs(processor_output, self.device)
 
         with torch.no_grad():
             outputs = self.model.generate(
                 input_ids=input_ids,
-                packed_inputs=packed_inputs,
+                **multimodal_inputs,
                 max_new_tokens=self.max_new_tokens,
                 do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,
