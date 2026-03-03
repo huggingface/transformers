@@ -821,22 +821,28 @@ class HmllLoadSpec(DeferredLoadSpec):
     Deferred load via hmll.
     - If ranges is non-empty: uses fetchv for TP slice-based loading (each rank loads its shard).
     - If ranges is empty: uses fetch for full-tensor loading (replicated parameters).
+
+    dst is allocated lazily inside execute() to avoid pre-allocating the entire model's
+    worth of GPU memory before any I/O begins.
     """
 
     registry: Any  # SafetensorsAccessor
     name: str
     ranges: list[tuple[int, int]]  # element (start, end) per slice; empty means full fetch
-    dst: torch.Tensor
+    shape: tuple[int, ...]
+    dtype: torch.dtype
+    device: torch.device
     nbytes: int = 0  # total bytes to read; required when ranges is empty
 
     def execute(self) -> torch.Tensor:
+        dst = torch.empty(self.shape, dtype=self.dtype, device=self.device)
         if self.ranges:
-            nread = self.registry.fetchv(self.name, self.ranges, self.dst.data_ptr())
+            nread = self.registry.fetchv(self.name, self.ranges, dst.data_ptr())
         else:
-            nread = self.registry.fetch(self.name, self.dst.data_ptr(), self.nbytes)
+            nread = self.registry.fetch(self.name, dst.data_ptr(), self.nbytes)
         if nread <= 0:
             raise RuntimeError("Failed to fetch tensor")
-        return self.dst
+        return dst
 
 
 def _compute_tp_elem_ranges(

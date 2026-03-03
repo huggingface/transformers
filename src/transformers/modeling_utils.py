@@ -4285,13 +4285,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                     empty_param = meta_model_state_dict[renamed_key]
                                     shard_shape = tuple(empty_param.shape)
 
-                                    # "allocate" (might be cached) memory to hold destination tensor
-                                    dst = torch.empty(shard_shape, dtype=dtype_torch, device=device)
                                     merged_state_dict[original_key] = HmllLoadSpec(
                                         registry=registry,
                                         name=original_key,
                                         ranges=elem_ranges,
-                                        dst=dst,
+                                        shape=shard_shape,
+                                        dtype=dtype_torch,
+                                        device=device,
                                     )
 
                                 # todo(mfuntowicz): wtf
@@ -4299,30 +4299,25 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                     continue
                             else:
                                 # Replicated parameter (not in TP plan): load full tensor on every rank
-                                dst = torch.empty(full_shape, dtype=dtype_torch, device=device)
                                 merged_state_dict[original_key] = HmllLoadSpec(
                                     registry=registry,
                                     name=original_key,
                                     ranges=[],
-                                    dst=dst,
-                                    nbytes=dst.numel() * elem_size_bytes,
+                                    shape=full_shape,
+                                    dtype=dtype_torch,
+                                    device=device,
+                                    nbytes=numel * elem_size_bytes,
                                 )
                         else:
                             # todo(mfuntowicz): potentially refactor this to unify
-                            dst = torch.empty(
-                                full_shape,
+                            merged_state_dict[original_key] = HmllLoadSpec(
+                                registry=registry,
+                                name=original_key,
+                                ranges=[],
+                                shape=full_shape,
                                 dtype=dtype_torch,
                                 device=device,
-                            )
-
-                            merged_state_dict[original_key] = NativeLoadSpec(
-                                dst=dst,
-                                fetch=partial(
-                                    registry.fetch,
-                                    original_key,
-                                    dst.data_ptr(),
-                                    dst.numel() * elem_size_bytes,
-                                ),
+                                nbytes=numel * elem_size_bytes,
                             )
 
             # User passed an explicit state_dict
