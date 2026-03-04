@@ -4292,7 +4292,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                         shape=shard_shape,
                                         dtype=dtype_torch,
                                         device=device,
-                                        nbytes
                                     )
 
                                 # todo(mfuntowicz): wtf
@@ -4306,18 +4305,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                     shape=full_shape,
                                     dtype=dtype_torch,
                                     device=device,
-                                    nbytes=numel * elem_size_bytes,
                                 )
                         else:
                             # todo(mfuntowicz): potentially refactor this to unify
                             merged_state_dict[original_key] = HmllLoadSpec(
                                 registry=registry,
                                 name=original_key,
-                                ranges=[],
                                 shape=full_shape,
                                 dtype=dtype_torch,
                                 device=device,
-                                nbytes=numel * elem_size_bytes,
                             )
 
             # User passed an explicit state_dict
