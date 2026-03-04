@@ -680,8 +680,8 @@ class AutoTokenizer:
             and config_model_type is not None
             and config_model_type != ""
             and TOKENIZER_MAPPING_NAMES.get(config_model_type) is not None
-            and (TOKENIZER_MAPPING_NAMES.get(config_model_type)[:-4] if TOKENIZER_MAPPING_NAMES.get(config_model_type).endswith("Fast") else TOKENIZER_MAPPING_NAMES.get(config_model_type))
-            != (tokenizer_config_class[:-4] if tokenizer_config_class.endswith("Fast") else tokenizer_config_class)
+            and (TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast"))
+            != (tokenizer_config_class.removesuffix("Fast"))
         ):
             # new model, but we ignore it unless the model type is the same
             if TokenizersBackend is not None:
