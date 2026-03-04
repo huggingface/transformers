@@ -4504,12 +4504,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         not missing either).
         """
         is_quantized = hf_quantizer is not None
-        # This is the only case where we do not initialize the model on meta device, so we don't have to do anything here
+        # This is the two case where we do not initialize the model on meta device, so we don't have to do anything here
         if is_deepspeed_zero3_enabled() and not is_quantized:
+            return
+        if is_fsdp_enabled() and is_local_dist_rank_0() and not is_quantized:
             return
 
         # In this case we need to move everything back
-        if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
+        if is_fsdp_enabled() and is_local_dist_rank_0() and not is_quantized:
             for key, param in self.named_parameters():
                 value = torch.empty_like(param, device="cpu")
                 _load_parameter_into_model(self, key, value)
