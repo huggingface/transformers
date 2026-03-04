@@ -270,19 +270,24 @@ class NllbTokenizer(TokenizersBackend):
         - In default mode: Prefix=[src_lang_code], suffix = [eos]
         """
         self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
+        lang_code_token = src_lang
 
         if self.legacy_behaviour:
             self.prefix_tokens = []
             self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+            self._tokenizer.post_processor = processors.TemplateProcessing(
+                single=["$A", self.eos_token, lang_code_token],
+                pair=["$A", "$B", self.eos_token, lang_code_token],
+                special_tokens=[(self.eos_token, self.eos_token_id), (lang_code_token, self.cur_lang_code)],
+            )
         else:
             self.prefix_tokens = [self.cur_lang_code]
             self.suffix_tokens = [self.eos_token_id]
-
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=["$A", self.eos_token, self.unk_token],
-            pair=["$A", "$B", self.eos_token, self.unk_token],
-            special_tokens=[(self.eos_token, self.eos_token_id), (self.unk_token, self.unk_token_id)],
-        )
+            self._tokenizer.post_processor = processors.TemplateProcessing(
+                single=[lang_code_token, "$A", self.eos_token],
+                pair=[lang_code_token, "$A", "$B", self.eos_token],
+                special_tokens=[(self.eos_token, self.eos_token_id), (lang_code_token, self.cur_lang_code)],
+            )
 
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target lang setting.
@@ -290,18 +295,24 @@ class NllbTokenizer(TokenizersBackend):
         - In default mode: Prefix=[tgt_lang_code], suffix = [eos]
         """
         self.cur_lang_code = self.convert_tokens_to_ids(lang)
+        lang_code_token = lang
+
         if self.legacy_behaviour:
             self.prefix_tokens = []
             self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+            self._tokenizer.post_processor = processors.TemplateProcessing(
+                single=["$A", self.eos_token, lang_code_token],
+                pair=["$A", "$B", self.eos_token, lang_code_token],
+                special_tokens=[(self.eos_token, self.eos_token_id), (lang_code_token, self.cur_lang_code)],
+            )
         else:
             self.prefix_tokens = [self.cur_lang_code]
             self.suffix_tokens = [self.eos_token_id]
-
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=["$A", self.eos_token, self.unk_token],
-            pair=["$A", "$B", self.eos_token, self.unk_token],
-            special_tokens=[(self.eos_token, self.eos_token_id), (self.unk_token, self.unk_token_id)],
-        )
+            self._tokenizer.post_processor = processors.TemplateProcessing(
+                single=[lang_code_token, "$A", self.eos_token],
+                pair=[lang_code_token, "$A", "$B", self.eos_token],
+                special_tokens=[(self.eos_token, self.eos_token_id), (lang_code_token, self.cur_lang_code)],
+            )
 
 
 __all__ = ["NllbTokenizer"]
