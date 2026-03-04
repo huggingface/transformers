@@ -1179,9 +1179,9 @@ class IsaacModel(Qwen3PreTrainedModel):
         self,
         input_ids: torch.Tensor,
         modality_tensor: torch.Tensor,
-        vision_patches: torch.Tensor | None = None,
+        vision_patches: torch.Tensor,
+        vision_token_grids: torch.Tensor,
         vision_patch_attention_mask: torch.Tensor | None = None,
-        vision_token_grids: torch.Tensor | None = None,
         vision_token_offsets: torch.Tensor | None = None,
         vision_token_lengths: torch.Tensor | None = None,
         vision_image_attention_mask: torch.Tensor | None = None,
@@ -1337,11 +1337,22 @@ class IsaacModel(Qwen3PreTrainedModel):
                 Mask indicating which image slots are populated, shape `(batch_size, max_images)`.
         """
 
-        if inputs_embeds is None and input_ids is None:
-            raise ValueError("`input_ids` or `inputs_embeds` must be provided.")
+        if inputs_embeds is None:
+            if input_ids is None:
+                raise ValueError("`input_ids` or `inputs_embeds` must be provided.")
 
-        if inputs_embeds is None and input_ids is not None:
-            if modality_tensor is not None or vision_patches is not None:
+            has_vision_inputs = any(
+                value is not None
+                for value in (
+                    vision_patches,
+                    vision_patch_attention_mask,
+                    vision_token_grids,
+                    vision_token_offsets,
+                    vision_token_lengths,
+                    vision_image_attention_mask,
+                )
+            )
+            if modality_tensor is not None or has_vision_inputs:
                 if modality_tensor is None:
                     modality_tensor = torch.full_like(input_ids, ModalityType.text.value)
                 inputs_embeds, modality_tensor = self.embed_multimodal_inputs(
@@ -1356,7 +1367,8 @@ class IsaacModel(Qwen3PreTrainedModel):
                 )
             else:
                 inputs_embeds = self.text_model.embed_tokens(input_ids)
-        elif inputs_embeds is not None and modality_tensor is None:
+
+        if modality_tensor is None:
             batch_size, seq_len = inputs_embeds.shape[:2]
             modality_tensor = torch.full(
                 (batch_size, seq_len), ModalityType.text.value, device=inputs_embeds.device, dtype=torch.long
@@ -1382,11 +1394,6 @@ class IsaacModel(Qwen3PreTrainedModel):
             cache_position=cache_position,
         )
         self.rope_deltas = rope_deltas
-
-        if modality_tensor is None:
-            modality_tensor = torch.full(
-                (batch_size, seq_len), ModalityType.text.value, device=device, dtype=torch.long
-            )
 
         cos, sin = self.rotary_emb(position_ids, modality_tensor, hidden_states=inputs_embeds)
 
