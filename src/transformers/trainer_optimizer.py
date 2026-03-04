@@ -554,6 +554,30 @@ def _get_stable_adamw(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     return StableAdamW, ctx.optimizer_kwargs
 
 
+def _patch_flashoptim_state_dict():
+    """
+    Patch FlashOptim's state_dict to handle empty optimizer state.
+
+    FlashOptim's `_state_dict_for_param` raises a KeyError when called before
+    the first optimizer step (empty state). This is triggered by accelerate's
+    `AcceleratedOptimizer.__init__`, which calls `state_dict()` for device placement.
+    """
+    from flashoptim.optimizers import FlashOptimizer
+
+    if getattr(FlashOptimizer, "_hf_patched", False):
+        return
+
+    orig = FlashOptimizer._state_dict_for_param
+
+    def _safe_state_dict_for_param(self, param_number, opt_state, *args, **kwargs):
+        if param_number not in opt_state:
+            return {}
+        return orig(self, param_number, opt_state, *args, **kwargs)
+
+    FlashOptimizer._state_dict_for_param = _safe_state_dict_for_param
+    FlashOptimizer._hf_patched = True
+
+
 def _get_flashoptim_optimizer(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     """Get FlashOptim optimizer (FlashAdamW, FlashAdam, FlashSGD, FlashSGDW, FlashLion)."""
     if not is_flashoptim_available():
@@ -563,6 +587,8 @@ def _get_flashoptim_optimizer(ctx: OptimizerContext) -> tuple[Any, dict[str, Any
         )
 
     from flashoptim import FlashAdam, FlashAdamW, FlashLion, FlashSGD, FlashSGDW
+
+    _patch_flashoptim_state_dict()
 
     optimizer_mapping = {
         OptimizerNames.FLASH_ADAMW: FlashAdamW,
@@ -581,13 +607,28 @@ def _get_flashoptim_optimizer(ctx: OptimizerContext) -> tuple[Any, dict[str, Any
     else:
         master_weight_bits = int(master_weight_bits)
 
+    # master_weight_bits has no effect when all model params are fp32 (FlashOptim
+    # raises an error in this case). Auto-disable it and warn the user.
+    if master_weight_bits is not None and ctx.model is not None:
+        all_fp32 = all(p.dtype == torch.float32 for p in ctx.model.parameters())
+        if all_fp32:
+            logger.warning(
+                f"FlashOptim: master_weight_bits={master_weight_bits} has no effect with fp32 parameters. "
+                "Setting master_weight_bits=None. Use bf16/fp16 model weights to enable master weight correction."
+            )
+            master_weight_bits = None
+
     flashoptim_kwargs = {
         "master_weight_bits": master_weight_bits,
-        "compress_state_dict": strtobool(ctx.optim_args.get("compress_state_dict", "True")),
-        "decouple_lr": strtobool(ctx.optim_args.get("decouple_lr", "False")),
     }
 
-    # Add adam-specific kwargs for Adam variants
+    # Only FlashAdamW and FlashSGDW accept compress_state_dict and decouple_lr directly.
+    # Other variants pass **kwargs to the base class which does not accept these.
+    if ctx.args.optim in (OptimizerNames.FLASH_ADAMW, OptimizerNames.FLASH_SGDW):
+        flashoptim_kwargs["compress_state_dict"] = strtobool(ctx.optim_args.get("compress_state_dict", "True"))
+        flashoptim_kwargs["decouple_lr"] = strtobool(ctx.optim_args.get("decouple_lr", "False"))
+
+    # Add optimizer-family-specific kwargs
     if ctx.args.optim in (OptimizerNames.FLASH_ADAMW, OptimizerNames.FLASH_ADAM):
         flashoptim_kwargs.update(ctx.adam_kwargs)
     elif ctx.args.optim == OptimizerNames.FLASH_LION:
