@@ -511,6 +511,20 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     # breakpoint()
     config = _get_exact_config(config, config_class)
 
+    # TODO: For `pe_audio_video`: the tester only gives `PeAudioVideoEncoderConfig` and can't create model for `PeAudioVideoModel`
+    #   we try to find if `config` is a subconfig for `config_class`. If so, return `config_class()` after setting that attr. to `config`
+    if not isinstance(config, config_class):
+        config_from_class = config_class()
+        keys = config_from_class.to_dict().keys()
+        for key in keys:
+            if key.endswith("_config"):
+                o = getattr(config_from_class, key)
+                if isinstance(config, o.__class__):
+                    setattr(config_from_class, key, config)
+                    config = config_from_class
+                    break
+
+    # breakpoint()
     # make sure this is long enough (some model tester has `20` for this attr.) to pass `text-generation`
     # pipeline tests.
     max_positions = []
@@ -529,6 +543,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
                 if getattr(config.text_config, key, None) is not None:
                     setattr(config.text_config, key, max_position)
 
+    # breakpoint()
     return config
 
 
@@ -1216,6 +1231,7 @@ def build(config_class, models_to_create, output_dir):
     # breakpoint()
     try:
         tiny_config = get_tiny_config(config_class)
+        # breakpoint()
     except Exception as e:
         # breakpoint()
         error = f"Failed to get tiny config for {config_class.__name__}: {e}"
@@ -1229,6 +1245,7 @@ def build(config_class, models_to_create, output_dir):
     processor_output_folder = os.path.join(output_dir, "processors")
     # breakpoint()
     try:
+        # breakpoint()
         processors = convert_processors(processors, tiny_config, processor_output_folder, result)
     except Exception:
         error = "Failed to convert the processors."
@@ -1286,6 +1303,7 @@ def build(config_class, models_to_create, output_dir):
         result["pytorch"][pytorch_arch.__name__] = {}
         error = None
         try:
+            # breakpoint()
             model = build_model(pytorch_arch, tiny_config, output_dir=output_dir)
         except Exception as e:
             model = None
