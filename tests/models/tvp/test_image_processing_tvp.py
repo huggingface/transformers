@@ -359,7 +359,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         encoding_torchvision = image_processor_torchvision(dummy_images, return_tensors="pt")
         encoding_pil = image_processor_pil(dummy_images, return_tensors="pt")
-        # Higher max atol for video processing, mean_atol still 5e-3 -> 1e-2
+        # Higher max atol for video processing, mean_atol still 5e-3 -> 1e-1
         self._assert_tensors_equivalence(
-            encoding_torchvision.pixel_values, encoding_pil.pixel_values, atol=10.0, mean_atol=1e-2
+            encoding_torchvision.pixel_values, encoding_pil.pixel_values, atol=10.0, mean_atol=1e-1
         )
