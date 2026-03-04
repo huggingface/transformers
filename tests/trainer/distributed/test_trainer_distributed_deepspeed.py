@@ -23,6 +23,7 @@ import dataclasses
 import itertools
 import json
 import os
+import subprocess
 import unittest
 from copy import deepcopy
 from functools import partial
@@ -40,11 +41,11 @@ from transformers.integrations.deepspeed import (
 from transformers.testing_utils import (
     CaptureLogger,
     CaptureStd,
-    CaptureStderr,
     LoggingLevel,
     TestCasePlus,
     backend_device_count,
     execute_subprocess_async,
+    get_tests_dir,
     get_torch_dist_unique_port,
     mockenv_context,
     read_json_file,
@@ -52,7 +53,6 @@ from transformers.testing_utils import (
     require_deepspeed,
     require_optuna,
     require_torch_accelerator,
-    require_torch_fp16,
     require_torch_multi_accelerator,
     run_first,
     slow,
@@ -1075,13 +1075,20 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
         """Test that ALST/Ulysses sequence parallelism produces the same losses as without it."""
         sp_config = os.path.join(CONFIGS_DIR, "deepspeed_zero2_sp.yaml")
         common_args = [
-            "--max_steps", "10",
-            "--per_device_train_batch_size", "1",
-            "--gradient_accumulation_steps", "1",
-            "--logging_steps", "1",
-            "--seed", "42",
-            "--attn_implementation", "sdpa",
-            "--pad_to_multiple_of", "4",
+            "--max_steps",
+            "10",
+            "--per_device_train_batch_size",
+            "1",
+            "--gradient_accumulation_steps",
+            "1",
+            "--logging_steps",
+            "1",
+            "--seed",
+            "42",
+            "--attn_implementation",
+            "sdpa",
+            "--pad_to_multiple_of",
+            "4",
         ]
 
         # Step 1: Run with SP enabled
@@ -1091,11 +1098,16 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
         cmd = self.get_accelerate_cmd(
             TRAIN_SCRIPT,
             config_file=sp_config,
-            extra_args=common_args + [
-                "--output_dir", sp_yes_dir,
-                "--per_device_eval_batch_size", "1",
-                "--loss_output_file", sp_yes_losses,
-                "--eval_output_file", sp_yes_eval,
+            extra_args=common_args
+            + [
+                "--output_dir",
+                sp_yes_dir,
+                "--per_device_eval_batch_size",
+                "1",
+                "--loss_output_file",
+                sp_yes_losses,
+                "--eval_output_file",
+                sp_yes_eval,
             ],
         )
         execute_subprocess_async(cmd, env=self.get_env())
@@ -1106,9 +1118,12 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
         cmd = self.get_accelerate_cmd(
             TRAIN_SCRIPT,
             config_file=DS_CONFIGS[ZERO2],
-            extra_args=common_args + [
-                "--output_dir", sp_no_dir,
-                "--loss_output_file", sp_no_losses,
+            extra_args=common_args
+            + [
+                "--output_dir",
+                sp_no_dir,
+                "--loss_output_file",
+                sp_no_losses,
             ],
         )
         execute_subprocess_async(cmd, env=self.get_env())
@@ -1244,7 +1259,9 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
             expected_dtype = torch.float32
 
         for name, param in model.named_parameters():
-            self.assertEqual(param.dtype, expected_dtype, f"Parameter {name} has dtype {param.dtype}, expected {expected_dtype}")
+            self.assertEqual(
+                param.dtype, expected_dtype, f"Parameter {name} has dtype {param.dtype}, expected {expected_dtype}"
+            )
 
     @require_torch_accelerator
     def test_from_config_zero3_weight_init(self):
@@ -1484,3 +1501,187 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
         embedding = model.get_input_embeddings()
         with deepspeed.zero.GatheredParameters([embedding.weight]):
             self.assertEqual(embedding.weight.shape[0], new_size)
+
+
+# ---------------------------------------------------------------------------
+# Model Zoo — test many architectures with DeepSpeed + zero_to_fp32 recovery
+# ---------------------------------------------------------------------------
+
+# Working tiny models
+ALBERT_TINY = "hf-internal-testing/tiny-albert"
+BART_TINY = "sshleifer/bart-tiny-random"
+BERT_TINY = "hf-internal-testing/tiny-bert"
+BIGBIRD_PEGASUS_TINY = "hf-internal-testing/tiny-random-bigbird_pegasus"
+BLENDERBOT_TINY = "hf-internal-testing/tiny-random-blenderbot"
+BLOOM_TINY = "bigscience/bigscience-small-testing"
+DEBERTA_TINY = "hf-internal-testing/tiny-random-deberta"
+DEBERTA_V2_TINY = "hf-internal-testing/tiny-random-deberta-v2"
+DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased"
+ELECTRA_TINY = "hf-internal-testing/tiny-electra"
+FLAUBERT_TINY = "hf-internal-testing/tiny-random-flaubert"
+FSMT_TINY = "stas/tiny-wmt19-en-de"
+FUNNEL_TINY = "hf-internal-testing/tiny-random-funnel"
+GPT_NEO_TINY = "hf-internal-testing/tiny-random-gpt_neo"
+LAYOUTLM_TINY = "hf-internal-testing/tiny-layoutlm"
+LED_TINY = "hf-internal-testing/tiny-random-led"
+LONGFORMER_TINY = "hf-internal-testing/tiny-random-longformer"
+M2M_100_TINY = "stas/tiny-m2m_100"
+MARIAN_TINY = "sshleifer/tiny-marian-en-de"
+MBART_TINY = "sshleifer/tiny-mbart"
+MOBILEBERT_TINY = "hf-internal-testing/tiny-random-mobilebert"
+MPNET_TINY = "hf-internal-testing/tiny-random-mpnet"
+PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
+PROPHETNET_TINY = "hf-internal-testing/tiny-random-prophetnet"
+ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
+SQUEEZEBERT_TINY = "hf-internal-testing/tiny-random-squeezebert"
+T5_V1_TINY = "hf-internal-testing/tiny-random-t5-v1.1"
+VIT_TINY = "hf-internal-testing/tiny-random-vit"
+XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
+XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
+
+FIXTURE_DIRECTORY = get_tests_dir("fixtures")
+ROOT_DIRECTORY = os.path.join(os.path.dirname(get_tests_dir()))
+DS_TESTS_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+
+
+def _get_deepspeed_launcher(distributed=False):
+    num_gpus = min(2, backend_device_count(torch_device)) if distributed else 1
+    master_port = os.environ.get("DS_TEST_PORT", "10999")
+    return f"deepspeed --num_nodes 1 --num_gpus {num_gpus} --master_port {master_port}".split()
+
+
+def _make_zoo_task_cmds():
+    data_dir_samples = f"{FIXTURE_DIRECTORY}/tests_samples"
+    data_dir_wmt = f"{data_dir_samples}/wmt_en_ro"
+    data_dir_xsum = f"{data_dir_samples}/xsum"
+    args_main = """
+        --do_train
+        --max_train_samples 4
+        --per_device_train_batch_size 2
+        --num_train_epochs 1
+        --fp16
+        --report_to none
+        """.split()
+
+    tasks2models = {
+        "trans": ["bart", "fsmt", "m2m_100", "marian", "mbart", "t5", "t5_v1"],
+        "sum": ["pegasus"],
+        "clm": ["bigbird_pegasus", "blenderbot", "bloom", "gpt2", "gpt_neo", "gptj", "xlm-roberta", "prophetnet"],
+        "mlm": ["albert", "deberta", "deberta-v2", "distilbert", "electra", "flaubert", "funnel", "layoutlm"],
+        "qa": ["led", "longformer", "mobilebert", "mpnet", "roberta", "squeezebert"],
+        "clas": ["bert", "xlnet"],
+        "img_clas": ["vit"],
+    }
+
+    scripts_dir = f"{ROOT_DIRECTORY}/examples/pytorch"
+
+    tasks = {
+        "trans": f"""
+        {scripts_dir}/translation/run_translation.py
+        --train_file {data_dir_wmt}/train.json
+        --source_lang en
+        --target_lang ro
+        --max_source_length 12
+        --max_target_length 12
+        """,
+        "sum": f"""
+        {scripts_dir}/summarization/run_summarization.py
+        --train_file {data_dir_xsum}/sample.json
+        --max_source_length 12
+        --max_target_length 12
+        --lang en
+        """,
+        "clm": f"""
+        {scripts_dir}/language-modeling/run_clm.py
+        --train_file {FIXTURE_DIRECTORY}/sample_text.txt
+        --block_size 8
+        """,
+        "mlm": f"""
+        {scripts_dir}/language-modeling/run_mlm.py
+        --train_file {FIXTURE_DIRECTORY}/sample_text.txt
+        """,
+        "qa": f"""
+        {scripts_dir}/question-answering/run_qa.py
+        --train_file {data_dir_samples}/SQUAD/sample.json
+        """,
+        "clas": f"""
+        {scripts_dir}/text-classification/run_glue.py
+        --train_file {data_dir_samples}/MRPC/train.csv
+        --max_seq_length 12
+        --task_name MRPC
+        """,
+        "img_clas": f"""
+        {scripts_dir}/image-classification/run_image_classification.py
+            --dataset_name hf-internal-testing/cats_vs_dogs_sample
+            --remove_unused_columns False
+            --max_steps 10
+            --image_processor_name {DS_TESTS_DIRECTORY}/vit_feature_extractor.json
+            --label_column_name labels
+        """,
+    }
+
+    launcher = _get_deepspeed_launcher(distributed=True)
+
+    # Model name lookup table (model key -> HF tiny model id)
+    _model_ids = {
+        "albert": ALBERT_TINY, "bart": BART_TINY, "bert": BERT_TINY,
+        "bigbird_pegasus": BIGBIRD_PEGASUS_TINY, "blenderbot": BLENDERBOT_TINY,
+        "bloom": BLOOM_TINY, "deberta": DEBERTA_TINY, "deberta-v2": DEBERTA_V2_TINY,
+        "distilbert": DISTILBERT_TINY, "electra": ELECTRA_TINY, "flaubert": FLAUBERT_TINY,
+        "fsmt": FSMT_TINY, "funnel": FUNNEL_TINY, "gpt2": GPT2_TINY, "gpt_neo": GPT_NEO_TINY,
+        "gptj": GPTJ_TINY, "layoutlm": LAYOUTLM_TINY, "led": LED_TINY,
+        "longformer": LONGFORMER_TINY, "m2m_100": M2M_100_TINY, "marian": MARIAN_TINY,
+        "mbart": MBART_TINY, "mobilebert": MOBILEBERT_TINY, "mpnet": MPNET_TINY,
+        "pegasus": PEGASUS_TINY, "prophetnet": PROPHETNET_TINY, "roberta": ROBERTA_TINY,
+        "squeezebert": SQUEEZEBERT_TINY, "t5": T5_TINY, "t5_v1": T5_V1_TINY,
+        "vit": VIT_TINY, "xlm-roberta": XLM_ROBERTA_TINY, "xlnet": XLNET_TINY,
+    }
+
+    cmds = {}
+    for task, args in tasks.items():
+        args = args.split()
+        for model in tasks2models[task]:
+            model_name = _model_ids[model]
+            args_model = f"--model_name_or_path {model_name}".split()
+            cmds[f"{task}_{model}"] = launcher + args + args_model + args_main
+
+    return cmds
+
+
+_zoo_task_cmds = _make_zoo_task_cmds()
+_zoo_params = list(itertools.product(stages, _zoo_task_cmds.keys()))
+
+
+@slow
+@run_first
+@require_deepspeed
+@require_torch_accelerator
+class TestDeepSpeedModelZoo(TestCasePlus):
+    """Test many model architectures with DeepSpeed via example scripts + zero_to_fp32 recovery."""
+
+    def get_task_cmd(self, task, stage):
+        if task not in _zoo_task_cmds:
+            raise ValueError(f"Unknown task {task}, available: {_zoo_task_cmds.keys()}")
+
+        cmd = list(_zoo_task_cmds[task])
+        args_ds = f"--deepspeed {SCRIPTS_DIR}/ds_config_{stage}.json".split()
+
+        output_dir = self.get_auto_remove_tmp_dir()
+        args_out = f"--output_dir {output_dir}".split()
+
+        cmd += args_ds + args_out
+        return cmd, output_dir
+
+    @parameterized.expand(_zoo_params, name_func=_parameterized_custom_name_func)
+    def test_zero_to_fp32(self, stage, task):
+        cmd, output_dir = self.get_task_cmd(task, stage)
+
+        # 1. Train and save a checkpoint
+        cmd += "--save_steps 1".split()
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        # 2. Recover FP32 weights from the ZeRO checkpoint
+        chkpt_dir = f"{output_dir}/checkpoint-1"
+        recovered_model_path = f"{chkpt_dir}/out.bin"
+        subprocess.check_call(f"{chkpt_dir}/zero_to_fp32.py {chkpt_dir} {recovered_model_path}", shell=True)
+        assert os.path.exists(recovered_model_path), f"{recovered_model_path} was not found"
