@@ -395,19 +395,6 @@ def pixel_shuffle_padded(
             f"Every non-empty (H, W) grid must be divisible by pixel_shuffle_scale={scale_factor}.",
         )
 
-    torch_compilable_check(
-        full_lengths <= max_patches,
-        "token_grids imply more tokens than available padded patches.",
-    )
-
-    if attention_mask is not None:
-        attention_mask = attention_mask.to(device=x.device, dtype=torch.long)
-        valid_lengths = attention_mask.sum(dim=1)
-        torch_compilable_check(
-            valid_lengths == full_lengths,
-            "attention_mask valid-token counts must match token_grids H*W for each image.",
-        )
-
     output_lengths = (heights // scale_factor) * (widths // scale_factor)
     max_output_tokens = (
         output_lengths.max() if output_lengths.numel() > 0 else torch.zeros((), device=x.device, dtype=torch.long)

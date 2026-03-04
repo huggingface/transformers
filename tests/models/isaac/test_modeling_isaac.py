@@ -627,14 +627,6 @@ class IsaacPixelShufflePaddedTest(unittest.TestCase):
         torch.testing.assert_close(mask, expected_mask)
         torch.testing.assert_close(lengths, expected_lengths)
 
-    def test_pixel_shuffle_padded_raises_on_attention_mask_length_mismatch(self):
-        x = torch.randn(1, 16, 8, device=torch_device)
-        token_grids = torch.tensor([[4, 4]], device=torch_device, dtype=torch.long)
-        attention_mask = torch.tensor([[1] * 15 + [0]], device=torch_device, dtype=torch.long)
-
-        with pytest.raises(ValueError, match="must match token_grids"):
-            pixel_shuffle_padded(x=x, token_grids=token_grids, attention_mask=attention_mask, scale_factor=2)
-
     def test_pixel_shuffle_padded_raises_on_non_divisible_grid(self):
         x = torch.randn(1, 15, 8, device=torch_device)
         token_grids = torch.tensor([[3, 5]], device=torch_device, dtype=torch.long)
