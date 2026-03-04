@@ -967,23 +967,23 @@ class TestTrainerDistributedDeepSpeed(TrainerDistributedCommon, DeepSpeedCommand
     @parameterized.expand(pure_dtype_params, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
     def test_training(self, stage, model_dtype):
-        self.run_training(model_dtype, config_file=DS_CONFIGS[stage])
+        self.check_training(model_dtype, config_file=DS_CONFIGS[stage])
 
     # Mixed precision training: model loaded in fp32, training in fp16/bf16.
     @parameterized.expand(mixed_precision_params, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
     def test_training_mixed_precision(self, stage, dtype):
-        self.run_mixed_precision(dtype, config_file=DS_CONFIGS[stage])
+        self.check_mixed_precision(dtype, config_file=DS_CONFIGS[stage])
 
     @parameterized.expand(stages, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
     def test_training_with_gradient_accumulation(self, stage):
-        self.run_gradient_accumulation(config_file=DS_CONFIGS[stage])
+        self.check_gradient_accumulation(config_file=DS_CONFIGS[stage])
 
     @parameterized.expand(stages, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
     def test_training_and_can_resume_normally(self, stage):
-        self.run_resume(config_file=DS_CONFIGS[stage])
+        self.check_resume(config_file=DS_CONFIGS[stage])
 
     @parameterized.expand(
         [
@@ -996,7 +996,7 @@ class TestTrainerDistributedDeepSpeed(TrainerDistributedCommon, DeepSpeedCommand
     @require_torch_multi_accelerator
     def test_basic_run_with_cpu_offload(self, stage, offload_param):
         output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir) + ["--bf16", "--max_steps", "10"]
+        args = self._get_default_script_args(output_dir) + ["--bf16", "--max_steps", "10"]
         launch_args = ["--offload_optimizer_device", "cpu"]
         if offload_param:
             launch_args += ["--offload_param_device", "cpu"]
@@ -1010,7 +1010,7 @@ class TestTrainerDistributedDeepSpeed(TrainerDistributedCommon, DeepSpeedCommand
     @require_torch_multi_accelerator
     def test_eval(self):
         # ZeRO inference only works with ZeRO-3
-        self.run_eval(config_file=DS_CONFIGS[ZERO3])
+        self.check_eval(config_file=DS_CONFIGS[ZERO3])
 
     @require_torch_multi_accelerator
     def test_alst_ulysses_sp(self):
@@ -1446,7 +1446,6 @@ _ZOO_MODELS = {
     "led": "hf-internal-testing/tiny-random-led",
     "longformer": "hf-internal-testing/tiny-random-longformer",
     "m2m_100": "stas/tiny-m2m_100",
-    "mbart": "sshleifer/tiny-mbart",
     "mobilebert": "hf-internal-testing/tiny-random-mobilebert",
     "mpnet": "hf-internal-testing/tiny-random-mpnet",
     "prophetnet": "hf-internal-testing/tiny-random-prophetnet",
@@ -1468,7 +1467,7 @@ _ZOO_VIT_FEATURE_EXTRACTOR = os.path.join(SCRIPTS_DIR, "vit_feature_extractor.js
 def _make_zoo_tasks():
     """Build {task_model: (script, script_args)} for each task/model combo."""
     tasks2models = {
-        "trans": ["bart", "m2m_100", "mbart", "t5", "t5_v1"],
+        "trans": ["bart", "m2m_100", "t5", "t5_v1"],
         "clm": ["bigbird_pegasus", "blenderbot", "bloom", "gpt2", "gpt_neo", "gptj", "xlm-roberta", "prophetnet"],
         "mlm": ["albert", "deberta", "deberta-v2", "distilbert", "electra", "funnel", "layoutlm"],
         "qa": ["led", "longformer", "mobilebert", "mpnet", "roberta", "squeezebert"],

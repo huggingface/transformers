@@ -280,14 +280,14 @@ class TestTrainerDistributedFSDP(TrainerDistributedCommon, FSDPCommandsMixin, Te
     # Pure dtype training: model loaded in target dtype, no mixed precision
     @parameterized.expand(pure_dtype_params, name_func=_parameterized_custom_name_func)
     def test_training(self, dtype, fsdp_version):
-        self.run_training(dtype, config_file=FSDP_CONFIGS[fsdp_version])
+        self.check_training(dtype, config_file=FSDP_CONFIGS[fsdp_version])
 
     # Mixed precision: model loaded in fp32, training with --bf16/--fp16
     @parameterized.expand(mixed_precision_params, name_func=_parameterized_custom_name_func)
     def test_training_mixed_precision(self, sharding_strategy, dtype, fsdp_version):
         sharding_idx = FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1
         launch_args = list(TRAIN_LAUNCH_ARGS) + ["--fsdp_sharding_strategy", str(sharding_idx)]
-        self.run_mixed_precision(dtype, config_file=FSDP_CONFIGS[fsdp_version], launch_args=launch_args)
+        self.check_mixed_precision(dtype, config_file=FSDP_CONFIGS[fsdp_version], launch_args=launch_args)
 
     @parameterized.expand(["true", "false"], name_func=_parameterized_custom_name_func)
     def test_fsdp2_cpu_ram_efficient_loading(self, cpu_ram_efficient_loading):
@@ -295,16 +295,16 @@ class TestTrainerDistributedFSDP(TrainerDistributedCommon, FSDPCommandsMixin, Te
             "--fsdp_cpu_ram_efficient_loading",
             cpu_ram_efficient_loading,
         ]
-        self.run_training("bf16", config_file=FSDP2_CONFIG_FILE, launch_args=launch_args)
+        self.check_training("bf16", config_file=FSDP2_CONFIG_FILE, launch_args=launch_args)
 
     @parameterized.expand(fsdp_versions, name_func=_parameterized_custom_name_func)
     def test_training_with_gradient_accumulation(self, fsdp_version):
-        self.run_gradient_accumulation(config_file=FSDP_CONFIGS[fsdp_version])
+        self.check_gradient_accumulation(config_file=FSDP_CONFIGS[fsdp_version])
 
     @parameterized.expand(fsdp_versions, name_func=_parameterized_custom_name_func)
     def test_basic_run_with_cpu_offload(self, fsdp_version):
         output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir) + ["--bf16", "--max_steps", "10"]
+        args = self._get_default_script_args(output_dir) + ["--bf16", "--max_steps", "10"]
         launch_args = list(TRAIN_LAUNCH_ARGS) + ["--fsdp_offload_params", "true"]
         execute_subprocess_async(
             self.get_accelerate_cmd(
@@ -316,12 +316,12 @@ class TestTrainerDistributedFSDP(TrainerDistributedCommon, FSDPCommandsMixin, Te
     @parameterized.expand(resume_params, name_func=_parameterized_custom_name_func)
     def test_training_and_can_resume_normally(self, state_dict_type, fsdp_version):
         output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir, num_epochs=2, logging_steps=2, save_steps=2)
+        args = self._get_default_script_args(output_dir, num_epochs=2, logging_steps=2, save_steps=2)
 
         launch_args = list(TRAIN_LAUNCH_ARGS) + ["--fsdp_state_dict_type", state_dict_type]
         cmd_kwargs = {"config_file": FSDP_CONFIGS[fsdp_version], "launch_args": launch_args}
 
-        logs = self._run_and_get_logs(
+        logs = self._train_and_get_log_history(
             self.get_accelerate_cmd(TRAIN_SCRIPT, script_args=args, **cmd_kwargs),
             output_dir,
         )
@@ -342,7 +342,7 @@ class TestTrainerDistributedFSDP(TrainerDistributedCommon, FSDPCommandsMixin, Te
         )
         self.assertTrue(is_fsdp_ckpt)
 
-        logs_resume = self._run_and_get_logs(
+        logs_resume = self._train_and_get_log_history(
             self.get_accelerate_cmd(TRAIN_SCRIPT, script_args=resume_args, **cmd_kwargs),
             output_dir,
         )
@@ -436,7 +436,7 @@ class TestTrainerDistributedFSDP(TrainerDistributedCommon, FSDPCommandsMixin, Te
     # FSDP eval tests
     # -------------------------------------------------------------------
     def test_eval(self):
-        self.run_eval(config_file=FSDP_CONFIG_FILE)
+        self.check_eval(config_file=FSDP_CONFIG_FILE)
 
     # -------------------------------------------------------------------
     # FSDP generation tests (moved from tests/generation/test_fsdp.py)

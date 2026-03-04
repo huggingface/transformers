@@ -19,7 +19,6 @@ DDP-specific distributed trainer tests.
 import json
 import os
 
-import yaml
 from parameterized import parameterized
 
 from transformers.testing_utils import (
@@ -54,11 +53,6 @@ def _parameterized_custom_name_func(func, param_num, param):
     return f"{func.__name__}_{param_based_name}"
 
 
-def _load_ddp_config():
-    with open(DDP_CONFIG_FILE) as f:
-        return yaml.safe_load(f)
-
-
 class DDPCommandsMixin:
     """Provides ``get_torchrun_cmd`` and ``get_accelerate_cmd`` for DDP."""
 
@@ -69,7 +63,7 @@ class DDPCommandsMixin:
         cmd = [
             "torchrun",
             f"--nproc_per_node={num_processes}",
-            f"--nnodes=1",
+            "--nnodes=1",
             f"--master_port={port}",
             script,
         ]
@@ -228,17 +222,17 @@ class TestTrainerDistributedDDPTraining(TrainerDistributedCommon, DDPCommandsMix
 
     @parameterized.expand(pure_dtype_params, name_func=_parameterized_custom_name_func)
     def test_training(self, dtype):
-        self.run_training(dtype, config_file=DDP_CONFIG_FILE)
+        self.check_training(dtype, config_file=DDP_CONFIG_FILE)
 
     @parameterized.expand(mixed_precision_params, name_func=_parameterized_custom_name_func)
     def test_training_mixed_precision(self, dtype):
-        self.run_mixed_precision(dtype, config_file=DDP_CONFIG_FILE)
+        self.check_mixed_precision(dtype, config_file=DDP_CONFIG_FILE)
 
     def test_training_with_gradient_accumulation(self):
-        self.run_gradient_accumulation(config_file=DDP_CONFIG_FILE)
+        self.check_gradient_accumulation(config_file=DDP_CONFIG_FILE)
 
     def test_training_and_can_resume_normally(self):
-        self.run_resume(config_file=DDP_CONFIG_FILE)
+        self.check_resume(config_file=DDP_CONFIG_FILE)
 
     def test_eval(self):
-        self.run_eval(config_file=DDP_CONFIG_FILE)
+        self.check_eval(config_file=DDP_CONFIG_FILE)
