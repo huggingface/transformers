@@ -19,7 +19,6 @@
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
-from ..siglip import SiglipVisionConfig
 
 
 class PI0Config(PreTrainedConfig):
@@ -33,22 +32,10 @@ class PI0Config(PreTrainedConfig):
     Example checkpoint: [lerobot/pi0_base](https://huggingface.co/lerobot/pi0_base).
 
     Args:
-        vision_config (`dict`, *optional*):
-            Configuration for the vision encoder (SiglipVisionModel).
-        text_config (`dict`, *optional*):
-            Configuration for the language model (GemmaModel).
-        expert_config (`dict`, *optional*):
-            Configuration for the action expert (GemmaModel). Defaults to a Gemma 300M variant.
-        image_token_index (`int`, *optional*, defaults to 256000):
-            The image token index to encode the image prompt.
-        vocab_size (`int`, *optional*, defaults to 257152):
-            Vocabulary size of the PI0 language backbone.
-        projection_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the multimodal projection space.
-        hidden_size (`int`, *optional*, defaults to 2048):
-            Dimension of the hidden layer of the language model.
-        tie_word_embeddings (`bool | None`, *optional*, defaults to `True`):
-            Whether to tie word embeddings.
+        vlm_config (`dict`, *optional*):
+            Configuration for the vlm backbone (PaliGemmaModel).
+        dit_config (`dict`, *optional*):
+            Configuration for the DiT backbone. Defaults to a Gemma 300M variant.
         chunk_size (`int`, *optional*, defaults to 50):
             Number of action steps to predict per chunk.
         max_state_dim (`int`, *optional*, defaults to 32):
@@ -80,26 +67,12 @@ class PI0Config(PreTrainedConfig):
     """
 
     model_type = "pi0"
-    attribute_map = {
-        "image_token_id": "image_token_index",
-    }
-    sub_configs = {
-        "text_config": AutoConfig,
-        "vision_config": SiglipVisionConfig,
-        "expert_config": AutoConfig,
-    }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs = {"vlm_config": AutoConfig, "dit_config": AutoConfig}
 
     def __init__(
         self,
-        vision_config=None,
-        text_config=None,
-        expert_config=None,
-        image_token_index=256000,
-        vocab_size=257152,
-        projection_dim=2048,
-        hidden_size=2048,
-        tie_word_embeddings: bool | None = True,
+        vlm_config=None,
+        dit_config=None,
         chunk_size=50,
         max_state_dim=32,
         max_action_dim=32,
@@ -112,88 +85,55 @@ class PI0Config(PreTrainedConfig):
         max_period=4.0,
         **kwargs,
     ):
-        if vision_config is None:
-            vision_config = {
-                "hidden_size": 1152,
-                "intermediate_size": 4304,
-                "num_hidden_layers": 27,
-                "num_attention_heads": 16,
-                "patch_size": 14,
-                "image_size": 224,
-                "vision_use_head": False,
-            }
-        if isinstance(text_config, dict):
-            text_vocab_size = text_config.get("vocab_size", 257152)
-        elif text_config is not None:
-            text_vocab_size = text_config.vocab_size
-        else:
-            text_vocab_size = 257152
+        if isinstance(vlm_config, dict):
+            vlm_model_type = vlm_config.get("model_type", "paligemma")
+            vlm_config = CONFIG_MAPPING[vlm_model_type](**vlm_config)
+        elif vlm_config is None:
+            vlm_config = CONFIG_MAPPING["paligemma"](
+                text_config={
+                    "model_type": "gemma",
+                    "hidden_size": 2048,
+                    "num_hidden_layers": 18,
+                    "intermediate_size": 16384,
+                    "num_attention_heads": 8,
+                    "num_key_value_heads": 1,
+                    "vocab_size": 257152,
+                },
+                vision_config={
+                    "model_type": "siglip_vision_model",
+                    "intermediate_size": 4304,
+                    "hidden_size": 1152,
+                    "patch_size": 14,
+                    "image_size": 224,
+                    "num_hidden_layers": 27,
+                    "num_attention_heads": 16,
+                    "vocab_size": 257152,
+                    "vision_use_head": False,
+                },
+                projection_dim=2048,
+            )
 
-        if isinstance(expert_config, dict):
-            expert_config["model_type"] = expert_config.get("model_type", "gemma")
-            self.expert_config = AutoConfig.for_model(**expert_config)
-        elif expert_config is None:
-            self.expert_config = AutoConfig.for_model(
-                "gemma",
+        if isinstance(dit_config, dict):
+            dit_model_type = dit_config.get("model_type", "gemma")
+            dit_config = CONFIG_MAPPING[dit_model_type](**dit_config)
+        elif dit_config is None:
+            dit_config = CONFIG_MAPPING["gemma"](
                 hidden_size=1024,
                 num_hidden_layers=18,
                 intermediate_size=4096,
                 num_attention_heads=8,
                 num_key_value_heads=1,
                 head_dim=256,
-                vocab_size=text_vocab_size,
-            )
-        else:
-            self.expert_config = expert_config
-
-        self.expert_config.is_causal = False
-        self.expert_config.use_bidirectional_attention = True
-        self.image_token_index = image_token_index
-        self.projection_dim = projection_dim
-        self.hidden_size = hidden_size
-        self.vision_config = vision_config
-        self.tie_word_embeddings = tie_word_embeddings
-        self.is_encoder_decoder = False
-
-        if isinstance(self.vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "siglip_vision_model")
-            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
-            self.vision_config = CONFIG_MAPPING["siglip_vision_model"](
-                intermediate_size=4096,
-                hidden_size=1152,
-                patch_size=14,
-                image_size=224,
-                num_hidden_layers=27,
-                num_attention_heads=16,
-                vocab_size=257152,
-                vision_use_head=False,
+                vocab_size=vlm_config.text_config.vocab_size,
             )
 
-        self.text_config = text_config
-        if isinstance(self.text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "gemma")
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            self.text_config = CONFIG_MAPPING["gemma"](
-                hidden_size=2048,
-                num_hidden_layers=18,
-                intermediate_size=16384,
-                num_attention_heads=8,
-                num_key_value_heads=1,
-                is_encoder_decoder=False,
-                vocab_size=vocab_size,
-            )
+        self.dit_config = dit_config
+        self.vlm_config = vlm_config
 
-        # BC: `use_bidirectional_attention` was originally unset in PI01 (backbone = Gemma1) AND PI02
-        # (backbone = Gemma2). Both PI0s want to default to True.
-        if self.text_config.use_bidirectional_attention is None:
-            self.text_config.use_bidirectional_attention = True
-
-        self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
-        self.vision_config.projection_dim = projection_dim
-        super().__init__(**kwargs)
-        self.vocab_size = self.text_config.vocab_size
+        # Force bidirectional attention
+        self.dit_config.is_causal = False
+        self.dit_config.use_bidirectional_attention = False
+        self.vlm_config.text_config.use_bidirectional_attention = True
 
         self.chunk_size = chunk_size
         self.max_state_dim = max_state_dim
@@ -205,6 +145,7 @@ class PI0Config(PreTrainedConfig):
         self.time_sampling_offset = time_sampling_offset
         self.min_period = min_period
         self.max_period = max_period
+        super().__init__(**kwargs)
 
 
 __all__ = ["PI0Config"]

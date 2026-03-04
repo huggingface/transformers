@@ -19,595 +19,303 @@
 # limitations under the License.
 
 import math
-from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
-from ...integrations import use_kernel_func_from_hub
-from ...masking_utils import create_bidirectional_mask, create_causal_mask, or_masks
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...masking_utils import create_bidirectional_mask
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_pi0 import PI0Config
 
 
-@dataclass
-class PI0Output(ModelOutput):
-    """Output type for PI0ForConditionalGeneration.
-
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
-        Flow matching MSE loss, returned when `actions` is provided.
-    loss_per_sample (`torch.FloatTensor` of shape `(batch_size, chunk_size, max_action_dim)`, *optional*):
-        Per-element MSE loss before reduction, returned when `actions` is provided.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-        Hidden states of the action expert suffix sequence when `output_hidden_states=True`.
-    attentions (`tuple(torch.FloatTensor)`, *optional*):
-        Attention maps of the action expert suffix sequence when `output_attentions=True`.
-    """
-
-    loss: torch.FloatTensor | None = None
-    loss_per_sample: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-
-
-class PI0MultiModalProjector(nn.Module):
-    def __init__(self, config: PI0Config):
+class ActionTimeEmbedding(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.linear = nn.Linear(config.vision_config.hidden_size, config.vision_config.projection_dim, bias=True)
+        self.config = config
+        self.expert_hidden_size = config.dit_config.hidden_size
+        if self.expert_hidden_size % 2 != 0:
+            raise ValueError(f"dimension ({self.expert_hidden_size}) must be divisible by 2")
 
-    def forward(self, image_features):
-        hidden_states = self.linear(image_features)
+        self.action_in_proj = nn.Linear(config.max_action_dim, self.expert_hidden_size)
+        self.state_proj = nn.Linear(config.max_state_dim, self.expert_hidden_size)
+        self.action_time_mlp_in = nn.Linear(2 * self.expert_hidden_size, self.expert_hidden_size)
+        self.action_time_mlp_out = nn.Linear(self.expert_hidden_size, self.expert_hidden_size)
 
-        return hidden_states
+    def create_sinusoidal_pos_embedding(self, time: torch.Tensor) -> torch.Tensor:
+        if time.ndim != 1:
+            raise ValueError("The time tensor is expected to be of shape `(batch_size, )`.")
+
+        min_period = self.config.min_period
+        max_period = self.config.max_period
+        device = time.device
+        dtype = torch.float64 if device.type not in ("mps", "cpu") else torch.float32
+
+        fraction = torch.linspace(0.0, 1.0, self.expert_hidden_size // 2, dtype=dtype, device=device)
+        period = min_period * (max_period / min_period) ** fraction
+        scaling_factor = 1.0 / period * 2 * math.pi
+        sin_input = scaling_factor[None, :] * time[:, None]
+        return torch.cat([torch.sin(sin_input), torch.cos(sin_input)], dim=1)
+
+    def forward(self, state, noise, timestep):
+        state_embeds = self.state_proj(state)
+        action_embeds = self.action_in_proj(noise)
+        time_embeds = self.create_sinusoidal_pos_embedding(timestep)
+        time_embeds = time_embeds[:, None, :].expand_as(action_embeds).to(dtype=action_embeds.dtype)
+
+        action_time_embeds = torch.cat([action_embeds, time_embeds], dim=2)
+        action_time_embeds = self.action_time_mlp_out(F.silu(self.action_time_mlp_in(action_time_embeds)))
+        action_embeds_merged = torch.cat([state_embeds[:, None, :], action_time_embeds], dim=1)
+        return action_embeds_merged
 
 
 @auto_docstring
 class PI0PreTrainedModel(PreTrainedModel):
-    config_class = PI0Config
+    config: PI0Config
     base_model_prefix = "model"
-    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PI0MultiModalProjector", "GemmaDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_flex_attn = True
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    input_modalities = ("image", "text")
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-@use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-def compute_layer_complete(
-    layer_idx: int,
-    inputs_embeds: list[torch.Tensor],
-    attention_mask: torch.Tensor,
-    position_ids: torch.Tensor,
-    language_model: nn.Module,
-    expert_model: nn.Module,
-    output_attentions: bool = False,
-    prefix_length: int = 0,
-) -> tuple[list[torch.Tensor], torch.Tensor | None]:
-    """Compute one merged attention layer across VLM language model and action expert."""
-    models = [language_model, expert_model]
-    query_states = []
-    key_states = []
-    value_states = []
-
-    for i, hidden_states in enumerate(inputs_embeds):
-        layer = models[i].layers[layer_idx]
-        hidden_states = layer.input_layernorm(hidden_states)
-
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, layer.self_attn.head_dim)
-        query_states.append(layer.self_attn.q_proj(hidden_states).view(hidden_shape).transpose(1, 2))
-        key_states.append(layer.self_attn.k_proj(hidden_states).view(hidden_shape).transpose(1, 2))
-        value_states.append(layer.self_attn.v_proj(hidden_states).view(hidden_shape).transpose(1, 2))
-
-    query_states = torch.cat(query_states, dim=2)
-    key_states = torch.cat(key_states, dim=2)
-    value_states = torch.cat(value_states, dim=2)
-
-    cos, sin = language_model.rotary_emb(
-        torch.zeros(
-            query_states.shape[0],
-            query_states.shape[2],
-            query_states.shape[-1],
-            device=query_states.device,
-            dtype=query_states.dtype,
-        ),
-        position_ids,
-    )
-    query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
-
-    vlm_layer = language_model.layers[layer_idx]
-    attn_implementation = vlm_layer.self_attn.config._attn_implementation
-    attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(attn_implementation, eager_attention_forward)
-    att_output, attn_weights = attention_interface(
-        vlm_layer.self_attn,
-        query_states,
-        key_states,
-        value_states,
-        attention_mask,
-        scaling=vlm_layer.self_attn.scaling,
-    )
-
-    batch_size = query_states.shape[0]
-    head_dim = vlm_layer.self_attn.head_dim
-    num_heads = vlm_layer.self_attn.config.num_attention_heads
-    att_output = att_output.reshape(batch_size, -1, num_heads * head_dim)
-
-    outputs_embeds = []
-    start_pos = 0
-    for i, hidden_states in enumerate(inputs_embeds):
-        layer = models[i].layers[layer_idx]
-        end_pos = start_pos + hidden_states.shape[1]
-        current_att = att_output[:, start_pos:end_pos]
-        if current_att.dtype != layer.self_attn.o_proj.weight.dtype:
-            current_att = current_att.to(layer.self_attn.o_proj.weight.dtype)
-        attn_output = layer.self_attn.o_proj(current_att)
-        hidden_states = hidden_states + attn_output
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = layer.post_attention_layernorm(hidden_states)
-        if layer.mlp.up_proj.weight.dtype == torch.bfloat16:
-            hidden_states = hidden_states.to(dtype=torch.bfloat16)
-        hidden_states = layer.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-        outputs_embeds.append(hidden_states)
-        start_pos = end_pos
-
-    suffix_attentions = None
-    if output_attentions and attn_weights is not None:
-        suffix_attentions = attn_weights
-
-    return outputs_embeds, suffix_attentions
-
-
+@auto_docstring
 class PI0Model(PI0PreTrainedModel):
-    """PI0 backbone: vision tower + language model + action expert with merged attention."""
-
     def __init__(self, config: PI0Config):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config=config.vision_config)
-        self.multi_modal_projector = PI0MultiModalProjector(config)
-        self.language_model = AutoModel.from_config(config=config.text_config)
-        self.expert = AutoModel.from_config(config=config.expert_config)
+        self.dit = AutoModel.from_config(config.dit_config)
+        self.vlm = AutoModel.from_config(config.vlm_config)
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
+        return self.vlm.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
+        self.vlm.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
-        batch_size, num_cameras = pixel_values.shape[:2]
-        pixel_values = pixel_values.reshape(batch_size * num_cameras, *pixel_values.shape[2:])
-        image_outputs = self.vision_tower(pixel_values)
-        image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
-        image_features = image_features.reshape(
-            batch_size, num_cameras, image_features.shape[1], image_features.shape[2]
-        )
-        return image_features.flatten(1, 2)
-
-    def embed_language_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
-        lang_emb = self.language_model.embed_tokens(tokens)
-        return lang_emb * math.sqrt(lang_emb.shape[-1])
-
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
-        attention_mask: torch.Tensor,
-        position_ids: torch.LongTensor,
-        past_key_values: Cache | None,
-        inputs_embeds: list[torch.Tensor],
-        use_cache: bool = False,
-    ) -> tuple[list[torch.Tensor | None], Cache | None]:
-        # Prefix-only path (cache the VLM prefix for inference)
-        if inputs_embeds[1] is None:
-            bidirectional_mask = create_bidirectional_mask(self.config.text_config, inputs_embeds[0], attention_mask)
-            prefix_output = self.language_model(
-                inputs_embeds=inputs_embeds[0],
-                attention_mask=bidirectional_mask,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-            )
-            return [prefix_output.last_hidden_state, None], prefix_output.past_key_values
-
-        # Suffix-only path (use cached prefix KV)
-        if inputs_embeds[0] is None:
-            suffix_output = self.expert(
-                inputs_embeds=inputs_embeds[1],
+        action_embeds: torch.Tensor,  # aka `suffix_emb` (noise + state + timestep)
+        input_ids: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        pixel_attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,  # aka `prefix_emb` or merged image+text emb
+        past_key_values: Cache | None = None,  # must-have for prefix tuning
+        **kwargs,
+    ) -> BaseModelOutputWithPast:
+        r"""
+        action_embeds (`torch.Tensor`, *optional*): args description placeholder
+        pixel_attention_mask (`torch.Tensor`, *optional*): args description placeholder
+        """
+        if pixel_values is not None:
+            vlm_output = self.vlm(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
+                inputs_embeds=inputs_embeds,
+                past_key_values=None,  # `None` on purpose
+                use_cache=True,
             )
-            return [None, suffix_output.last_hidden_state], None
+            past_key_values = vlm_output.past_key_values
 
-        # Full merged attention path (training)
-        num_layers = self.config.text_config.num_hidden_layers
-        for layer_idx in range(num_layers):
-            inputs_embeds = compute_layer_complete(
-                layer_idx,
-                inputs_embeds,
-                attention_mask,
-                position_ids,
-                language_model=self.language_model,
-                expert_model=self.expert,
+        # Mask for images, text and noise is bidirectional but we still need to know
+        # if there are any pad tokens in the text
+        if attention_mask is not None and attention_mask.ndim != 2:
+            raise ValueError("Only two-dimensional attention masks are accepted for now!")
+
+        # Merge masks if needed, same for position ids
+        dit_position_ids = dit_attention_mask = None
+        if pixel_attention_mask is not None and attention_mask is not None:
+            noise_mask = torch.ones(
+                action_embeds.shape[0],
+                action_embeds.shape[1],
+                dtype=attention_mask.dtype,
+                device=attention_mask.device,
             )
+            dit_attention_mask = torch.cat([pixel_attention_mask, attention_mask, noise_mask], dim=1)
+            dit_position_ids = torch.cumsum(attention_mask, dim=1) - 1
 
-        # Final norms
-        prefix_output = self.language_model.norm(inputs_embeds[0])
-        suffix_output = self.expert.norm(inputs_embeds[1])
+        bidirectional_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=action_embeds,
+            attention_mask=dit_attention_mask,
+            past_key_values=past_key_values,
+        )
 
-        return [prefix_output, suffix_output], None
-
-
-def create_sinusoidal_pos_embedding(
-    time: torch.Tensor, dimension: int, min_period: float, max_period: float
-) -> torch.Tensor:
-    if dimension % 2 != 0:
-        raise ValueError(f"dimension ({dimension}) must be divisible by 2")
-    if time.ndim != 1:
-        raise ValueError("The time tensor is expected to be of shape `(batch_size, )`.")
-
-    device = time.device
-    dtype = torch.float64 if device.type not in ("mps", "cpu") else torch.float32
-    fraction = torch.linspace(0.0, 1.0, dimension // 2, dtype=dtype, device=device)
-    period = min_period * (max_period / min_period) ** fraction
-
-    scaling_factor = 1.0 / period * 2 * math.pi
-    sin_input = scaling_factor[None, :] * time[:, None]
-    return torch.cat([torch.sin(sin_input), torch.cos(sin_input)], dim=1)
-
-
-def sample_beta(alpha: float, beta: float, batch_size: int, device: torch.device) -> torch.Tensor:
-    alpha_t = torch.tensor(alpha, dtype=torch.float32)
-    beta_t = torch.tensor(beta, dtype=torch.float32)
-    dist = torch.distributions.Beta(alpha_t, beta_t)
-    return dist.sample((batch_size,)).to(device)
+        dit_output = self.dit(
+            inputs_embeds=action_embeds,
+            attention_mask=bidirectional_mask,
+            position_ids=dit_position_ids,
+            past_key_values=past_key_values,
+        )
+        return dit_output
 
 
 class PI0ForConditionalGeneration(PI0PreTrainedModel):
     """PI0 model with action projection heads and flow matching."""
 
-    _can_record_outputs = {
-        "hidden_states": OutputRecorder(target_class=nn.Identity, layer_name="hidden_state_recorders"),
-        "attentions": OutputRecorder(target_class=nn.Identity, layer_name="attention_recorders"),
-    }
-    main_input_name = "pixel_values"
-
     def __init__(self, config: PI0Config):
         super().__init__(config)
         self.model = PI0Model(config)
-        self.vocab_size = config.vocab_size
-
-        expert_hidden_size = config.expert_config.hidden_size
-
-        self.action_in_proj = nn.Linear(config.max_action_dim, expert_hidden_size)
-        self.action_out_proj = nn.Linear(expert_hidden_size, config.max_action_dim)
-        self.state_proj = nn.Linear(config.max_state_dim, expert_hidden_size)
-        self.action_time_mlp_in = nn.Linear(2 * expert_hidden_size, expert_hidden_size)
-        self.action_time_mlp_out = nn.Linear(expert_hidden_size, expert_hidden_size)
-        self.hidden_state_recorders = nn.ModuleList(
-            [nn.Identity() for _ in range(config.text_config.num_hidden_layers)]
-        )
-        self.attention_recorders = nn.ModuleList([nn.Identity() for _ in range(config.text_config.num_hidden_layers)])
-
+        self.expert_hidden_size = config.dit_config.hidden_size
+        self.embed_action_time = ActionTimeEmbedding(config)
+        self.action_out_proj = nn.Linear(self.expert_hidden_size, config.max_action_dim)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def embed_prefix(
-        self,
-        pixel_values: torch.FloatTensor,
-        input_ids: torch.LongTensor,
-        attention_mask: torch.Tensor,
-        image_masks: torch.BoolTensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Embed images and language tokens into a prefix sequence."""
-        batch_size = input_ids.shape[0]
-        embs = []
-        pad_masks = []
-
-        image_features = self.model.get_image_features(pixel_values)
-
-        if image_masks is not None:
-            num_cameras = image_masks.shape[1]
-            image_seq_len = image_features.shape[1] // num_cameras
-            for cam_idx in range(num_cameras):
-                cam_features = image_features[:, cam_idx * image_seq_len : (cam_idx + 1) * image_seq_len]
-                embs.append(cam_features)
-                cam_mask = image_masks[:, cam_idx]
-                pad_masks.append(cam_mask[:, None].expand(batch_size, image_seq_len))
-        else:
-            num_image_tokens = image_features.shape[1]
-            embs.append(image_features)
-            pad_masks.append(torch.ones(batch_size, num_image_tokens, dtype=torch.bool, device=image_features.device))
-
-        lang_emb = self.model.embed_language_tokens(input_ids)
-        embs.append(lang_emb)
-        if attention_mask is None:
-            pad_masks.append(torch.ones(input_ids.shape, dtype=torch.bool, device=input_ids.device))
-        else:
-            pad_masks.append(attention_mask.bool())
-
-        return torch.cat(embs, dim=1), torch.cat(pad_masks, dim=1)
-
-    def embed_suffix(
-        self,
-        state: torch.FloatTensor,
-        noisy_actions: torch.FloatTensor,
-        timestep: torch.FloatTensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Embed suffix: state + action-time fusion."""
-        expert_hidden_size = self.action_in_proj.out_features
-
-        # TODO: remove dtype handling once proper input casting is in place
-        state_emb = self.state_proj(state)
-        batch_size = state_emb.shape[0]
-        device = state_emb.device
-
-        time_emb = create_sinusoidal_pos_embedding(
-            timestep, expert_hidden_size, min_period=self.config.min_period, max_period=self.config.max_period
-        )
-
-        action_emb = self.action_in_proj(noisy_actions)
-        time_emb_expanded = time_emb[:, None, :].expand_as(action_emb).to(dtype=action_emb.dtype)
-        action_time_emb = torch.cat([action_emb, time_emb_expanded], dim=2)
-        action_time_emb = self.action_time_mlp_out(F.silu(self.action_time_mlp_in(action_time_emb)))
-
-        embs = torch.cat([state_emb[:, None, :], action_time_emb], dim=1)
-        pad_masks = torch.ones(batch_size, embs.shape[1], dtype=torch.bool, device=device)
-
-        return embs, pad_masks
-
-    @capture_outputs
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        input_ids: torch.LongTensor,
+        input_ids: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_attention_mask: torch.BoolTensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         state: torch.FloatTensor | None = None,
-        actions: torch.FloatTensor | None = None,
-        image_masks: torch.BoolTensor | None = None,
         noise: torch.FloatTensor | None = None,
         timestep: torch.FloatTensor | None = None,
-        labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-    ) -> PI0Output:
-        """Training forward pass with flow matching loss."""
+        past_key_values: Cache | None = None,
+        actions: torch.FloatTensor = None,  # aka labels
+        **kwargs,
+    ) -> CausalLMOutputWithPast:
+        r"""
+        actions (`torch.Tensor`, *optional*): args description placeholder
+        pixel_attention_mask (`torch.Tensor`, *optional*): args description placeholder
+        state  (`torch.Tensor`, *optional*): args description placeholder
+        noise  (`torch.Tensor`, *optional*): args description placeholder
+        timestep  (`torch.Tensor`, *optional*): args description placeholder
+        """
         batch_size = input_ids.shape[0]
         device = input_ids.device
 
-        if actions is None:
-            raise ValueError("actions must be provided for training. Use sample_actions for inference.")
-        del labels  # Unused; accepted for compatibility with generic testing utilities.
-        del return_dict  # Handled by `capture_outputs`.
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        if noise is None:
-            noise = torch.randn_like(actions)
-        elif noise.shape != actions.shape:
-            noise = torch.zeros_like(actions)
+        # 1.Sample the timestep
         if timestep is None:
-            time_beta = sample_beta(
-                self.config.time_sampling_beta_alpha, self.config.time_sampling_beta_beta, batch_size, device
-            )
+            alpha_t = torch.tensor(self.config.time_sampling_beta_alpha, dtype=torch.float32)
+            beta_t = torch.tensor(self.config.time_sampling_beta_beta, dtype=torch.float32)
+            dist = torch.distributions.Beta(alpha_t, beta_t)
+            time_beta = dist.sample((batch_size,)).to(device)
             timestep = (time_beta * self.config.time_sampling_scale + self.config.time_sampling_offset).float()
 
-        time_expanded = timestep[:, None, None]
-        noisy_actions = (time_expanded * noise + (1 - time_expanded) * actions).to(actions.dtype)
-        target_velocity = noise - actions
-
-        prefix_embs, prefix_pad_masks = self.embed_prefix(pixel_values, input_ids, attention_mask, image_masks)
-        suffix_embs, suffix_pad_masks = self.embed_suffix(state, noisy_actions, timestep)
-
-        if prefix_embs.dtype != suffix_embs.dtype:
-            suffix_embs = suffix_embs.to(dtype=prefix_embs.dtype)
-
-        combined_pad_masks = torch.cat([prefix_pad_masks, suffix_pad_masks], dim=1)
-        prefix_length = prefix_embs.shape[1]
-        total_length = prefix_length + suffix_embs.shape[1]
-
-        position_ids = torch.cumsum(combined_pad_masks, dim=1) - 1
-        cache_position = torch.arange(total_length, device=device)
-
-        def prefix_bidirectional(batch_idx, head_idx, q_idx, kv_idx):
-            return (q_idx < prefix_length) & (kv_idx < prefix_length)
-
-        def suffix_bidirectional(batch_idx, head_idx, q_idx, kv_idx):
-            return (q_idx >= prefix_length) & (kv_idx >= prefix_length)
-
-        attention_mask_4d = create_causal_mask(
-            config=self.config.text_config,
-            inputs_embeds=prefix_embs,
-            attention_mask=combined_pad_masks,
-            cache_position=cache_position,
-            past_key_values=None,
-            position_ids=position_ids,
-            or_mask_function=or_masks(prefix_bidirectional, suffix_bidirectional),
-        )
-
-        inputs_embeds = [prefix_embs, suffix_embs]
-        num_layers = self.config.text_config.num_hidden_layers
-        for layer_idx in range(num_layers):
-            inputs_embeds, suffix_attn = compute_layer_complete(
-                layer_idx,
-                inputs_embeds,
-                attention_mask_4d,
-                position_ids,
-                language_model=self.model.language_model,
-                expert_model=self.model.expert,
-                output_attentions=output_attentions,
-                prefix_length=prefix_length,
+        # 2. Create random noise if not provided
+        if noise is None:
+            noise = torch.randn(
+                batch_size,
+                self.config.chunk_size,
+                self.config.max_action_dim,
+                device=device,
+                dtype=pixel_values.dtype,
             )
-            combined = self.hidden_state_recorders[layer_idx](inputs_embeds)
-            if suffix_attn is not None:
-                _ = self.attention_recorders[layer_idx](suffix_attn)
 
-        suffix_out = self.model.expert.norm(inputs_embeds[1])
+        # 3. If training: merge noise with the ground truth actions (aka labels)
+        # Target velocity is the label we want to preduct and will compute loss upon
+        if actions is not None:
+            time_expanded = timestep[:, None, None]
+            noisy_actions = (time_expanded * noise + (1 - time_expanded) * actions).to(actions.dtype)
+            target_velocity = noise - actions
+        else:
+            noisy_actions = noise
 
-        suffix_out = suffix_out[:, -self.config.chunk_size :]
-        predicted_velocity = self.action_out_proj(suffix_out)
+        # 4. Embed 'state + noise + actions' for DiT blocks
+        action_time_embeds = self.embed_action_time(state, noisy_actions, timestep)
 
-        loss_per_sample = F.mse_loss(target_velocity, predicted_velocity, reduction="none")
-        loss = loss_per_sample.mean()
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            action_embeds=action_time_embeds,
+            past_key_values=past_key_values,
+            **kwargs,
+        )
+        last_hidden_states = outputs.last_hidden_state[:, -self.config.chunk_size :]
+        predicted_velocity = self.action_out_proj(last_hidden_states)
 
-        return PI0Output(loss=loss, loss_per_sample=loss_per_sample)
+        loss = None
+        if actions is not None:
+            # Let the users reduce loss themselves and return fine-grained per sample loss
+            loss = F.mse_loss(target_velocity, predicted_velocity, reduction="none")
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=predicted_velocity,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
     @torch.no_grad()
     def sample_actions(
         self,
-        pixel_values: torch.FloatTensor,
         input_ids: torch.LongTensor,
+        pixel_values: torch.FloatTensor,
         attention_mask: torch.Tensor | None = None,
+        pixel_attention_mask: torch.BoolTensor | None = None,
         state: torch.FloatTensor | None = None,
-        image_masks: torch.BoolTensor | None = None,
         noise: torch.FloatTensor | None = None,
         num_steps: int | None = None,
     ) -> torch.FloatTensor:
         """Run flow matching inference to generate actions."""
-        if num_steps is None:
-            num_steps = self.config.num_inference_steps
 
+        num_steps = num_steps or self.config.num_inference_steps
         batch_size = input_ids.shape[0]
         device = input_ids.device
 
+        # 1. Sample random noise
         if noise is None:
-            noise = torch.normal(
-                mean=0.0,
-                std=1.0,
-                size=(batch_size, self.config.chunk_size, self.config.max_action_dim,),
-                dtype=pixel_values.dtype,
+            noise = torch.randn(
+                batch_size,
+                self.config.chunk_size,
+                self.config.max_action_dim,
                 device=device,
+                dtype=pixel_values.dtype,
             )
 
-        prefix_embs, prefix_pad_masks = self.embed_prefix(pixel_values, input_ids, attention_mask, image_masks)
-        prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
-
-        _, past_key_values = self.model(
-            attention_mask=prefix_pad_masks,
-            position_ids=prefix_position_ids,
-            past_key_values=None,
-            inputs_embeds=[prefix_embs, None],
+        # 2. Run VLM once and obtain prefix cache
+        output = self.model.vlm(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
             use_cache=True,
+            return_dict=True,
         )
-        prefix_length = prefix_embs.shape[1]
+        past_key_values = output.past_key_values
+        prefix_length = past_key_values.get_seq_length()
 
+        # 3. Denoise `num_steps` times
         dt = -1.0 / num_steps
-        x_t = noise
-
         for step in range(num_steps):
             time = 1.0 + step * dt
             time_tensor = torch.tensor(time, dtype=torch.float32, device=device).expand(batch_size)
-
-            suffix_embs, suffix_pad_masks = self.embed_suffix(state, x_t, time_tensor)
-
-            full_pad_masks = torch.cat([prefix_pad_masks, suffix_pad_masks], dim=1)
-            prefix_offsets = torch.sum(prefix_pad_masks, dim=-1)[:, None]
-            position_ids = prefix_offsets + torch.cumsum(suffix_pad_masks, dim=1) - 1
-
-            (_, suffix_out), _ = self.model(
-                attention_mask=full_pad_masks,
-                position_ids=position_ids,
+            output = self(
+                pixel_attention_mask=pixel_attention_mask,
+                attention_mask=attention_mask,
                 past_key_values=past_key_values,
-                inputs_embeds=[None, suffix_embs],
-                use_cache=False,
+                state=state,
+                noise=noise,
+                timestep=time_tensor,
             )
+
+            # We need to keep only the "vlm-prefix", no attention to past denoising steps!
             if past_key_values is not None:
                 past_key_values.crop(prefix_length)
 
-            suffix_out = suffix_out[:, -self.config.chunk_size :]
-            v_t = self.action_out_proj(suffix_out)
-
-            x_t = x_t + dt * v_t
-
-        return x_t
+            noise = noise + dt * output.logits
+        return noise
 
 
 __all__ = ["PI0PreTrainedModel", "PI0Model", "PI0ForConditionalGeneration"]

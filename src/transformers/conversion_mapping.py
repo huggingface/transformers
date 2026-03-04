@@ -67,6 +67,27 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "pi0": [
+            WeightRenaming(source_patterns=r"state_proj", target_patterns="embed_action_time.state_proj"),
+            WeightRenaming(source_patterns=r"action_in_proj", target_patterns="embed_action_time.action_in_proj"),
+            WeightRenaming(
+                source_patterns=r"action_time_mlp_in", target_patterns="embed_action_time.action_time_mlp_in"
+            ),
+            WeightRenaming(
+                source_patterns=r"action_time_mlp_out", target_patterns="embed_action_time.action_time_mlp_out"
+            ),
+            WeightRenaming(source_patterns=r"^paligemma_with_expert.paligemma.model", target_patterns="model.vlm"),
+            WeightRenaming(source_patterns=r"^paligemma_with_expert.gemma_expert.model", target_patterns="model.dit"),
+            # FIXME: use `tie-word-embeddings` correctly!
+            WeightRenaming(
+                source_patterns=r"^paligemma_with_expert.gemma_expert.lm_head",
+                target_patterns="model.dit.embed_tokens",
+            ),
+            WeightRenaming(
+                source_patterns=r"^paligemma_with_expert.paligemma.lm_head",
+                target_patterns="model.vlm.language_model.embed_tokens",
+            ),
+        ],
         "qwen3_5_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
         ],
@@ -294,17 +315,6 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="feed_forward.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
-        ],
-        "pi0": [
-            WeightRenaming("paligemma_with_expert.paligemma.model.vision_tower", "model.vision_tower"),
-            WeightRenaming(
-                "paligemma_with_expert.paligemma.model.multi_modal_projector",
-                "model.multi_modal_projector",
-            ),
-            WeightRenaming("paligemma_with_expert.paligemma.lm_head", "model.language_model.embed_tokens"),
-            WeightRenaming("paligemma_with_expert.paligemma.model.language_model", "model.language_model"),
-            WeightRenaming("paligemma_with_expert.gemma_expert.lm_head", "model.expert.embed_tokens"),
-            WeightRenaming("paligemma_with_expert.gemma_expert.model", "model.expert"),
         ],
         "pi0_fast": [
             WeightRenaming("paligemma.model.vision_tower", "model.vision_tower"),
