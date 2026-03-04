@@ -19,6 +19,7 @@ import unittest
 
 import numpy as np
 import requests
+from parameterized import parameterized
 
 from transformers import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
 from transformers.testing_utils import (
@@ -33,6 +34,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
@@ -554,9 +556,9 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="Owlv2ObjectDetectionOutput has no top-level hidden_states; tested in sub-models")
-    def test_eager_matches_sdpa_inference(self):
-        pass
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(self, *args):
+        self.skipTest("Owlv2ObjectDetectionOutput has no top-level hidden_states; SDPA tested in sub-models")
 
     @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
     def test_inputs_embeds(self):
