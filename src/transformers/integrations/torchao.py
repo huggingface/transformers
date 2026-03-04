@@ -148,6 +148,12 @@ class TorchAoQuantize(ConversionOps):
                         quantize_(module, c, (lambda x, fqn: True))
                         missing_keys.discard(full_layer_name)
                         module._is_hf_initialized = True
+                        # torchao quantizes weights into a module but some models access the weight directly
+                        # (e.g. module.o_proj.weight). The _is_hf_initialized flag is set at the module
+                        # level only, so we also set it on each parameter to prevent _init_weights from
+                        # calling normal_() on already-quantized Float8Tensors.
+                        for param in module.parameters(recurse=False):
+                            param._is_hf_initialized = True
                         return {"lm_head.weight": lm_head} if is_embedding_param and untie_embedding_weights else {}
                     else:
                         # need to apply to custom param name
@@ -155,6 +161,8 @@ class TorchAoQuantize(ConversionOps):
                         quantize_(module, custom_param_fqn_config, filter_fn=None)
                         missing_keys.discard(full_layer_name)
                         module._is_hf_initialized = True
+                        for param in module.parameters(recurse=False):
+                            param._is_hf_initialized = True
                         return {}
                 return {full_layer_name: value}
 
@@ -189,6 +197,8 @@ class TorchAoQuantize(ConversionOps):
                     quantize_(module, c, filter_fn=lambda x, fqn: True)
                     missing_keys.discard(full_layer_name)
                     module._is_hf_initialized = True
+                    for param in module.parameters(recurse=False):
+                        param._is_hf_initialized = True
                     return {"lm_head.weight": lm_head} if is_embedding_param and untie_embedding_weights else {}
 
                 return {full_layer_name: value}
@@ -198,6 +208,8 @@ class TorchAoQuantize(ConversionOps):
         quantize_(module, self.hf_quantizer.quantization_config.get_apply_tensor_subclass())
         missing_keys.discard(full_layer_name)
         module._is_hf_initialized = True
+        for param in module.parameters(recurse=False):
+            param._is_hf_initialized = True
         return {"lm_head.weight": lm_head} if is_embedding_param and untie_embedding_weights else {}
 
 
