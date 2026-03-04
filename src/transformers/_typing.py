@@ -19,6 +19,7 @@ import logging
 from collections.abc import Mapping, MutableMapping
 from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
 
+
 if TYPE_CHECKING:
     import torch
 
