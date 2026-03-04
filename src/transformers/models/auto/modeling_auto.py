@@ -1255,6 +1255,8 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("qwen2", "Qwen2ForSequenceClassification"),
         ("qwen2_moe", "Qwen2MoeForSequenceClassification"),
         ("qwen3", "Qwen3ForSequenceClassification"),
+        ("qwen3_5", "Qwen3_5ForSequenceClassification"),
+        ("qwen3_5_text", "Qwen3_5ForSequenceClassification"),
         ("qwen3_moe", "Qwen3MoeForSequenceClassification"),
         ("qwen3_next", "Qwen3NextForSequenceClassification"),
         ("reformer", "ReformerForSequenceClassification"),
