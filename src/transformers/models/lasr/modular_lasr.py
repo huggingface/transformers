@@ -16,6 +16,8 @@ import itertools
 from collections.abc import Callable
 
 import torch
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers.models import Unigram
 from torch import nn
 
 from ...masking_utils import create_bidirectional_mask
@@ -36,11 +38,9 @@ from ..parakeet.modeling_parakeet import (
 )
 from ..parakeet.processing_parakeet import ParakeetProcessor
 from ..t5.tokenization_t5 import T5Tokenizer
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
-from tokenizers.models import Unigram
+
 
 class LasrTokenizer(T5Tokenizer, TokenizersBackend):
-
     def __init__(
         self,
         eos_token="</s>",
