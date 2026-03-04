@@ -25,7 +25,7 @@ class SeamlessM4TConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`~SeamlessM4TModel`]. It is used to instantiate an
     SeamlessM4T model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SeamlessM4T
-    ["facebook/hf-seamless-m4t-medium"](https://huggingface.co/"facebook/hf-seamless-m4t-medium") architecture.
+    [facebook/hf-seamless-m4t-medium](https://huggingface.co/facebook/hf-seamless-m4t-medium) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
