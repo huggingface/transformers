@@ -1260,8 +1260,8 @@ class LwDetrModel(DeformableDetrModel):
             _cur += height * width
         output_proposals = torch.cat(proposals, 1)
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
-        output_proposals = output_proposals.masked_fill(padding_mask.unsqueeze(-1), float("inf"))
-        output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
+        output_proposals = output_proposals.masked_fill(padding_mask.unsqueeze(-1), float(0))
+        output_proposals = output_proposals.masked_fill(~output_proposals_valid, float(0))
 
         # assign each pixel as an object query
         object_query = enc_output
@@ -1388,9 +1388,9 @@ class LwDetrModel(DeformableDetrModel):
         object_query_undetach = torch.cat(object_query_undetach, 1)
 
         enc_outputs_class = object_query_undetach
-        enc_outputs_coord_logits = topk_coords_logits
+        enc_outputs_coord_logits = topk_coords_logits_undetach
 
-        reference_points = refine_bboxes(topk_coords_logits_undetach, reference_points)
+        reference_points = refine_bboxes(topk_coords_logits, reference_points)
 
         init_reference_points = reference_points
         decoder_outputs = self.decoder(
