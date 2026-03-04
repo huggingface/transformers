@@ -83,17 +83,19 @@ class AudioProcessingMixin(PreprocessingMixin):
         """
         return cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-    def fetch_audio(self, audio_url_or_urls: str | list[str] | list[list[str]]):
+    def fetch_audio(self, audio_url_or_urls: str | list[str] | list[list[str]], sampling_rate: int | None = None):
         """
         Convert a single or a list of urls into the corresponding `np.ndarray` objects.
 
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
+        if sampling_rate is None:
+            sampling_rate = getattr(self, "sample_rate", 16000)
         if isinstance(audio_url_or_urls, list):
-            return [self.fetch_audio(x) for x in audio_url_or_urls]
+            return [self.fetch_audio(x, sampling_rate=sampling_rate) for x in audio_url_or_urls]
         elif isinstance(audio_url_or_urls, str):
-            return load_audio(audio_url_or_urls)
+            return load_audio(audio_url_or_urls, sampling_rate=sampling_rate)
         elif is_valid_audio(audio_url_or_urls):
             return audio_url_or_urls
         else:
