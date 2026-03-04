@@ -17,6 +17,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
+from ..granitemoehybrid.configuration_granitemoehybrid import GraniteMoeHybridConfig
 from ..idefics3.configuration_idefics3 import Idefics3VisionConfig
 
 
@@ -24,6 +25,10 @@ logger = logging.get_logger(__name__)
 
 
 class GraniteDoclingHybridVisionConfig(Idefics3VisionConfig):
+    pass
+
+
+class GraniteDoclingHybridGraniteMoeHybridConfig(GraniteMoeHybridConfig):
     pass
 
 
