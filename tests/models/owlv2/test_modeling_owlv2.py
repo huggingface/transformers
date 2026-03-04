@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 import requests
-from parameterized import parameterized
 
 from transformers import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
 from transformers.testing_utils import (
@@ -34,7 +33,6 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
-    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
