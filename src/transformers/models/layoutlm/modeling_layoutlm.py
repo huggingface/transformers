@@ -226,7 +226,7 @@ class LayoutLMAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states, _ = self.self(
             hidden_states,
@@ -283,7 +283,7 @@ class LayoutLMLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         hidden_states = self.attention(
             hidden_states,
             attention_mask=attention_mask,
@@ -314,7 +314,7 @@ class LayoutLMEncoder(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | BaseModelOutput:
+    ) -> BaseModelOutput:
         for layer_module in self.layer:
             hidden_states = layer_module(
                 hidden_states,
