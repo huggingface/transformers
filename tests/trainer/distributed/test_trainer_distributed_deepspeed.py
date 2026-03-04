@@ -1507,62 +1507,50 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
 # Model Zoo — test many architectures with DeepSpeed + zero_to_fp32 recovery
 # ---------------------------------------------------------------------------
 
-# Working tiny models
-ALBERT_TINY = "hf-internal-testing/tiny-albert"
-BART_TINY = "sshleifer/bart-tiny-random"
-BERT_TINY = "hf-internal-testing/tiny-bert"
-BIGBIRD_PEGASUS_TINY = "hf-internal-testing/tiny-random-bigbird_pegasus"
-BLENDERBOT_TINY = "hf-internal-testing/tiny-random-blenderbot"
-BLOOM_TINY = "bigscience/bigscience-small-testing"
-DEBERTA_TINY = "hf-internal-testing/tiny-random-deberta"
-DEBERTA_V2_TINY = "hf-internal-testing/tiny-random-deberta-v2"
-DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased"
-ELECTRA_TINY = "hf-internal-testing/tiny-electra"
-FLAUBERT_TINY = "hf-internal-testing/tiny-random-flaubert"
-FSMT_TINY = "stas/tiny-wmt19-en-de"
-FUNNEL_TINY = "hf-internal-testing/tiny-random-funnel"
-GPT_NEO_TINY = "hf-internal-testing/tiny-random-gpt_neo"
-LAYOUTLM_TINY = "hf-internal-testing/tiny-layoutlm"
-LED_TINY = "hf-internal-testing/tiny-random-led"
-LONGFORMER_TINY = "hf-internal-testing/tiny-random-longformer"
-M2M_100_TINY = "stas/tiny-m2m_100"
-MARIAN_TINY = "sshleifer/tiny-marian-en-de"
-MBART_TINY = "sshleifer/tiny-mbart"
-MOBILEBERT_TINY = "hf-internal-testing/tiny-random-mobilebert"
-MPNET_TINY = "hf-internal-testing/tiny-random-mpnet"
-PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
-PROPHETNET_TINY = "hf-internal-testing/tiny-random-prophetnet"
-ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
-SQUEEZEBERT_TINY = "hf-internal-testing/tiny-random-squeezebert"
-T5_V1_TINY = "hf-internal-testing/tiny-random-t5-v1.1"
-VIT_TINY = "hf-internal-testing/tiny-random-vit"
-XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
-XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
+_ZOO_MODELS = {
+    "albert": "hf-internal-testing/tiny-albert",
+    "bart": "sshleifer/bart-tiny-random",
+    "bert": "hf-internal-testing/tiny-bert",
+    "bigbird_pegasus": "hf-internal-testing/tiny-random-bigbird_pegasus",
+    "blenderbot": "hf-internal-testing/tiny-random-blenderbot",
+    "bloom": "bigscience/bigscience-small-testing",
+    "deberta": "hf-internal-testing/tiny-random-deberta",
+    "deberta-v2": "hf-internal-testing/tiny-random-deberta-v2",
+    "distilbert": "sshleifer/tiny-distilbert-base-cased",
+    "electra": "hf-internal-testing/tiny-electra",
+    "flaubert": "hf-internal-testing/tiny-random-flaubert",
+    "fsmt": "stas/tiny-wmt19-en-de",
+    "funnel": "hf-internal-testing/tiny-random-funnel",
+    "gpt2": GPT2_TINY,
+    "gpt_neo": "hf-internal-testing/tiny-random-gpt_neo",
+    "gptj": GPTJ_TINY,
+    "layoutlm": "hf-internal-testing/tiny-layoutlm",
+    "led": "hf-internal-testing/tiny-random-led",
+    "longformer": "hf-internal-testing/tiny-random-longformer",
+    "m2m_100": "stas/tiny-m2m_100",
+    "marian": "sshleifer/tiny-marian-en-de",
+    "mbart": "sshleifer/tiny-mbart",
+    "mobilebert": "hf-internal-testing/tiny-random-mobilebert",
+    "mpnet": "hf-internal-testing/tiny-random-mpnet",
+    "pegasus": "stas/pegasus-cnn_dailymail-tiny-random",
+    "prophetnet": "hf-internal-testing/tiny-random-prophetnet",
+    "roberta": "sshleifer/tiny-distilroberta-base",
+    "squeezebert": "hf-internal-testing/tiny-random-squeezebert",
+    "t5": T5_TINY,
+    "t5_v1": "hf-internal-testing/tiny-random-t5-v1.1",
+    "vit": "hf-internal-testing/tiny-random-vit",
+    "xlm-roberta": "hf-internal-testing/tiny-xlm-roberta",
+    "xlnet": "sshleifer/tiny-xlnet-base-cased",
+}
 
-FIXTURE_DIRECTORY = get_tests_dir("fixtures")
-ROOT_DIRECTORY = os.path.join(os.path.dirname(get_tests_dir()))
-DS_TESTS_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+_ZOO_FIXTURE_DIR = get_tests_dir("fixtures")
+_ZOO_SAMPLES_DIR = f"{_ZOO_FIXTURE_DIR}/tests_samples"
+_ZOO_SCRIPTS_DIR = f"{os.path.join(os.path.dirname(get_tests_dir()))}/examples/pytorch"
+_ZOO_VIT_FEATURE_EXTRACTOR = os.path.join(SCRIPTS_DIR, "vit_feature_extractor.json")
 
 
-def _get_deepspeed_launcher(distributed=False):
-    num_gpus = min(2, backend_device_count(torch_device)) if distributed else 1
-    master_port = os.environ.get("DS_TEST_PORT", "10999")
-    return f"deepspeed --num_nodes 1 --num_gpus {num_gpus} --master_port {master_port}".split()
-
-
-def _make_zoo_task_cmds():
-    data_dir_samples = f"{FIXTURE_DIRECTORY}/tests_samples"
-    data_dir_wmt = f"{data_dir_samples}/wmt_en_ro"
-    data_dir_xsum = f"{data_dir_samples}/xsum"
-    args_main = """
-        --do_train
-        --max_train_samples 4
-        --per_device_train_batch_size 2
-        --num_train_epochs 1
-        --fp16
-        --report_to none
-        """.split()
-
+def _make_zoo_tasks():
+    """Build {task_model: (script, script_args)} for each task/model combo."""
     tasks2models = {
         "trans": ["bart", "fsmt", "m2m_100", "marian", "mbart", "t5", "t5_v1"],
         "sum": ["pegasus"],
@@ -1573,111 +1561,76 @@ def _make_zoo_task_cmds():
         "img_clas": ["vit"],
     }
 
-    scripts_dir = f"{ROOT_DIRECTORY}/examples/pytorch"
-
-    tasks = {
-        "trans": f"""
-        {scripts_dir}/translation/run_translation.py
-        --train_file {data_dir_wmt}/train.json
-        --source_lang en
-        --target_lang ro
-        --max_source_length 12
-        --max_target_length 12
-        """,
-        "sum": f"""
-        {scripts_dir}/summarization/run_summarization.py
-        --train_file {data_dir_xsum}/sample.json
-        --max_source_length 12
-        --max_target_length 12
-        --lang en
-        """,
-        "clm": f"""
-        {scripts_dir}/language-modeling/run_clm.py
-        --train_file {FIXTURE_DIRECTORY}/sample_text.txt
-        --block_size 8
-        """,
-        "mlm": f"""
-        {scripts_dir}/language-modeling/run_mlm.py
-        --train_file {FIXTURE_DIRECTORY}/sample_text.txt
-        """,
-        "qa": f"""
-        {scripts_dir}/question-answering/run_qa.py
-        --train_file {data_dir_samples}/SQUAD/sample.json
-        """,
-        "clas": f"""
-        {scripts_dir}/text-classification/run_glue.py
-        --train_file {data_dir_samples}/MRPC/train.csv
-        --max_seq_length 12
-        --task_name MRPC
-        """,
-        "img_clas": f"""
-        {scripts_dir}/image-classification/run_image_classification.py
-            --dataset_name hf-internal-testing/cats_vs_dogs_sample
-            --remove_unused_columns False
-            --max_steps 10
-            --image_processor_name {DS_TESTS_DIRECTORY}/vit_feature_extractor.json
-            --label_column_name labels
-        """,
+    # task -> (script_path, task-specific args)
+    task_defs = {
+        "trans": (
+            f"{_ZOO_SCRIPTS_DIR}/translation/run_translation.py",
+            f"--train_file {_ZOO_SAMPLES_DIR}/wmt_en_ro/train.json --source_lang en --target_lang ro "
+            f"--max_source_length 12 --max_target_length 12".split(),
+        ),
+        "sum": (
+            f"{_ZOO_SCRIPTS_DIR}/summarization/run_summarization.py",
+            f"--train_file {_ZOO_SAMPLES_DIR}/xsum/sample.json --max_source_length 12 "
+            f"--max_target_length 12 --lang en".split(),
+        ),
+        "clm": (
+            f"{_ZOO_SCRIPTS_DIR}/language-modeling/run_clm.py",
+            f"--train_file {_ZOO_FIXTURE_DIR}/sample_text.txt --block_size 8".split(),
+        ),
+        "mlm": (
+            f"{_ZOO_SCRIPTS_DIR}/language-modeling/run_mlm.py",
+            f"--train_file {_ZOO_FIXTURE_DIR}/sample_text.txt".split(),
+        ),
+        "qa": (
+            f"{_ZOO_SCRIPTS_DIR}/question-answering/run_qa.py",
+            f"--train_file {_ZOO_SAMPLES_DIR}/SQUAD/sample.json".split(),
+        ),
+        "clas": (
+            f"{_ZOO_SCRIPTS_DIR}/text-classification/run_glue.py",
+            f"--train_file {_ZOO_SAMPLES_DIR}/MRPC/train.csv --max_seq_length 12 --task_name MRPC".split(),
+        ),
+        "img_clas": (
+            f"{_ZOO_SCRIPTS_DIR}/image-classification/run_image_classification.py",
+            f"--dataset_name hf-internal-testing/cats_vs_dogs_sample --remove_unused_columns False "
+            f"--max_steps 10 --image_processor_name {_ZOO_VIT_FEATURE_EXTRACTOR} "
+            f"--label_column_name labels".split(),
+        ),
     }
 
-    launcher = _get_deepspeed_launcher(distributed=True)
+    common_args = "--do_train --max_train_samples 4 --per_device_train_batch_size 2 --num_train_epochs 1 --fp16 --save_steps 1".split()
 
-    # Model name lookup table (model key -> HF tiny model id)
-    _model_ids = {
-        "albert": ALBERT_TINY, "bart": BART_TINY, "bert": BERT_TINY,
-        "bigbird_pegasus": BIGBIRD_PEGASUS_TINY, "blenderbot": BLENDERBOT_TINY,
-        "bloom": BLOOM_TINY, "deberta": DEBERTA_TINY, "deberta-v2": DEBERTA_V2_TINY,
-        "distilbert": DISTILBERT_TINY, "electra": ELECTRA_TINY, "flaubert": FLAUBERT_TINY,
-        "fsmt": FSMT_TINY, "funnel": FUNNEL_TINY, "gpt2": GPT2_TINY, "gpt_neo": GPT_NEO_TINY,
-        "gptj": GPTJ_TINY, "layoutlm": LAYOUTLM_TINY, "led": LED_TINY,
-        "longformer": LONGFORMER_TINY, "m2m_100": M2M_100_TINY, "marian": MARIAN_TINY,
-        "mbart": MBART_TINY, "mobilebert": MOBILEBERT_TINY, "mpnet": MPNET_TINY,
-        "pegasus": PEGASUS_TINY, "prophetnet": PROPHETNET_TINY, "roberta": ROBERTA_TINY,
-        "squeezebert": SQUEEZEBERT_TINY, "t5": T5_TINY, "t5_v1": T5_V1_TINY,
-        "vit": VIT_TINY, "xlm-roberta": XLM_ROBERTA_TINY, "xlnet": XLNET_TINY,
-    }
+    result = {}
+    for task, models in tasks2models.items():
+        script, task_args = task_defs[task]
+        for model in models:
+            model_args = ["--model_name_or_path", _ZOO_MODELS[model]]
+            result[f"{task}_{model}"] = (script, task_args + model_args + common_args)
 
-    cmds = {}
-    for task, args in tasks.items():
-        args = args.split()
-        for model in tasks2models[task]:
-            model_name = _model_ids[model]
-            args_model = f"--model_name_or_path {model_name}".split()
-            cmds[f"{task}_{model}"] = launcher + args + args_model + args_main
-
-    return cmds
+    return result
 
 
-_zoo_task_cmds = _make_zoo_task_cmds()
-_zoo_params = list(itertools.product(stages, _zoo_task_cmds.keys()))
+_zoo_tasks = _make_zoo_tasks()
+_zoo_params = list(itertools.product(stages, _zoo_tasks.keys()))
 
 
 @slow
 @run_first
 @require_deepspeed
 @require_torch_accelerator
-class TestDeepSpeedModelZoo(TestCasePlus):
-    """Test many model architectures with DeepSpeed via example scripts + zero_to_fp32 recovery."""
-
-    def get_task_cmd(self, task, stage):
-        if task not in _zoo_task_cmds:
-            raise ValueError(f"Unknown task {task}, available: {_zoo_task_cmds.keys()}")
-
-        cmd = list(_zoo_task_cmds[task])
-        args_ds = f"--deepspeed {SCRIPTS_DIR}/ds_config_{stage}.json".split()
-
-        output_dir = self.get_auto_remove_tmp_dir()
-        args_out = f"--output_dir {output_dir}".split()
-
-        cmd += args_ds + args_out
-        return cmd, output_dir
+class TestDeepSpeedModelZoo(DeepSpeedCommandsMixin, TestCasePlus):
+    """Test many model architectures with DeepSpeed (fp16 mixed precision) via example scripts + zero_to_fp32 recovery."""
 
     @parameterized.expand(_zoo_params, name_func=_parameterized_custom_name_func)
     def test_zero_to_fp32(self, stage, task):
-        cmd, output_dir = self.get_task_cmd(task, stage)
+        script, script_args = _zoo_tasks[task]
+        output_dir = self.get_auto_remove_tmp_dir()
 
         # 1. Train and save a checkpoint
-        cmd += "--save_steps 1".split()
+        cmd = self.get_accelerate_cmd(
+            script,
+            config_file=DS_CONFIGS[stage],
+            extra_args=script_args + ["--output_dir", output_dir],
+        )
         execute_subprocess_async(cmd, env=self.get_env())
 
         # 2. Recover FP32 weights from the ZeRO checkpoint
