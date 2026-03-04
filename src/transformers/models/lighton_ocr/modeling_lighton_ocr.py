@@ -29,6 +29,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.generic import merge_with_config_defaults
 from ..auto import AutoModel
 from .configuration_lighton_ocr import LightOnOcrConfig
 
@@ -321,6 +322,7 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes, **kwargs)
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
