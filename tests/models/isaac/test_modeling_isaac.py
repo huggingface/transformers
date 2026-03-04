@@ -43,6 +43,7 @@ from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProc
 from transformers.models.isaac.modeling_isaac import (
     IsaacVisionAttention,
     IsaacVisionConfig,
+    pixel_shuffle_padded,
 )
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import (
@@ -232,6 +233,35 @@ def infer_pad_from_tail(sequence: torch.Tensor) -> tuple[int | None, int]:
     if idx < 0:
         return pad_candidate, -1
     return pad_candidate, idx
+
+
+def _pixel_shuffle_reference(x: torch.Tensor, token_grids: torch.Tensor, scale_factor: int):
+    num_images, _, embed_dim = x.shape
+    output_lengths = []
+    for i in range(num_images):
+        h, w = token_grids[i].tolist()
+        output_lengths.append((h // scale_factor) * (w // scale_factor))
+
+    max_output_tokens = max(output_lengths, default=0)
+    output_dim = embed_dim * scale_factor * scale_factor
+    out = x.new_zeros((num_images, max_output_tokens, output_dim))
+    out_mask = torch.zeros((num_images, max_output_tokens), device=x.device, dtype=torch.long)
+
+    for i in range(num_images):
+        h, w = token_grids[i].tolist()
+        if h == 0 or w == 0:
+            continue
+        seq_len = h * w
+        tokens = x[i, :seq_len]
+        hb, wb = h // scale_factor, w // scale_factor
+        t = tokens.view(h, w, embed_dim).permute(2, 0, 1).unsqueeze(0)
+        t = torch.nn.functional.pixel_unshuffle(t, downscale_factor=scale_factor)
+        t = t.view(1, embed_dim, scale_factor, scale_factor, hb, wb)
+        t = t.permute(0, 4, 5, 2, 3, 1).contiguous().view(hb * wb, output_dim)
+        out[i, : hb * wb] = t
+        out_mask[i, : hb * wb] = 1
+
+    return out, out_mask, torch.tensor(output_lengths, device=x.device, dtype=torch.long)
 
 
 def create_isaac_processor(
@@ -582,6 +612,45 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertIsNotNone(outputs.loss)
         self.assertEqual(outputs.loss.ndim, 0)
         self.assertEqual(outputs.logits.shape, (batch_size, seq_len, config.vocab_size))
+
+
+@require_torch
+class IsaacPixelShufflePaddedTest(unittest.TestCase):
+    def test_pixel_shuffle_padded_matches_reference_no_attention_mask(self):
+        x = torch.arange(2 * 16 * 4, device=torch_device, dtype=torch.float32).view(2, 16, 4)
+        token_grids = torch.tensor([[4, 4], [2, 4]], device=torch_device, dtype=torch.long)
+        expected_hidden, expected_mask, expected_lengths = _pixel_shuffle_reference(x, token_grids, scale_factor=2)
+
+        hidden, mask, lengths = pixel_shuffle_padded(x=x, token_grids=token_grids, attention_mask=None, scale_factor=2)
+
+        torch.testing.assert_close(hidden, expected_hidden)
+        torch.testing.assert_close(mask, expected_mask)
+        torch.testing.assert_close(lengths, expected_lengths)
+
+    def test_pixel_shuffle_padded_raises_on_attention_mask_length_mismatch(self):
+        x = torch.randn(1, 16, 8, device=torch_device)
+        token_grids = torch.tensor([[4, 4]], device=torch_device, dtype=torch.long)
+        attention_mask = torch.tensor([[1] * 15 + [0]], device=torch_device, dtype=torch.long)
+
+        with pytest.raises(ValueError, match="must match token_grids"):
+            pixel_shuffle_padded(x=x, token_grids=token_grids, attention_mask=attention_mask, scale_factor=2)
+
+    def test_pixel_shuffle_padded_raises_on_non_divisible_grid(self):
+        x = torch.randn(1, 15, 8, device=torch_device)
+        token_grids = torch.tensor([[3, 5]], device=torch_device, dtype=torch.long)
+
+        with pytest.raises(ValueError, match="divisible"):
+            pixel_shuffle_padded(x=x, token_grids=token_grids, attention_mask=None, scale_factor=2)
+
+    def test_pixel_shuffle_padded_zero_grid(self):
+        x = torch.randn(1, 4, 8, device=torch_device)
+        token_grids = torch.tensor([[0, 0]], device=torch_device, dtype=torch.long)
+
+        hidden, mask, lengths = pixel_shuffle_padded(x=x, token_grids=token_grids, attention_mask=None, scale_factor=2)
+
+        self.assertEqual(hidden.shape, (1, 0, 32))
+        self.assertEqual(mask.shape, (1, 0))
+        torch.testing.assert_close(lengths, torch.tensor([0], device=torch_device, dtype=torch.long))
 
 
 @require_torch
