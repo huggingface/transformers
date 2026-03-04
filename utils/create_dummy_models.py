@@ -860,6 +860,7 @@ def build_model(model_arch, tiny_config, output_dir):
     Also copy the set of processors to each model (under the same model type) output folder.
     """
 
+    # breakpoint()
     checkpoint_dir = get_checkpoint_dir(output_dir, model_arch)
 
     processor_output_dir = os.path.join(output_dir, "processors")

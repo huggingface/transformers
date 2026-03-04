@@ -26,7 +26,7 @@ class PixtralVisionConfig(PreTrainedConfig):
     Pixtral vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to the vision encoder used by Pixtral-12B.
 
-    e.g. [pixtral-hf/pixtral-9b](https://huggingface.co/pixtral-hf/pixtral-9b)
+    e.g. [mistral-labs/pixtral-12b](https://huggingface.co/mistral-labs/pixtral-12b)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
