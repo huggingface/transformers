@@ -439,6 +439,7 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
             hidden_states=outputs.hidden_states if user_requested_hidden_states else None,
+            attentions=outputs.attentions,
         )
 
 
