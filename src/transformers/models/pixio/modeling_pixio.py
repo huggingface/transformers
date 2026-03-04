@@ -467,7 +467,11 @@ class PixioBackbone(BackboneMixin, PixioPreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 1280, 16, 16]
         ```"""
-        # NOTE: that due to the nature of the model, we always return the `hidden_states`
+        # Internally the model always needs to output hidden states, we control the output
+        # per user request on the final output
+        user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
+            self.config, "output_hidden_states", False
+        )
         kwargs["output_hidden_states"] = True
 
         embedding_output = self.embeddings(pixel_values)
@@ -489,7 +493,7 @@ class PixioBackbone(BackboneMixin, PixioPreTrainedModel):
 
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
-            hidden_states=output.hidden_states,
+            hidden_states=hidden_states if user_requested_hidden_states else None,
             attentions=output.attentions,
         )
 
