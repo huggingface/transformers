@@ -1154,7 +1154,6 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_cnndm_inference(self):
         model = ProphetNetForConditionalGeneration.from_pretrained("microsoft/prophetnet-large-uncased-cnndm")
-        # model.config.max_length = 512
         model.generation_config.max_length = 512
         model.to(torch_device)
 
