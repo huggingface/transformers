@@ -470,6 +470,8 @@ class IsaacVisionTransformer(PreTrainedModel):
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pixel_shuffle_scale_factor = config.pixel_shuffle_scale_factor
 
+        self.post_init()
+
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
