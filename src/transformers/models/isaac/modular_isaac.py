@@ -753,14 +753,19 @@ class IsaacConfig(PretrainedConfig):
         vision_token: str = "<image>",
         **kwargs,
     ):
-        attn_implementation = kwargs.get("attn_implementation")
-
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
         elif isinstance(text_config, Qwen3Config):
             self.text_config = text_config
         elif text_config is None:
             self.text_config = self.sub_configs["text_config"]()
+
+        if isinstance(vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**vision_config)
+        elif isinstance(vision_config, IsaacVisionConfig):
+            self.vision_config = vision_config
+        elif vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"]()
 
         # Seed RoPE parameters before base init so the shared mixin can standardize/validate them.
         self.rope_parameters = getattr(self.text_config, "rope_parameters", None)
@@ -786,23 +791,6 @@ class IsaacConfig(PretrainedConfig):
         self.layer_types = getattr(self.text_config, "layer_types", None)
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Handle vision config - either dict or IsaacVisionConfig instance
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif isinstance(vision_config, IsaacVisionConfig):
-            self.vision_config = vision_config
-        elif vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        # Propagate user-requested attention backend to the vision sub-config when provided.
-        if attn_implementation is not None:
-            if isinstance(attn_implementation, dict):
-                vision_attn = attn_implementation.get("vision_config", attn_implementation.get("", None))
-            else:
-                vision_attn = attn_implementation
-            if vision_attn is not None:
-                self.vision_config._attn_implementation = vision_attn
-
         if getattr(self, "_attn_implementation", None) is None:
             self._attn_implementation = "sdpa"
         # Vision normalization parameters
@@ -811,15 +799,6 @@ class IsaacConfig(PretrainedConfig):
         # Processing parameters
         self.max_sequence_length = max_sequence_length
         self.vision_token = vision_token
-
-    def to_dict(self):
-        output = super().to_dict()
-        # Ensure nested configs round-trip through dict serialization
-        if hasattr(self, "text_config") and self.text_config is not None:
-            output["text_config"] = self.text_config.to_dict()
-        if hasattr(self, "vision_config") and self.vision_config is not None:
-            output["vision_config"] = self.vision_config.to_dict()
-        return output
 
 
 class IsaacProcessor(ProcessorMixin):
