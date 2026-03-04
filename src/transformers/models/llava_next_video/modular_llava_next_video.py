@@ -281,7 +281,6 @@ class LlavaNextVideoModel(LlavaNextModel):
         self.post_init()
 
     @can_return_tuple
-    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -354,7 +353,6 @@ class LlavaNextVideoModel(LlavaNextModel):
         return image_outputs
 
     @can_return_tuple
-    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )

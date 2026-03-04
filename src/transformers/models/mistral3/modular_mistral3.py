@@ -121,7 +121,6 @@ class Mistral3PreTrainedModel(LlavaPreTrainedModel):
 
 class Mistral3Model(LlavaModel):
     @can_return_tuple
-    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )

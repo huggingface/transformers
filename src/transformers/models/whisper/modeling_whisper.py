@@ -885,7 +885,6 @@ class WhisperModel(WhisperPreTrainedModel):
         return input_features
 
     @can_return_tuple
-    @merge_with_config_defaults
     @auto_docstring
     def forward(
         self,

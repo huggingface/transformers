@@ -216,7 +216,6 @@ class Mistral3Model(Mistral3PreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
-    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )

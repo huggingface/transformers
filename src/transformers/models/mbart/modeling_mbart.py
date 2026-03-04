@@ -807,7 +807,7 @@ class MBartModel(MBartPreTrainedModel):
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
 
-    @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

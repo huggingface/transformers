@@ -171,7 +171,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
-    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -220,7 +219,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         return image_outputs
 
     @can_return_tuple
-    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )

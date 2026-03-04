@@ -671,7 +671,6 @@ class DiaModel(DiaPreTrainedModel):
         self.decoder = DiaDecoder(config.decoder_config)
         self.post_init()
 
-    @merge_with_config_defaults
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -796,7 +795,6 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @merge_with_config_defaults
     @auto_docstring
     @can_return_tuple
     def forward(

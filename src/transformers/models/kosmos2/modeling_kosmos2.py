@@ -535,8 +535,8 @@ class Kosmos2VisionTransformer(Kosmos2PreTrainedModel):
 
         self.post_init()
 
-    @capture_outputs(tie_last_hidden_states=False)
     @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -996,8 +996,8 @@ class Kosmos2TextTransformer(Kosmos2PreTrainedModel):
 
         return hidden_states
 
-    @capture_outputs
     @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

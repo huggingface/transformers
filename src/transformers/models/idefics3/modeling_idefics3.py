@@ -843,7 +843,6 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         Assistant: The bridge is in San Francisco.
         ```"""
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        # Let decorator handle output_* flags; just forward kwargs through.
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,

@@ -637,8 +637,8 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         return final_embedding, final_attention_mask, final_labels, position_ids, final_input_ids
 
     @merge_with_config_defaults
-    @auto_docstring
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

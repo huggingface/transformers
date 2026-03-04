@@ -401,7 +401,6 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         return new_image_features, feature_lens
 
     @can_return_tuple
-    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -598,7 +597,6 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         )
 
     @can_return_tuple
-    @merge_with_config_defaults
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )

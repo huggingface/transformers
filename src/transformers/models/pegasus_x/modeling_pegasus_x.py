@@ -1147,7 +1147,6 @@ class PegasusXModel(PegasusXPreTrainedModel):
         return (self.encoder.get_position_embeddings(), self.decoder.get_position_embeddings())
 
     @can_return_tuple
-    @merge_with_config_defaults
     @auto_docstring
     def forward(
         self,
@@ -1276,9 +1275,8 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
         """
         return (self.model.encoder.get_position_embeddings(), self.model.decoder.get_position_embeddings())
 
-    @merge_with_config_defaults
-    @auto_docstring
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
