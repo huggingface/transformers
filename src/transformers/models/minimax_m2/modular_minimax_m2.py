@@ -132,11 +132,10 @@ class MiniMaxM2Config(PreTrainedConfig):
     model_type = "minimax_m2"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_rep",
-        "layers.*.self_attn.k_proj": "colwise_rep",
-        "layers.*.self_attn.v_proj": "colwise_rep",
-        "layers.*.self_attn.o_proj": "rowwise_rep",
-        "layers.*.mlp.gate": "colwise_rep",  # we need to replicate here to correctly route experts
+        "layers.*.self_attn.q_proj": "colwise_gather_output",
+        "layers.*.self_attn.k_proj": "colwise_gather_output",
+        "layers.*.self_attn.v_proj": "colwise_gather_output",
+        "layers.*.self_attn.o_proj": "rowwise_split_input",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
