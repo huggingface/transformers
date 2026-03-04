@@ -192,6 +192,14 @@ class SentencePieceExtractor:
             AddedToken(token, normalized=False, special=special)
             for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
         ]
+
+        # Extract precompiled_charsmap from the SentencePiece normalizer spec so that
+        # TokenizersBackend can apply the correct Precompiled normalizer instead of
+        # inferring one from Python-level parameters (e.g. do_lower_case / keep_accents).
+        charsmap = getattr(getattr(self.proto, "normalizer_spec", None), "precompiled_charsmap", None)
+        if charsmap:
+            kwargs["_spm_precompiled_charsmap"] = charsmap
+
         return kwargs
 
 

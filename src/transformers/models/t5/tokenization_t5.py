@@ -15,7 +15,7 @@
 
 import re
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors, normalizers, Regex
 from tokenizers.models import Unigram
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -25,7 +25,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
-
 
 class T5Tokenizer(TokenizersBackend):
     """
@@ -74,6 +73,7 @@ class T5Tokenizer(TokenizersBackend):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
+        _spm_precompiled_charsmap=None,
         extra_ids=100,
         additional_special_tokens=None,
         **kwargs,
@@ -116,15 +116,15 @@ class T5Tokenizer(TokenizersBackend):
             )
         )
 
-        self._tokenizer.normalizer = None
+        normalizers_ = [
+            normalizers.Strip(left=False, right=True),  # stripping is important
+            normalizers.Replace(Regex(" {2,}"), "▁"),
+        ]
+        if _spm_precompiled_charsmap is not None:
+            normalizers_ += [normalizers.Precompiled(_spm_precompiled_charsmap)]
 
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.WhitespaceSplit(),
-                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
-            ]
-        )
-
+        self._tokenizer.normalizer = normalizers.Sequence(normalizers_)
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         super().__init__(
