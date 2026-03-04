@@ -20,7 +20,7 @@ import warnings
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional, Protocol, cast
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import torch
 import torch.distributed as dist
@@ -110,17 +110,10 @@ from .stopping_criteria import (
 
 
 if TYPE_CHECKING:
-    from .._typing import GenerativePreTrainedModel as _GenerativePreTrainedModel
+    from .._typing import GenerativePreTrainedModel
     from ..modeling_utils import PreTrainedModel
     from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .streamers import BaseStreamer
-
-    class GenerativePreTrainedModel(_GenerativePreTrainedModel, Protocol):
-        _cache: Cache
-
-        # GenerationMixin calls many of its own helper methods through `self`; keep those dynamic lookups valid.
-        def __getattr__(self, name: str) -> Any: ...
-
 
 logger = logging.get_logger(__name__)
 
