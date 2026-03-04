@@ -26,12 +26,7 @@ from transformers import (
     VibeVoiceForConditionalGeneration,
     is_torch_available,
 )
-from transformers.testing_utils import (
-    cleanup,
-    require_diffusers,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import cleanup, is_diffusers_available, require_diffusers, slow, torch_device
 from transformers.trainer_utils import set_seed
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -44,6 +39,10 @@ from ...test_modeling_common import (
 
 if is_torch_available():
     import torch
+
+
+if is_diffusers_available():
+    import diffusers
 
 
 class DummyNoiseScheduler:
@@ -432,9 +431,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         # Generate audio
-        from diffusers import DPMSolverMultistepScheduler
-
-        noise_scheduler = DPMSolverMultistepScheduler(
+        noise_scheduler = diffusers.DPMSolverMultistepScheduler(
             beta_schedule="squaredcos_cap_v2", prediction_type="v_prediction"
         )
         generated_speech = model.generate(
@@ -507,9 +504,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).to(torch_device, dtype=model.dtype)
 
         # Generate audio
-        from diffusers import DPMSolverMultistepScheduler
-
-        noise_scheduler = DPMSolverMultistepScheduler(
+        noise_scheduler = diffusers.DPMSolverMultistepScheduler(
             beta_schedule="squaredcos_cap_v2", prediction_type="v_prediction"
         )
         generated_speech = model.generate(
