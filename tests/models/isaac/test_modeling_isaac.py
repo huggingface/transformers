@@ -38,10 +38,12 @@ from transformers import (
     is_torch_available,
 )
 from transformers.image_utils import load_image
+from transformers.masking_utils import create_bidirectional_mask
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
 from transformers.models.isaac.modeling_isaac import (
     IsaacVisionAttention,
     IsaacVisionConfig,
+    pixel_shuffle_padded,
 )
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import (
@@ -233,6 +235,35 @@ def infer_pad_from_tail(sequence: torch.Tensor) -> tuple[int | None, int]:
     return pad_candidate, idx
 
 
+def _pixel_shuffle_reference(x: torch.Tensor, token_grids: torch.Tensor, scale_factor: int):
+    num_images, _, embed_dim = x.shape
+    output_lengths = []
+    for i in range(num_images):
+        h, w = token_grids[i].tolist()
+        output_lengths.append((h // scale_factor) * (w // scale_factor))
+
+    max_output_tokens = max(output_lengths, default=0)
+    output_dim = embed_dim * scale_factor * scale_factor
+    out = x.new_zeros((num_images, max_output_tokens, output_dim))
+    out_mask = torch.zeros((num_images, max_output_tokens), device=x.device, dtype=torch.long)
+
+    for i in range(num_images):
+        h, w = token_grids[i].tolist()
+        if h == 0 or w == 0:
+            continue
+        seq_len = h * w
+        tokens = x[i, :seq_len]
+        hb, wb = h // scale_factor, w // scale_factor
+        t = tokens.view(h, w, embed_dim).permute(2, 0, 1).unsqueeze(0)
+        t = torch.nn.functional.pixel_unshuffle(t, downscale_factor=scale_factor)
+        t = t.view(1, embed_dim, scale_factor, scale_factor, hb, wb)
+        t = t.permute(0, 4, 5, 2, 3, 1).contiguous().view(hb * wb, output_dim)
+        out[i, : hb * wb] = t
+        out_mask[i, : hb * wb] = 1
+
+    return out, out_mask, torch.tensor(output_lengths, device=x.device, dtype=torch.long)
+
+
 def create_isaac_processor(
     tokenizer,
     isaac_config,
@@ -276,6 +307,24 @@ def create_isaac_processor(
         tokenizer=tokenizer,
         **processor_params,
     )
+
+
+def to_model_multimodal_inputs(processor_output, device):
+    keys = (
+        "modality_tensor",
+        "position_ids",
+        "vision_patches",
+        "vision_patch_attention_mask",
+        "vision_token_grids",
+        "vision_token_offsets",
+        "vision_token_lengths",
+        "vision_image_attention_mask",
+    )
+    return {
+        key: (value.to(device) if isinstance(value, torch.Tensor) else value)
+        for key, value in processor_output.items()
+        if key in keys
+    }
 
 
 @lru_cache(maxsize=1)
@@ -387,7 +436,7 @@ class IsaacModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.is_training = True
-        self.expected_num_hidden_layers = 1
+        self.expected_num_hidden_layers = num_hidden_layers + 1
 
         self.text_config = {
             "bos_token_id": 0,
@@ -566,6 +615,33 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 
 @require_torch
+class IsaacPixelShufflePaddedTest(unittest.TestCase):
+    def test_pixel_shuffle_padded_matches_reference_no_attention_mask(self):
+        x = torch.arange(2 * 16 * 4, device=torch_device, dtype=torch.float32).view(2, 16, 4)
+        token_grids = torch.tensor([[4, 4], [2, 4]], device=torch_device, dtype=torch.long)
+        expected_hidden, expected_mask, expected_lengths = _pixel_shuffle_reference(x, token_grids, scale_factor=2)
+
+        hidden = pixel_shuffle_padded(x=x, token_grids=token_grids, scale_factor=2)
+
+        torch.testing.assert_close(hidden, expected_hidden)
+
+    def test_pixel_shuffle_padded_raises_on_non_divisible_grid(self):
+        x = torch.randn(1, 15, 8, device=torch_device)
+        token_grids = torch.tensor([[3, 5]], device=torch_device, dtype=torch.long)
+
+        with pytest.raises(ValueError, match="divisible"):
+            pixel_shuffle_padded(x=x, token_grids=token_grids, scale_factor=2)
+
+    def test_pixel_shuffle_padded_zero_grid(self):
+        x = torch.randn(1, 4, 8, device=torch_device)
+        token_grids = torch.tensor([[0, 0]], device=torch_device, dtype=torch.long)
+
+        hidden = pixel_shuffle_padded(x=x, token_grids=token_grids, scale_factor=2)
+
+        self.assertEqual(hidden.shape, (1, 0, 32))
+
+
+@require_torch
 @require_flash_attn
 class IsaacAttentionDtypeTest(unittest.TestCase):
     def _make_config(self):
@@ -624,7 +700,7 @@ class IsaacAttentionDtypeTest(unittest.TestCase):
         assert attn_output.dtype == attn.out_proj.weight.dtype
         assert attn_output.dtype == hidden_states.dtype
 
-    def test_flash_attention_matches_weight_dtype_bf16_with_cu_seqlens(self):
+    def test_flash_attention_matches_weight_dtype_bf16_with_prepared_mask(self):
         self._skip_if_no_cuda_bf16()
         torch.manual_seed(0)
 
@@ -635,10 +711,15 @@ class IsaacAttentionDtypeTest(unittest.TestCase):
         attn = IsaacVisionAttention(config).to(device=device, dtype=torch.bfloat16).eval()
 
         hidden_states = torch.randn(1, 5, config.hidden_size, device=device, dtype=torch.bfloat16)
-        cu_seqlens = torch.tensor([0, 3, 5], device=device, dtype=torch.int32)
+        attention_mask = torch.tensor([[1, 1, 1, 0, 0]], device=device, dtype=torch.long)
+        prepared_attention_mask = create_bidirectional_mask(
+            config=config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
 
         with torch.no_grad():
-            attn_output, _ = attn(hidden_states, cu_seqlens=cu_seqlens, max_seqlen=3)
+            attn_output, _ = attn(hidden_states, attention_mask=prepared_attention_mask)
 
         assert attn_output.dtype == attn.out_proj.weight.dtype
         assert attn_output.dtype == hidden_states.dtype
@@ -702,7 +783,6 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
     def _generate_from_messages(self, messages, images, num_tokens=None):
         prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
         processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
-        packed_inputs = processor_output["packed_inputs"]
         input_ids = processor_output["input_ids"].to(self.device)
         attention_mask = processor_output.get("attention_mask")
         if attention_mask is None:
@@ -712,16 +792,13 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
             attention_mask = processor_output["input_ids"].ne(pad_id).long()
         attention_mask = attention_mask.to(self.device)
         prompt_len = input_ids.shape[1]
-        packed_inputs = {
-            key: (value.to(self.device) if isinstance(value, torch.Tensor) else value)
-            for key, value in packed_inputs.items()
-        }
+        multimodal_inputs = to_model_multimodal_inputs(processor_output, self.device)
 
         with torch.no_grad():
             outputs = self.model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                packed_inputs=packed_inputs,
+                **multimodal_inputs,
                 max_new_tokens=num_tokens or self.max_new_tokens,
                 do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,
@@ -796,16 +873,13 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         input_ids = input_ids.to(self.device)
         attention_mask = attention_mask.to(self.device)
 
-        packed_inputs = {
-            k: (v.to(self.device) if isinstance(v, torch.Tensor) else v)
-            for k, v in processor_output["packed_inputs"].items()
-        }
+        multimodal_inputs = to_model_multimodal_inputs(processor_output, self.device)
 
         with torch.no_grad():
             outputs = self.model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                packed_inputs=packed_inputs,
+                **multimodal_inputs,
                 max_new_tokens=num_tokens or self.max_new_tokens,
                 do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,
@@ -836,17 +910,15 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         ]
         prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
         processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
-        packed_inputs = processor_output["packed_inputs"]
         input_ids = processor_output["input_ids"]
         device = next(self.model.parameters()).device
         input_ids = input_ids.to(device)
-        # Move packed tensors to model device
-        packed_inputs = {k: (v.to(device) if isinstance(v, torch.Tensor) else v) for k, v in packed_inputs.items()}
+        multimodal_inputs = to_model_multimodal_inputs(processor_output, device)
 
         with torch.no_grad():
             outputs = self.model.generate(
                 input_ids=input_ids,
-                packed_inputs=packed_inputs,
+                **multimodal_inputs,
                 max_new_tokens=num_tokens or self.max_new_tokens,
                 do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,
@@ -938,22 +1010,16 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         ]
         batch_outputs = self.processor(text=prompts, images=images_list, return_tensors="pt")
         batch_input_ids = batch_outputs["input_ids"]
-        batch_packed = batch_outputs["packed_inputs"]
+        batch_packed = batch_outputs
 
         sample_lengths = [output["input_ids"].squeeze(0).shape[0] for output in per_sample_outputs]
         max_length = max(sample_lengths)
-
-        expected_vision_patches = []
-        expected_vision_grids = []
-        expected_vision_offsets = []
-        expected_vision_lengths = []
-        expected_vision_batch_indices = []
 
         for i, (single_output, batch_ids, single_len) in enumerate(
             zip(per_sample_outputs, batch_input_ids, sample_lengths)
         ):
             single_ids = single_output["input_ids"].squeeze(0)
-            single_packed = single_output["packed_inputs"]
+            single_packed = single_output
 
             torch.testing.assert_close(batch_ids[-single_len:], single_ids)
 
@@ -975,11 +1041,22 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
             torch.testing.assert_close(batch_positions_row, expected_positions)
 
             if single_packed["vision_patches"] is not None:
-                expected_vision_patches.append(single_packed["vision_patches"])
-                expected_vision_grids.append(single_packed["vision_token_grids"])
-                expected_vision_offsets.append(single_packed["vision_token_offsets"])
-                expected_vision_lengths.append(single_packed["vision_token_lengths"])
-                expected_vision_batch_indices.append(torch.full_like(single_packed["vision_token_batch_indices"], i))
+                expected_image_count = int(single_packed["vision_image_attention_mask"].sum().item())
+                batch_image_count = int(batch_packed["vision_image_attention_mask"][i].sum().item())
+                assert batch_image_count == expected_image_count
+                if expected_image_count > 0:
+                    torch.testing.assert_close(
+                        batch_packed["vision_token_grids"][i, :expected_image_count],
+                        single_packed["vision_token_grids"][0, :expected_image_count],
+                    )
+                    torch.testing.assert_close(
+                        batch_packed["vision_token_offsets"][i, :expected_image_count],
+                        single_packed["vision_token_offsets"][0, :expected_image_count],
+                    )
+                    torch.testing.assert_close(
+                        batch_packed["vision_token_lengths"][i, :expected_image_count],
+                        single_packed["vision_token_lengths"][0, :expected_image_count],
+                    )
 
             if single_len == max_length:
                 continue
@@ -991,20 +1068,11 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
             assert not torch.any(attention_mask[: max_length - single_len]), f"sample {i} mask ones inside left pad"
             assert torch.all(attention_mask[-single_len:]), f"sample {i} mask zeros inside content"
 
-        if expected_vision_patches:
-            torch.testing.assert_close(batch_packed["vision_patches"], torch.cat(expected_vision_patches, dim=0))
-            torch.testing.assert_close(batch_packed["vision_token_grids"], torch.cat(expected_vision_grids, dim=0))
-            torch.testing.assert_close(batch_packed["vision_token_offsets"], torch.cat(expected_vision_offsets, dim=0))
-            torch.testing.assert_close(batch_packed["vision_token_lengths"], torch.cat(expected_vision_lengths, dim=0))
-            torch.testing.assert_close(
-                batch_packed["vision_token_batch_indices"], torch.cat(expected_vision_batch_indices, dim=0)
-            )
-        else:
-            assert batch_packed["vision_patches"] is None
-            assert batch_packed["vision_token_grids"] is None
-            assert batch_packed["vision_token_offsets"] is None
-            assert batch_packed["vision_token_lengths"] is None
-            assert batch_packed["vision_token_batch_indices"] is None
+        assert batch_packed["vision_patches"] is not None
+        assert batch_packed["vision_token_grids"] is not None
+        assert batch_packed["vision_token_offsets"] is not None
+        assert batch_packed["vision_token_lengths"] is not None
+        assert batch_packed["vision_image_attention_mask"] is not None
 
         batch_texts = self._generate_batch(prompts, images_list, num_tokens=100)
         assert len(batch_texts) == len(single_texts) == 3
@@ -1058,18 +1126,14 @@ class IsaacBoxPointingIntegrationTest(unittest.TestCase):
         messages, images = document_to_messages(document, vision_token=self.hf_config.vision_token)
         prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
         processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
-        packed_inputs = processor_output["packed_inputs"]
         input_ids = processor_output["input_ids"].to(self.device)
         prompt_len = input_ids.shape[1]
-        packed_inputs = {
-            key: (value.to(self.device) if isinstance(value, torch.Tensor) else value)
-            for key, value in packed_inputs.items()
-        }
+        multimodal_inputs = to_model_multimodal_inputs(processor_output, self.device)
 
         with torch.no_grad():
             outputs = self.model.generate(
                 input_ids=input_ids,
-                packed_inputs=packed_inputs,
+                **multimodal_inputs,
                 max_new_tokens=self.max_new_tokens,
                 do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,

@@ -19,13 +19,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 from ...image_processing_utils_fast import ImagesKwargs
 
 
 class IsaacImageProcessorKwargs(ImagesKwargs, total=False):
-    patch_size: Optional[int]
-    max_num_patches: Optional[int]
-    min_num_patches: Optional[int]
-    pixel_shuffle_scale: Optional[int]
+    patch_size: int | None
+    max_num_patches: int | None
+    min_num_patches: int | None
+    pixel_shuffle_scale: int | None

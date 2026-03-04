@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Perceptron, Inc and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,10 +16,11 @@ from __future__ import annotations
 
 import copy
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from enum import IntEnum
-from typing import Any, Optional, Union
+from typing import Any
 
+from ... import initialization as init
 from ...cache_utils import DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...feature_extraction_utils import BatchFeature
@@ -35,23 +35,29 @@ from ...image_processing_utils_fast import (
 from ...image_utils import (
     PILImageResampling,
 )
-from ...masking_utils import ALL_MASK_ATTENTION_FUNCTIONS, create_masks_for_generate, packed_sequence_mask_function
+from ...masking_utils import create_bidirectional_mask, create_masks_for_generate
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...models.qwen3.configuration_qwen3 import Qwen3Config
-from ...models.qwen3.modeling_qwen3 import Qwen3Attention, Qwen3ForCausalLM, Qwen3Model, Qwen3PreTrainedModel
+from ...models.qwen3.modeling_qwen3 import (
+    Qwen3Attention,
+    Qwen3DecoderLayer,
+    Qwen3ForCausalLM,
+    Qwen3Model,
+    Qwen3PreTrainedModel,
+)
 from ...processing_utils import ProcessorMixin, Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, torch_compilable_check
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from ...utils.generic import OutputRecorder, TransformersKwargs, can_return_tuple, check_model_inputs, maybe_autocast
+from ...utils.generic import TransformersKwargs, can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import (
     is_torch_available,
     is_torchdynamo_compiling,
     is_torchvision_available,
     is_vision_available,
 )
-from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLRotaryEmbedding
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
@@ -139,10 +145,21 @@ class IsaacVisionConfig(Siglip2VisionConfig):
 
 
 class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
-    patch_size: Optional[int]
-    max_num_patches: Optional[int]
-    min_num_patches: Optional[int]
-    pixel_shuffle_scale: Optional[int]
+    """
+    patch_size (`int`, *optional*):
+        Side length (in pixels) for square patches extracted from resized images.
+    max_num_patches (`int`, *optional*):
+        Upper bound on extracted patches per image after resizing.
+    min_num_patches (`int`, *optional*):
+        Lower bound on extracted patches per image after resizing.
+    pixel_shuffle_scale (`int`, *optional*):
+        Pixel-shuffle reduction factor applied in the vision tower.
+    """
+
+    patch_size: int | None
+    max_num_patches: int | None
+    min_num_patches: int | None
+    pixel_shuffle_scale: int | None
 
 
 @auto_docstring
@@ -156,10 +173,10 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     do_resize = True
     do_center_crop = False
-    patch_size: Optional[int] = 16
-    max_num_patches: Optional[int] = 256
-    min_num_patches: Optional[int] = None
-    pixel_shuffle_scale: Optional[int] = 1
+    patch_size: int | None = 16
+    max_num_patches: int | None = 256
+    min_num_patches: int | None = None
+    pixel_shuffle_scale: int | None = 1
     do_pad = False
     do_rescale = True
     do_normalize = True
@@ -168,19 +185,9 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     disable_grouping = False
 
-    def __init__(
-        self,
-        **kwargs: Unpack[IsaacImageProcessorFastKwargs],
-    ) -> None:
-        super().__init__(**kwargs)
-
     def _validate_preprocess_kwargs(self, **kwargs):
         # Allow callers to omit resize-related placeholders that BaseImageProcessorFast checks for.
         kwargs.pop("do_resize", None)
-        kwargs.pop("size", None)
-        kwargs.pop("do_center_crop", None)
-        kwargs.pop("crop_size", None)
-        kwargs.pop("disable_grouping", None)
         return super()._validate_preprocess_kwargs(**kwargs)
 
     def resize(
@@ -189,33 +196,25 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         **kwargs,
     ) -> torch.Tensor:
-        resize_kwargs: dict[str, Any] = {"align_corners": False}
-        resize_mode = "bilinear"
-
-        return F.interpolate(
-            image,
-            size=(size.height, size.width),
-            mode=resize_mode,
-            **resize_kwargs,
-        )
+        return F.interpolate(image, size=(size.height, size.width), mode="bilinear", align_corners=False)
 
     def _preprocess(
         self,
         images: list[torch.Tensor],
         do_resize: bool,
-        interpolation: Optional[Any],
-        do_rescale: Optional[bool],
-        rescale_factor: Optional[float],
-        do_normalize: Optional[bool],
-        image_mean: Optional[Union[float, Sequence[float]]],
-        image_std: Optional[Union[float, Sequence[float]]],
-        disable_grouping: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        interpolation: Any | None,
+        do_rescale: bool | None,
+        rescale_factor: float | None,
+        do_normalize: bool | None,
+        image_mean: float | Sequence[float] | None,
+        image_std: float | Sequence[float] | None,
+        disable_grouping: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         *,
-        patch_size: Optional[int] = None,
-        max_num_patches: Optional[int] = None,
-        min_num_patches: Optional[int] = None,
-        pixel_shuffle_scale: Optional[int] = None,
+        patch_size: int | None = None,
+        max_num_patches: int | None = None,
+        min_num_patches: int | None = None,
+        pixel_shuffle_scale: int | None = None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -334,308 +333,130 @@ class IsaacVisionEmbeddings(Siglip2VisionEmbeddings):
         )
         nn.init.normal_(self.position_embedding)
 
-    @check_model_inputs
-    def forward(self, seq_patches: torch.Tensor, spatial_shapes: torch.Tensor) -> torch.Tensor:
-        # Rebatch packed variable-resolution patches to resize per-image position embeddings
-        # and track lengths for varlen attention metadata.
-        packed_pixel_values, seq_lengths = self._pack_to_batch(seq_patches, spatial_shapes)
-        if packed_pixel_values is None:
-            return seq_patches.new_zeros((0, self.embed_dim))
-
-        target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(packed_pixel_values.to(dtype=target_dtype))
-
-        positional_embeddings = self.position_embedding
-        resized_positional_embeddings = self.resize_positional_embeddings(
-            positional_embeddings, spatial_shapes, max_length=packed_pixel_values.shape[1]
-        )
-
-        embeddings = patch_embeds + resized_positional_embeddings
-        return self._unpack_from_batch(embeddings, seq_lengths)
-
-    def _pack_to_batch(
+    @merge_with_config_defaults
+    @capture_outputs
+    def forward(
         self,
-        seq_patches: torch.Tensor,
+        pixel_values: torch.Tensor,
         spatial_shapes: torch.Tensor,
-    ) -> tuple[Optional[torch.Tensor], torch.Tensor]:
-        """Rebatch a packed patch sequence using per-image grids to align embeddings.
+        attention_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        # pixel_values: (num_images, max_patches, patch_dim)
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
 
-        Args:
-            seq_patches: Packed patches of shape (total_patches, patch_dim).
-            spatial_shapes: Per-image patch grids of shape (num_images, 2) as (H_tokens, W_tokens).
+        resized_positional_embeddings = self.resize_positional_embeddings(
+            self.position_embedding,
+            spatial_shapes,
+            max_length=pixel_values.shape[1],
+        )
+        embeddings = patch_embeds + resized_positional_embeddings
 
-        Returns:
-            (packed_pixel_values, seq_lengths) where:
-            - packed_pixel_values: (batch, max_len, patch_dim) padded with zeros, or None if batch_size == 0
-            - seq_lengths: (batch,) lengths for each image
-        """
-        seq_lengths = spatial_shapes.long().prod(dim=-1)  # (B,)
-        batch_size = int(seq_lengths.numel())
-        if batch_size == 0:
-            return None, seq_lengths
+        if attention_mask is not None:
+            embeddings = embeddings * attention_mask.unsqueeze(-1).to(dtype=embeddings.dtype)
 
-        # Split the packed sequence into per-image chunks, then pad to a batch
-        lengths_list = seq_lengths.tolist()
-        chunks = seq_patches.split(lengths_list, dim=0)
-        packed_pixel_values = nn.utils.rnn.pad_sequence(chunks, batch_first=True)  # zero-padded by default
-        return packed_pixel_values, seq_lengths
-
-    def _unpack_from_batch(self, embeddings: torch.Tensor, seq_lengths: torch.Tensor) -> torch.Tensor:
-        """Flatten a padded batch back to packed sequence order using `seq_lengths`."""
-        lengths = seq_lengths.to(device=embeddings.device).tolist()
-        chunks = [embeddings[i, :l] for i, l in enumerate(lengths) if l > 0]
-        return torch.cat(chunks, dim=0)
+        return embeddings
 
 
 class IsaacVisionAttention(Siglip2Attention):
     """Custom attention that supports variable-length sequences with flash/SDPA backends."""
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        **kwargs,
-    ):
-        batch_size, seq_length, embed_dim = hidden_states.shape
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
-
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attn_impl = self.config._attn_implementation
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS["sdpa"]
-        if attn_impl != "sdpa":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[attn_impl]
-
-        seq_sizes = kwargs.pop("seq_sizes", None)
-
-        attention_kwargs: dict[str, Any] = {
-            "is_causal": False,
-            "scaling": self.scale,
-        }
-
-        if seq_sizes is not None and seq_sizes.numel() > 0:
-            if attn_impl in {"flash_attention_2", "flash_attention_3"}:
-                cu_seqlens = F.pad(seq_sizes.cumsum(0).to(torch.int32), (1, 0))
-                max_len = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
-                attention_kwargs.update(
-                    {
-                        "cu_seq_lens_q": cu_seqlens,
-                        "cu_seq_lens_k": cu_seqlens,
-                        "max_length_q": max_len,
-                        "max_length_k": max_len,
-                    }
-                )
-            else:
-                seg_ids = torch.repeat_interleave(
-                    torch.arange(seq_sizes.numel(), device=seq_sizes.device), seq_sizes
-                ).view(1, -1)
-                mask_function = packed_sequence_mask_function(seg_ids)
-                cache_position = torch.arange(seq_length, device=hidden_states.device, dtype=torch.long)
-                mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[attn_impl]
-                attention_mask = mask_interface(
-                    batch_size=batch_size,
-                    cache_position=cache_position,
-                    kv_length=seq_length,
-                    kv_offset=0,
-                    mask_function=mask_function,
-                    attention_mask=attention_mask,
-                    allow_is_causal_skip=False,
-                    allow_is_bidirectional_skip=False,
-                    dtype=hidden_states.dtype,
-                    config=self.config,
-                    use_vmap=False,
-                )
-        else:
-            attention_mask = None
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            **attention_kwargs,
-        )
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights
+    pass
 
 
 class IsaacVisionEncoderLayer(Siglip2EncoderLayer):
-    """Isaac vision encoder layer with variable-length attention."""
+    """Isaac vision encoder layer using the shared attention interfaces."""
 
     def __init__(self, config: IsaacVisionConfig):
         super().__init__(config)
         self.self_attn = IsaacVisionAttention(config)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        r"""
-        Variable-length metadata (e.g., `seq_sizes`) flows via `**kwargs` to attention for backend-specific handling.
-        """
-        # Run attention directly so variable-length metadata reaches FlashAttention.
-        residual = hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
-        attn_output, _ = self.self_attn(
-            hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            **kwargs,
-        )
-
-        hidden_states = residual + attn_output
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
-
 
 class IsaacVisionEncoder(Siglip2Encoder):
-    """Encoder using Isaac encoder layers with variable-length attention support."""
+    """Encoder using Isaac encoder layers."""
 
     def __init__(self, config: IsaacVisionConfig):
         super().__init__(config)
         self.layers = nn.ModuleList([IsaacVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
 
-def create_pixel_shuffle_index_map(
-    seq_sizes: torch.Tensor,
-    token_grids: torch.Tensor,
-    scale_factor: int = 1,
-    device: Optional[torch.device] = None,
-) -> torch.Tensor:
-    """
-    Build a gather-index map that tells us, for every *output* token after
-    pixel-shuffle, which `scale_factor**2` *input* tokens are being merged.
-
-    Args
-    ----
-    seq_sizes     : (num_images,)  - #patches in each image (row-major order)
-    token_grids   : (num_images,2) - (height, width) for every image
-    scale_factor  : spatial down-scale factor (≥2)
-    device        : (optional) overrides `seq_sizes.device`
-
-    Returns
-    -------
-    gather_idx : (new_total_seq_len, scale_factor**2) int64 tensor.
-                 gather_idx[i, j] is the *flat* index into the *original*
-                 packed sequence for the j-th sub-patch that forms the
-                 i-th output token.
-    """
-    if not is_torchdynamo_compiling():
-        if (token_grids % scale_factor).any():
-            raise AssertionError(
-                f"Every (H,W) in token_grids must be divisible by scale_factor={scale_factor}, got {token_grids.tolist()}"
-            )
-
-    gather_chunks: list[torch.Tensor] = []
-    tok_offset = 0
-    for seq_len, (h, w) in zip(seq_sizes.tolist(), token_grids.tolist()):
-        # Flat indices for this image's packed segment
-        grid = torch.arange(seq_len, device=device, dtype=torch.int64).view(h, w) + tok_offset
-
-        # Block into (H/s, W/s) groups; each group contributes s*s indices
-        grid = (
-            grid.view(h // scale_factor, scale_factor, w // scale_factor, scale_factor)
-            .permute(0, 2, 1, 3)
-            .contiguous()
-        )
-        gather_chunks.append(grid.view(-1, scale_factor * scale_factor))
-
-        tok_offset += seq_len
-
-    return torch.cat(gather_chunks, dim=0)
-
-
-def pixel_shuffle_varlen(
+def pixel_shuffle_padded(
     x: torch.Tensor,
     token_grids: torch.Tensor,
     scale_factor: int = 1,
 ) -> torch.Tensor:
-    r"""Apply pixel shuffle to a packed vision sequence without unpacking per image.
+    """Apply pixel shuffle per image on padded batched vision embeddings.
 
     Args:
         x (`torch.Tensor`):
-            Concatenated vision embeddings. Accepts `(seq_len, hidden_size)` or `(1, seq_len, hidden_size)` shapes
-            produced by stacking image patches.
+            Vision embeddings of shape `(num_images, max_patches, hidden_size)`.
         token_grids (`torch.Tensor`):
-            Integer tensor of shape `(num_images, 2)` whose rows give the `(height, width)` patch grid sizes
-            corresponding to each image segment inside `x`.
+            Grid sizes `(height, width)` per image, shape `(num_images, 2)`.
         scale_factor (`int`, *optional*, defaults to 1):
-            Spatial down-sampling factor specific to pixel shuffle. Values greater than one merge `scale_factor**2` neighboring patches into a
-            single embedding channel-group.
+            Spatial down-sampling factor.
 
     Returns:
-        `torch.Tensor`: Pixel-shuffled embeddings with shape matching the input convention:
-        `(seq_len, hidden_size * scale_factor**2)` when the input was 2D, or `(1, seq_len, hidden_size * scale_factor**2)`
-        if the singleton batch dimension was present.
-
-    Raises:
-        ValueError: If more than one batch item is provided.
+        Tuple of:
+            - pixel-shuffled embeddings `(num_images, max_tokens, hidden_size * scale_factor**2)`
+            - attention mask `(num_images, max_tokens)`
+            - per-image valid token lengths `(num_images,)`
     """
-    return_with_batch_dim = x.dim() == 3
-    if return_with_batch_dim:
-        if x.size(0) != 1:
-            raise ValueError(
-                f"Packed vision sequences expect a singleton batch dimension; received batch_size={x.size(0)}."
-            )
-        embeddings = x.squeeze(0)  # (seq, embed)
-    else:
-        embeddings = x  # (seq, embed)
+    num_images, max_patches, embed_dim = x.shape
+    output_dim = embed_dim * scale_factor * scale_factor
 
-    embed_dim = embeddings.size(-1)
-    scale_factor = int(scale_factor)
+    token_grids = token_grids.to(device=x.device, dtype=torch.long)
+    heights = token_grids[:, 0]
+    widths = token_grids[:, 1]
+    full_lengths = heights * widths
 
-    # Calculate seq_sizes from token_grids
-    seq_sizes = torch.prod(token_grids, dim=-1)
+    non_empty = full_lengths > 0
+    if not is_torchdynamo_compiling():
+        divisible = ((heights % scale_factor) == 0) & ((widths % scale_factor) == 0)
+        torch_compilable_check(
+            (~non_empty) | divisible,
+            f"Every non-empty (H, W) grid must be divisible by pixel_shuffle_scale={scale_factor}.",
+        )
 
-    # Build a single gather index so pixel shuffle works on the packed stream
-    # without unpacking per-image grids.
-    gather_idx = create_pixel_shuffle_index_map(
-        seq_sizes=seq_sizes,
-        token_grids=token_grids,
-        scale_factor=scale_factor,
-        device=embeddings.device,
-    )  # (new_seq, scale_factor**2)
+    output_lengths = (heights // scale_factor) * (widths // scale_factor)
+    max_output_tokens = output_lengths.max()
+    shuffled_4d = x.new_zeros((num_images, max_output_tokens, scale_factor * scale_factor, embed_dim))
 
-    # Gather → (new_seq, scale_factor**2, embed_dim)
-    gathered = embeddings[gather_idx]  # fancy indexing keeps gradient
+    token_positions = torch.arange(max_patches, device=x.device, dtype=torch.long).unsqueeze(0).expand(num_images, -1)
+    valid_token_mask = token_positions < full_lengths.unsqueeze(1)
 
-    # Merge the scale_factor**2 group dimension into channels to finish the shuffle
-    out = gathered.reshape(gathered.size(0), embed_dim * scale_factor * scale_factor)
+    safe_widths = torch.where(widths > 0, widths, torch.ones_like(widths))
+    row_index = torch.div(token_positions, safe_widths.unsqueeze(1), rounding_mode="floor")
+    col_index = token_positions.remainder(safe_widths.unsqueeze(1))
 
-    # Restore batch dimension if needed
-    if return_with_batch_dim:
-        out = out.unsqueeze(0)
-    return out
+    output_widths = widths.div(scale_factor, rounding_mode="floor")
+    output_index = row_index.div(scale_factor, rounding_mode="floor") * output_widths.unsqueeze(1)
+    output_index = output_index + col_index.div(scale_factor, rounding_mode="floor")
+    sub_index = row_index.remainder(scale_factor) * scale_factor + col_index.remainder(scale_factor)
+
+    batch_index = torch.arange(num_images, device=x.device, dtype=torch.long).unsqueeze(1).expand_as(token_positions)
+    shuffled_4d[batch_index[valid_token_mask], output_index[valid_token_mask], sub_index[valid_token_mask]] = x[
+        valid_token_mask
+    ]
+
+    shuffled = shuffled_4d.view(num_images, max_output_tokens, output_dim)
+    return shuffled
 
 
 class IsaacVisionTransformer(PreTrainedModel):
-    """Vision tower that packs variable-resolution patches, applies varlen attention, and pixel-shuffles outputs.
+    """Vision tower for padded variable-resolution patches with per-image masks.
 
     Args:
         config (IsaacVisionConfig): Vision configuration with pixel-shuffle and patching parameters.
 
     Inputs:
-        packed_seq_patches (Tuple[Tensor, Tensor]): ``(patches, token_grids)`` where ``patches`` is a packed
-            patch sequence and ``token_grids`` holds per-image (H_tokens, W_tokens).
+        vision_tokens (Tuple[Tensor, Tensor, Optional[Tensor]]):
+            `(patches, token_grids, patch_attention_mask)` where:
+            - `patches`: `(num_images, max_patches, patch_dim)`
+            - `token_grids`: `(num_images, 2)` with per-image `(H_tokens, W_tokens)`
+            - `patch_attention_mask`: `(num_images, max_patches)` or `None`
 
     Returns:
-        torch.Tensor: Vision embeddings after encoder + pixel shuffle, shaped ``(seq_len, hidden_size * s^2)``.
+        Tuple of `(pixel_shuffled_features, attention_mask, token_lengths)`.
     """
 
     _supports_sdpa = True
@@ -649,44 +470,42 @@ class IsaacVisionTransformer(PreTrainedModel):
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pixel_shuffle_scale_factor = config.pixel_shuffle_scale_factor
 
+        self.post_init()
+
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, IsaacVisionEmbeddings):
             init.zeros_(module.position_embedding)
 
-    def forward(self, packed_seq_patches: tuple[torch.Tensor, torch.Tensor]):
-        seq_patches, token_grids = packed_seq_patches
-        seq_sizes = torch.prod(token_grids, dim=-1)
-
-        # Get embeddings from packed sequence
-        hidden_states = self.embeddings(seq_patches, token_grids)
-
-        # Add a pseudo batch dimension so we can reuse the batch-first encoder stack
-        # while still driving per-image sequence metadata through the varlen attention path.
-        hidden_states = hidden_states.unsqueeze(0)
-
-        # Pass through encoder with variable-length metadata for attention
-        encoder_outputs = self.encoder(
-            inputs_embeds=hidden_states,
-            attention_mask=None,
-            seq_sizes=seq_sizes,
+    def forward(
+        self,
+        vision_tokens: tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor | None],
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if len(vision_tokens) == 2:
+            seq_patches, token_grids = vision_tokens
+            vision_patch_attention_mask = None
+        else:
+            seq_patches, token_grids, vision_patch_attention_mask = vision_tokens
+        hidden_states = self.embeddings(
+            seq_patches,
+            token_grids,
+            attention_mask=vision_patch_attention_mask,
         )
-        hidden_states = encoder_outputs.last_hidden_state
 
-        # Apply final layer normalization
-        hidden_states = self.post_layernorm(hidden_states)
+        encoder_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=vision_patch_attention_mask,
+        )
+        encoder_outputs = self.encoder(inputs_embeds=hidden_states, attention_mask=encoder_attention_mask)
+        hidden_states = self.post_layernorm(encoder_outputs.last_hidden_state)
 
-        hidden_states = pixel_shuffle_varlen(
+        return pixel_shuffle_padded(
             x=hidden_states,
             token_grids=token_grids,
             scale_factor=self.pixel_shuffle_scale_factor,
         )
-        # Remove the pseudo batch dimension we added earlier
-        hidden_states = hidden_states.squeeze(0)
-
-        # Return the full sequence of embeddings
-        return hidden_states
 
 
 class IsaacMultiModalProjector(nn.Module):
@@ -717,9 +536,14 @@ class IsaacVisionEmbedding(nn.Module):
         self.vision_tower = IsaacVisionTransformer(vision_cfg)
         self.multimodal_projector = IsaacMultiModalProjector(config)
 
-    def forward(self, vision_tokens: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
-        hidden_states = self.vision_tower(vision_tokens)
-        return self.multimodal_projector(hidden_states)
+    def forward(
+        self,
+        vision_tokens: tuple[torch.Tensor, torch.Tensor, torch.Tensor | None],
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        vision_patches, token_grids, vision_patch_attention_mask = vision_tokens
+        hidden_states = self.vision_tower((vision_patches, token_grids, vision_patch_attention_mask))
+        projected = self.multimodal_projector(hidden_states)
+        return projected
 
 
 def get_scaled_image_size(
@@ -740,7 +564,7 @@ def get_image_size_for_max_num_patches(
     image_width: int,
     patch_size: int,
     max_num_patches: int,
-    min_num_patches: Optional[int] = None,
+    min_num_patches: int | None = None,
     eps: float = 1e-5,
     pixel_shuffle_scale: int = 1,
 ) -> tuple[int, int]:
@@ -826,21 +650,26 @@ class IsaacConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vision_config: Optional[IsaacVisionConfig] = None,
-        text_config: Optional[Union[Qwen3Config, dict]] = None,
+        vision_config: IsaacVisionConfig | None = None,
+        text_config: Qwen3Config | dict | None = None,
         vision_rescale_factor: float = 1 / 255,
         max_sequence_length: int = 16384,
         vision_token: str = "<image>",
         **kwargs,
     ):
-        attn_implementation = kwargs.get("attn_implementation")
-
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
         elif isinstance(text_config, Qwen3Config):
             self.text_config = text_config
         elif text_config is None:
             self.text_config = self.sub_configs["text_config"]()
+
+        if isinstance(vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**vision_config)
+        elif isinstance(vision_config, IsaacVisionConfig):
+            self.vision_config = vision_config
+        elif vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"]()
 
         # Seed RoPE parameters before base init so the shared mixin can standardize/validate them.
         self.rope_parameters = getattr(self.text_config, "rope_parameters", None)
@@ -866,23 +695,6 @@ class IsaacConfig(PretrainedConfig):
         self.layer_types = getattr(self.text_config, "layer_types", None)
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Handle vision config - either dict or IsaacVisionConfig instance
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif isinstance(vision_config, IsaacVisionConfig):
-            self.vision_config = vision_config
-        elif vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        # Propagate user-requested attention backend to the vision sub-config when provided.
-        if attn_implementation is not None:
-            if isinstance(attn_implementation, dict):
-                vision_attn = attn_implementation.get("vision_config", attn_implementation.get("", None))
-            else:
-                vision_attn = attn_implementation
-            if vision_attn is not None:
-                self.vision_config._attn_implementation = vision_attn
-
         if getattr(self, "_attn_implementation", None) is None:
             self._attn_implementation = "sdpa"
         # Vision normalization parameters
@@ -891,15 +703,6 @@ class IsaacConfig(PretrainedConfig):
         # Processing parameters
         self.max_sequence_length = max_sequence_length
         self.vision_token = vision_token
-
-    def to_dict(self):
-        output = super().to_dict()
-        # Ensure nested configs round-trip through dict serialization
-        if hasattr(self, "text_config") and self.text_config is not None:
-            output["text_config"] = self.text_config.to_dict()
-        if hasattr(self, "vision_config") and self.vision_config is not None:
-            output["vision_config"] = self.vision_config.to_dict()
-        return output
 
 
 class IsaacProcessor(ProcessorMixin):
@@ -914,7 +717,7 @@ class IsaacProcessor(ProcessorMixin):
         config (IsaacConfig | dict, optional): If provided, overrides processor defaults from the model config.
 
     Returns:
-        BatchFeature: Contains ``input_ids`` and ``packed_inputs`` (patch tensors, grids, offsets, lengths, modality, positions).
+        BatchFeature: Top-level batched text and vision tensors.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -929,8 +732,8 @@ class IsaacProcessor(ProcessorMixin):
         *,
         vision_token: str = "<image>",
         max_sequence_length: int = 16384,
-        rescale_factor: Optional[float] = None,
-        config: Optional[Union[IsaacConfig, dict]] = None,
+        rescale_factor: float | None = None,
+        config: IsaacConfig | dict | None = None,
     ) -> None:
         if isinstance(config, dict):
             config = IsaacConfig(**config)
@@ -960,254 +763,260 @@ class IsaacProcessor(ProcessorMixin):
         self.vision_token = vision_token
         self.max_sequence_length = max_sequence_length
 
-    def _pack_batch(
-        self, texts: list[str], images_list: Optional[list[Optional[list[Image]]]]
-    ) -> dict[str, Optional[torch.Tensor]]:
-        if images_list is None:
-            pairs = ((t, None) for t in texts)
-        else:
+    def _build_batch(
+        self,
+        text: str | list[str],
+        images: Image | list[Image] | None = None,
+    ) -> dict[str, torch.Tensor | None]:
+        texts = [text] if isinstance(text, str) else text
+        if images is None:
+            pairs = ((text_value, None) for text_value in texts)
+        elif isinstance(images, list) and len(images) == len(texts):
+            if not images:
+                images_list = []
+            elif isinstance(images[0], list):
+                images_list = images
+            else:
+                images_list = [[image] for image in images]
             pairs = zip(texts, images_list, strict=True)
-
-        per_sample: list[dict[str, Optional[torch.Tensor]]] = []
-        for txt, imgs in pairs:
-            if imgs is not None and isinstance(imgs, Image):
-                imgs = [imgs]
-            per_sample.append(self._pack_single(txt, imgs))
-
-        lengths = [int(p["input_ids"].shape[1]) for p in per_sample]
-        max_len = max(lengths, default=0)
-        batch = len(per_sample)
-
-        # Use first device with data as anchor
-        base_device = torch.device("cpu")
-        for p in per_sample:
-            if p["input_ids"].numel() > 0:
-                base_device = p["input_ids"].device
-                break
-
-        pad_id = self.text_pad_token_id
-        padded_input_ids = torch.full((batch, max_len), pad_id, device=base_device, dtype=torch.long)
-        padded_modality = torch.full((batch, max_len), ModalityType.text.value, device=base_device, dtype=torch.long)
-        padded_position_ids = torch.zeros((batch, max_len, 3), device=base_device, dtype=torch.long)
-
-        for i, (sample, l) in enumerate(zip(per_sample, lengths)):
-            if l:
-                padded_input_ids[i, -l:] = sample["input_ids"][0]
-                padded_modality[i, -l:] = sample["modality_tensor"][0]
-                padded_position_ids[i, -l:] = sample["position_ids"][0]
-
-        # Vision-side aggregation
-        v_samples = [(b, s) for b, s in enumerate(per_sample) if s["vision_patches"] is not None]
-        if v_samples:
-            vision_patches_list = [s["vision_patches"] for _, s in v_samples]
-            vision_grids_list = [s["vision_token_grids"] for _, s in v_samples]
-            vision_offsets_list = [s["vision_token_offsets"] for _, s in v_samples]
-            vision_lengths_list = [s["vision_token_lengths"] for _, s in v_samples]
-            vision_batch_indices = [torch.full_like(s["vision_token_offsets"], b) for b, s in v_samples]
-
-            vision_patches = torch.cat(vision_patches_list, dim=0)
-            vision_token_grids = torch.cat(vision_grids_list, dim=0)
-            vision_token_offsets = torch.cat(vision_offsets_list, dim=0)
-            vision_token_lengths = torch.cat(vision_lengths_list, dim=0)
-            vision_token_batch_indices = torch.cat(vision_batch_indices, dim=0)
         else:
-            vision_patches = vision_token_grids = vision_token_offsets = vision_token_lengths = (
-                vision_token_batch_indices
-            ) = None
-
-        return {
-            "input_ids": padded_input_ids,
-            "vision_patches": vision_patches,
-            "vision_token_grids": vision_token_grids,
-            "vision_token_offsets": vision_token_offsets,
-            "vision_token_lengths": vision_token_lengths,
-            "vision_token_batch_indices": vision_token_batch_indices,
-            "modality_tensor": padded_modality,
-            "position_ids": padded_position_ids,
-        }
-
-    def _pack_single(self, text: str, images: Optional[list[Image]]) -> dict[str, Optional[torch.Tensor]]:
-        segments = text.split(self.vision_token)  # Parse by vision_token; interleave text segments and image segments.
-        num_images = len(segments) - 1
-        items: list[dict[str, Any]] = []
-        total = 0
-        num_provided_images = len(images) if images is not None else 0
-        if not num_images == num_provided_images:
-            raise ValueError(
-                f"IsaacProcessor expects one image per image token, got {num_images} tokens and {num_provided_images} images in sample with text {text} "
+            pairs = (
+                (
+                    text_value,
+                    None
+                    if text_value.count(self.vision_token) == 0
+                    else images
+                    if isinstance(images, list)
+                    else [images],
+                )
+                for text_value in texts
             )
 
-        for index, segment in enumerate(segments):
-            if segment:
-                tok = (
-                    self.tokenizer.encode(segment, add_special_tokens=False, return_tensors="pt")
-                    .squeeze(0)
-                    .to(torch.long)
+        sample_input_ids: list[torch.Tensor] = []
+        sample_modality: list[torch.Tensor] = []
+        sample_position_ids: list[torch.Tensor] = []
+        sample_vision_patches: list[list[torch.Tensor]] = []
+        sample_vision_grids: list[torch.Tensor] = []
+        sample_vision_offsets: list[torch.Tensor] = []
+        sample_vision_lengths: list[torch.Tensor] = []
+
+        for text_value, sample_images in pairs:
+            segments = text_value.split(self.vision_token)
+            num_images = len(segments) - 1
+            num_provided_images = len(sample_images) if sample_images is not None else 0
+            if num_images != num_provided_images:
+                raise ValueError(
+                    f"IsaacProcessor expects one image per image token, got {num_images} tokens and {num_provided_images} images in sample with text {text_value} "
                 )
-                segment_length = int(tok.numel())
-                items.append({"type": "text", "segment_length": segment_length, "tok": tok})
-                total += segment_length
 
-            if index < num_images:
-                feat = self.image_processor(images=images[index], return_tensors=TensorType.PYTORCH)
-                patches = feat["patches"][0].reshape(-1, feat["patches"].shape[-1])
-
-                virtual_pixel_size = feat["virtual_pixel_size"][0].to(torch.long).tolist()
-                real_pixel_size = feat["real_pixel_size"][0].to(torch.long).tolist()
-                dims = tuple((virtual_pixel_size + [1, 1, 1])[:3])  # (T,H,W) in virtual space
-                segment_length = int(dims[0] * dims[1] * dims[2])
-
-                items.append(
-                    {
-                        "type": "image",
-                        "segment_length": segment_length,
-                        "dims": dims,
-                        "patches": patches,
-                        "grid": (int(real_pixel_size[1]), int(real_pixel_size[2])),
-                    }
-                )
-                total += segment_length
-
-        # Tail crop window.
-        start = max(0, total - self.max_sequence_length)
-        end = total
-
-        image_pad_value = self.image_pad_token_id
-        base_device: Optional[torch.device] = None
-        position_ids, modality, input_ids = [], [], []
-        vpatches, grids, vision_token_offsets, vision_token_lengths = [], [], [], []
-
-        global_offset = 0
-        position_offset = 0
-
-        for item in items:
-            segment_length = int(item["segment_length"])
-            current_window_start = max(start, global_offset)
-            current_window_end = min(end, global_offset + segment_length)
-            has_overlap = current_window_end > current_window_start
-
-            if has_overlap and base_device is None:
-                base_device = item["patches"].device if item["type"] == "image" else item["tok"].device
-
-            if has_overlap:
-                segment_local_start = int(current_window_start - global_offset)
-                segment_local_end = int(current_window_end - global_offset)
-                segment_local_indices = torch.arange(
-                    segment_local_start, segment_local_end, device=base_device, dtype=torch.long
-                )
-                segment_kept_length = segment_local_end - segment_local_start
-
-                if item["type"] == "text":
-                    slice_index = segment_local_indices + position_offset
-                    zero_axis_pad = torch.zeros_like(slice_index)
-                    position_ids.append(torch.stack((slice_index, zero_axis_pad, zero_axis_pad), -1))
-                    modality.append(
-                        torch.full(
-                            (segment_kept_length,), ModalityType.text.value, device=base_device, dtype=torch.long
-                        )
+            items: list[dict[str, Any]] = []
+            total = 0
+            for index, segment in enumerate(segments):
+                if segment:
+                    text_tokens = (
+                        self.tokenizer.encode(segment, add_special_tokens=False, return_tensors="pt")
+                        .squeeze(0)
+                        .to(torch.long)
                     )
-                    input_ids.append(item["tok"].to(base_device)[segment_local_start:segment_local_end])
-                    position_offset += segment_length
+                    segment_length = int(text_tokens.numel())
+                    items.append({"type": "text", "segment_length": segment_length, "tokens": text_tokens})
+                    total += segment_length
+
+                if index < num_images:
+                    feature = self.image_processor(images=sample_images[index], return_tensors=TensorType.PYTORCH)
+                    patches = feature["patches"][0].reshape(-1, feature["patches"].shape[-1])
+                    virtual_pixel_size = feature["virtual_pixel_size"][0].to(torch.long).tolist()
+                    real_pixel_size = feature["real_pixel_size"][0].to(torch.long).tolist()
+                    dims = tuple((virtual_pixel_size + [1, 1, 1])[:3])
+                    segment_length = int(dims[0] * dims[1] * dims[2])
+                    items.append(
+                        {
+                            "type": "image",
+                            "segment_length": segment_length,
+                            "dims": dims,
+                            "patches": patches,
+                            "grid": (int(real_pixel_size[1]), int(real_pixel_size[2])),
+                        }
+                    )
+                    total += segment_length
+
+            start = max(0, total - self.max_sequence_length)
+            end = total
+            base_device: torch.device | None = None
+            input_ids_chunks, modality_chunks, position_chunks = [], [], []
+            vision_patches, vision_grids, vision_offsets, vision_lengths = [], [], [], []
+            global_offset = 0
+            position_offset = 0
+
+            for item in items:
+                segment_length = int(item["segment_length"])
+                current_window_start = max(start, global_offset)
+                current_window_end = min(end, global_offset + segment_length)
+                has_overlap = current_window_end > current_window_start
+
+                if has_overlap and base_device is None:
+                    base_device = item["patches"].device if item["type"] == "image" else item["tokens"].device
+
+                if has_overlap:
+                    segment_local_start = int(current_window_start - global_offset)
+                    segment_local_end = int(current_window_end - global_offset)
+                    segment_local_indices = torch.arange(
+                        segment_local_start, segment_local_end, device=base_device, dtype=torch.long
+                    )
+                    segment_kept_length = segment_local_end - segment_local_start
+
+                    if item["type"] == "text":
+                        slice_index = segment_local_indices + position_offset
+                        zero_axis = torch.zeros_like(slice_index)
+                        position_chunks.append(torch.stack((slice_index, zero_axis, zero_axis), -1))
+                        modality_chunks.append(
+                            torch.full(
+                                (segment_kept_length,), ModalityType.text.value, device=base_device, dtype=torch.long
+                            )
+                        )
+                        input_ids_chunks.append(item["tokens"].to(base_device)[segment_local_start:segment_local_end])
+                        position_offset += segment_length
+                    else:
+                        num_pos_slices, grid_height_tokens, grid_width_tokens = item["dims"]
+                        hw = grid_height_tokens * grid_width_tokens
+                        slice_index = (segment_local_indices // hw) + position_offset
+                        rem = segment_local_indices % hw
+                        position_chunks.append(
+                            torch.stack((slice_index, rem // grid_width_tokens, rem % grid_width_tokens), -1)
+                        )
+                        modality_chunks.append(
+                            torch.full(
+                                (segment_kept_length,), ModalityType.image.value, device=base_device, dtype=torch.long
+                            )
+                        )
+                        input_ids_chunks.append(
+                            torch.full(
+                                (segment_kept_length,), self.image_pad_token_id, device=base_device, dtype=torch.long
+                            )
+                        )
+
+                        vision_patches.append(item["patches"].to(base_device))
+                        vision_grids.append(item["grid"])
+                        vision_offsets.append(segment_local_start)
+                        vision_lengths.append(segment_kept_length)
+                        position_offset += int(num_pos_slices)
                 else:
-                    num_pos_slices, grid_height_tokens, grid_width_tokens = item["dims"]
-                    hw = grid_height_tokens * grid_width_tokens
-                    slice_index = (segment_local_indices // hw) + position_offset
-                    rem = segment_local_indices % hw
-                    row_index = rem // grid_width_tokens
-                    col_index = rem % grid_width_tokens
-                    position_ids.append(torch.stack((slice_index, row_index, col_index), -1))
-                    modality.append(
-                        torch.full(
-                            (segment_kept_length,), ModalityType.image.value, device=base_device, dtype=torch.long
-                        )
-                    )
-                    input_ids.append(
-                        torch.full((segment_kept_length,), image_pad_value, device=base_device, dtype=torch.long)
-                    )
+                    position_offset += segment_length if item["type"] == "text" else int(item["dims"][0])
 
-                    vpatches.append(item["patches"].to(base_device))  # full patches; slice later via offsets/lengths
-                    # Record per-image slice boundaries so we can drop cropped virtual tokens
-                    # after pixel shuffle without re-packing the entire vision stream.
-                    grids.append(item["grid"])
-                    vision_token_offsets.append(segment_local_start)
-                    vision_token_lengths.append(segment_kept_length)
+                global_offset += segment_length
 
-                    position_offset += int(num_pos_slices)
+            if base_device is None:
+                base_device = torch.device("cpu")
 
+            sample_input_ids.append(
+                torch.cat(input_ids_chunks, 0)
+                if input_ids_chunks
+                else torch.zeros((0,), device=base_device, dtype=torch.long)
+            )
+            sample_modality.append(
+                torch.cat(modality_chunks, 0)
+                if modality_chunks
+                else torch.zeros((0,), device=base_device, dtype=torch.long)
+            )
+            sample_position_ids.append(
+                torch.cat(position_chunks, 0)
+                if position_chunks
+                else torch.zeros((0, 3), device=base_device, dtype=torch.long)
+            )
+            sample_vision_patches.append(vision_patches)
+            if vision_patches:
+                sample_vision_grids.append(torch.tensor(vision_grids, device=base_device, dtype=torch.long))
+                sample_vision_offsets.append(torch.tensor(vision_offsets, device=base_device, dtype=torch.long))
+                sample_vision_lengths.append(torch.tensor(vision_lengths, device=base_device, dtype=torch.long))
             else:
-                position_offset += segment_length if item["type"] == "text" else int(item["dims"][0])
+                sample_vision_grids.append(torch.zeros((0, 2), device=base_device, dtype=torch.long))
+                sample_vision_offsets.append(torch.zeros((0,), device=base_device, dtype=torch.long))
+                sample_vision_lengths.append(torch.zeros((0,), device=base_device, dtype=torch.long))
 
-            global_offset += segment_length
-
-        if base_device is None:
-            base_device = torch.device("cpu")
-
-        modality_tensor = (
-            torch.cat(modality, 0).unsqueeze(0)
-            if modality
-            else torch.zeros((1, 0), device=base_device, dtype=torch.long)
-        )
-        position_ids = (
-            torch.cat(position_ids, 0).unsqueeze(0)
-            if position_ids
-            else torch.zeros((1, 0, 3), device=base_device, dtype=torch.long)
-        )
-        input_ids = (
-            torch.cat(input_ids, 0).unsqueeze(0)
-            if input_ids
-            else torch.zeros((1, 0), device=base_device, dtype=torch.long)
+        batch_size = len(sample_input_ids)
+        lengths = [int(sample_input.shape[0]) for sample_input in sample_input_ids]
+        max_len = max(lengths, default=0)
+        base_device = next(
+            (sample_input.device for sample_input in sample_input_ids if sample_input.numel() > 0),
+            torch.device("cpu"),
         )
 
-        if vpatches:
-            vision_patches = torch.cat(vpatches, 0)
-            vision_token_grids = torch.tensor(grids, device=base_device, dtype=torch.long)
-            vision_token_offsets = torch.tensor(vision_token_offsets, device=base_device, dtype=torch.long)
-            vision_token_lengths = torch.tensor(vision_token_lengths, device=base_device, dtype=torch.long)
+        input_ids = torch.full((batch_size, max_len), self.text_pad_token_id, device=base_device, dtype=torch.long)
+        attention_mask = torch.zeros((batch_size, max_len), device=base_device, dtype=torch.long)
+        modality_tensor = torch.full(
+            (batch_size, max_len), ModalityType.text.value, device=base_device, dtype=torch.long
+        )
+        position_ids = torch.zeros((batch_size, max_len, 3), device=base_device, dtype=torch.long)
+
+        for batch_idx, length in enumerate(lengths):
+            if length == 0:
+                continue
+            input_ids[batch_idx, -length:] = sample_input_ids[batch_idx]
+            attention_mask[batch_idx, -length:] = 1
+            modality_tensor[batch_idx, -length:] = sample_modality[batch_idx]
+            position_ids[batch_idx, -length:] = sample_position_ids[batch_idx]
+
+        image_counts = [len(patches) for patches in sample_vision_patches]
+        max_images = max(image_counts, default=0)
+        if max_images == 0:
+            vision_patches = None
+            vision_patch_attention_mask = None
+            vision_token_grids = None
+            vision_token_offsets = None
+            vision_token_lengths = None
+            vision_image_attention_mask = None
         else:
-            vision_patches = vision_token_grids = vision_token_offsets = vision_token_lengths = None
+            first_patch = next((patches[0] for patches in sample_vision_patches if patches), None)
+            patch_dim = first_patch.shape[-1]
+            patch_dtype = first_patch.dtype
+            max_patches = max((patch.shape[0] for patches in sample_vision_patches for patch in patches), default=0)
+
+            vision_patches = torch.zeros(
+                (batch_size, max_images, max_patches, patch_dim), device=base_device, dtype=patch_dtype
+            )
+            vision_patch_attention_mask = torch.zeros(
+                (batch_size, max_images, max_patches), device=base_device, dtype=torch.long
+            )
+            vision_token_grids = torch.zeros((batch_size, max_images, 2), device=base_device, dtype=torch.long)
+            vision_token_offsets = torch.zeros((batch_size, max_images), device=base_device, dtype=torch.long)
+            vision_token_lengths = torch.zeros((batch_size, max_images), device=base_device, dtype=torch.long)
+            vision_image_attention_mask = torch.zeros((batch_size, max_images), device=base_device, dtype=torch.long)
+
+            for batch_idx, sample_patches in enumerate(sample_vision_patches):
+                sample_image_count = len(sample_patches)
+                if sample_image_count == 0:
+                    continue
+                vision_token_grids[batch_idx, :sample_image_count] = sample_vision_grids[batch_idx]
+                vision_token_offsets[batch_idx, :sample_image_count] = sample_vision_offsets[batch_idx]
+                vision_token_lengths[batch_idx, :sample_image_count] = sample_vision_lengths[batch_idx]
+                vision_image_attention_mask[batch_idx, :sample_image_count] = 1
+
+                for image_idx, patches in enumerate(sample_patches):
+                    patch_count = int(patches.shape[0])
+                    vision_patches[batch_idx, image_idx, :patch_count] = patches
+                    vision_patch_attention_mask[batch_idx, image_idx, :patch_count] = 1
 
         return {
             "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "position_ids": position_ids,
+            "modality_tensor": modality_tensor,
             "vision_patches": vision_patches,
+            "vision_patch_attention_mask": vision_patch_attention_mask,
             "vision_token_grids": vision_token_grids,
             "vision_token_offsets": vision_token_offsets,
             "vision_token_lengths": vision_token_lengths,
-            "modality_tensor": modality_tensor,
-            "position_ids": position_ids,
+            "vision_image_attention_mask": vision_image_attention_mask,
         }
 
     def __call__(
         self,
-        text: Union[str, list[str]],
-        images: Optional[Union[Image, list[Image]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        text: str | list[str],
+        images: Image | list[Image] | None = None,
+        return_tensors: str | TensorType | None = TensorType.PYTORCH,
         **kwargs,
     ) -> BatchFeature:
-        texts = [text] if isinstance(text, str) else text
-        images_list: Optional[list[Optional[list[Image]]]] = None
-        if images is not None:
-            if isinstance(images, list) and len(images) == len(texts):
-                if not images:
-                    images_list = []
-                elif isinstance(images[0], list):
-                    images_list = images  # already per-sample
-                else:
-                    images_list = [[img] for img in images]  # list of images, one per sample
-            else:
-                images_list = []
-                for t in texts:
-                    n_tok = t.count(self.vision_token)
-                    if n_tok == 0:
-                        images_list.append(None)
-                    else:
-                        if isinstance(images, list):
-                            images_list.append(images)
-                        else:
-                            images_list.append([images])
-
-        packed = self._pack_batch(texts, images_list)
-        input_ids = packed.pop("input_ids")
-        return BatchFeature(data={"input_ids": input_ids, "packed_inputs": packed})
+        return BatchFeature(data=self._build_batch(text=text, images=images), tensor_type=return_tensors)
 
 
 class IsaacRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
@@ -1217,15 +1026,17 @@ class IsaacRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
         config_for_rope = copy.copy(rope_source_cfg)
         config_for_rope.rope_scaling = rope_scaling
 
-        init_device = device if device is not None and getattr(device, "type", None) != "meta" else None
-        super().__init__(config_for_rope, device=init_device)
+        super().__init__(
+            config_for_rope,
+            device=device if device is not None and getattr(device, "type", None) != "meta" else None,
+        )
 
         rotary_half_dim = self.inv_freq.shape[0]
         self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), rotary_half_dim)
         self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
 
     @staticmethod
-    def _resolve_mrope_section(section: Optional[list[int]], rotary_half_dim: int) -> list[int]:
+    def _resolve_mrope_section(section: list[int] | None, rotary_half_dim: int) -> list[int]:
         if section is None:
             weights = (2, 1, 1)
             base = [rotary_half_dim * w // sum(weights) for w in weights]
@@ -1244,7 +1055,7 @@ class IsaacRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
         self,
         position_ids: torch.Tensor,
         modality_tensor: torch.Tensor,
-        hidden_states: Optional[torch.Tensor] = None,
+        hidden_states: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         if hidden_states is None:
             batch, seq_len, _ = position_ids.shape
@@ -1289,18 +1100,15 @@ class IsaacModel(Qwen3PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_flex_attn = False
     _can_record_outputs = {
-        "attentions": OutputRecorder(Qwen3Attention, index=1),
-        "vision_attentions": OutputRecorder(IsaacVisionAttention, index=1),
+        "hidden_states": OutputRecorder(Qwen3DecoderLayer),
+        "attentions": Qwen3Attention,
+        "vision_attentions": IsaacVisionAttention,
     }
     all_tied_weights_keys: dict[str, str] = {}
 
     def __init__(self, config: IsaacConfig):
         Qwen3PreTrainedModel.__init__(self, config)
-
-        text_cfg_source = config.text_config
-        text_cfg = copy.deepcopy(text_cfg_source)
-        self.text_model = Qwen3Model._from_config(text_cfg)
-        self.text_model.config = config  # Ensure downstream callers observe the composed config
+        self.text_model = Qwen3Model._from_config(config.text_config)
 
         self.rotary_emb = IsaacRotaryEmbedding(config, device=self.device)
 
@@ -1336,88 +1144,73 @@ class IsaacModel(Qwen3PreTrainedModel):
     def embed_tokens(self, value: nn.Module) -> None:
         self.text_model.embed_tokens = value
 
-    @property
-    def vision_model(self) -> nn.Module:
-        return self.vision_embedding.vision_tower
-
-    def embed_packed_inputs(
-        self, input_ids: torch.Tensor, packed_inputs: dict[str, Optional[torch.Tensor]]
+    def embed_multimodal_inputs(
+        self,
+        input_ids: torch.Tensor,
+        modality_tensor: torch.Tensor,
+        vision_patches: torch.Tensor,
+        vision_token_grids: torch.Tensor,
+        vision_patch_attention_mask: torch.Tensor | None = None,
+        vision_token_offsets: torch.Tensor | None = None,
+        vision_token_lengths: torch.Tensor | None = None,
+        vision_image_attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Expects input_ids for text tokens and packed_inputs containing:
-        - modality_tensor: (batch, seq_len) modality ids aligned to the sequence
-        - position_ids: (batch, seq_len, 3) MRoPE coordinates (optional)
-        - vision_patches: concatenated vision tokens shaped (total_tokens, embed_dim) or None
-        - vision_token_grids: (num_images, 2) token grid sizes or None
-        - vision_token_offsets: (num_images,) offsets into each image's virtual token span (optional)
-        - vision_token_lengths: (num_images,) surviving virtual token lengths per image (optional)
-        - vision_token_batch_indices: (num_images,) batch row for each image (optional; defaults to zeros)
-        """
-        modality = packed_inputs["modality_tensor"].to(device=input_ids.device, dtype=torch.long)
+        modality = modality_tensor.to(device=input_ids.device, dtype=torch.long)
         embeds = self.text_model.embed_tokens(input_ids)
+        image_token_mask = modality == ModalityType.image.value
 
-        vision_patches = packed_inputs.get("vision_patches")
-        if vision_patches is None:
+        if vision_patches is None or vision_token_grids is None:
+            if torch.any(image_token_mask):
+                raise ValueError("Image placeholders require `vision_patches` and `vision_token_grids`.")
             return embeds, modality
 
-        token_grids = packed_inputs["vision_token_grids"].to(device=vision_patches.device, dtype=torch.long)
-        vision = self.vision_embedding((vision_patches, token_grids))  # (total_tokens, hidden)
-
-        # per-image token counts AFTER pixel-shuffle
-        vision_reduction_factor = int(self.config.vision_config.pixel_shuffle_scale_factor)
-        sizes = (
-            token_grids.prod(-1).div(vision_reduction_factor * vision_reduction_factor, rounding_mode="floor").tolist()
+        vision_patches = vision_patches.to(device=embeds.device)
+        token_grids = vision_token_grids.to(device=embeds.device, dtype=torch.long)
+        image_attention_mask = (
+            vision_image_attention_mask.to(device=embeds.device, dtype=torch.bool)
+            if vision_image_attention_mask is not None
+            else torch.ones(token_grids.shape[:2], device=embeds.device, dtype=torch.bool)
         )
-        offsets = packed_inputs.get("vision_token_offsets")
-        lengths = packed_inputs.get("vision_token_lengths")
-        batch_indices = packed_inputs.get("vision_token_batch_indices")
+        patch_attention_mask = (
+            vision_patch_attention_mask.to(device=embeds.device, dtype=torch.long)
+            if vision_patch_attention_mask is not None
+            else torch.ones(vision_patches.shape[:3], device=embeds.device, dtype=torch.long)
+        )
+        offsets = (
+            vision_token_offsets.to(device=embeds.device, dtype=torch.long)
+            if vision_token_offsets is not None
+            else torch.zeros(token_grids.shape[:2], device=embeds.device, dtype=torch.long)
+        )
+        reduction_factor = int(self.config.vision_config.pixel_shuffle_scale_factor) ** 2
+        lengths = (
+            vision_token_lengths.to(device=embeds.device, dtype=torch.long)
+            if vision_token_lengths is not None
+            else token_grids.prod(-1).div(reduction_factor, rounding_mode="floor").to(dtype=torch.long)
+        )
 
-        chunks = vision.split(sizes, dim=0)
-        picked: list[torch.Tensor] = []
-        picked_batch: list[int] = []
-        for chunk, size, offset, length, batch_index in zip(
-            chunks,
-            sizes,
-            offsets.tolist(),
-            lengths.tolist(),
-            (batch_indices.tolist() if batch_indices is not None else [0] * len(sizes)),
-        ):
-            if size <= 0:
-                continue
-            offset = max(0, min(int(offset), size))
-            length = max(0, min(int(length), size - offset))
-            if length:
-                picked.append(chunk[offset : offset + length])
-                picked_batch.append(int(batch_index))
-        if picked:
-            vision_chunks = picked
-            vision_batch_idx = picked_batch
-        else:
-            vision_chunks = vision_batch_idx = []
+        flat_vision_patches = vision_patches[image_attention_mask]
+        flat_patch_attention_mask = patch_attention_mask[image_attention_mask]
+        flat_token_grids = token_grids[image_attention_mask]
+        flat_offsets = offsets[image_attention_mask]
+        flat_lengths = lengths[image_attention_mask]
 
-        vision = torch.cat(vision_chunks, 0) if vision_chunks else vision.new_zeros((0, vision.size(-1)))
-        embeds = embeds.clone()
-        num_batches = modality.shape[0]
-        image_positions = [
-            (modality[b] == ModalityType.image.value).nonzero(as_tuple=False).squeeze(-1) for b in range(num_batches)
-        ]
-        cursors = [0 for _ in range(num_batches)]
-
-        for chunk, batch_index in zip(vision_chunks, vision_batch_idx):
-            if chunk.numel() == 0:
-                continue
-            positions = image_positions[batch_index]
-            start = cursors[batch_index]
-            end = start + chunk.shape[0]
-            embeds[batch_index, positions[start:end]] = chunk.to(device=embeds.device, dtype=embeds.dtype)
-            cursors[batch_index] = end
+        vision_embeddings = self.vision_embedding((flat_vision_patches, flat_token_grids, flat_patch_attention_mask))
+        token_positions = torch.arange(flat_lengths.max(), device=embeds.device, dtype=torch.long)
+        gather_positions = flat_offsets[:, None] + token_positions[None, :]
+        gather_mask = token_positions[None, :] < flat_lengths[:, None]
+        image_features = vision_embeddings[
+            torch.arange(vision_embeddings.shape[0], device=embeds.device, dtype=torch.long)[:, None],
+            gather_positions,
+        ][gather_mask]
+        scatter_mask = image_token_mask.unsqueeze(-1).expand_as(embeds)
+        embeds = embeds.masked_scatter(scatter_mask, image_features)
 
         return embeds, modality
 
     def get_rope_index(
         self,
         *,
-        position_ids: Optional[torch.Tensor] = None,
+        position_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor,
         inputs_embeds: torch.Tensor,
         cache_position: torch.Tensor,
@@ -1439,12 +1232,13 @@ class IsaacModel(Qwen3PreTrainedModel):
             if cp.ndim == 1:
                 cp = cp.view(1, -1).expand(batch_size or 1, -1)
 
-            base_delta = torch.as_tensor(
-                0 if self.rope_deltas is None else self.rope_deltas,
-                device=device,
-                dtype=torch.long,
-            ).reshape(-1, 1)
-            base_delta = torch.broadcast_to(base_delta, (batch_size, 1))
+            is_new_prefill = cp[:, :1].eq(0).all(dim=1, keepdim=True)
+            if self.rope_deltas is None:
+                base_delta = torch.zeros((batch_size, 1), device=device, dtype=torch.long)
+            else:
+                previous_delta = torch.as_tensor(self.rope_deltas, device=device, dtype=torch.long).reshape(-1, 1)
+                previous_delta = torch.broadcast_to(previous_delta, (batch_size, 1))
+                base_delta = torch.where(is_new_prefill, torch.zeros_like(previous_delta), previous_delta)
 
             mask_delta = attention_mask.to(device=device, dtype=torch.long).sum(1, keepdim=True) - attention_mask.size(
                 1
@@ -1469,17 +1263,24 @@ class IsaacModel(Qwen3PreTrainedModel):
         return position_ids, rope_deltas
 
     @auto_docstring
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        packed_inputs: Optional[dict[str, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        modality_tensor: torch.LongTensor | None = None,
+        vision_patches: torch.Tensor | None = None,
+        vision_patch_attention_mask: torch.Tensor | None = None,
+        vision_token_grids: torch.LongTensor | None = None,
+        vision_token_offsets: torch.LongTensor | None = None,
+        vision_token_lengths: torch.LongTensor | None = None,
+        vision_image_attention_mask: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         """
@@ -1488,21 +1289,59 @@ class IsaacModel(Qwen3PreTrainedModel):
         Computes position embeddings once and passes them through all layers.
 
         Args:
-            packed_inputs (`dict`, *optional*):
-                Plain tensor payloads. When provided, requires `input_ids` for text tokens (or `text_token_ids` so `input_ids` can be rebuilt).
             modality_tensor (`torch.LongTensor`, *optional*):
                 Modality identifiers aligned with the embedded sequence, shaped `(batch_size, seq_len)` and containing
-                values from `ModalityType`. Automatically built from `packed_inputs` or treated as text-only when omitted.
+                values from `ModalityType`. Treated as text-only when omitted.
+            vision_patches (`torch.FloatTensor`, *optional*):
+                Padded per-image patch vectors of shape `(batch_size, max_images, max_patches, patch_dim)`.
+            vision_patch_attention_mask (`torch.LongTensor`, *optional*):
+                Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
+            vision_token_grids (`torch.LongTensor`, *optional*):
+                Per-image patch grids `(h, w)` with shape `(batch_size, max_images, 2)`.
+            vision_token_offsets (`torch.LongTensor`, *optional*):
+                Start offsets inside the per-image vision embedding sequence, shape `(batch_size, max_images)`.
+            vision_token_lengths (`torch.LongTensor`, *optional*):
+                Number of vision tokens to consume per image, shape `(batch_size, max_images)`.
+            vision_image_attention_mask (`torch.LongTensor`, *optional*):
+                Mask indicating which image slots are populated, shape `(batch_size, max_images)`.
         """
 
-        output_attentions = kwargs.pop("output_attentions", None)
+        if inputs_embeds is None:
+            if input_ids is None:
+                raise ValueError("`input_ids` or `inputs_embeds` must be provided.")
 
-        modality_tensor: Optional[torch.Tensor] = None
+            has_vision_inputs = any(
+                value is not None
+                for value in (
+                    vision_patches,
+                    vision_patch_attention_mask,
+                    vision_token_grids,
+                    vision_token_offsets,
+                    vision_token_lengths,
+                    vision_image_attention_mask,
+                )
+            )
+            if modality_tensor is not None or has_vision_inputs:
+                if modality_tensor is None:
+                    modality_tensor = torch.full_like(input_ids, ModalityType.text.value)
+                inputs_embeds, modality_tensor = self.embed_multimodal_inputs(
+                    input_ids=input_ids,
+                    modality_tensor=modality_tensor,
+                    vision_patches=vision_patches,
+                    vision_patch_attention_mask=vision_patch_attention_mask,
+                    vision_token_grids=vision_token_grids,
+                    vision_token_offsets=vision_token_offsets,
+                    vision_token_lengths=vision_token_lengths,
+                    vision_image_attention_mask=vision_image_attention_mask,
+                )
+            else:
+                inputs_embeds = self.text_model.embed_tokens(input_ids)
 
-        if packed_inputs is not None:
-            inputs_embeds, modality_tensor = self.embed_packed_inputs(input_ids, packed_inputs)
-        elif input_ids is not None:
-            inputs_embeds = self.text_model.embed_tokens(input_ids)
+        if modality_tensor is None:
+            batch_size, seq_len = inputs_embeds.shape[:2]
+            modality_tensor = torch.full(
+                (batch_size, seq_len), ModalityType.text.value, device=inputs_embeds.device, dtype=torch.long
+            )
 
         device = inputs_embeds.device
         batch_size, seq_len = inputs_embeds.shape[:2]
@@ -1517,9 +1356,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(inputs_embeds.shape[:2], device=inputs_embeds.device, dtype=torch.long)
 
-        if position_ids is None and packed_inputs is not None and packed_inputs.get("position_ids") is not None:
-            position_ids = packed_inputs.get("position_ids").to(device=device)
-
         position_ids, rope_deltas = self.get_rope_index(
             position_ids=position_ids,
             attention_mask=attention_mask,
@@ -1528,11 +1364,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         )
         self.rope_deltas = rope_deltas
 
-        if modality_tensor is None:
-            modality_tensor = torch.full(
-                (batch_size, seq_len), ModalityType.text.value, device=device, dtype=torch.long
-            )
-
         cos, sin = self.rotary_emb(position_ids, modality_tensor, hidden_states=inputs_embeds)
 
         decoder_position_ids = position_ids[..., 0] if position_ids.ndim == 3 else position_ids
@@ -1540,7 +1371,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         if not isinstance(attention_mask, dict):
             attention_mask = create_masks_for_generate(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 cache_position=cache_position,
                 past_key_values=past_key_values,
@@ -1560,7 +1391,6 @@ class IsaacModel(Qwen3PreTrainedModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=(cos, sin),
-                output_attentions=output_attentions,
                 **kwargs,
             )
 
@@ -1570,9 +1400,7 @@ class IsaacModel(Qwen3PreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-            hidden_states=(hidden_states,),
-            attentions=None,
+            past_key_values=past_key_values if use_cache else None,
         )
 
 
@@ -1591,41 +1419,56 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
 
     @auto_docstring
     @can_return_tuple
-    @check_model_inputs
+    @merge_with_config_defaults
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        packed_inputs: Optional[dict[str, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        modality_tensor: torch.LongTensor | None = None,
+        vision_patches: torch.Tensor | None = None,
+        vision_patch_attention_mask: torch.Tensor | None = None,
+        vision_token_grids: torch.LongTensor | None = None,
+        vision_token_offsets: torch.LongTensor | None = None,
+        vision_token_lengths: torch.LongTensor | None = None,
+        vision_image_attention_mask: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
-        """Run multimodal CausalLM forward, accepting packed vision/text inputs.
-
-        Args:
-            packed_inputs (`dict`, *optional*):
-                Packed vision/text payload from ``IsaacProcessor`` containing modality ids, MRoPE position ids, and
-                vision patch tensors/grids (with optional offsets/lengths) used to rebuild embeddings.
-
-        Returns:
-            CausalLMOutputWithPast: logits, optional loss, caches, hidden states, attentions.
+        r"""
+        modality_tensor (`torch.LongTensor`, *optional*):
+            Modality identifiers aligned with the token sequence, shaped `(batch_size, seq_len)`.
+        vision_patches (`torch.FloatTensor`, *optional*):
+            Padded per-image patch vectors of shape `(batch_size, max_images, max_patches, patch_dim)`.
+        vision_patch_attention_mask (`torch.LongTensor`, *optional*):
+            Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
+        vision_token_grids (`torch.LongTensor`, *optional*):
+            Per-image patch grids `(h, w)` with shape `(batch_size, max_images, 2)`.
+        vision_token_offsets (`torch.LongTensor`, *optional*):
+            Start offsets inside the per-image vision embedding sequence, shape `(batch_size, max_images)`.
+        vision_token_lengths (`torch.LongTensor`, *optional*):
+            Number of vision tokens to consume per image, shape `(batch_size, max_images)`.
+        vision_image_attention_mask (`torch.LongTensor`, *optional*):
+            Mask indicating which image slots are populated, shape `(batch_size, max_images)`.
         """
-        output_attentions = kwargs.pop("output_attentions", None)
-
         outputs = self.model(
             input_ids=input_ids,
-            packed_inputs=packed_inputs,
+            modality_tensor=modality_tensor,
+            vision_patches=vision_patches,
+            vision_patch_attention_mask=vision_patch_attention_mask,
+            vision_token_grids=vision_token_grids,
+            vision_token_offsets=vision_token_offsets,
+            vision_token_lengths=vision_token_lengths,
+            vision_image_attention_mask=vision_image_attention_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             cache_position=cache_position,
             **kwargs,
         )
@@ -1640,18 +1483,24 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions if output_attentions else None,
+            attentions=outputs.attentions,
         )
 
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        packed_inputs: Optional[dict[str, torch.Tensor]] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        modality_tensor: torch.LongTensor | None = None,
+        vision_patches: torch.Tensor | None = None,
+        vision_patch_attention_mask: torch.Tensor | None = None,
+        vision_token_grids: torch.LongTensor | None = None,
+        vision_token_offsets: torch.LongTensor | None = None,
+        vision_token_lengths: torch.LongTensor | None = None,
+        vision_image_attention_mask: torch.LongTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
         model_inputs = super().prepare_inputs_for_generation(
@@ -1660,16 +1509,26 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             cache_position=cache_position,
-            position_ids=position_ids,
+            position_ids=None,
             **kwargs,
         )
-        if packed_inputs is None:
+        multimodal_inputs = {
+            "modality_tensor": modality_tensor,
+            "vision_patches": vision_patches,
+            "vision_patch_attention_mask": vision_patch_attention_mask,
+            "vision_token_grids": vision_token_grids,
+            "vision_token_offsets": vision_token_offsets,
+            "vision_token_lengths": vision_token_lengths,
+            "vision_image_attention_mask": vision_image_attention_mask,
+        }
+        if not any(value is not None for value in multimodal_inputs.values()):
             return model_inputs
 
         past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
         first_step = past_len == 0
-        model_inputs["packed_inputs"] = packed_inputs if first_step else None
-        model_inputs["position_ids"] = None
+        for key, value in multimodal_inputs.items():
+            model_inputs[key] = value if first_step else None
+        model_inputs["position_ids"] = position_ids if first_step else None
 
         return model_inputs
 

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Perceptron, Inc and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Optional, Union
+from typing import Any
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
@@ -49,7 +48,7 @@ class IsaacProcessor(ProcessorMixin):
         config (IsaacConfig | dict, optional): If provided, overrides processor defaults from the model config.
 
     Returns:
-        BatchFeature: Contains ``input_ids`` and ``packed_inputs`` (patch tensors, grids, offsets, lengths, modality, positions).
+        BatchFeature: Top-level batched text and vision tensors.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -64,8 +63,8 @@ class IsaacProcessor(ProcessorMixin):
         *,
         vision_token: str = "<image>",
         max_sequence_length: int = 16384,
-        rescale_factor: Optional[float] = None,
-        config: Optional[Union[IsaacConfig, dict]] = None,
+        rescale_factor: float | None = None,
+        config: IsaacConfig | dict | None = None,
     ) -> None:
         if isinstance(config, dict):
             config = IsaacConfig(**config)
@@ -95,254 +94,260 @@ class IsaacProcessor(ProcessorMixin):
         self.vision_token = vision_token
         self.max_sequence_length = max_sequence_length
 
-    def _pack_batch(
-        self, texts: list[str], images_list: Optional[list[Optional[list[Image]]]]
-    ) -> dict[str, Optional[torch.Tensor]]:
-        if images_list is None:
-            pairs = ((t, None) for t in texts)
-        else:
+    def _build_batch(
+        self,
+        text: str | list[str],
+        images: Image | list[Image] | None = None,
+    ) -> dict[str, torch.Tensor | None]:
+        texts = [text] if isinstance(text, str) else text
+        if images is None:
+            pairs = ((text_value, None) for text_value in texts)
+        elif isinstance(images, list) and len(images) == len(texts):
+            if not images:
+                images_list = []
+            elif isinstance(images[0], list):
+                images_list = images
+            else:
+                images_list = [[image] for image in images]
             pairs = zip(texts, images_list, strict=True)
-
-        per_sample: list[dict[str, Optional[torch.Tensor]]] = []
-        for txt, imgs in pairs:
-            if imgs is not None and isinstance(imgs, Image):
-                imgs = [imgs]
-            per_sample.append(self._pack_single(txt, imgs))
-
-        lengths = [int(p["input_ids"].shape[1]) for p in per_sample]
-        max_len = max(lengths, default=0)
-        batch = len(per_sample)
-
-        # Use first device with data as anchor
-        base_device = torch.device("cpu")
-        for p in per_sample:
-            if p["input_ids"].numel() > 0:
-                base_device = p["input_ids"].device
-                break
-
-        pad_id = self.text_pad_token_id
-        padded_input_ids = torch.full((batch, max_len), pad_id, device=base_device, dtype=torch.long)
-        padded_modality = torch.full((batch, max_len), ModalityType.text.value, device=base_device, dtype=torch.long)
-        padded_position_ids = torch.zeros((batch, max_len, 3), device=base_device, dtype=torch.long)
-
-        for i, (sample, l) in enumerate(zip(per_sample, lengths)):
-            if l:
-                padded_input_ids[i, -l:] = sample["input_ids"][0]
-                padded_modality[i, -l:] = sample["modality_tensor"][0]
-                padded_position_ids[i, -l:] = sample["position_ids"][0]
-
-        # Vision-side aggregation
-        v_samples = [(b, s) for b, s in enumerate(per_sample) if s["vision_patches"] is not None]
-        if v_samples:
-            vision_patches_list = [s["vision_patches"] for _, s in v_samples]
-            vision_grids_list = [s["vision_token_grids"] for _, s in v_samples]
-            vision_offsets_list = [s["vision_token_offsets"] for _, s in v_samples]
-            vision_lengths_list = [s["vision_token_lengths"] for _, s in v_samples]
-            vision_batch_indices = [torch.full_like(s["vision_token_offsets"], b) for b, s in v_samples]
-
-            vision_patches = torch.cat(vision_patches_list, dim=0)
-            vision_token_grids = torch.cat(vision_grids_list, dim=0)
-            vision_token_offsets = torch.cat(vision_offsets_list, dim=0)
-            vision_token_lengths = torch.cat(vision_lengths_list, dim=0)
-            vision_token_batch_indices = torch.cat(vision_batch_indices, dim=0)
         else:
-            vision_patches = vision_token_grids = vision_token_offsets = vision_token_lengths = (
-                vision_token_batch_indices
-            ) = None
-
-        return {
-            "input_ids": padded_input_ids,
-            "vision_patches": vision_patches,
-            "vision_token_grids": vision_token_grids,
-            "vision_token_offsets": vision_token_offsets,
-            "vision_token_lengths": vision_token_lengths,
-            "vision_token_batch_indices": vision_token_batch_indices,
-            "modality_tensor": padded_modality,
-            "position_ids": padded_position_ids,
-        }
-
-    def _pack_single(self, text: str, images: Optional[list[Image]]) -> dict[str, Optional[torch.Tensor]]:
-        segments = text.split(self.vision_token)  # Parse by vision_token; interleave text segments and image segments.
-        num_images = len(segments) - 1
-        items: list[dict[str, Any]] = []
-        total = 0
-        num_provided_images = len(images) if images is not None else 0
-        if not num_images == num_provided_images:
-            raise ValueError(
-                f"IsaacProcessor expects one image per image token, got {num_images} tokens and {num_provided_images} images in sample with text {text} "
+            pairs = (
+                (
+                    text_value,
+                    None
+                    if text_value.count(self.vision_token) == 0
+                    else images
+                    if isinstance(images, list)
+                    else [images],
+                )
+                for text_value in texts
             )
 
-        for index, segment in enumerate(segments):
-            if segment:
-                tok = (
-                    self.tokenizer.encode(segment, add_special_tokens=False, return_tensors="pt")
-                    .squeeze(0)
-                    .to(torch.long)
+        sample_input_ids: list[torch.Tensor] = []
+        sample_modality: list[torch.Tensor] = []
+        sample_position_ids: list[torch.Tensor] = []
+        sample_vision_patches: list[list[torch.Tensor]] = []
+        sample_vision_grids: list[torch.Tensor] = []
+        sample_vision_offsets: list[torch.Tensor] = []
+        sample_vision_lengths: list[torch.Tensor] = []
+
+        for text_value, sample_images in pairs:
+            segments = text_value.split(self.vision_token)
+            num_images = len(segments) - 1
+            num_provided_images = len(sample_images) if sample_images is not None else 0
+            if num_images != num_provided_images:
+                raise ValueError(
+                    f"IsaacProcessor expects one image per image token, got {num_images} tokens and {num_provided_images} images in sample with text {text_value} "
                 )
-                segment_length = int(tok.numel())
-                items.append({"type": "text", "segment_length": segment_length, "tok": tok})
-                total += segment_length
 
-            if index < num_images:
-                feat = self.image_processor(images=images[index], return_tensors=TensorType.PYTORCH)
-                patches = feat["patches"][0].reshape(-1, feat["patches"].shape[-1])
-
-                virtual_pixel_size = feat["virtual_pixel_size"][0].to(torch.long).tolist()
-                real_pixel_size = feat["real_pixel_size"][0].to(torch.long).tolist()
-                dims = tuple((virtual_pixel_size + [1, 1, 1])[:3])  # (T,H,W) in virtual space
-                segment_length = int(dims[0] * dims[1] * dims[2])
-
-                items.append(
-                    {
-                        "type": "image",
-                        "segment_length": segment_length,
-                        "dims": dims,
-                        "patches": patches,
-                        "grid": (int(real_pixel_size[1]), int(real_pixel_size[2])),
-                    }
-                )
-                total += segment_length
-
-        # Tail crop window.
-        start = max(0, total - self.max_sequence_length)
-        end = total
-
-        image_pad_value = self.image_pad_token_id
-        base_device: Optional[torch.device] = None
-        position_ids, modality, input_ids = [], [], []
-        vpatches, grids, vision_token_offsets, vision_token_lengths = [], [], [], []
-
-        global_offset = 0
-        position_offset = 0
-
-        for item in items:
-            segment_length = int(item["segment_length"])
-            current_window_start = max(start, global_offset)
-            current_window_end = min(end, global_offset + segment_length)
-            has_overlap = current_window_end > current_window_start
-
-            if has_overlap and base_device is None:
-                base_device = item["patches"].device if item["type"] == "image" else item["tok"].device
-
-            if has_overlap:
-                segment_local_start = int(current_window_start - global_offset)
-                segment_local_end = int(current_window_end - global_offset)
-                segment_local_indices = torch.arange(
-                    segment_local_start, segment_local_end, device=base_device, dtype=torch.long
-                )
-                segment_kept_length = segment_local_end - segment_local_start
-
-                if item["type"] == "text":
-                    slice_index = segment_local_indices + position_offset
-                    zero_axis_pad = torch.zeros_like(slice_index)
-                    position_ids.append(torch.stack((slice_index, zero_axis_pad, zero_axis_pad), -1))
-                    modality.append(
-                        torch.full(
-                            (segment_kept_length,), ModalityType.text.value, device=base_device, dtype=torch.long
-                        )
+            items: list[dict[str, Any]] = []
+            total = 0
+            for index, segment in enumerate(segments):
+                if segment:
+                    text_tokens = (
+                        self.tokenizer.encode(segment, add_special_tokens=False, return_tensors="pt")
+                        .squeeze(0)
+                        .to(torch.long)
                     )
-                    input_ids.append(item["tok"].to(base_device)[segment_local_start:segment_local_end])
-                    position_offset += segment_length
+                    segment_length = int(text_tokens.numel())
+                    items.append({"type": "text", "segment_length": segment_length, "tokens": text_tokens})
+                    total += segment_length
+
+                if index < num_images:
+                    feature = self.image_processor(images=sample_images[index], return_tensors=TensorType.PYTORCH)
+                    patches = feature["patches"][0].reshape(-1, feature["patches"].shape[-1])
+                    virtual_pixel_size = feature["virtual_pixel_size"][0].to(torch.long).tolist()
+                    real_pixel_size = feature["real_pixel_size"][0].to(torch.long).tolist()
+                    dims = tuple((virtual_pixel_size + [1, 1, 1])[:3])
+                    segment_length = int(dims[0] * dims[1] * dims[2])
+                    items.append(
+                        {
+                            "type": "image",
+                            "segment_length": segment_length,
+                            "dims": dims,
+                            "patches": patches,
+                            "grid": (int(real_pixel_size[1]), int(real_pixel_size[2])),
+                        }
+                    )
+                    total += segment_length
+
+            start = max(0, total - self.max_sequence_length)
+            end = total
+            base_device: torch.device | None = None
+            input_ids_chunks, modality_chunks, position_chunks = [], [], []
+            vision_patches, vision_grids, vision_offsets, vision_lengths = [], [], [], []
+            global_offset = 0
+            position_offset = 0
+
+            for item in items:
+                segment_length = int(item["segment_length"])
+                current_window_start = max(start, global_offset)
+                current_window_end = min(end, global_offset + segment_length)
+                has_overlap = current_window_end > current_window_start
+
+                if has_overlap and base_device is None:
+                    base_device = item["patches"].device if item["type"] == "image" else item["tokens"].device
+
+                if has_overlap:
+                    segment_local_start = int(current_window_start - global_offset)
+                    segment_local_end = int(current_window_end - global_offset)
+                    segment_local_indices = torch.arange(
+                        segment_local_start, segment_local_end, device=base_device, dtype=torch.long
+                    )
+                    segment_kept_length = segment_local_end - segment_local_start
+
+                    if item["type"] == "text":
+                        slice_index = segment_local_indices + position_offset
+                        zero_axis = torch.zeros_like(slice_index)
+                        position_chunks.append(torch.stack((slice_index, zero_axis, zero_axis), -1))
+                        modality_chunks.append(
+                            torch.full(
+                                (segment_kept_length,), ModalityType.text.value, device=base_device, dtype=torch.long
+                            )
+                        )
+                        input_ids_chunks.append(item["tokens"].to(base_device)[segment_local_start:segment_local_end])
+                        position_offset += segment_length
+                    else:
+                        num_pos_slices, grid_height_tokens, grid_width_tokens = item["dims"]
+                        hw = grid_height_tokens * grid_width_tokens
+                        slice_index = (segment_local_indices // hw) + position_offset
+                        rem = segment_local_indices % hw
+                        position_chunks.append(
+                            torch.stack((slice_index, rem // grid_width_tokens, rem % grid_width_tokens), -1)
+                        )
+                        modality_chunks.append(
+                            torch.full(
+                                (segment_kept_length,), ModalityType.image.value, device=base_device, dtype=torch.long
+                            )
+                        )
+                        input_ids_chunks.append(
+                            torch.full(
+                                (segment_kept_length,), self.image_pad_token_id, device=base_device, dtype=torch.long
+                            )
+                        )
+
+                        vision_patches.append(item["patches"].to(base_device))
+                        vision_grids.append(item["grid"])
+                        vision_offsets.append(segment_local_start)
+                        vision_lengths.append(segment_kept_length)
+                        position_offset += int(num_pos_slices)
                 else:
-                    num_pos_slices, grid_height_tokens, grid_width_tokens = item["dims"]
-                    hw = grid_height_tokens * grid_width_tokens
-                    slice_index = (segment_local_indices // hw) + position_offset
-                    rem = segment_local_indices % hw
-                    row_index = rem // grid_width_tokens
-                    col_index = rem % grid_width_tokens
-                    position_ids.append(torch.stack((slice_index, row_index, col_index), -1))
-                    modality.append(
-                        torch.full(
-                            (segment_kept_length,), ModalityType.image.value, device=base_device, dtype=torch.long
-                        )
-                    )
-                    input_ids.append(
-                        torch.full((segment_kept_length,), image_pad_value, device=base_device, dtype=torch.long)
-                    )
+                    position_offset += segment_length if item["type"] == "text" else int(item["dims"][0])
 
-                    vpatches.append(item["patches"].to(base_device))  # full patches; slice later via offsets/lengths
-                    # Record per-image slice boundaries so we can drop cropped virtual tokens
-                    # after pixel shuffle without re-packing the entire vision stream.
-                    grids.append(item["grid"])
-                    vision_token_offsets.append(segment_local_start)
-                    vision_token_lengths.append(segment_kept_length)
+                global_offset += segment_length
 
-                    position_offset += int(num_pos_slices)
+            if base_device is None:
+                base_device = torch.device("cpu")
 
+            sample_input_ids.append(
+                torch.cat(input_ids_chunks, 0)
+                if input_ids_chunks
+                else torch.zeros((0,), device=base_device, dtype=torch.long)
+            )
+            sample_modality.append(
+                torch.cat(modality_chunks, 0)
+                if modality_chunks
+                else torch.zeros((0,), device=base_device, dtype=torch.long)
+            )
+            sample_position_ids.append(
+                torch.cat(position_chunks, 0)
+                if position_chunks
+                else torch.zeros((0, 3), device=base_device, dtype=torch.long)
+            )
+            sample_vision_patches.append(vision_patches)
+            if vision_patches:
+                sample_vision_grids.append(torch.tensor(vision_grids, device=base_device, dtype=torch.long))
+                sample_vision_offsets.append(torch.tensor(vision_offsets, device=base_device, dtype=torch.long))
+                sample_vision_lengths.append(torch.tensor(vision_lengths, device=base_device, dtype=torch.long))
             else:
-                position_offset += segment_length if item["type"] == "text" else int(item["dims"][0])
+                sample_vision_grids.append(torch.zeros((0, 2), device=base_device, dtype=torch.long))
+                sample_vision_offsets.append(torch.zeros((0,), device=base_device, dtype=torch.long))
+                sample_vision_lengths.append(torch.zeros((0,), device=base_device, dtype=torch.long))
 
-            global_offset += segment_length
-
-        if base_device is None:
-            base_device = torch.device("cpu")
-
-        modality_tensor = (
-            torch.cat(modality, 0).unsqueeze(0)
-            if modality
-            else torch.zeros((1, 0), device=base_device, dtype=torch.long)
-        )
-        position_ids = (
-            torch.cat(position_ids, 0).unsqueeze(0)
-            if position_ids
-            else torch.zeros((1, 0, 3), device=base_device, dtype=torch.long)
-        )
-        input_ids = (
-            torch.cat(input_ids, 0).unsqueeze(0)
-            if input_ids
-            else torch.zeros((1, 0), device=base_device, dtype=torch.long)
+        batch_size = len(sample_input_ids)
+        lengths = [int(sample_input.shape[0]) for sample_input in sample_input_ids]
+        max_len = max(lengths, default=0)
+        base_device = next(
+            (sample_input.device for sample_input in sample_input_ids if sample_input.numel() > 0),
+            torch.device("cpu"),
         )
 
-        if vpatches:
-            vision_patches = torch.cat(vpatches, 0)
-            vision_token_grids = torch.tensor(grids, device=base_device, dtype=torch.long)
-            vision_token_offsets = torch.tensor(vision_token_offsets, device=base_device, dtype=torch.long)
-            vision_token_lengths = torch.tensor(vision_token_lengths, device=base_device, dtype=torch.long)
+        input_ids = torch.full((batch_size, max_len), self.text_pad_token_id, device=base_device, dtype=torch.long)
+        attention_mask = torch.zeros((batch_size, max_len), device=base_device, dtype=torch.long)
+        modality_tensor = torch.full(
+            (batch_size, max_len), ModalityType.text.value, device=base_device, dtype=torch.long
+        )
+        position_ids = torch.zeros((batch_size, max_len, 3), device=base_device, dtype=torch.long)
+
+        for batch_idx, length in enumerate(lengths):
+            if length == 0:
+                continue
+            input_ids[batch_idx, -length:] = sample_input_ids[batch_idx]
+            attention_mask[batch_idx, -length:] = 1
+            modality_tensor[batch_idx, -length:] = sample_modality[batch_idx]
+            position_ids[batch_idx, -length:] = sample_position_ids[batch_idx]
+
+        image_counts = [len(patches) for patches in sample_vision_patches]
+        max_images = max(image_counts, default=0)
+        if max_images == 0:
+            vision_patches = None
+            vision_patch_attention_mask = None
+            vision_token_grids = None
+            vision_token_offsets = None
+            vision_token_lengths = None
+            vision_image_attention_mask = None
         else:
-            vision_patches = vision_token_grids = vision_token_offsets = vision_token_lengths = None
+            first_patch = next((patches[0] for patches in sample_vision_patches if patches), None)
+            patch_dim = first_patch.shape[-1]
+            patch_dtype = first_patch.dtype
+            max_patches = max((patch.shape[0] for patches in sample_vision_patches for patch in patches), default=0)
+
+            vision_patches = torch.zeros(
+                (batch_size, max_images, max_patches, patch_dim), device=base_device, dtype=patch_dtype
+            )
+            vision_patch_attention_mask = torch.zeros(
+                (batch_size, max_images, max_patches), device=base_device, dtype=torch.long
+            )
+            vision_token_grids = torch.zeros((batch_size, max_images, 2), device=base_device, dtype=torch.long)
+            vision_token_offsets = torch.zeros((batch_size, max_images), device=base_device, dtype=torch.long)
+            vision_token_lengths = torch.zeros((batch_size, max_images), device=base_device, dtype=torch.long)
+            vision_image_attention_mask = torch.zeros((batch_size, max_images), device=base_device, dtype=torch.long)
+
+            for batch_idx, sample_patches in enumerate(sample_vision_patches):
+                sample_image_count = len(sample_patches)
+                if sample_image_count == 0:
+                    continue
+                vision_token_grids[batch_idx, :sample_image_count] = sample_vision_grids[batch_idx]
+                vision_token_offsets[batch_idx, :sample_image_count] = sample_vision_offsets[batch_idx]
+                vision_token_lengths[batch_idx, :sample_image_count] = sample_vision_lengths[batch_idx]
+                vision_image_attention_mask[batch_idx, :sample_image_count] = 1
+
+                for image_idx, patches in enumerate(sample_patches):
+                    patch_count = int(patches.shape[0])
+                    vision_patches[batch_idx, image_idx, :patch_count] = patches
+                    vision_patch_attention_mask[batch_idx, image_idx, :patch_count] = 1
 
         return {
             "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "position_ids": position_ids,
+            "modality_tensor": modality_tensor,
             "vision_patches": vision_patches,
+            "vision_patch_attention_mask": vision_patch_attention_mask,
             "vision_token_grids": vision_token_grids,
             "vision_token_offsets": vision_token_offsets,
             "vision_token_lengths": vision_token_lengths,
-            "modality_tensor": modality_tensor,
-            "position_ids": position_ids,
+            "vision_image_attention_mask": vision_image_attention_mask,
         }
 
     def __call__(
         self,
-        text: Union[str, list[str]],
-        images: Optional[Union[Image, list[Image]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        text: str | list[str],
+        images: Image | list[Image] | None = None,
+        return_tensors: str | TensorType | None = TensorType.PYTORCH,
         **kwargs,
     ) -> BatchFeature:
-        texts = [text] if isinstance(text, str) else text
-        images_list: Optional[list[Optional[list[Image]]]] = None
-        if images is not None:
-            if isinstance(images, list) and len(images) == len(texts):
-                if not images:
-                    images_list = []
-                elif isinstance(images[0], list):
-                    images_list = images  # already per-sample
-                else:
-                    images_list = [[img] for img in images]  # list of images, one per sample
-            else:
-                images_list = []
-                for t in texts:
-                    n_tok = t.count(self.vision_token)
-                    if n_tok == 0:
-                        images_list.append(None)
-                    else:
-                        if isinstance(images, list):
-                            images_list.append(images)
-                        else:
-                            images_list.append([images])
-
-        packed = self._pack_batch(texts, images_list)
-        input_ids = packed.pop("input_ids")
-        return BatchFeature(data={"input_ids": input_ids, "packed_inputs": packed})
+        return BatchFeature(data=self._build_batch(text=text, images=images), tensor_type=return_tensors)
 
 
 __all__ = ["IsaacProcessor"]

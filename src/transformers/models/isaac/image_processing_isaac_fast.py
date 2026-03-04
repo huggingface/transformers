@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Perceptron, Inc and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,12 +20,11 @@
 
 import math
 from collections.abc import Sequence
-from typing import Any, Optional, Union
+from typing import Any
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling
-from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
@@ -80,7 +78,7 @@ def get_image_size_for_max_num_patches(
     image_width: int,
     patch_size: int,
     max_num_patches: int,
-    min_num_patches: Optional[int] = None,
+    min_num_patches: int | None = None,
     eps: float = 1e-5,
     pixel_shuffle_scale: int = 1,
 ) -> tuple[int, int]:
@@ -164,10 +162,10 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     do_resize = True
     do_center_crop = False
-    patch_size: Optional[int] = 16
-    max_num_patches: Optional[int] = 256
-    min_num_patches: Optional[int] = None
-    pixel_shuffle_scale: Optional[int] = 1
+    patch_size: int | None = 16
+    max_num_patches: int | None = 256
+    min_num_patches: int | None = None
+    pixel_shuffle_scale: int | None = 1
     do_pad = False
     do_rescale = True
     do_normalize = True
@@ -176,19 +174,9 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     disable_grouping = False
 
-    def __init__(
-        self,
-        **kwargs: Unpack[IsaacImageProcessorFastKwargs],
-    ) -> None:
-        super().__init__(**kwargs)
-
     def _validate_preprocess_kwargs(self, **kwargs):
         # Allow callers to omit resize-related placeholders that BaseImageProcessorFast checks for.
         kwargs.pop("do_resize", None)
-        kwargs.pop("size", None)
-        kwargs.pop("do_center_crop", None)
-        kwargs.pop("crop_size", None)
-        kwargs.pop("disable_grouping", None)
         return super()._validate_preprocess_kwargs(**kwargs)
 
     def resize(
@@ -197,33 +185,25 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         **kwargs,
     ) -> torch.Tensor:
-        resize_kwargs: dict[str, Any] = {"align_corners": False}
-        resize_mode = "bilinear"
-
-        return F.interpolate(
-            image,
-            size=(size.height, size.width),
-            mode=resize_mode,
-            **resize_kwargs,
-        )
+        return F.interpolate(image, size=(size.height, size.width), mode="bilinear", align_corners=False)
 
     def _preprocess(
         self,
         images: list[torch.Tensor],
         do_resize: bool,
-        interpolation: Optional[Any],
-        do_rescale: Optional[bool],
-        rescale_factor: Optional[float],
-        do_normalize: Optional[bool],
-        image_mean: Optional[Union[float, Sequence[float]]],
-        image_std: Optional[Union[float, Sequence[float]]],
-        disable_grouping: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        interpolation: Any | None,
+        do_rescale: bool | None,
+        rescale_factor: float | None,
+        do_normalize: bool | None,
+        image_mean: float | Sequence[float] | None,
+        image_std: float | Sequence[float] | None,
+        disable_grouping: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         *,
-        patch_size: Optional[int] = None,
-        max_num_patches: Optional[int] = None,
-        min_num_patches: Optional[int] = None,
-        pixel_shuffle_scale: Optional[int] = None,
+        patch_size: int | None = None,
+        max_num_patches: int | None = None,
+        min_num_patches: int | None = None,
+        pixel_shuffle_scale: int | None = None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
