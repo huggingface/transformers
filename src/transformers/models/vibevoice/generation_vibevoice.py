@@ -146,14 +146,13 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             else self.__call__
         )
 
-        # Assisted generation completes the prefill stage in candidate generator so that
-        # we don't have several `prefill` calls in one generation loop. Skip `_prefill` for assistants
-        if not generation_config.is_assistant:
-            outputs = self._prefill(input_ids, generation_config, model_kwargs)
-            prefill_consumed = False
-        else:
-            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
-            prefill_consumed = True
+        prefill_consumed = False
+        outputs = self._prefill(
+            input_ids,
+            generation_config,
+            model_kwargs,
+            is_first_iteration=not generation_config.is_assistant,
+        )
 
         # *************** VibeVoice specific ***************
         noise_scheduler = generation_config.noise_scheduler
@@ -167,9 +166,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             )
 
         # State tracking
-        acoustic_cache = None
-        semantic_cache = None
-        inputs_embeds = None
+        acoustic_cache, semantic_cache, inputs_embeds = None, None, None
         audio_chunks = [[] for _ in range(batch_size)]
 
         # Token constraints for VibeVoice - only allow audio tokens
@@ -249,7 +246,11 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             # ============================================
 
             if prefill_consumed:
-                model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+                next_sequence_length = 1 if model_kwargs["use_cache"] else None
+                model_inputs = self.prepare_inputs_for_generation(
+                    input_ids, next_sequence_length=next_sequence_length, **model_kwargs
+                )
+
                 # *************** VibeVoice specific ***************
                 # Subsequent steps use embeddings from previous step
                 model_inputs.pop("input_values", None)
@@ -323,8 +324,11 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             diffusion_idx = diffusion_mask.nonzero(as_tuple=True)[0].cpu()
             if diffusion_idx.numel() > 0:
                 # Negative pass for classifier-free guidance
-                negative_model_inputs = self.prepare_inputs_for_generation(negative_input_ids, **negative_model_kwargs)
-                if negative_model_inputs["inputs_embeds"] is None and inputs_embeds is not None:
+                next_sequence_length = 1 if model_kwargs["use_cache"] else None
+                negative_model_inputs = self.prepare_inputs_for_generation(
+                    negative_input_ids, next_sequence_length=next_sequence_length, **negative_model_kwargs
+                )
+                if negative_model_inputs.get("inputs_embeds") is None and inputs_embeds is not None:
                     negative_model_inputs["inputs_embeds"] = inputs_embeds
                     negative_model_inputs["input_ids"] = None
                 negative_outputs = model_forward(**negative_model_inputs, return_dict=True)
@@ -380,11 +384,12 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 negative_input_ids = torch.cat([negative_input_ids, next_tokens[:, None]], dim=-1)
                 del negative_outputs
 
-                semantic_outputs = self.model.semantic_tokenizer(
+                semantic_outputs = self.model.semantic_tokenizer_encoder(
                     audio_chunk,
                     padding_cache=semantic_cache,
                     use_cache=True,
                 )
+
                 semantic_features = semantic_outputs.latents[diffusion_idx]
                 semantic_cache = semantic_outputs.padding_cache
                 acoustic_embed = self.model.acoustic_connector(audio_latent)

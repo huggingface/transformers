@@ -237,8 +237,6 @@ IGNORE_NON_TESTED = (
         "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
-        # TODO remove?
-        "VibeVoiceSemanticTokenizerModel",  # Building part of bigger (tested) model. Tested implicitly through VibeVoiceForConditionalGeneration
         "VibeVoiceModel",  # Building part of bigger (tested) model. Tested implicitly through VibeVoiceForConditionalGeneration
         "HiggsAudioV2Model",  # Building part of bigger (tested) model. Tested implicitly through HiggsAudioV2ForConditionalGenerationIntegrationTest.
         "Ernie4_5_VLMoeTextModel",  # Building part of bigger (tested) model

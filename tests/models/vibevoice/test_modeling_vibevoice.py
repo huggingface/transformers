@@ -107,8 +107,8 @@ class VibeVoiceModelTester:
             "downsampling_ratios": [2],
             "depths": [1, 1],
         },
-        semantic_tokenizer_config={
-            "model_type": "vibevoice_semantic_tokenizer",
+        semantic_tokenizer_encoder_config={
+            "model_type": "vibevoice_acoustic_tokenizer_encoder",
             "channels": 1,
             "hidden_size": 32,
             "kernel_size": 3,
@@ -124,7 +124,7 @@ class VibeVoiceModelTester:
         self.use_cache = use_cache
         self.text_config = text_config
         self.acoustic_tokenizer_config = acoustic_tokenizer_config
-        self.semantic_tokenizer_config = semantic_tokenizer_config
+        self.semantic_tokenizer_encoder_config = semantic_tokenizer_encoder_config
         self.num_head_layers = num_head_layers
 
         # Extract common attributes for testing
@@ -138,7 +138,7 @@ class VibeVoiceModelTester:
         return VibeVoiceConfig(
             text_config=self.text_config,
             acoustic_tokenizer_config=self.acoustic_tokenizer_config,
-            semantic_tokenizer_config=self.semantic_tokenizer_config,
+            semantic_tokenizer_encoder_config=self.semantic_tokenizer_encoder_config,
             num_head_layers=self.num_head_layers,
             use_cache=self.use_cache,
             pad_token_id=self.text_config["pad_token_id"],
@@ -373,7 +373,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
 class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_checkpoint = "bezzam/VibeVoice-1.5B"
+        self.model_checkpoint = "bezzam/VibeVoice-1.5Bv2"   # TODO change
         self.sampling_rate = 24000
 
     def tearDown(self):
@@ -383,8 +383,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_diffusers
     def test_1b5_inference_no_voice(self):
         """
-        Reproducer which generates JSON expected outputs for acoustic/semantic tokenizers and main model:
-        https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
+        Reproducer: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
         diffusers library is needed (ran with `diffusers==0.35.2`)
         """
         set_seed(42)
@@ -449,8 +448,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_diffusers
     def test_1b5_inference(self):
         """
-        Reproducer which generates JSON expected outputs for acoustic/semantic tokenizers and main model:
-        https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
+        Reproducer: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
         diffusers library is needed (ran with `diffusers==0.35.2`)
         """
         set_seed(42)

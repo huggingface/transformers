@@ -440,8 +440,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vaultgemma", "VaultGemmaModel"),
         ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
-        # TODO remove?
-        ("vibevoice_semantic_tokenizer", "VibeVoiceSemanticTokenizerModel"),
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderModel"),
         ("vibevoice_acoustic_tokenizer_encoder", "VibeVoiceAcousticTokenizerEncoderModel"),
         ("vibevoice_asr", "VibeVoiceAsrForConditionalGeneration"),

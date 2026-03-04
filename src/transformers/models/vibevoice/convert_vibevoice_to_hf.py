@@ -30,7 +30,7 @@ from transformers import (
     VibeVoiceConfig,
     VibeVoiceForConditionalGeneration,
     VibeVoiceProcessor,
-    VibeVoiceSemanticTokenizerConfig,
+    VibeVoiceAcousticTokenizerEncoderConfig,
 )
 
 
@@ -40,12 +40,19 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 # fmt: off
 STATE_DICT_MAPPING = {
-    # Tokenizer encoder: downsample_layers.0 -> stem, downsample_layers.N -> conv_layers.N-1
-    r"(?:semantic|acoustic)_tokenizer\.encoder\.downsample_layers\.0\.0\.conv\.":    r"TOKENIZER_TYPE_tokenizer.encoder.stem.conv.conv.",
-    r"(?:semantic|acoustic)_tokenizer\.encoder\.stages\.0\.":                        r"TOKENIZER_TYPE_tokenizer.encoder.stem.stage.",
-    r"(?:semantic|acoustic)_tokenizer\.encoder\.downsample_layers\.(\d+)\.0\.conv\.": r"TOKENIZER_TYPE_tokenizer.encoder.conv_layers.PLACEHOLDER.conv.conv.",
-    r"(?:semantic|acoustic)_tokenizer\.encoder\.stages\.(\d+)\.":                    r"TOKENIZER_TYPE_tokenizer.encoder.conv_layers.PLACEHOLDER.stage.",
-    r"(?:semantic|acoustic)_tokenizer\.encoder\.head\.conv\.":                       r"TOKENIZER_TYPE_tokenizer.encoder.head.",
+    # Semantic tokenizer encoder
+    r"semantic_tokenizer\.encoder\.downsample_layers\.0\.0\.conv\.":    r"semantic_tokenizer_encoder.stem.conv.conv.",
+    r"semantic_tokenizer\.encoder\.stages\.0\.":                        r"semantic_tokenizer_encoder.stem.stage.",
+    r"semantic_tokenizer\.encoder\.downsample_layers\.(\d+)\.0\.conv\.": r"semantic_tokenizer_encoder.conv_layers.PLACEHOLDER.conv.conv.",
+    r"semantic_tokenizer\.encoder\.stages\.(\d+)\.":                    r"semantic_tokenizer_encoder.conv_layers.PLACEHOLDER.stage.",
+    r"semantic_tokenizer\.encoder\.head\.conv\.":                       r"semantic_tokenizer_encoder.head.",
+
+    # Acoustic tokenizer encoder
+    r"acoustic_tokenizer\.encoder\.downsample_layers\.0\.0\.conv\.":    r"acoustic_tokenizer.encoder.stem.conv.conv.",
+    r"acoustic_tokenizer\.encoder\.stages\.0\.":                        r"acoustic_tokenizer.encoder.stem.stage.",
+    r"acoustic_tokenizer\.encoder\.downsample_layers\.(\d+)\.0\.conv\.": r"acoustic_tokenizer.encoder.conv_layers.PLACEHOLDER.conv.conv.",
+    r"acoustic_tokenizer\.encoder\.stages\.(\d+)\.":                    r"acoustic_tokenizer.encoder.conv_layers.PLACEHOLDER.stage.",
+    r"acoustic_tokenizer\.encoder\.head\.conv\.":                       r"acoustic_tokenizer.encoder.head.",
 
     # Acoustic tokenizer decoder: upsample_layers.0 -> stem, upsample_layers.N -> conv_layers.N-1
     r"acoustic_tokenizer\.decoder\.upsample_layers\.0\.0\.conv\.conv\.":           r"acoustic_tokenizer.decoder.stem.conv.conv.",
@@ -79,11 +86,6 @@ def map_old_key_to_new(old_key: str) -> str:
     for pattern, replacement in STATE_DICT_MAPPING.items():
         match = re.search(pattern, new_key)
         if match:
-            # Handle tokenizer type replacement for non-capturing group patterns
-            if "TOKENIZER_TYPE" in replacement:
-                tokenizer_type = "semantic" if "semantic_tokenizer" in new_key else "acoustic"
-                replacement = replacement.replace("TOKENIZER_TYPE", tokenizer_type)
-
             # Handle index shifts for conv_layers (downsample_layers/upsample_layers indexed from 1)
             if "PLACEHOLDER" in replacement and match.groups():
                 layer_idx = int(match.group(1))
@@ -218,7 +220,7 @@ def convert_checkpoint(
 
     # 5) Create semantic tokenizer config
     logger.info("Creating semantic tokenizer config")
-    semantic_config = VibeVoiceSemanticTokenizerConfig(**semantic_config_dict)
+    semantic_encoder_config = VibeVoiceAcousticTokenizerEncoderConfig(**semantic_config_dict)
 
     # 6) Create acoustic tokenizer config
     logger.info("Creating acoustic tokenizer config")
@@ -289,7 +291,7 @@ def convert_checkpoint(
     # 8) Create and save full VibeVoice model
     logger.info("Creating full model")
     model_config["acoustic_tokenizer_config"] = acoustic_config.to_dict()
-    model_config["semantic_tokenizer_config"] = semantic_config.to_dict()
+    model_config["semantic_tokenizer_encoder_config"] = semantic_encoder_config.to_dict()
     vibevoice_config = VibeVoiceConfig(**model_config)
     vibevoice_model = VibeVoiceForConditionalGeneration(vibevoice_config).to(dtype)
     logger.info(f"Number of parameters in model: {len(vibevoice_model.state_dict())}")
@@ -298,7 +300,7 @@ def convert_checkpoint(
     logger.info(f"Semantic connector dtype: {next(vibevoice_model.model.semantic_connector.parameters()).dtype}")
     logger.info(f"Language model dtype: {next(vibevoice_model.model.language_model.parameters()).dtype}")
     logger.info(f"Acoustic tokenizer dtype: {next(vibevoice_model.model.acoustic_tokenizer.parameters()).dtype}")
-    logger.info(f"Semantic tokenizer dtype: {next(vibevoice_model.model.semantic_tokenizer.parameters()).dtype}")
+    logger.info(f"Semantic tokenizer dtype: {next(vibevoice_model.model.semantic_tokenizer_encoder.parameters()).dtype}")
     logger.info(f"Diffusion head dtype: {next(vibevoice_model.model.diffusion_head.parameters()).dtype}")
 
     # -- load into HF model

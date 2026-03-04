@@ -461,8 +461,6 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("vaultgemma", "VaultGemmaConfig"),
         ("vibevoice", "VibeVoiceConfig"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerConfig"),
-        # TODO remove?
-        ("vibevoice_semantic_tokenizer", "VibeVoiceSemanticTokenizerConfig"),
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderConfig"),
         ("vibevoice_acoustic_tokenizer_encoder", "VibeVoiceAcousticTokenizerEncoderConfig"),
         ("vibevoice_asr", "VibeVoiceAsrConfig"),
@@ -973,8 +971,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("vaultgemma", "VaultGemma"),
         ("vibevoice", "VibeVoice"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizer"),
-        # TODO remove?
-        ("vibevoice_semantic_tokenizer", "VibeVoiceSemanticTokenizer"),
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderConfig"),
         ("vibevoice_acoustic_tokenizer_encoder", "VibeVoiceAcousticTokenizerEncoderConfig"),
         ("vibevoice_asr", "VibeVoiceAsr"),

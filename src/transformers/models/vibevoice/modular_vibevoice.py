@@ -21,108 +21,12 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..llama.modeling_llama import LlamaMLP
-from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
-from ..vibevoice_acoustic_tokenizer.configuration_vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerConfig
-from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
-    VibeVoiceAcousticTokenizerEncoderOutput,
-    VibeVoiceAcousticTokenizerModel,
-    VibeVoiceAcousticTokenizerPreTrainedModel,
-)
 from .generation_vibevoice import VibeVoiceGenerationMixin
-
-
-# TODO after VibeVoice ASR is merged: https://github.com/huggingface/transformers/pull/43625
-# can use the encoder only object `VibeVoiceAsrEncoderModel` from there
-class VibeVoiceSemanticTokenizerConfig(VibeVoiceAcousticTokenizerConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`VibeVoiceSemanticTokenizerModel`]. It is used to
-    instantiate a VibeVoice semantic tokenizer model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    semantic tokenizer of [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        channels (`int`, *optional*, defaults to 1):
-            Number of input channels.
-        hidden_size (`int`, *optional*, defaults to 128):
-            Dimensionality of latent representations.
-        kernel_size (`int`, *optional*, defaults to 7):
-            Kernel size for convolutional layers.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            Epsilon value for RMSNorm layers.
-        layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
-            Initial value for layer scaling.
-        initializer_range (`float`, *optional*, defaults to 0.01):
-            Standard deviation for weight initialization.
-        num_filters (`int`, *optional*, defaults to 32):
-            Number of filters in initial convolutional layer, and doubles after each downsampling.
-        downsampling_ratios (`List[int]`, *optional*, defaults to `[2, 2, 4, 5, 5, 8]`):
-            Downsampling ratios for each layer.
-        depths (`List[int]`, *optional*, defaults to `[3, 3, 3, 3, 3, 3, 8]`):
-            Number of ConvNeXt blocks at each stage.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            Activation function to use.
-        ffn_expansion (`int`, *optional*, defaults to 4):
-            Expansion factor for feed-forward networks.
-
-    ```python
-    >>> from transformers import VibeVoiceSemanticTokenizerModel, VibeVoiceSemanticTokenizerConfig
-
-    >>> # Initializing a VibeVoice Semantic Tokenizer configuration
-    >>> configuration = VibeVoiceSemanticTokenizerConfig()
-
-    >>> # Initializing a model (with random weights)
-    >>> model = VibeVoiceSemanticTokenizerModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "vibevoice_semantic_tokenizer"
-
-    def __init__(
-        self,
-        channels=1,
-        hidden_size=128,
-        kernel_size=7,
-        rms_norm_eps=1e-5,
-        layer_scale_init_value=1e-6,
-        initializer_range=1e-2,
-        num_filters=32,
-        downsampling_ratios=[2, 2, 4, 5, 5, 8],
-        depths=[3, 3, 3, 3, 3, 3, 8],
-        hidden_act="gelu",
-        ffn_expansion=4,
-        **kwargs,
-    ):
-        super().__init__(
-            channels=channels,
-            hidden_size=hidden_size,
-            kernel_size=kernel_size,
-            rms_norm_eps=rms_norm_eps,
-            layer_scale_init_value=layer_scale_init_value,
-            initializer_range=initializer_range,
-            num_filters=num_filters,
-            downsampling_ratios=downsampling_ratios,
-            depths=depths,
-            hidden_act=hidden_act,
-            ffn_expansion=ffn_expansion,
-            **kwargs,
-        )
-
-        del self.vae_std
-
-    def upsampling_ratios(self):
-        raise NotImplementedError("VibeVoiceAsrEncoderConfig does not need upsampling_ratios.")
-
-    def decoder_depths(self):
-        raise NotImplementedError("VibeVoiceAsrEncoderConfig does not need decoder_depths.")
 
 
 class VibeVoiceConfig(PretrainedConfig):
@@ -137,8 +41,8 @@ class VibeVoiceConfig(PretrainedConfig):
     Args:
         acoustic_tokenizer_config (`Union[AutoConfig, dict]`, *optional*):
             The config object or dictionary of the acoustic tokenizer.
-        semantic_tokenizer_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object or dictionary of the semantic tokenizer.
+        semantic_tokenizer_encoder_config (`Union[AutoConfig, dict]`, *optional*):
+            The config object or dictionary of the semantic tokenizer. This tokenizer extracts semantic features from audio.
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object or dictionary of the text model.
         pad_token_id (`int`, *optional*, defaults to 151643):
@@ -178,11 +82,9 @@ class VibeVoiceConfig(PretrainedConfig):
     ```"""
 
     model_type = "vibevoice"
-    is_composition = True
-
     sub_configs = {
         "acoustic_tokenizer_config": AutoConfig,
-        "semantic_tokenizer_config": AutoConfig,
+        "semantic_tokenizer_encoder_config": AutoConfig,
         "text_config": AutoConfig,
     }
 
@@ -200,7 +102,7 @@ class VibeVoiceConfig(PretrainedConfig):
     def __init__(
         self,
         acoustic_tokenizer_config=None,
-        semantic_tokenizer_config=None,
+        semantic_tokenizer_encoder_config=None,
         text_config=None,
         pad_token_id=151643,
         eos_token_id=151643,
@@ -226,18 +128,16 @@ class VibeVoiceConfig(PretrainedConfig):
             acoustic_tokenizer_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer"]()
         self.acoustic_tokenizer_config = acoustic_tokenizer_config
 
-        # TODO after VibeVoice ASR is merged: https://github.com/huggingface/transformers/pull/43625
-        # can use the encoder only object `VibeVoiceAsrEncoderModel` from there
-        if isinstance(semantic_tokenizer_config, dict):
-            semantic_tokenizer_config["model_type"] = semantic_tokenizer_config.get(
-                "model_type", "vibevoice_semantic_tokenizer"
+        if isinstance(semantic_tokenizer_encoder_config, dict):
+            semantic_tokenizer_encoder_config["model_type"] = semantic_tokenizer_encoder_config.get(
+                "model_type", "vibevoice_acoustic_tokenizer_encoder"
             )
-            semantic_tokenizer_config = CONFIG_MAPPING[semantic_tokenizer_config["model_type"]](
-                **semantic_tokenizer_config
+            semantic_tokenizer_encoder_config = CONFIG_MAPPING[semantic_tokenizer_encoder_config["model_type"]](
+                **semantic_tokenizer_encoder_config
             )
-        elif semantic_tokenizer_config is None:
-            semantic_tokenizer_config = CONFIG_MAPPING["vibevoice_semantic_tokenizer"]()
-        self.semantic_tokenizer_config = semantic_tokenizer_config
+        elif semantic_tokenizer_encoder_config is None:
+            semantic_tokenizer_encoder_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"](hidden_size=128)
+        self.semantic_tokenizer_encoder_config = semantic_tokenizer_encoder_config
 
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config.get("model_type", "qwen2")
@@ -314,10 +214,6 @@ class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
 
 
 class VibeVoiceRMSNorm(Qwen2RMSNorm):
-    pass
-
-
-class VibeVoiceConv1dPaddingCache(MimiConv1dPaddingCache):
     pass
 
 
@@ -429,11 +325,11 @@ class VibeVoiceMultiModalProjector(nn.Module):
 
 
 @auto_docstring
-class VibeVoicePreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
+class VibeVoicePreTrainedModel(PreTrainedModel):
     config: VibeVoiceConfig
     base_model_prefix = "model"
     main_input_name = "input_ids"
-    _no_split_modules = ["VibeVoiceConvNext1dLayer", "VibeVoiceDiffusionHead"]
+    _no_split_modules = ["VibeVoiceDiffusionHead"]
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
@@ -450,68 +346,6 @@ class VibeVoicePreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
             nn.init.constant_(module.latent_bias_factor, 0.0)
 
 
-class VibeVoiceSemanticTokenizerOutput(VibeVoiceAcousticTokenizerEncoderOutput):
-    pass
-
-
-# TODO after VibeVoice ASR is merged: https://github.com/huggingface/transformers/pull/43625
-# can use the encoder only object `VibeVoiceAsrEncoderModel` from there
-@auto_docstring(
-    custom_intro="""
-    Semantic tokenizer which only encodes audio into semantic tokens, namely no decoding.
-    """
-)
-class VibeVoiceSemanticTokenizerModel(VibeVoiceAcousticTokenizerModel):
-    config: VibeVoiceSemanticTokenizerConfig
-    main_input_name = "input_values"
-    input_modalities = "audio"
-
-    def __init__(self, config):
-        super().__init__(config)
-        del self.decoder
-
-    def encode(self, input_values, padding_cache=None, use_cache=None, sample=True):
-        raise NotImplementedError("Encode method is not implemented.")
-
-    def decode(self, latents, padding_cache=None, use_cache=False):
-        raise NotImplementedError("Decode method is not implemented.")
-
-    def forward(self, input_values, padding_cache=None, use_cache=None, **kwargs):
-        r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
-            Input audio waveform to be encoded into latent representations.
-        padding_cache (`VibeVoiceConv1dPaddingCache`, *optional*):
-            Cache object for streaming mode to maintain convolution states across layers.
-        use_cache (`bool`, *optional*):
-            Whether to use caching for convolution states.
-        """
-        if use_cache and padding_cache is None:
-            per_layer_padding = [self.encoder.stem.conv.causal_padding]
-            per_layer_in_channels = [self.encoder.stem.conv.conv.in_channels]
-            per_layer_padding.extend([block.mixer.causal_padding for block in self.encoder.stem.stage])
-            per_layer_in_channels.extend([block.mixer.conv.in_channels for block in self.encoder.stem.stage])
-            for layer in self.encoder.conv_layers:
-                per_layer_padding.append(layer.conv.causal_padding)
-                per_layer_in_channels.append(layer.conv.conv.in_channels)
-                per_layer_padding.extend([block.mixer.causal_padding for block in layer.stage])
-                per_layer_in_channels.extend([block.mixer.conv.in_channels for block in layer.stage])
-            per_layer_padding.append(self.encoder.head.causal_padding)
-            per_layer_in_channels.append(self.encoder.head.conv.in_channels)
-
-            padding_cache = VibeVoiceConv1dPaddingCache(
-                num_layers=len(per_layer_padding),
-                per_layer_padding=per_layer_padding,
-                per_layer_padding_mode=["constant"] * len(per_layer_padding),
-                per_layer_in_channels=per_layer_in_channels,
-            )
-        latents = self.encoder(input_values, padding_cache=padding_cache)
-
-        return VibeVoiceSemanticTokenizerOutput(
-            latents=latents,
-            padding_cache=padding_cache if use_cache else None,
-        )
-
-
 @auto_docstring(
     custom_intro="""
     The VibeVoice model which consists of audio tokenizers and an LLM backbone, without a language modeling head.
@@ -522,12 +356,12 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         super().__init__(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.acoustic_tokenizer = AutoModel.from_config(config.acoustic_tokenizer_config)
-        self.semantic_tokenizer = AutoModel.from_config(config.semantic_tokenizer_config)
+        self.semantic_tokenizer_encoder = AutoModel.from_config(config.semantic_tokenizer_encoder_config)
         self.acoustic_connector = VibeVoiceMultiModalProjector(
             config.acoustic_tokenizer_config.hidden_size, config.text_config.hidden_size
         )
         self.semantic_connector = VibeVoiceMultiModalProjector(
-            config.semantic_tokenizer_config.hidden_size, config.text_config.hidden_size
+            config.semantic_tokenizer_encoder_config.hidden_size, config.text_config.hidden_size
         )
         self.diffusion_head = VibeVoiceDiffusionHead(config)
         self.post_init()
@@ -714,9 +548,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
 
 __all__ = [
     "VibeVoiceConfig",
-    "VibeVoiceSemanticTokenizerConfig",
     "VibeVoiceForConditionalGeneration",
     "VibeVoicePreTrainedModel",
     "VibeVoiceModel",
-    "VibeVoiceSemanticTokenizerModel",
 ]
