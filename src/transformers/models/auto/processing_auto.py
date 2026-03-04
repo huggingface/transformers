@@ -45,7 +45,7 @@ logger = logging.get_logger(__name__)
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
-    PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[str | None, str | None]] = OrderedDict()
+    PROCESSOR_MAPPING_NAMES: OrderedDict[str, str | None] = OrderedDict()
 else:
     PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
