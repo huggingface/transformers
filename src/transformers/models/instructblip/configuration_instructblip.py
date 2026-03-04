@@ -27,7 +27,7 @@ class InstructBlipVisionConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`InstructBlipVisionModel`]. It is used to
     instantiate a InstructBLIP vision encoder according to the specified arguments, defining the model architecture.
     Instantiating a configuration defaults will yield a similar configuration to that of the InstructBLIP
-    [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
+    [Salesforce/instructblip-flan-t5-xl](https://huggingface.co/Salesforce/instructblip-flan-t5-xl) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -111,7 +111,7 @@ class InstructBlipQFormerConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`InstructBlipQFormerModel`]. It is used to
     instantiate a InstructBLIP Querying Transformer (Q-Former) model according to the specified arguments, defining the
     model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the InstructBLIP [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5)
+    the InstructBLIP [Salesforce/instructblip-flan-t5-xl](https://huggingface.co/Salesforce/instructblip-flan-t5-xl)
     architecture. Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs.
     Read the documentation from [`PreTrainedConfig`] for more information.
 
@@ -209,7 +209,7 @@ class InstructBlipConfig(PreTrainedConfig):
     [`InstructBlipForConditionalGeneration`]. It is used to instantiate a InstructBLIP model according to the specified
     arguments, defining the vision model, Q-Former model and language model configs. Instantiating a configuration with
     the defaults will yield a similar configuration to that of the InstructBLIP
-    [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
+    [Salesforce/instructblip-flan-t5-xl](https://huggingface.co/Salesforce/instructblip-flan-t5-xl) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.

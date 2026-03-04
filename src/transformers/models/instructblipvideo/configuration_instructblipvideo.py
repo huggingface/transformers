@@ -33,7 +33,7 @@ class InstructBlipVideoVisionConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`InstructBlipVideoVisionModel`]. It is used to
     instantiate a InstructBlipVideo vision encoder according to the specified arguments, defining the model architecture.
     Instantiating a configuration defaults will yield a similar configuration to that of the InstructBlipVideo
-    [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
+    [Salesforce/instructblip-flan-t5-xl](https://huggingface.co/Salesforce/instructblip-flan-t5-xl) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -117,7 +117,7 @@ class InstructBlipVideoQFormerConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`InstructBlipVideoQFormerModel`]. It is used to
     instantiate a InstructBlipVideo Querying Transformer (Q-Former) model according to the specified arguments, defining the
     model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the InstructBlipVideo [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5)
+    the InstructBlipVideo [Salesforce/instructblip-flan-t5-xl](https://huggingface.co/Salesforce/instructblip-flan-t5-xl)
     architecture. Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs.
     Read the documentation from [`PreTrainedConfig`] for more information.
 
@@ -215,7 +215,7 @@ class InstructBlipVideoConfig(PreTrainedConfig):
     [`InstructBlipVideoForConditionalGeneration`]. It is used to instantiate a Instructblipvideo model according to the specified
     arguments, defining the vision model, Q-Former model and language model configs. Instantiating a configuration with
     the defaults will yield a similar configuration to that of the Instructblipvideo
-    [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
+    [Salesforce/instructblip-flan-t5-xl](https://huggingface.co/Salesforce/instructblip-flan-t5-xl) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
