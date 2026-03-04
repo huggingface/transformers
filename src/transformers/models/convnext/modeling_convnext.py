@@ -391,11 +391,7 @@ class ConvNextBackbone(BackboneMixin, ConvNextPreTrainedModel):
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
         ```"""
-        # Internally the model always needs to output hidden states, we control the output
-        # per user request on the final output
-        user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
-            self.config, "output_hidden_states", False
-        )
+        # NOTE: that due to the nature of the model, we always return the `hidden_states`
         kwargs["output_hidden_states"] = True
 
         embedding_output = self.embeddings(pixel_values)
@@ -408,9 +404,7 @@ class ConvNextBackbone(BackboneMixin, ConvNextPreTrainedModel):
                 hidden_state = self.hidden_states_norms[stage](hidden_state)
                 feature_maps.append(hidden_state)
 
-        return BackboneOutput(
-            feature_maps=tuple(feature_maps), hidden_states=hidden_states if user_requested_hidden_states else None
-        )
+        return BackboneOutput(feature_maps=tuple(feature_maps), hidden_states=hidden_states)
 
 
 __all__ = ["ConvNextForImageClassification", "ConvNextModel", "ConvNextPreTrainedModel", "ConvNextBackbone"]
