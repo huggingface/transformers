@@ -884,7 +884,7 @@ class Qwen3_5MoeSparseMoeBlock(nn.Module):
 
         shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states_reshaped)) * shared_expert_output
 
-        expert_output += shared_expert_output
+        expert_output = expert_output + shared_expert_output
         expert_output = expert_output.reshape(batch_size, sequence_length, hidden_dim)
         return expert_output
 

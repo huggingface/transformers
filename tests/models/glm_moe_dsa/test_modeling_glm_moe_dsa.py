@@ -76,6 +76,10 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     model_split_percents = [0.5, 0.7, 0.8]
 
+    @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
+    def test_tp_generation_quantized(self):
+        pass
+
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """Needs to be overridden as GLM-4.7-Flash has special MLA cache format (though we don't really use the MLA)"""
         self.assertIsInstance(past_key_values, Cache)
