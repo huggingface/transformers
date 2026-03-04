@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,29 +13,20 @@
 # limitations under the License.
 
 from functools import lru_cache
-from typing import Optional, Union, Unpack
+from typing import Unpack
 
-import numpy as np
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .audio_processing_base import AudioProcessingMixin
 from .audio_utils import AudioInput, make_list_of_audio
 from .feature_extraction_utils import BatchFeature
-from .image_utils import validate_kwargs
 from .processing_utils import AudioKwargs
 from .utils import TensorType, logging
-from .utils.import_utils import is_torch_available, requires
-
-
-if is_torch_available():
-    import torch
-    import torch.nn.functional as F
 
 
 logger = logging.get_logger(__name__)
 
 
-@requires(backends=("torch",))
 class BaseAudioProcessor(AudioProcessingMixin):
     model_input_names = ["audio"]
     valid_kwargs = AudioKwargs
@@ -56,15 +46,39 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         super().__init__(**kwargs)
 
-        kwargs = self.filter_out_unused_kwargs(kwargs)
-        self._init_kwargs_from_valid_kwargs(kwargs)
-
     def __call__(self, audio: AudioInput, *args, **kwargs: Unpack[AudioKwargs]) -> BatchFeature:
         return self.preprocess(audio, *args, **kwargs)
 
+    def process_audio(self, *args, **kwargs):
+        """
+        Process a single raw audio input into the backend's working format.
+
+        Implemented by backend subclasses (e.g., `TorchBackend`). Converts a raw input
+        (NumPy array) to the backend's internal format (e.g., `torch.Tensor`), handles
+        mono conversion if needed.
+        """
+        raise NotImplementedError
+
+    def _preprocess(self, *args, **kwargs):
+        """
+        Perform the actual batch audio preprocessing (truncation, padding, stacking).
+
+        Implemented by backend subclasses (e.g., `TorchBackend`). Receives a list of
+        already-prepared audio tensors and applies the configured preprocessing operations.
+        Returns a `BatchFeature` with the processed audio values.
+        """
+        raise NotImplementedError
+
+    def pad(self, *args, **kwargs):
+        """
+        Pad a single audio tensor to a target length.
+
+        Implemented by backend subclasses (e.g., `TorchBackend`).
+        """
+        raise NotImplementedError
+
     def preprocess(self, audio: AudioInput, *args, **kwargs: Unpack[AudioKwargs]) -> BatchFeature:
         # args are not validated, but their order in the `preprocess` and `_preprocess` signatures must be the same
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_kwargs_names)
 
         # Perform type validation on received kwargs
         validate_typed_dict(self.valid_kwargs, kwargs)
@@ -90,11 +104,11 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _validate_preprocess_kwargs(
         self,
-        sample_rate: Optional[int] = None,
-        max_length: Optional[int] = None,
-        truncation: Optional[bool] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        sample_rate: int | None = None,
+        max_length: int | None = None,
+        truncation: bool | None = None,
+        pad_to_multiple_of: int | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
         """
@@ -112,13 +126,19 @@ class BaseAudioProcessor(AudioProcessingMixin):
         self,
         audio: AudioInput,
         *args,
-        sample_rate: Optional[int] = None,
+        sample_rate: int | None = None,
         **kwargs: Unpack[AudioKwargs],
     ) -> BatchFeature:
         audio = self._prepare_audio_like_inputs(audio=audio, sample_rate=sample_rate)
         return self._preprocess(audio, *args, **kwargs)
 
-    def _prepare_audio_like_inputs(self, audio: AudioInput, sample_rate: Optional[int] = None) -> list["torch.Tensor"]:
+    def _prepare_audio_structure(self, audio: AudioInput, sample_rate: int | None = None) -> list:
+        """
+        Prepare the audio structure for processing: handle URL inputs, validate sample rate,
+        and flatten into a list of audio arrays.
+
+        Analogous to `_prepare_images_structure` in the image processing pipeline.
+        """
         if not (isinstance(audio, str) or (isinstance(audio, (list, tuple)) and all(isinstance(el, str) for el in audio))):
             # NOTE: we want to force the user to either:
             # 1. pass the sample rate when provided audio is array-type, to avoid silent errors that might be hard to debug
@@ -139,71 +159,18 @@ class BaseAudioProcessor(AudioProcessingMixin):
             audio = [audio]
 
         audio = make_list_of_audio(audio)
-
-        if self.force_mono:
-            # TODO: audio proc, to change
-            audio = [a.mean(axis=1) if a.ndim > 1 else a for a in audio]
-
-        audio = [torch.from_numpy(audio_el) if isinstance(audio_el, np.ndarray) else audio_el for audio_el in audio]
-
         return audio
 
-    def _preprocess(
-        self,
-        audio: list["torch.Tensor"],
-        padding,
-        max_length,
-        truncation,
-        pad_to_multiple_of,
-        return_tensors,
-        **kwargs,
-    ) -> BatchFeature:
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+    def _prepare_audio_like_inputs(self, audio: AudioInput, *args, sample_rate: int | None = None, **kwargs) -> list:
+        """
+        Prepare audio-like inputs for processing by structuring and then converting each
+        audio item via `process_audio`.
 
-        is_batched = len(audio) > 1
-
-        if truncation and max_length is None:
-            raise ValueError("When setting ``truncation=True``, make sure that ``max_length`` is defined.")
-
-        if is_batched and not truncation and max_length is not None and max(audio_el.shape[-1] for audio_el in audio) > max_length:
-            logger.warning(
-                f"Truncation is set to False but `max_length` is set to {max_length} with the longest audio being "
-                f"{max(audio_el.shape[-1] for audio_el in audio)}. We will set truncation to True."
-            )
-            truncation = True
-
-        if truncation:
-            audio = [audio_el[..., :max_length] for audio_el in audio]
-
-        if max_length is None:
-            max_length = max(audio_el.shape[-1] for audio_el in audio)
-
-        if padding:
-            audio = [self.pad(audio_el, max_length) for audio_el in audio]
-
-        audio = torch.stack(audio, dim=0) if return_tensors else audio
-        return BatchFeature(data={"audio": audio}, tensor_type=return_tensors)
-
-    def pad(self, audio: "torch.Tensor", max_length: int) -> "torch.Tensor":
-        current_length = audio.shape[-1]
-        if current_length >= max_length:
-            return audio
-
-        if self.padding_value is None:
-            raise ValueError(
-                "Asking to pad but the audio processor does not have a padding value. Please select a value to use"
-                " as `padding_value`. For example: `audio_processor.padding_value = 0.0`."
-            )
-
-        if self.padding_side == "right":
-            pad_args = (0, max_length - current_length)
-        elif self.padding_side == "left":
-            pad_args = (max_length - current_length, 0)
-        else:
-            raise ValueError(f"Invalid padding side: {self.padding_side}")
-
-        return F.pad(audio, pad_args, "constant", self.padding_value)
+        Analogous to `_prepare_image_like_inputs` in the image processing pipeline.
+        """
+        audio = self._prepare_audio_structure(audio, sample_rate=sample_rate)
+        audio = [self.process_audio(audio_el) for audio_el in audio]
+        return audio
 
     def to_dict(self):
         return super().to_dict()
@@ -211,11 +178,11 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
 @lru_cache(maxsize=10)
 def validate_preprocess_arguments(
-    sample_rate: Optional[int] = None,
-    max_length: Optional[int] = None,
-    truncation: Optional[bool] = None,
-    pad_to_multiple_of: Optional[int] = None,
-    return_tensors: Optional[Union[str, TensorType]] = None,
+    sample_rate: int | None = None,
+    max_length: int | None = None,
+    truncation: bool | None = None,
+    pad_to_multiple_of: int | None = None,
+    return_tensors: str | TensorType | None = None,
 ):
     """
     Checks validity of typically used arguments in a `BaseAudioProcessor` `preprocess` method.
