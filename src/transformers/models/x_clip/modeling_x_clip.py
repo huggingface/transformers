@@ -35,7 +35,7 @@ from ...utils import (
     logging,
     torch_int,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 
@@ -431,7 +431,7 @@ class XCLIPVisionEncoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             **kwargs,
@@ -445,7 +445,7 @@ class XCLIPVisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        return hidden_states, attn_weights
+        return hidden_states
 
 
 @auto_docstring
@@ -455,10 +455,7 @@ class XCLIPPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _can_record_outputs = {
-        "hidden_states": [
-            OutputRecorder(XCLIPEncoderLayer, layer_name="text_model"),
-            XCLIPVisionEncoderLayer,
-        ],
+        "hidden_states": [XCLIPEncoderLayer, XCLIPVisionEncoderLayer],
         "attentions": OutputRecorder(XCLIPAttention, layer_name="self_attn", index=1),
     }
 
@@ -572,6 +569,8 @@ class XCLIPTextTransformer(XCLIPPreTrainedModel):
 
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -632,8 +631,7 @@ class XCLIPTextModel(XCLIPPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -701,25 +699,23 @@ class XCLIPVisionEncoder(nn.Module):
                 [What are attention masks?](../glossary#attention-mask)
         """
         hidden_states = inputs_embeds
-        for idx, encoder_layer in enumerate(self.layers):
-            layer_outputs = encoder_layer(
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask,
                 **kwargs,
             )
-            hidden_states = layer_outputs[0]
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class XCLIPVisionTransformer(nn.Module):
+class XCLIPVisionTransformer(XCLIPPreTrainedModel):
     """
     This corresponds to the `CrossFrameCommunicationTransformer` class in the original implementation.
     """
 
     def __init__(self, config: XCLIPVisionConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         embed_dim = config.hidden_size
 
         self.embeddings = XCLIPVisionEmbeddings(config)
@@ -727,6 +723,10 @@ class XCLIPVisionTransformer(nn.Module):
         self.encoder = XCLIPVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -766,8 +766,7 @@ class XCLIPVisionModel(XCLIPPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1033,8 +1032,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
@@ -1068,8 +1066,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
 
         return text_outputs
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def get_video_features(
         self,
@@ -1159,8 +1156,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
 
         return video_outputs
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
