@@ -27,8 +27,11 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
     from transformers import (
+        Qwen3TTSConfig,
         Qwen3TTSForConditionalGeneration,
         Qwen3TTSProcessor,
+        Qwen3TTSSpeakerEncoderConfig,
+        Qwen3TTSTalkerCodePredictorConfig,
         Qwen3TTSTalkerConfig,
         Qwen3TTSTalkerForConditionalGeneration,
         Qwen3TTSTalkerModel,
@@ -37,6 +40,8 @@ if is_torch_available():
     )
     from transformers.models.qwen3_tts.modeling_qwen3_tts import (
         Qwen3TTSTokenizerV1Decoder,
+        Qwen3TTSTokenizerV1DecoderBigVGANModel,
+        Qwen3TTSTokenizerV1DecoderDiTModel,
         Qwen3TTSTokenizerV2Model,
         Qwen3TTSTokenizerV2TransformerModel,
     )
@@ -192,6 +197,49 @@ class Qwen3TTSTalkerModelTest(ModelTesterMixin, unittest.TestCase):
         outputs = model(inputs_embeds=inputs_embeds, labels=labels)
         self.assertIsNotNone(outputs.loss)
 
+    def test_sdpa_attention_implementation(self):
+        """Talker model runs correctly under the SDPA attention backend."""
+        config = self.model_tester.get_config()
+        config._attn_implementation = "sdpa"
+        model = Qwen3TTSTalkerModel(config).to(torch_device)
+        model.eval()
+        _, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        with torch.no_grad():
+            outputs = model(**input_dict)
+        self.assertEqual(
+            outputs.last_hidden_state.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size),
+        )
+
+    def test_output_hidden_states(self):
+        """Talker model returns all intermediate hidden states when requested."""
+        config = self.model_tester.get_config()
+        model = Qwen3TTSTalkerModel(config).to(torch_device)
+        model.eval()
+        _, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        with torch.no_grad():
+            outputs = model(**input_dict, output_hidden_states=True)
+        self.assertIsNotNone(outputs.hidden_states)
+        # num_hidden_layers intermediate + 1 final = num_hidden_layers + 1
+        self.assertEqual(len(outputs.hidden_states), config.num_hidden_layers + 1)
+        for hs in outputs.hidden_states:
+            self.assertEqual(
+                hs.shape,
+                (self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size),
+            )
+
+    def test_past_key_values_caching(self):
+        """Prefill with use_cache=True produces past_key_values and same output shape."""
+        config = self.model_tester.get_config()
+        model = Qwen3TTSTalkerModel(config).to(torch_device)
+        model.eval()
+        _, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        with torch.no_grad():
+            out_no_cache = model(**input_dict, use_cache=False)
+            out_cached = model(**input_dict, use_cache=True)
+        self.assertIsNotNone(out_cached.past_key_values)
+        self.assertEqual(out_no_cache.last_hidden_state.shape, out_cached.last_hidden_state.shape)
+
 
 @require_torch
 class Qwen3TTSTokenizerModelTest(unittest.TestCase):
@@ -290,6 +338,395 @@ class Qwen3TTSTokenizerModelTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(codes, conditioning, reference_mel, num_steps=2)
         self.assertEqual(outputs.shape[0], 2)
+
+    @unittest.skipIf(sys.platform == "win32", "safetensors file locking not supported on Windows.")
+    def test_v1_decoder_save_load(self):
+        """V1 decoder produces identical output after save/load."""
+        config = Qwen3TTSTokenizerV1Config(
+            encoder_config={"n_mels": 64, "n_layer": 2},
+            decoder_config={"dit_config": {"hidden_size": 128, "num_hidden_layers": 2, "num_attention_heads": 4}},
+        ).decoder_config
+        model = Qwen3TTSTokenizerV1Decoder(config).to(torch_device)
+        model.eval()
+        codes = torch.randint(0, 512, (1, 50), device=torch_device)
+        conditioning = torch.randn(1, 192, device=torch_device)
+        reference_mel = torch.randn(1, 300, 80, device=torch_device)
+        with torch.no_grad():
+            output_before = model(codes, conditioning, reference_mel, num_steps=2)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model.save_pretrained(tmpdir)
+            loaded = Qwen3TTSTokenizerV1Decoder.from_pretrained(tmpdir).to(torch_device)
+        loaded.eval()
+        with torch.no_grad():
+            output_after = loaded(codes, conditioning, reference_mel, num_steps=2)
+        self.assertTrue(torch.allclose(output_before, output_after))
+
+    def test_v2_batch_decode(self):
+        """V2 tokenizer decodes a batch of two items producing one waveform per item."""
+        config = self._get_v2_config()
+        num_q = config.decoder_config.num_quantizers
+        model = Qwen3TTSTokenizerV2Model(config).to(torch_device)
+        model.eval()
+        # decode expects shape (batch, seq_len, num_quantizers)
+        audio_codes = torch.randint(1, config.decoder_config.codebook_size, (2, 4, num_q), device=torch_device)
+        with torch.no_grad():
+            output = model.decode(audio_codes, return_dict=True)
+        self.assertEqual(len(output.audio_values), 2)
+        for wav in output.audio_values:
+            self.assertEqual(wav.dim(), 1)
+
+    def test_v2_output_length_scales_with_codes(self):
+        """V2 decoder output audio length doubles when the code sequence doubles."""
+        config = self._get_v2_config()
+        num_q = config.decoder_config.num_quantizers
+        model = Qwen3TTSTokenizerV2Model(config).to(torch_device)
+        model.eval()
+        # decode expects shape (batch, seq_len, num_quantizers)
+        codes_4 = torch.randint(1, config.decoder_config.codebook_size, (1, 4, num_q), device=torch_device)
+        codes_8 = torch.randint(1, config.decoder_config.codebook_size, (1, 8, num_q), device=torch_device)
+        with torch.no_grad():
+            out_4 = model.decode(codes_4, return_dict=True).audio_values[0]
+            out_8 = model.decode(codes_8, return_dict=True).audio_values[0]
+        self.assertEqual(len(out_8), 2 * len(out_4))
+
+
+@require_torch
+class Qwen3TTSTokenizerV2Test(unittest.TestCase):
+    """Comprehensive tests for the V2 (12Hz) speech tokenizer."""
+
+    def _get_v2_config(self):
+        return Qwen3TTSTokenizerV2Config(
+            encoder_config={
+                "audio_channels": 1,
+                "chunk_in_sec": None,
+                "hidden_size": 32,
+                "num_filters": 8,
+                "num_residual_layers": 1,
+                "upsampling_ratios": [8, 4],
+                "codebook_size": 64,
+                "vector_quantization_hidden_dimension": 64,
+                "upsample_groups": 32,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 2,
+                "num_key_value_heads": 2,
+                "sliding_window": 4,
+                "codebook_dim": 64,
+                "use_cache": False,
+            },
+            decoder_config={
+                "codebook_size": 64,
+                "hidden_size": 64,
+                "latent_dim": 64,
+                "max_position_embeddings": 256,
+                "num_attention_heads": 4,
+                "num_key_value_heads": 4,
+                "intermediate_size": 128,
+                "num_hidden_layers": 2,
+                "num_quantizers": 4,
+                "sliding_window": 8,
+                "codebook_dim": 32,
+                "decoder_dim": 64,
+                "upsample_rates": (2, 2, 2, 2),
+                "upsampling_ratios": (2, 2),
+            },
+            encoder_valid_num_quantizers=4,
+            input_sample_rate=24000,
+            output_sample_rate=24000,
+            decode_upsample_rate=16,
+            encode_downsample_rate=16,
+        )
+
+    def test_v2_decode_output_is_valid_audio(self):
+        """V2 decode output is float, finite, and within [-1, 1]."""
+        config = self._get_v2_config()
+        model = Qwen3TTSTokenizerV2Model(config).to(torch_device)
+        model.eval()
+        num_q = config.decoder_config.num_quantizers
+        audio_codes = torch.randint(1, config.decoder_config.codebook_size, (1, 6, num_q), device=torch_device)
+        with torch.no_grad():
+            output = model.decode(audio_codes, return_dict=True)
+        wav = output.audio_values[0]
+        self.assertTrue(wav.is_floating_point())
+        self.assertTrue(torch.isfinite(wav).all())
+        self.assertLessEqual(wav.max().item(), 1.0)
+        self.assertGreaterEqual(wav.min().item(), -1.0)
+
+    def test_v2_decode_audio_length_matches_upsample_rate(self):
+        """V2 decoded audio length equals codes_length * decode_upsample_rate."""
+        config = self._get_v2_config()
+        model = Qwen3TTSTokenizerV2Model(config).to(torch_device)
+        model.eval()
+        num_q = config.decoder_config.num_quantizers
+        codes_len = 5
+        audio_codes = torch.randint(1, config.decoder_config.codebook_size, (1, codes_len, num_q), device=torch_device)
+        with torch.no_grad():
+            output = model.decode(audio_codes, return_dict=True)
+        wav = output.audio_values[0]
+        expected_length = codes_len * config.decode_upsample_rate
+        self.assertEqual(len(wav), expected_length)
+
+    def test_v2_decode_no_nans(self):
+        """V2 decode does not produce NaN values."""
+        config = self._get_v2_config()
+        model = Qwen3TTSTokenizerV2Model(config).to(torch_device)
+        model.eval()
+        num_q = config.decoder_config.num_quantizers
+        audio_codes = torch.randint(1, config.decoder_config.codebook_size, (1, 8, num_q), device=torch_device)
+        with torch.no_grad():
+            output = model.decode(audio_codes, return_dict=True)
+        wav = output.audio_values[0]
+        self.assertFalse(torch.isnan(wav).any())
+
+    def test_v2_decode_deterministic(self):
+        """V2 decode produces identical output for the same input."""
+        config = self._get_v2_config()
+        model = Qwen3TTSTokenizerV2Model(config).to(torch_device)
+        model.eval()
+        num_q = config.decoder_config.num_quantizers
+        audio_codes = torch.randint(1, config.decoder_config.codebook_size, (1, 4, num_q), device=torch_device)
+        with torch.no_grad():
+            out1 = model.decode(audio_codes, return_dict=True).audio_values[0]
+            out2 = model.decode(audio_codes, return_dict=True).audio_values[0]
+        self.assertTrue(torch.equal(out1, out2))
+
+    def test_v2_decode_returns_tuple_when_return_dict_false(self):
+        """V2 decode returns a tuple when return_dict=False."""
+        config = self._get_v2_config()
+        model = Qwen3TTSTokenizerV2Model(config).to(torch_device)
+        model.eval()
+        num_q = config.decoder_config.num_quantizers
+        audio_codes = torch.randint(1, config.decoder_config.codebook_size, (1, 4, num_q), device=torch_device)
+        with torch.no_grad():
+            output = model.decode(audio_codes, return_dict=False)
+        self.assertIsInstance(output, tuple)
+        self.assertEqual(len(output[0]), 1)
+
+    def test_v2_config_roundtrip(self):
+        """V2 config saves and loads with identical values."""
+        config = self._get_v2_config()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config.save_pretrained(tmpdir)
+            loaded = Qwen3TTSTokenizerV2Config.from_pretrained(tmpdir)
+        self.assertEqual(config.decoder_config.num_quantizers, loaded.decoder_config.num_quantizers)
+        self.assertEqual(config.decode_upsample_rate, loaded.decode_upsample_rate)
+        self.assertEqual(config.encoder_valid_num_quantizers, loaded.encoder_valid_num_quantizers)
+
+    def test_v2_decode_wrong_num_quantizers_raises(self):
+        """V2 decode raises when codes have the wrong number of quantizers."""
+        config = self._get_v2_config()
+        model = Qwen3TTSTokenizerV2Model(config).to(torch_device)
+        model.eval()
+        num_q = config.decoder_config.num_quantizers
+        wrong_q = num_q + 2
+        bad_codes = torch.randint(1, config.decoder_config.codebook_size, (1, 4, wrong_q), device=torch_device)
+        with self.assertRaises((ValueError, RuntimeError)):
+            with torch.no_grad():
+                model.decode(bad_codes, return_dict=True)
+
+
+@require_torch
+class Qwen3TTSTokenizerV1Test(unittest.TestCase):
+    """Comprehensive tests for the V1 (25Hz) speech tokenizer."""
+
+    def _get_v1_decoder_config(self):
+        return Qwen3TTSTokenizerV1Config(
+            encoder_config={"n_mels": 64, "n_layer": 2},
+            decoder_config={
+                "dit_config": {"hidden_size": 128, "num_hidden_layers": 2, "num_attention_heads": 4},
+            },
+        ).decoder_config
+
+    def _get_v1_config(self):
+        return Qwen3TTSTokenizerV1Config(
+            encoder_config={
+                "n_mels": 64,
+                "n_layer": 2,
+                "n_state": 64,
+                "n_head": 4,
+                "output_dim": 64,
+                "audio_vq_type": "GRVQ",
+                "audio_vq_codebook_size": 64,
+                "audio_vq_codebook_dim": 64,
+            },
+            decoder_config={
+                "dit_config": {"hidden_size": 128, "num_hidden_layers": 2, "num_attention_heads": 4},
+            },
+            decode_upsample_rate=200,
+            encode_downsample_rate=200,
+        )
+
+    def test_v1_decoder_output_shape(self):
+        """V1 decoder produces waveform with batch dimension preserved."""
+        config = self._get_v1_decoder_config()
+        model = Qwen3TTSTokenizerV1Decoder(config).to(torch_device)
+        model.eval()
+        batch_size = 3
+        codes = torch.randint(0, 512, (batch_size, 50), device=torch_device)
+        conditioning = torch.randn(batch_size, 192, device=torch_device)
+        reference_mel = torch.randn(batch_size, 300, 80, device=torch_device)
+        with torch.no_grad():
+            outputs = model(codes, conditioning, reference_mel, num_steps=2)
+        self.assertEqual(outputs.shape[0], batch_size)
+
+    def test_v1_decoder_output_is_valid_waveform(self):
+        """V1 decoder output is a finite, non-empty waveform clamped to [-1, 1]."""
+        config = self._get_v1_decoder_config()
+        model = Qwen3TTSTokenizerV1Decoder(config).to(torch_device)
+        model.eval()
+        codes = torch.randint(0, 512, (1, 50), device=torch_device)
+        conditioning = torch.randn(1, 192, device=torch_device)
+        reference_mel = torch.randn(1, 300, 80, device=torch_device)
+        with torch.no_grad():
+            waveform = model(codes, conditioning, reference_mel, num_steps=2)
+        self.assertGreater(waveform.numel(), 0)
+        self.assertTrue(torch.isfinite(waveform).all())
+        self.assertLessEqual(waveform.max().item(), 1.0)
+        self.assertGreaterEqual(waveform.min().item(), -1.0)
+
+    def test_v1_decoder_output_no_nans(self):
+        """V1 decoder output contains no NaN values."""
+        config = self._get_v1_decoder_config()
+        model = Qwen3TTSTokenizerV1Decoder(config).to(torch_device)
+        model.eval()
+        codes = torch.randint(0, 512, (1, 50), device=torch_device)
+        conditioning = torch.randn(1, 192, device=torch_device)
+        reference_mel = torch.randn(1, 300, 80, device=torch_device)
+        with torch.no_grad():
+            outputs = model(codes, conditioning, reference_mel, num_steps=2)
+        self.assertFalse(torch.isnan(outputs).any())
+        self.assertTrue(torch.isfinite(outputs).all())
+
+    def test_v1_dit_forward(self):
+        """V1 DiT model forward pass produces output of the correct shape."""
+        config = self._get_v1_decoder_config()
+        dit = Qwen3TTSTokenizerV1DecoderDiTModel(config.dit_config).to(torch_device)
+        dit.eval()
+        batch_size = 2
+        mel_dim = config.dit_config.mel_dim
+        repeats = config.dit_config.repeats
+        code_len = 20
+        seq_len = code_len * repeats
+        hidden_states = torch.randn(batch_size, seq_len, mel_dim, device=torch_device)
+        speaker_embedding = torch.randn(batch_size, seq_len, 192, device=torch_device)
+        condition_vector = torch.randn(batch_size, 300, mel_dim, device=torch_device)
+        quantized_code = torch.randint(0, 512, (batch_size, code_len), device=torch_device)
+        time_step = torch.tensor(0.5, device=torch_device)
+        with torch.no_grad():
+            output = dit(
+                hidden_states=hidden_states,
+                speaker_embedding=speaker_embedding,
+                condition_vector=condition_vector,
+                quantized_code=quantized_code,
+                time_step=time_step,
+            )
+        # DiT doubles the batch via classifier-free guidance (apply_cfg=True by default)
+        self.assertEqual(output.shape, (batch_size * 2, seq_len, mel_dim))
+
+    def test_v1_bigvgan_forward(self):
+        """V1 BigVGAN vocoder converts mel spectrogram to waveform."""
+        bigvgan_config = Qwen3TTSTokenizerV1Config(
+            decoder_config={
+                "dit_config": {"hidden_size": 128, "num_hidden_layers": 2, "num_attention_heads": 4},
+            },
+        ).decoder_config.bigvgan_config
+        model = Qwen3TTSTokenizerV1DecoderBigVGANModel(bigvgan_config).to(torch_device)
+        model.eval()
+        batch_size = 2
+        mel_len = 50
+        mel_dim = bigvgan_config.mel_dim
+        # BigVGAN conv_pre expects channels-first: (batch, mel_dim, mel_len)
+        mel_input = torch.randn(batch_size, mel_dim, mel_len, device=torch_device)
+        with torch.no_grad():
+            waveform = model(mel_input)
+        # BigVGAN squeezes and moves to CPU in its forward
+        self.assertGreater(waveform.numel(), 0)
+        # Waveform length is mel_len * product(upsample_rates)
+        expected_upsample = 1
+        for rate in bigvgan_config.upsample_rates:
+            expected_upsample *= rate
+        expected_samples = mel_len * expected_upsample
+        # Output is squeezed, so shape depends on batch_size
+        self.assertEqual(waveform.shape, (batch_size, expected_samples))
+
+    def test_v1_config_roundtrip(self):
+        """V1 config saves and loads with identical values."""
+        config = self._get_v1_config()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config.save_pretrained(tmpdir)
+            loaded = Qwen3TTSTokenizerV1Config.from_pretrained(tmpdir)
+        self.assertEqual(config.decoder_config.dit_config.hidden_size, loaded.decoder_config.dit_config.hidden_size)
+        self.assertEqual(config.decode_upsample_rate, loaded.decode_upsample_rate)
+        self.assertEqual(config.encoder_config.n_mels, loaded.encoder_config.n_mels)
+
+    def test_v1_decoder_longer_codes_produce_longer_audio(self):
+        """V1 decoder output audio length grows proportionally with code sequence length."""
+        config = self._get_v1_decoder_config()
+        model = Qwen3TTSTokenizerV1Decoder(config).to(torch_device)
+        model.eval()
+        conditioning = torch.randn(1, 192, device=torch_device)
+        reference_mel = torch.randn(1, 300, 80, device=torch_device)
+        codes_short = torch.randint(0, 512, (1, 25), device=torch_device)
+        codes_long = torch.randint(0, 512, (1, 50), device=torch_device)
+        with torch.no_grad():
+            out_short = model(codes_short, conditioning, reference_mel, num_steps=2)
+            out_long = model(codes_long, conditioning, reference_mel, num_steps=2)
+        self.assertGreater(out_long.numel(), out_short.numel())
+
+
+@require_torch
+class Qwen3TTSTopLevelConfigTest(unittest.TestCase):
+    """Tests for Qwen3TTSConfig and its sub-configs."""
+
+    def test_default_sub_configs_are_created(self):
+        """Qwen3TTSConfig always instantiates its sub-configs even when not provided."""
+        config = Qwen3TTSConfig()
+        self.assertIsInstance(config.talker_config, Qwen3TTSTalkerConfig)
+        self.assertIsInstance(config.speaker_encoder_config, Qwen3TTSSpeakerEncoderConfig)
+        self.assertIsInstance(config.talker_config.code_predictor_config, Qwen3TTSTalkerCodePredictorConfig)
+
+    def test_config_model_type(self):
+        """model_type strings are set correctly at every level."""
+        config = Qwen3TTSConfig()
+        self.assertEqual(config.model_type, "qwen3_tts")
+        self.assertEqual(config.talker_config.model_type, "qwen3_tts_talker")
+        self.assertEqual(config.speaker_encoder_config.model_type, "qwen3_tts_speaker_encoder")
+
+    def test_config_roundtrip(self):
+        """Qwen3TTSConfig serialises and deserialises all sub-configs correctly."""
+        config = Qwen3TTSConfig()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config.save_pretrained(tmpdir)
+            loaded = Qwen3TTSConfig.from_pretrained(tmpdir)
+        self.assertEqual(config.talker_config.hidden_size, loaded.talker_config.hidden_size)
+        self.assertEqual(config.talker_config.num_code_groups, loaded.talker_config.num_code_groups)
+        self.assertEqual(config.speaker_encoder_config.enc_dim, loaded.speaker_encoder_config.enc_dim)
+        self.assertEqual(config.tts_pad_token_id, loaded.tts_pad_token_id)
+        self.assertEqual(config.tts_bos_token_id, loaded.tts_bos_token_id)
+        self.assertEqual(config.tts_eos_token_id, loaded.tts_eos_token_id)
+
+    def test_config_custom_talker_params(self):
+        """Custom talker parameters are stored and accessible on Qwen3TTSConfig."""
+        config = Qwen3TTSConfig(
+            talker_config={"hidden_size": 512, "num_code_groups": 16},
+            tts_pad_token_id=100,
+        )
+        self.assertEqual(config.talker_config.hidden_size, 512)
+        self.assertEqual(config.talker_config.num_code_groups, 16)
+        self.assertEqual(config.tts_pad_token_id, 100)
+
+    def test_talker_code_predictor_config_defaults(self):
+        """Qwen3TTSTalkerCodePredictorConfig exposes expected default values."""
+        cfg = Qwen3TTSTalkerCodePredictorConfig()
+        self.assertEqual(cfg.vocab_size, 2048)
+        self.assertEqual(cfg.num_code_groups, 32)
+        self.assertEqual(cfg.model_type, "qwen3_tts_talker_code_predictor")
+
+    def test_speaker_encoder_config_defaults(self):
+        """Qwen3TTSSpeakerEncoderConfig exposes expected default values."""
+        cfg = Qwen3TTSSpeakerEncoderConfig()
+        self.assertEqual(cfg.enc_dim, 1024)
+        self.assertEqual(cfg.sample_rate, 24000)
+        self.assertEqual(cfg.model_type, "qwen3_tts_speaker_encoder")
 
 
 @require_torch
@@ -5747,3 +6184,269 @@ class Qwen3TTSIntegrationTest(unittest.TestCase):
         codes = codes_list[0]
         self.assertEqual(codes.dim(), 2)
         self.assertEqual(codes.shape[-1], model.talker.config.num_code_groups)
+
+    @slow
+    @require_torch_accelerator
+    def test_small_model_integration_sampling(self):
+        """Stochastic generation (do_sample=True) produces codes of the expected shape."""
+        model, processor = self._load_model_and_processor()
+
+        text = "Hello, this is a stochastic generation test."
+        inputs = processor(text=text, return_tensors="pt").to(torch_device)
+
+        codes_list, hidden_list = model.generate(
+            input_ids=[inputs["input_ids"]],
+            languages=["auto"],
+            do_sample=True,
+            temperature=0.9,
+            top_k=50,
+            top_p=1.0,
+            subtalker_dosample=True,
+            max_new_tokens=50,
+        )
+
+        self.assertEqual(len(codes_list), 1)
+        codes = codes_list[0]
+        self.assertEqual(codes.dim(), 2)
+        self.assertEqual(codes.shape[-1], model.talker.config.num_code_groups)
+        self.assertEqual(len(hidden_list), 1)
+        self.assertEqual(hidden_list[0].shape[0], codes.shape[0])
+
+    @slow
+    @require_torch_accelerator
+    def test_small_model_integration_max_new_tokens_respected(self):
+        """max_new_tokens limits the length of the generated code sequence."""
+        model, processor = self._load_model_and_processor()
+
+        text = "This sentence should be truncated early by the max_new_tokens limit."
+        inputs = processor(text=text, return_tensors="pt").to(torch_device)
+
+        limit = 20
+        codes_list, _ = model.generate(
+            input_ids=[inputs["input_ids"]],
+            languages=["auto"],
+            do_sample=False,
+            subtalker_dosample=False,
+            max_new_tokens=limit,
+        )
+
+        self.assertEqual(len(codes_list), 1)
+        self.assertLessEqual(codes_list[0].shape[0], limit)
+
+    @slow
+    @require_torch_accelerator
+    def test_small_model_integration_output_types(self):
+        """generate() returns lists of CPU-movable tensors with correct dtypes."""
+        model, processor = self._load_model_and_processor()
+
+        text = "Output type verification."
+        inputs = processor(text=text, return_tensors="pt").to(torch_device)
+
+        codes_list, hidden_list = model.generate(
+            input_ids=[inputs["input_ids"]],
+            languages=["auto"],
+            do_sample=False,
+            subtalker_dosample=False,
+            max_new_tokens=30,
+        )
+
+        self.assertIsInstance(codes_list, list)
+        self.assertIsInstance(hidden_list, list)
+        codes = codes_list[0]
+        # Codes must be integer tensors (codec token indices)
+        self.assertTrue(codes.dtype in (torch.int32, torch.int64, torch.long))
+        # Hidden states must be floating-point
+        self.assertTrue(hidden_list[0].dtype in (torch.float16, torch.bfloat16, torch.float32))
+
+    @slow
+    @require_torch_accelerator
+    def test_small_model_integration_hidden_states_shape(self):
+        """Hidden states returned alongside codes have a consistent sequence length."""
+        model, processor = self._load_model_and_processor()
+
+        text = "Verify hidden state shapes match code sequence length."
+        inputs = processor(text=text, return_tensors="pt").to(torch_device)
+
+        codes_list, hidden_list = model.generate(
+            input_ids=[inputs["input_ids"]],
+            languages=["auto"],
+            do_sample=False,
+            subtalker_dosample=False,
+            max_new_tokens=50,
+        )
+
+        codes = codes_list[0]
+        hidden = hidden_list[0]
+        # First dimension of hidden states must equal the number of generated code frames
+        self.assertEqual(hidden.shape[0], codes.shape[0])
+        # Hidden size must be positive
+        self.assertGreater(hidden.shape[-1], 0)
+
+    @slow
+    @require_torch_accelerator
+    def test_small_model_integration_batch_independent(self):
+        """Each item in a batch generates independently reproducible codes."""
+        model, processor = self._load_model_and_processor()
+
+        text = "The weather is nice today."
+        inputs = processor(text=text, return_tensors="pt").to(torch_device)
+
+        # Generate single item
+        codes_single, _ = model.generate(
+            input_ids=[inputs["input_ids"]],
+            languages=["auto"],
+            do_sample=False,
+            subtalker_dosample=False,
+            max_new_tokens=50,
+        )
+        # Generate same item twice in a batch
+        codes_batch, _ = model.generate(
+            input_ids=[inputs["input_ids"], inputs["input_ids"]],
+            languages=["auto", "auto"],
+            do_sample=False,
+            subtalker_dosample=False,
+            max_new_tokens=50,
+        )
+
+        self.assertEqual(len(codes_batch), 2)
+        # Both batch items must produce identical results to the single run
+        torch.testing.assert_close(codes_single[0], codes_batch[0])
+        torch.testing.assert_close(codes_single[0], codes_batch[1])
+
+    @slow
+    @require_torch_accelerator
+    def test_small_model_integration_text_to_audio_v2(self):
+        """End-to-end: text → codes → audio waveform using the V2 (12Hz) speech tokenizer."""
+        model, processor = self._load_model_and_processor()
+
+        text = "Hello, this is an end-to-end test."
+        inputs = processor(text=text, return_tensors="pt").to(torch_device)
+
+        codes_list, _ = model.generate(
+            input_ids=[inputs["input_ids"]],
+            languages=["auto"],
+            do_sample=False,
+            subtalker_dosample=False,
+            max_new_tokens=50,
+        )
+        self.assertEqual(len(codes_list), 1)
+        codes = codes_list[0]
+
+        # Load V2 speech tokenizer and decode codes → audio
+        speech_tokenizer = Qwen3TTSTokenizerV2Model.from_pretrained(
+            "Qwen/Qwen3-TTS-Tokenizer-12Hz", device_map=torch_device
+        )
+        speech_tokenizer.eval()
+
+        # codes shape from generate: (seq_len, num_code_groups)
+        # V2 decode expects: (batch, codes_len, num_quantizers)
+        audio_codes = codes.unsqueeze(0).to(torch_device)
+        with torch.no_grad():
+            output = speech_tokenizer.decode(audio_codes, return_dict=True)
+
+        self.assertEqual(len(output.audio_values), 1)
+        wav = output.audio_values[0]
+
+        # Validate audio output
+        self.assertTrue(wav.is_floating_point(), "Waveform should be float")
+        self.assertGreater(len(wav), 0, "Waveform should not be empty")
+        self.assertTrue(torch.isfinite(wav).all(), "Waveform should contain no inf values")
+        self.assertFalse(torch.isnan(wav).any(), "Waveform should contain no NaN values")
+        self.assertLessEqual(wav.max().item(), 1.0, "Waveform should be clamped to [-1, 1]")
+        self.assertGreaterEqual(wav.min().item(), -1.0, "Waveform should be clamped to [-1, 1]")
+
+        # Audio duration should be proportional to codes length
+        expected_audio_length = codes.shape[0] * speech_tokenizer.decode_upsample_rate
+        self.assertEqual(len(wav), expected_audio_length)
+
+    @slow
+    @require_torch_accelerator
+    def test_small_model_integration_batch_text_to_audio_v2(self):
+        """End-to-end batch: multiple texts → codes → audio waveforms."""
+        model, processor = self._load_model_and_processor()
+
+        texts = ["Hello.", "The weather is nice today."]
+        inputs_list = [
+            processor(text=t, return_tensors="pt").to(torch_device)
+            for t in texts
+        ]
+
+        codes_list, _ = model.generate(
+            input_ids=[inp["input_ids"] for inp in inputs_list],
+            languages=["auto", "auto"],
+            do_sample=False,
+            subtalker_dosample=False,
+            max_new_tokens=50,
+        )
+        self.assertEqual(len(codes_list), 2)
+
+        # Load V2 speech tokenizer
+        speech_tokenizer = Qwen3TTSTokenizerV2Model.from_pretrained(
+            "Qwen/Qwen3-TTS-Tokenizer-12Hz", device_map=torch_device
+        )
+        speech_tokenizer.eval()
+
+        # Decode each item independently (variable lengths)
+        for i, codes in enumerate(codes_list):
+            audio_codes = codes.unsqueeze(0).to(torch_device)
+            with torch.no_grad():
+                output = speech_tokenizer.decode(audio_codes, return_dict=True)
+            wav = output.audio_values[0]
+            self.assertTrue(wav.is_floating_point())
+            self.assertGreater(len(wav), 0, f"Waveform {i} should not be empty")
+            self.assertFalse(torch.isnan(wav).any(), f"Waveform {i} has NaNs")
+            self.assertTrue(torch.isfinite(wav).all(), f"Waveform {i} has infs")
+
+    @slow
+    @require_torch_accelerator
+    def test_small_model_integration_v2_tokenizer_encode_decode_roundtrip(self):
+        """V2 tokenizer encode → decode roundtrip preserves audio structure (real weights)."""
+        speech_tokenizer = Qwen3TTSTokenizerV2Model.from_pretrained(
+            "Qwen/Qwen3-TTS-Tokenizer-12Hz", device_map=torch_device
+        )
+        speech_tokenizer.eval()
+
+        # Create a synthetic 24kHz audio signal (1 second sine wave)
+        sample_rate = speech_tokenizer.input_sample_rate
+        duration = 1.0
+        t = torch.linspace(0, duration, int(sample_rate * duration), device=torch_device)
+        audio = 0.5 * torch.sin(2 * 3.14159 * 440 * t)  # 440 Hz tone
+
+        # Encode: audio → codes
+        input_values = audio.unsqueeze(0)
+        padding_mask = torch.ones_like(input_values, dtype=torch.long)
+        with torch.no_grad():
+            encoded = speech_tokenizer.encode(input_values, padding_mask=padding_mask, return_dict=True)
+        self.assertEqual(len(encoded.audio_codes), 1)
+        codes = encoded.audio_codes[0]  # (codes_len, num_quantizers)
+        self.assertEqual(codes.dim(), 2)
+        self.assertEqual(codes.shape[-1], speech_tokenizer.encoder_valid_num_quantizers)
+
+        # Decode: codes → audio
+        with torch.no_grad():
+            decoded = speech_tokenizer.decode(codes.unsqueeze(0), return_dict=True)
+        wav = decoded.audio_values[0]
+        self.assertTrue(wav.is_floating_point())
+        self.assertGreater(len(wav), 0)
+        self.assertFalse(torch.isnan(wav).any())
+
+    @slow
+    @require_torch_accelerator
+    def test_small_model_integration_v2_audio_duration_proportional_to_codes(self):
+        """V2 tokenizer: audio duration doubles when code sequence doubles (real weights)."""
+        speech_tokenizer = Qwen3TTSTokenizerV2Model.from_pretrained(
+            "Qwen/Qwen3-TTS-Tokenizer-12Hz", device_map=torch_device
+        )
+        speech_tokenizer.eval()
+
+        num_q = speech_tokenizer.encoder_valid_num_quantizers
+        codebook_size = speech_tokenizer.decoder.config.codebook_size
+
+        codes_short = torch.randint(1, codebook_size, (1, 10, num_q), device=torch_device)
+        codes_long = torch.randint(1, codebook_size, (1, 20, num_q), device=torch_device)
+
+        with torch.no_grad():
+            wav_short = speech_tokenizer.decode(codes_short, return_dict=True).audio_values[0]
+            wav_long = speech_tokenizer.decode(codes_long, return_dict=True).audio_values[0]
+
+        self.assertEqual(len(wav_long), 2 * len(wav_short))
