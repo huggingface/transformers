@@ -30,7 +30,7 @@ class LightOnOcrConfig(PretrainedConfig):
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information. Instantiating a configuration with the defaults will yield
-    a similar configuration to that of the LightOnOcr [lightonocr-hf/lightonocr-9b](https://huggingface.co/lightonocr-hf/lightonocr-9b) architecture.
+    a similar configuration to that of the LightOnOcr [lightonai/LightOnOCR-1B-1025](https://huggingface.co/lightonai/LightOnOCR-1B-1025) architecture.
 
     Args:
         spatial_merge_size (`int`, *optional*, defaults to 2):
