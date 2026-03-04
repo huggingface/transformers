@@ -183,9 +183,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 )
                 from .convert_slow_tokenizer import TikTokenConverter
 
-                local_kwargs["vocab"], local_kwargs["merges"] = TikTokenConverter(
+                # Use full converted tokenizer to get proper pre-tokenizer setup
+                local_kwargs["tokenizer_object"] = TikTokenConverter(
                     vocab_file=vocab_file, extra_special_tokens=local_kwargs.get("extra_special_tokens")
-                ).extract_vocab_merges_from_model(vocab_file)
+                ).converted()
 
             return local_kwargs
 
@@ -241,8 +242,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         add_prefix_space = kwargs.get("add_prefix_space", False)
         vocab_file = kwargs.get("vocab_file")
 
-        vocab = kwargs.get("vocab")
-        merges = kwargs.get("merges")
+        vocab = kwargs.pop("vocab", None)
+        merges = kwargs.pop("merges", None)
 
         fast_tokenizer = None
         if tokenizer_object is not None:

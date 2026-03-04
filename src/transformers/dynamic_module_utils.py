@@ -745,12 +745,6 @@ def resolve_trust_remote_code(
             # For the CI which puts the timeout at 0
             _raise_timeout_error(None, None)
 
-    if has_remote_code and not has_local_code and not trust_remote_code:
-        raise ValueError(
-            f"{error_message} You can inspect the repository content at https://hf.co/{model_name}.\n"
-            f"Please pass the argument `trust_remote_code=True` to allow custom code to be run."
-        )
-
     return trust_remote_code
 
 
