@@ -216,7 +216,7 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
     T5Gemma2EncoderForConditionalGeneration according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the PaliGemma-2B.
 
-    e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
+    e.g. [google/t5gemma-2-270m-270m](https://huggingface.co/google/t5gemma-2-270m-270m)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.

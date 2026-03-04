@@ -498,7 +498,8 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
         if isinstance(_config, config_class):
             return _config
 
-        keys = [x for x in _config.to_dict().keys() if x.endswith("_config")]
+        # TODO: T5Gemma2 has `encoder` and `decoder` instead `_config`
+        keys = [x for x in _config.to_dict().keys() if x.endswith("_config") or x in ["encoder", "decoder"]]
         for key in keys:
             sub_config = getattr(_config, key)
             if sub_config is not None:
