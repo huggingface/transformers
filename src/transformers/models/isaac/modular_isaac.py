@@ -342,9 +342,6 @@ class IsaacVisionEmbeddings(Siglip2VisionEmbeddings):
         attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         # pixel_values: (num_images, max_patches, patch_dim)
-        if pixel_values.numel() == 0:
-            return pixel_values.new_zeros((0, 0, self.embed_dim))
-
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
 
@@ -447,7 +444,7 @@ def pixel_shuffle_padded(
     x: torch.Tensor,
     token_grids: torch.Tensor,
     scale_factor: int = 1,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> torch.Tensor:
     """Apply pixel shuffle per image on padded batched vision embeddings.
 
     Args:
@@ -481,10 +478,7 @@ def pixel_shuffle_padded(
         )
 
     output_lengths = (heights // scale_factor) * (widths // scale_factor)
-    max_output_tokens = (
-        output_lengths.max() if output_lengths.numel() > 0 else torch.zeros((), device=x.device, dtype=torch.long)
-    )
-
+    max_output_tokens = output_lengths.max()
     shuffled_4d = x.new_zeros((num_images, max_output_tokens, scale_factor * scale_factor, embed_dim))
 
     token_positions = torch.arange(max_patches, device=x.device, dtype=torch.long).unsqueeze(0).expand(num_images, -1)
@@ -551,14 +545,6 @@ class IsaacVisionTransformer(PreTrainedModel):
             vision_patch_attention_mask = None
         else:
             seq_patches, token_grids, vision_patch_attention_mask = vision_tokens
-
-        if seq_patches.numel() == 0:
-            hidden_dim = self.config.hidden_size * (self.pixel_shuffle_scale_factor**2)
-            empty_hidden = seq_patches.new_zeros((0, 0, hidden_dim))
-            empty_mask = torch.zeros((0, 0), device=seq_patches.device, dtype=torch.long)
-            empty_lengths = torch.zeros((0,), device=seq_patches.device, dtype=torch.long)
-            return empty_hidden, empty_mask, empty_lengths
-
         hidden_states = self.embeddings(
             seq_patches,
             token_grids,
@@ -1300,11 +1286,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         flat_lengths = lengths[image_attention_mask]
 
         vision_embeddings = self.vision_embedding((flat_vision_patches, flat_token_grids, flat_patch_attention_mask))
-
-        if flat_lengths.numel() > 0:
-            token_positions = torch.arange(flat_lengths.max(), device=embeds.device, dtype=torch.long)
-        else:
-            token_positions = torch.zeros((0,), device=embeds.device, dtype=torch.long)
+        token_positions = torch.arange(flat_lengths.max(), device=embeds.device, dtype=torch.long)
         gather_positions = flat_offsets[:, None] + token_positions[None, :]
         gather_mask = token_positions[None, :] < flat_lengths[:, None]
         image_features = vision_embeddings[
