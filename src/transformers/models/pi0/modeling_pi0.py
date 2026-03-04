@@ -120,6 +120,9 @@ class PI0Model(PI0PreTrainedModel):
         pixel_attention_mask (`torch.Tensor`, *optional*): args description placeholder
         """
         if pixel_values is not None:
+            # Pi0 never passes positions, so we need to infer manually
+            if attention_mask is not None and position_ids is None:
+                position_ids = attention_mask.cumsum(-1) - 1
             vlm_output = self.vlm(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
@@ -137,6 +140,7 @@ class PI0Model(PI0PreTrainedModel):
             raise ValueError("Only two-dimensional attention masks are accepted for now!")
 
         # Merge masks if needed, same for position ids
+        # TODO: why we need `pixel_attention_mask` and can it be zero, in which cases?
         dit_position_ids = dit_attention_mask = None
         if pixel_attention_mask is not None and attention_mask is not None:
             noise_mask = torch.ones(
@@ -145,8 +149,8 @@ class PI0Model(PI0PreTrainedModel):
                 dtype=attention_mask.dtype,
                 device=attention_mask.device,
             )
-            dit_attention_mask = torch.cat([pixel_attention_mask, attention_mask, noise_mask], dim=1)
-            dit_position_ids = torch.cumsum(attention_mask, dim=1) - 1
+            dit_attention_mask = torch.cat([attention_mask, noise_mask], dim=1)
+            dit_position_ids = (torch.cumsum(dit_attention_mask, dim=1) - 1)[:, -action_embeds.shape[1]:]
 
         bidirectional_mask = create_bidirectional_mask(
             config=self.config,
@@ -155,6 +159,7 @@ class PI0Model(PI0PreTrainedModel):
             past_key_values=past_key_values,
         )
 
+        action_embeds = action_embeds / torch.tensor(self.config.dit_config.hidden_size**0.5, dtype=action_embeds.dtype)
         dit_output = self.dit(
             inputs_embeds=action_embeds,
             attention_mask=bidirectional_mask,
@@ -179,15 +184,15 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     @auto_docstring
     def forward(
         self,
+        state: torch.FloatTensor | None = None,
+        noise: torch.FloatTensor | None = None,
+        timestep: torch.FloatTensor | None = None,
         input_ids: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        state: torch.FloatTensor | None = None,
-        noise: torch.FloatTensor | None = None,
-        timestep: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         actions: torch.FloatTensor = None,  # aka labels
         **kwargs,
@@ -199,8 +204,8 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         noise  (`torch.Tensor`, *optional*): args description placeholder
         timestep  (`torch.Tensor`, *optional*): args description placeholder
         """
-        batch_size = input_ids.shape[0]
-        device = input_ids.device
+        batch_size = state.shape[0]
+        device = state.device
 
         # 1.Sample the timestep
         if timestep is None:
@@ -236,6 +241,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
+            pixel_attention_mask=pixel_attention_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             action_embeds=action_time_embeds,
