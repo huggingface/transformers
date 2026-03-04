@@ -1671,7 +1671,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # mistral common is not there
             other_pattern = r"tekken\.json|tokenizer\.model\.*|tiktoken\.model|spiece\.model|sentencepiece\.bpe\.model"
             if match := re.search(other_pattern, "\n".join(remote_files)):
-                vocab_files["vocab_file"] = match.group()
+                if "spm_file" in vocab_files:
+                    vocab_files["spm_file"] = match.group()
+                else:
+                    vocab_files["vocab_file"] = match.group()
 
         resolved_vocab_files = {}
         for file_id, file_path in vocab_files.items():
