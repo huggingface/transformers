@@ -159,12 +159,12 @@ class MBart50Tokenizer(TokenizersBackend):
             )
         )
 
-        normalizers_ = [normalizers.Replace(Regex(r" {2,}"), "▁")]
+        normalizers_ = [normalizers.Replace(Regex(r" {2,}"), " ")]
         if _spm_precompiled_charsmap is not None:
             normalizers_ = [normalizers.Precompiled(_spm_precompiled_charsmap)] + normalizers_
 
         self._tokenizer.normalizer = normalizers.Sequence(normalizers_)
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=True)
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         additional_special_tokens = kwargs.pop("additional_special_tokens", []) or []
