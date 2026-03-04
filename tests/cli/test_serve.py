@@ -684,6 +684,27 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
             )
         )
 
+    def test_full_request_vlm(self):
+        """Tests that an inference using Continuous Batching works with a VLM"""
+
+        request = {
+            "model": "HuggingFaceTB/SmolVLM-Instruct",
+            "messages": [
+                {"role": "user", "content": "Describe this image."},
+            ],
+            "stream": True,
+            "max_tokens": 30,
+        }
+        all_payloads = self.run_server(request)
+
+        full_text = ""
+        for token in all_payloads:
+            if isinstance(token, ChatCompletionStreamOutput) and token.choices and len(token.choices) > 0:
+                content = token.choices[0].delta.get("content", "")
+                full_text += content if content is not None else ""
+
+        self.assertTrue(len(full_text) > 0)
+
     def test_max_tokens_not_set_in_req(self):
         request = {
             "model": "Qwen/Qwen2.5-0.5B-Instruct",
