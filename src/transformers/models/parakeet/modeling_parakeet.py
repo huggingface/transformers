@@ -915,7 +915,9 @@ def tdt_loss(
     Compute TDT (Token-and-Duration Transducer) loss.
 
     Ported from NeMo's `TDTLossPytorch`. Unlike standard RNNT loss, this loss trains both
-    the token prediction head and the duration prediction head.
+    the token prediction head and the duration prediction head. Uses vectorized anti-diagonal
+    processing for efficiency: all (t, u) pairs on each anti-diagonal t+u=n are computed in
+    parallel as batched tensor operations.
 
     Args:
         token_logits: Token logits of shape `(batch, T, U+1, vocab_size+1)`.
@@ -941,51 +943,73 @@ def tdt_loss(
     token_log_probs = torch.log_softmax(token_logits, dim=-1) - sigma
     duration_log_probs = torch.log_softmax(duration_logits, dim=-1)
 
-    # Forward variable: log_alpha[b, t, u] = log P(y_{1:u} | x_{1:t})
-    log_alpha = torch.full((batch_size, max_t, max_u), -1000.0, device=device)
+    log_alpha = torch.full((batch_size, max_t, max_u), float("-inf"), device=device)
     log_alpha[:, 0, 0] = 0.0
-    batch_idx = torch.arange(batch_size, device=device)
 
-    for t in range(max_t):
-        for u in range(max_u):
-            if t == 0 and u == 0:
+    # Precompute blank and label log-probs for vectorized access
+    blank_log_probs = token_log_probs[:, :, :, blank]
+
+    if max_u > 1:
+        targets_expanded = targets.unsqueeze(1).expand(-1, max_t, -1)  # (batch, T, U_labels)
+        label_log_probs = torch.gather(
+            token_log_probs[:, :, : max_u - 1, :],  # (batch, T, U-1, vocab)
+            dim=3,
+            index=targets_expanded.unsqueeze(-1),
+        ).squeeze(-1)  # (batch, T, U-1)
+
+    # Process anti-diagonals: all (t, u) with t + u = n have no mutual dependencies
+    for n in range(1, max_t + max_u - 1):
+        u_start = max(0, n - max_t + 1)
+        u_end = min(n + 1, max_u)
+        u_indices = torch.arange(u_start, u_end, device=device)
+        t_indices = n - u_indices
+
+        all_candidates = []
+
+        for i, dur in enumerate(durations):
+            t_prev = t_indices - dur
+            valid_t = t_prev >= 0
+
+            if not valid_t.any():
                 continue
 
-            # Accumulate log-probabilities from all incoming arcs
-            candidates = []
+            t_src = t_prev.clamp(min=0)
 
-            for n, dur in enumerate(durations):
-                t_prev = t - dur
-                if t_prev < 0:
-                    continue
+            # Blank arcs (dur > 0): from (t-dur, u) to (t, u)
+            if dur > 0:
+                contrib = (
+                    log_alpha[:, t_src, u_indices]
+                    + blank_log_probs[:, t_src, u_indices]
+                    + duration_log_probs[:, t_src, u_indices, i]
+                )
+                contrib = torch.where(valid_t.unsqueeze(0), contrib, torch.tensor(float("-inf"), device=device))
+                all_candidates.append(contrib)
 
-                # Blank arc (duration > 0): same label position, skip `dur` frames
-                if dur > 0:
-                    blank_contribution = (
-                        log_alpha[:, t_prev, u]
-                        + token_log_probs[:, t_prev, u, blank]
-                        + duration_log_probs[:, t_prev, u, n]
-                    )
-                    candidates.append(blank_contribution)
+            # Label arcs: from (t-dur, u-1) to (t, u), only if u > 0
+            valid_u = u_indices > 0
+            valid_both = valid_t & valid_u
+            if valid_both.any():
+                u_src = (u_indices - 1).clamp(min=0)
+                u_src_label = u_src.clamp(max=max_u - 2) if max_u > 1 else u_src
 
-                # Label arc (u > 0): emit label y_u from position (t_prev, u-1)
-                if u > 0:
-                    label_contribution = (
-                        log_alpha[:, t_prev, u - 1]
-                        + token_log_probs[batch_idx, t_prev, u - 1, targets[:, u - 1]]
-                        + duration_log_probs[:, t_prev, u - 1, n]
-                    )
-                    candidates.append(label_contribution)
+                contrib = (
+                    log_alpha[:, t_src, u_src]
+                    + label_log_probs[:, t_src, u_src_label]
+                    + duration_log_probs[:, t_src, u_src, i]
+                )
+                contrib = torch.where(valid_both.unsqueeze(0), contrib, torch.tensor(float("-inf"), device=device))
+                all_candidates.append(contrib)
 
-            if candidates:
-                log_alpha[:, t, u] = torch.logsumexp(torch.stack(candidates, dim=0), dim=0)
+        if all_candidates:
+            stacked = torch.stack(all_candidates, dim=0)
+            log_alpha[:, t_indices, u_indices] = torch.logsumexp(stacked, dim=0)
 
     # Terminal probability: sum over blank arcs that reach (T, U) from (T-dur, U)
-    log_probs = torch.full((batch_size,), -1000.0, device=device)
-    for n, dur in enumerate(durations):
+    batch_idx = torch.arange(batch_size, device=device)
+    log_probs = torch.full((batch_size,), float("-inf"), device=device)
+    for i, dur in enumerate(durations):
         if dur == 0:
             continue
-        # For each example, check if act_lens[b] - dur >= 0
         t_final = logit_lengths - dur
         valid = t_final >= 0
         if not valid.any():
@@ -995,9 +1019,8 @@ def tdt_loss(
         terminal = (
             log_alpha[batch_idx, t_clamped, target_lengths]
             + token_log_probs[batch_idx, t_clamped, target_lengths, blank]
-            + duration_log_probs[batch_idx, t_clamped, target_lengths, n]
+            + duration_log_probs[batch_idx, t_clamped, target_lengths, i]
         )
-        # Only update valid entries
         combined = torch.stack([log_probs, terminal], dim=0)
         log_probs = torch.where(valid, torch.logsumexp(combined, dim=0), log_probs)
 
