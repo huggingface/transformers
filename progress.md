@@ -317,3 +317,45 @@ Implement RF-DETR in Transformers based on `/Users/nielsrogge/Documents/python_p
 - [x] Checked real RF-DETR small checkpoint args (`/Users/nielsrogge/Documents/python_projecten/rf-detr/rf-detr-small.pth`):
   - `ia_bce_loss=True`, `use_varifocal_loss=False`, `use_position_supervised_loss=False`, `sum_group_losses=False`, `cls_loss_coef=1.0`.
   - This means the current HF mapping is aligned with the **default/released small checkpoint path**, but is **not a full exact superset** of all RF-DETR loss options from upstream training code.
+
+## 2026-03-03 Image Processor Reuse Audit (RF-DETR vs LW-DETR)
+- [x] Checked current auto mappings in `src/transformers/models/auto/image_processing_auto.py`:
+  - `lw_detr -> (DeformableDetrImageProcessor, DeformableDetrImageProcessorFast)`,
+  - `rf_detr -> (RfDetrImageProcessor, RfDetrImageProcessorFast)`.
+- [x] Verified RF-DETR conversion script parity still passes with current RF processors:
+  - object detection:
+    `uv run --no-project --python .venv/bin/python src/transformers/models/rf_detr/convert_rf_detr_to_hf.py --checkpoint_path /Users/nielsrogge/Documents/python_projecten/rf-detr/rf-detr-small.pth --original_repo_path /Users/nielsrogge/Documents/python_projecten/rf-detr --verify_with_original --pytorch_dump_folder_path /tmp/rf-detr-small-hf-verify-reuse-check`
+    -> exact/near-exact preprocessing and postprocessing parity, conversion load clean.
+  - instance segmentation:
+    `uv run --no-project --python .venv/bin/python src/transformers/models/rf_detr/convert_rf_detr_to_hf.py --checkpoint_path /Users/nielsrogge/Documents/python_projecten/rf-detr/rf-detr-seg-small.pt --original_repo_path /Users/nielsrogge/Documents/python_projecten/rf-detr --verify_with_original --pytorch_dump_folder_path /tmp/rf-detr-seg-small-hf-verify-reuse-check`
+    -> preprocessing + detection/segmentation postprocessing parity, conversion load clean.
+- [x] Reuse check against LW-DETR’s current processor choice (`DeformableDetrImageProcessor` + fast), using the same conversion-script parity setup/helpers:
+  - preprocessing mismatch vs original RF-DETR pipeline:
+    - small: `max_abs_preprocess_diff ~= 1.7245e-2` (slow), `~8.7537e-3` (fast),
+    - seg-small: `max_abs_preprocess_diff ~= 1.7233e-2` (slow), `~8.7536e-3` (fast),
+    - while RF processors are exact/near-exact (`0.0` for slow, ~`1e-6` for fast).
+  - object-detection postprocess matched for this check (scores/boxes/labels), but:
+  - `DeformableDetrImageProcessor` does **not** implement `post_process_instance_segmentation`, so it cannot cover RF-DETR instance-segmentation inference/postprocessing requirements.
+- [x] Conclusion:
+  - We should **not** remap `rf_detr` to LW-DETR’s current auto image processor mapping (`DeformableDetrImageProcessor`), because it is not a drop-in replacement for RF-DETR end-to-end parity requirements (notably preprocessing exactness and missing instance-segmentation postprocess API).
+  - No change made to `image_processing_auto.py` mapping.
+
+## 2026-03-03 Image Processor Reuse Audit (RF-DETR vs DETR)
+- [x] Evaluated whether `rf_detr` can reuse DETR image processors (`DetrImageProcessor`, `DetrImageProcessorFast`) instead of RF-specific processors, using conversion-script-style parity checks against original RF-DETR implementation.
+- [x] Preprocessing parity check (same dummy inputs used in converter logic):
+  - `small` checkpoint:
+    - RF processors: exact/near-exact (`0.0` slow, `~9.54e-7` fast),
+    - DETR processors: clear mismatch (`~1.7245e-2` slow, `~8.7537e-3` fast).
+  - `seg-small` checkpoint:
+    - RF processors: exact/near-exact (`0.0` slow, `~7.15e-7` fast),
+    - DETR processors: clear mismatch (`~1.7233e-2` slow, `~8.7536e-3` fast).
+- [x] Post-processing parity check vs original RF-DETR postprocessor:
+  - Object detection with DETR processors is not compatible with RF-DETR semantics:
+    - `small`: score diff `~9.98e-2`, box diff `~526.2`, labels mismatch.
+    - `seg-small`: score diff `~9.53e-2`, box diff `~374.6`, labels mismatch.
+  - Root cause is expected: DETR postprocess uses softmax/no-object behavior and different selection logic, while RF-DETR uses sigmoid + top-k over all query/class scores.
+- [x] Instance-segmentation API mismatch:
+  - DETR `post_process_instance_segmentation` returns panoptic-style structure (`segmentation`, `segments_info`) and does not match RF-DETR’s expected output format (`scores`, `labels`, `boxes`, `masks`) used in RF conversion verification.
+- [x] Conclusion:
+  - We should **not** remap `rf_detr` to DETR image processors in `src/transformers/models/auto/image_processing_auto.py`.
+  - No mapping change made.
