@@ -32,7 +32,7 @@ from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_vitpose_backbone import VitPoseBackboneConfig
 
@@ -147,7 +147,7 @@ class VitPoseBackboneSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs],) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -168,6 +168,7 @@ class VitPoseBackboneSelfAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
+            **kwargs,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -201,8 +202,8 @@ class VitPoseBackboneAttention(nn.Module):
         self.attention = VitPoseBackboneSelfAttention(config)
         self.output = VitPoseBackboneSelfOutput(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states)
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, **kwargs)
         output = self.output(self_attn_output, hidden_states)
         return output
 
@@ -288,6 +289,7 @@ class VitPoseBackboneLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         dataset_index: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         # Validate dataset_index when using multiple experts
         if self.num_experts > 1 and dataset_index is None:
@@ -298,7 +300,7 @@ class VitPoseBackboneLayer(GradientCheckpointingLayer):
             )
 
         hidden_states_norm = self.layernorm_before(hidden_states)
-        attention_output = self.attention(hidden_states_norm)
+        attention_output = self.attention(hidden_states_norm, **kwargs)
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -313,26 +315,6 @@ class VitPoseBackboneLayer(GradientCheckpointingLayer):
         layer_output = layer_output + hidden_states
 
         return layer_output
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->VitPoseBackbone
-class VitPoseBackboneEncoder(nn.Module):
-    def __init__(self, config: VitPoseBackboneConfig):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([VitPoseBackboneLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    # Ignore copy
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        dataset_index: torch.Tensor | None = None,
-    ) -> BaseModelOutput:
-        for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states, dataset_index)
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -364,6 +346,26 @@ class VitPoseBackbonePreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
 
 
+class VitPoseBackboneEncoder(VitPoseBackbonePreTrainedModel):
+    def __init__(self, config: VitPoseBackboneConfig):
+        super().__init__(config)
+        self.layer = nn.ModuleList([VitPoseBackboneLayer(config) for _ in range(config.num_hidden_layers)])
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        dataset_index: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, dataset_index, **kwargs)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 @auto_docstring(
     custom_intro="""
     The VitPose backbone useful for downstream tasks.
@@ -382,8 +384,7 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -410,6 +411,12 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
         >>> dataset_index = torch.tensor([1])
         >>> outputs = model(pixel_values, dataset_index)
         ```"""
+        # Internally the model always needs to output hidden states, we control the output
+        # per user request on the final output
+        user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
+            self.config, "output_hidden_states", False
+        )
+        kwargs["output_hidden_states"] = True
 
         embedding_output = self.embeddings(pixel_values)
         outputs: BaseModelOutput = self.encoder(embedding_output, dataset_index=dataset_index, **kwargs)
@@ -423,7 +430,7 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
 
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
-            hidden_states=outputs.hidden_states,
+            hidden_states=outputs.hidden_states if user_requested_hidden_states else None,
         )
 
 
