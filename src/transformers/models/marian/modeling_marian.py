@@ -581,10 +581,10 @@ class MarianDecoder(MarianPreTrainedModel):
                 past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
             )
 
-            if attention_mask is None and not is_torchdynamo_compiling():
-                # required mask seq length can be calculated via length of past cache
-                mask_seq_length = past_key_values_length + seq_length
-                attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
+        if attention_mask is None and not is_torchdynamo_compiling():
+            # required mask seq length can be calculated via length of past cache
+            mask_seq_length = past_key_values_length + seq_length
+            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         self_attn_cache = (
             past_key_values.self_attention_cache

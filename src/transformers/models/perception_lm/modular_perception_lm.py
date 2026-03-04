@@ -96,8 +96,6 @@ class PerceptionLMMultiModalProjector(nn.Module):
 class PerceptionLMPreTrainedModel(LlavaPreTrainedModel):
     base_model_prefix = "model"
 
-    pass
-
 
 class PerceptionLMModelOutputWithPast(LlavaModelOutputWithPast):
     r"""

@@ -321,7 +321,6 @@ class VitPoseBackboneEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([VitPoseBackboneLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     # Ignore copy
     def forward(
@@ -329,15 +328,10 @@ class VitPoseBackboneEncoder(nn.Module):
         hidden_states: torch.Tensor,
         dataset_index: torch.Tensor | None = None,
     ) -> BaseModelOutput:
-        all_hidden_states = [hidden_states]
-        for i, layer_module in enumerate(self.layer):
+        for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, dataset_index)
-            all_hidden_states.append(hidden_states)
 
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=tuple(all_hidden_states),
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -417,7 +411,7 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
         ```"""
 
         embedding_output = self.embeddings(pixel_values)
-        outputs: BaseModelOutput = self.encoder(embedding_output, dataset_index=dataset_index)
+        outputs: BaseModelOutput = self.encoder(embedding_output, dataset_index=dataset_index, **kwargs)
         hidden_states = outputs.hidden_states
 
         feature_maps = []
@@ -428,7 +422,7 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
 
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
-            hidden_states=None,
+            hidden_states=outputs.hidden_states,
         )
 
 

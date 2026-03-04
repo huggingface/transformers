@@ -40,7 +40,7 @@ from ...utils import (
     logging,
 )
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_gpt_bigcode import GPTBigCodeConfig
 
 
@@ -297,7 +297,7 @@ class GPTBigCodeBlock(GradientCheckpointingLayer):
     ) -> tuple[torch.Tensor] | tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
-        attn_outputs = self.attn(
+        attn_output, _ = self.attn(
             hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
@@ -306,9 +306,6 @@ class GPTBigCodeBlock(GradientCheckpointingLayer):
             cache_position=cache_position,
             **kwargs,
         )
-        attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
-        outputs = attn_outputs[1:]
-        # residual connection
         hidden_states = attn_output + residual
 
         if encoder_hidden_states is not None:
@@ -320,7 +317,7 @@ class GPTBigCodeBlock(GradientCheckpointingLayer):
                 )
             residual = hidden_states
             hidden_states = self.ln_cross_attn(hidden_states)
-            cross_attn_outputs = self.crossattention(
+            attn_output, _ = self.crossattention(
                 hidden_states,
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
@@ -329,16 +326,14 @@ class GPTBigCodeBlock(GradientCheckpointingLayer):
                 cache_position=cache_position,
                 **kwargs,
             )
-            attn_output = cross_attn_outputs[0]
             # residual connection
             hidden_states = residual + attn_output
-            outputs = outputs + cross_attn_outputs[1:]  # add cross attentions if we output attention weights
 
         residual = hidden_states
         hidden_states = self.ln_2(hidden_states)
         feed_forward_hidden_states = self.mlp(hidden_states)
         hidden_states = residual + feed_forward_hidden_states
-        return (hidden_states,) + outputs
+        return hidden_states
 
 
 @auto_docstring
@@ -352,7 +347,8 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _can_record_outputs = {
         "hidden_states": GPTBigCodeBlock,
-        "attentions": GPTBigCodeAttention,
+        "attentions": OutputRecorder(GPTBigCodeAttention, index=1, layer_name="attn"),
+        "cross_attentions": OutputRecorder(GPTBigCodeAttention, index=1, layer_name="crossattention"),
     }
 
     @torch.no_grad()
@@ -435,23 +431,8 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
         """
-        output_attentions = kwargs.get("output_attentions", self.config.output_attentions)
-        output_hidden_states = kwargs.get("output_hidden_states", self.config.output_hidden_states)
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-            batch_size = input_ids.shape[0]
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-            batch_size = inputs_embeds.shape[0]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if batch_size <= 0:
-            raise ValueError("batch_size has to be defined and > 0")
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -502,21 +483,15 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         hidden_states = inputs_embeds + position_embeds.to(inputs_embeds.device)
 
         if token_type_ids is not None:
-            token_type_ids = token_type_ids.view(-1, input_shape[-1])
+            token_type_ids = token_type_ids.view(-1, inputs_embeds.shape[1])
             token_type_embeds = self.wte(token_type_ids)
             hidden_states = hidden_states + token_type_embeds
 
         hidden_states = self.drop(hidden_states)
-        output_shape = input_shape + (hidden_states.size(-1),)
+        output_shape = inputs_embeds.shape[:-1] + (hidden_states.size(-1),)
 
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-        all_hidden_states = () if output_hidden_states else None
-        for i, block in enumerate(self.h):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            outputs = block(
+        for block in self.h:
+            hidden_states = block(
                 hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 layer_past=past_key_values,  # as keyword argument so it can be removed by GradientCheckpointingLayer
@@ -527,25 +502,13 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
                 **kwargs,
             )
 
-            hidden_states = outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (outputs[2],)
-
         hidden_states = self.ln_f(hidden_states)
 
         hidden_states = hidden_states.view(output_shape)
-        # Add last hidden state
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 

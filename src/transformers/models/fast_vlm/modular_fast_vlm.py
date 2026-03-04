@@ -21,7 +21,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ..auto import CONFIG_MAPPING
 from ..llava.configuration_llava import LlavaConfig
 from ..llava.modeling_llava import (
@@ -180,6 +180,7 @@ class FastVlmModel(LlavaModel):
     def __init__(self, config: FastVlmConfig):
         super().__init__(config)
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."

@@ -331,14 +331,14 @@ class GitAttention(nn.Module):
         past_key_values: Cache | None = None,
         cache_position: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor]:
-        attn_output, self_attn_weights = self.self(
+        attn_output, _ = self.self(
             hidden_states,
             attention_mask,
             past_key_values,
             cache_position=cache_position,
         )
         attention_output = self.output(attn_output, hidden_states)
-        return attention_output, self_attn_weights
+        return attention_output
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate
@@ -388,8 +388,7 @@ class GitLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         cache_position: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor]:
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        attention_output, self_attention_weights = self.attention(
+        attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
             past_key_values=past_key_values,
@@ -399,7 +398,7 @@ class GitLayer(GradientCheckpointingLayer):
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        return layer_output, self_attention_weights
+        return layer_output
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -412,7 +411,6 @@ class GitEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([GitLayer(config, i) for i in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -421,25 +419,16 @@ class GitEncoder(nn.Module):
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         cache_position: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
         for layer_module in self.layer:
-            layer_outputs = layer_module(
+            hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
                 past_key_values,
                 cache_position,
+                **kwargs,
             )
-            hidden_states = layer_outputs[0]
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -867,7 +856,7 @@ class GitProjection(nn.Module):
 class GitModel(GitPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": GitLayer,
-        "attentions": GitAttention,
+        "attentions": GitSelfAttention,
     }
 
     def __init__(self, config):
@@ -936,6 +925,9 @@ class GitModel(GitPreTrainedModel):
         ```"""
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
 
         # past_key_values_length
         past_key_values_length = 0
@@ -1037,6 +1029,7 @@ class GitModel(GitPreTrainedModel):
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
+            **kwargs,
         )
 
         return BaseModelOutputWithPast(

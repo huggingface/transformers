@@ -565,8 +565,7 @@ class Siglip2Model(SiglipModel):
 
 class Siglip2ForImageClassification(SiglipForImageClassification):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
-    @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

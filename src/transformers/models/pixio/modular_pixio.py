@@ -20,7 +20,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_tracing, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..dinov2.configuration_dinov2 import Dinov2Config
 from ..dinov2.modeling_dinov2 import (
@@ -277,30 +277,27 @@ class PixioLayer(GradientCheckpointingLayer):
         return layer_output
 
 
-class PixioEncoder(nn.Module):
-    def __init__(self, config: PixioConfig):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([PixioLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(self, hidden_states: torch.Tensor) -> BaseModelOutput:
-        all_hidden_states = [hidden_states]
-        for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states)
-            all_hidden_states.append(hidden_states)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=tuple(all_hidden_states),
-        )
-
 
 class PixioPreTrainedModel(ViTPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": PixioLayer,
         "attentions": PixioSelfAttention,
     }
+
+
+class PixioEncoder(nn.Module):
+    def __init__(self, config: PixioConfig):
+        super().__init__()
+        self.config = config
+        self.layer = nn.ModuleList([PixioLayer(config) for _ in range(config.num_hidden_layers)])
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(self, hidden_states: torch.Tensor) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -319,8 +316,7 @@ class PixioModel(PixioPreTrainedModel):
     def get_input_embeddings(self) -> PixioPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -340,6 +336,8 @@ class PixioModel(PixioPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
@@ -349,8 +347,7 @@ class PixioModel(PixioPreTrainedModel):
     """
 )
 class PixioBackbone(Dinov2Backbone):
-    @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
@@ -379,8 +376,11 @@ class PixioBackbone(Dinov2Backbone):
         >>> list(feature_maps[-1].shape)
         [1, 1280, 16, 16]
         ```"""
+        # NOTE: that due to the nature of the model, we always return the `hidden_states`
+        kwargs["output_hidden_states"] = True
+
         embedding_output = self.embeddings(pixel_values)
-        output: BaseModelOutput = self.encoder(embedding_output)
+        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
         hidden_states = output.hidden_states
 
         feature_maps = []
@@ -398,6 +398,8 @@ class PixioBackbone(Dinov2Backbone):
 
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
         )
 
 
