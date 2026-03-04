@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import copy
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from enum import IntEnum
 from typing import Any
 
@@ -37,7 +37,7 @@ from ...image_utils import (
 )
 from ...masking_utils import create_bidirectional_mask, create_masks_for_generate
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...models.qwen3.configuration_qwen3 import Qwen3Config
 from ...models.qwen3.modeling_qwen3 import (
     Qwen3Attention,
@@ -361,42 +361,7 @@ class IsaacVisionEmbeddings(Siglip2VisionEmbeddings):
 class IsaacVisionAttention(Siglip2Attention):
     """Custom attention that supports variable-length sequences with flash/SDPA backends."""
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        output_attentions: bool = False,
-        **kwargs,
-    ):
-        batch_size, seq_length, embed_dim = hidden_states.shape
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
-
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attn_impl = self.config._attn_implementation or "sdpa"
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS[attn_impl]
-
-        attention_kwargs: dict[str, Any] = {
-            "is_causal": False,
-            "scaling": self.scale,
-        }
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            **attention_kwargs,
-        )
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights
+    pass
 
 
 class IsaacVisionEncoderLayer(Siglip2EncoderLayer):
@@ -405,31 +370,6 @@ class IsaacVisionEncoderLayer(Siglip2EncoderLayer):
     def __init__(self, config: IsaacVisionConfig):
         super().__init__(config)
         self.self_attn = IsaacVisionAttention(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        output_attentions: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        residual = hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
-        attn_output, _ = self.self_attn(
-            hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            **kwargs,
-        )
-
-        hidden_states = residual + attn_output
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
 
 
 class IsaacVisionEncoder(Siglip2Encoder):

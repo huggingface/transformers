@@ -209,6 +209,29 @@ class IsaacVisionEmbeddings(nn.Module):
         return embeddings
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class IsaacVisionAttention(nn.Module):
     """Custom attention that supports variable-length sequences with flash/SDPA backends."""
 
@@ -236,11 +259,12 @@ class IsaacVisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool = False,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
+
         batch_size, seq_length, embed_dim = hidden_states.shape
+
         queries = self.q_proj(hidden_states)
         keys = self.k_proj(hidden_states)
         values = self.v_proj(hidden_states)
@@ -249,13 +273,9 @@ class IsaacVisionAttention(nn.Module):
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        attn_impl = self.config._attn_implementation or "sdpa"
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS[attn_impl]
-
-        attention_kwargs: dict[str, Any] = {
-            "is_causal": False,
-            "scaling": self.scale,
-        }
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -263,8 +283,11 @@ class IsaacVisionAttention(nn.Module):
             keys,
             values,
             attention_mask,
-            **attention_kwargs,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
         )
+
         attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
 
@@ -301,20 +324,18 @@ class IsaacVisionEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        output_attentions: bool = False,
+        attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         residual = hidden_states
+
         hidden_states = self.layer_norm1(hidden_states)
-        attn_output, _ = self.self_attn(
-            hidden_states,
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
             **kwargs,
         )
-
-        hidden_states = residual + attn_output
+        hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
@@ -356,7 +377,7 @@ def pixel_shuffle_padded(
     x: torch.Tensor,
     token_grids: torch.Tensor,
     scale_factor: int = 1,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> torch.Tensor:
     """Apply pixel shuffle per image on padded batched vision embeddings.
 
     Args:
@@ -1007,31 +1028,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
