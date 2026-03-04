@@ -4262,11 +4262,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         )
                         full_shape = tuple(specs.shape)
                         dtype_torch = as_dtype(specs.dtype) if getattr(specs, "dtype", None) is not None else torch.float32
-                        nbytes = specs.end - specs.start
-                        numel = 1
-                        for s in full_shape:
-                            numel *= s
-                        elem_size_bytes = nbytes // numel if numel else 2
 
                         use_tp_load_spec = (
                             device_mesh is not None
@@ -4275,7 +4270,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         )
 
                         if use_tp_load_spec:
-                            elem_ranges = []
                             if tp_style := _get_parameter_tp_plan(renamed_key, tp_plan):
                                 try:
                                     elem_ranges = _compute_tp_elem_ranges(
@@ -4286,6 +4280,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                     shard_shape = tuple(empty_param.shape)
 
                                     merged_state_dict[original_key] = HmllScatteredLoadSpec(
+                                        dst=empty_param,
                                         registry=registry,
                                         name=original_key,
                                         ranges=elem_ranges,
@@ -4300,6 +4295,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             else:
                                 # Replicated parameter (not in TP plan): load full tensor on every rank
                                 merged_state_dict[original_key] = HmllLoadSpec(
+                                    dst=meta_model_state_dict[renamed_key],
                                     registry=registry,
                                     name=original_key,
                                     shape=full_shape,
@@ -4308,13 +4304,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                 )
                         else:
                             # todo(mfuntowicz): potentially refactor this to unify
-                            merged_state_dict[original_key] = HmllLoadSpec(
-                                registry=registry,
-                                name=original_key,
-                                shape=full_shape,
-                                dtype=dtype_torch,
-                                device=device,
-                            )
+                            if renamed_key in meta_model_state_dict:
+                                merged_state_dict[original_key] = HmllLoadSpec(
+                                    dst=meta_model_state_dict[renamed_key],
+                                    registry=registry,
+                                    name=original_key,
+                                    shape=full_shape,
+                                    dtype=dtype_torch,
+                                    device=device,
+                                )
 
             # User passed an explicit state_dict
             elif state_dict is not None:

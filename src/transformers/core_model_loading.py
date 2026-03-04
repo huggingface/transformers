@@ -822,8 +822,10 @@ class NativeLoadSpec(DeferredLoadSpec):
 class HmllLoadSpec(DeferredLoadSpec):
     """
     Deferred load via hmll.
+    dst is the pre-allocated destination tensor (e.g. the model parameter already on GPU).
     """
 
+    dst: torch.Tensor
     registry: Any
     name: str
     shape: tuple[int, ...]
@@ -833,31 +835,32 @@ class HmllLoadSpec(DeferredLoadSpec):
     def execute(self) -> torch.Tensor:
         nvtx.range_push("HmllLoadSpec.execute")
 
-        dst = torch.empty(self.shape, dtype=self.dtype, device=self.device)
-        if (n_read := self.registry.fetch(self.name, dst.data_ptr(), dst.nbytes)) <= 0:
+        if (n_read := self.registry.fetch(self.name, self.dst.data_ptr(), self.dst.nbytes)) <= 0:
             nvtx.range_pop()
             raise RuntimeError(f"Failed to fetch tensor {self.name} (error code: {n_read})")
         nvtx.range_pop()
-        return dst
+        return self.dst
 
 
 @dataclass(slots=True, frozen=True)
 class HmllScatteredLoadSpec(HmllLoadSpec):
     """
-    dst is allocated lazily inside execute() to avoid pre-allocating the entire model's
-    worth of GPU memory before any I/O begins.
+    Like HmllLoadSpec but reads only the element ranges for this rank's shard.
+    dst is the pre-allocated shard tensor.
     """
 
-    ranges: list[tuple[int, int]]  # element (start, end) per slice; empty means full fetch
+    # Element (start, end) ranges in the source tensor to read, in destination write order:
+    # ranges[i] is read from the source and written sequentially into dst after ranges[i-1].
+    # The order must match the expected memory layout of the shard in dst.
+    ranges: list[tuple[int, int]]
 
     def execute(self) -> torch.Tensor:
         nvtx.range_push("HmllScatteredLoadSpec.execute")
-        dst = torch.empty(self.shape, dtype=self.dtype, device=self.device)
-        if (n_read := self.registry.fetchv(self.name, self.ranges, dst.data_ptr())) <= 0:
+        if (n_read := self.registry.fetchv(self.name, self.ranges, self.dst.data_ptr())) <= 0:
             nvtx.range_pop()
             raise RuntimeError(f"Failed to fetch tensor {self.name} (error code: {n_read})")
         nvtx.range_pop()
-        return dst
+        return self.dst
 
 
 def _compute_tp_elem_ranges(
