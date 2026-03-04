@@ -82,6 +82,10 @@ logger = logging.get_logger(__name__)
 class TorchvisionBackend(BaseImageProcessor):
     """Torchvision backend for GPU-accelerated batched image processing."""
 
+    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+        super().__init__(**kwargs)
+        self._set_attributes(**kwargs)
+
     @property
     def is_fast(self) -> bool:
         """
@@ -402,6 +406,10 @@ class TorchvisionBackend(BaseImageProcessor):
 
 class PilBackend(BaseImageProcessor):
     """PIL/NumPy backend for portable CPU-only image processing."""
+
+    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+        super().__init__(**kwargs)
+        self._set_attributes(**kwargs)
 
     @property
     def is_fast(self) -> bool:

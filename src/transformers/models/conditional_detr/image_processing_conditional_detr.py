@@ -575,7 +575,9 @@ class ConditionalDetrImageProcessor(TorchvisionBackend):
             elif key == "masks":
                 masks = value[:, None]
                 masks = [
-                    super().resize(mask, size=SizeDict(height=target_size[0], width=target_size[1]), resample=resample)
+                    super(ConditionalDetrImageProcessor, self).resize(
+                        mask, size=SizeDict(height=target_size[0], width=target_size[1]), resample=resample
+                    )
                     for mask in masks
                 ]
                 masks = torch.stack(masks).to(torch.float32)

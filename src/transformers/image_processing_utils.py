@@ -18,10 +18,13 @@ from copy import deepcopy
 from functools import partial
 from typing import Any
 
+import numpy as np
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .image_processing_base import BatchFeature, ImageProcessingMixin
+from .image_transforms import center_crop, normalize, rescale
 from .image_utils import (
+    ChannelDimension,
     ImageInput,
     SizeDict,
     get_image_size,
@@ -191,7 +194,11 @@ class BaseImageProcessor(ImageProcessingMixin):
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)
+        # We don't call self._set_attributes in BaseImageProcessor for backward compatibility with remote code
+        # We call it instead in the backend subclasses' __init__ methods.
 
+    def _set_attributes(self, **kwargs):
+        """Resolve and set instance attributes from kwargs and class-level defaults for all valid kwargs."""
         attributes = {}
         for key in self.valid_kwargs.__annotations__:
             kwarg = kwargs.pop(key, None)
@@ -203,7 +210,6 @@ class BaseImageProcessor(ImageProcessingMixin):
         for key, value in attributes.items():
             setattr(self, key, value)
 
-        # get valid kwargs names
         self._valid_kwargs_names = list(self.valid_kwargs.__annotations__.keys())
 
     def __call__(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
@@ -409,6 +415,115 @@ class BaseImageProcessor(ImageProcessingMixin):
         filtered_dict.pop("_valid_processor_keys", None)
         filtered_dict.pop("_valid_kwargs_names", None)
         return filtered_dict
+
+    def rescale(
+        self,
+        image: np.ndarray,
+        scale: float,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Rescale an image by a scale factor. image = image * scale.
+
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The rescaled image.
+        """
+        return rescale(image, scale=scale, data_format=data_format, input_data_format=input_data_format, **kwargs)
+
+    # The next methods are kept for backwards compatibility with remote code, but are overriden by backends.
+    def normalize(
+        self,
+        image: np.ndarray,
+        mean: float | Iterable[float],
+        std: float | Iterable[float],
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Normalize an image. image = (image - image_mean) / image_std.
+
+        Args:
+            image (`np.ndarray`):
+                Image to normalize.
+            mean (`float` or `Iterable[float]`):
+                Image mean to use for normalization.
+            std (`float` or `Iterable[float]`):
+                Image standard deviation to use for normalization.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The normalized image.
+        """
+        return normalize(
+            image, mean=mean, std=std, data_format=data_format, input_data_format=input_data_format, **kwargs
+        )
+
+    def center_crop(
+        self,
+        image: np.ndarray,
+        size: dict[str, int],
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
+        any edge, the image is padded with 0's and then center cropped.
+
+        Args:
+            image (`np.ndarray`):
+                Image to center crop.
+            size (`dict[str, int]`):
+                Size of the output image.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+        """
+        size = get_size_dict(size)
+        if "height" not in size or "width" not in size:
+            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
+        return center_crop(
+            image,
+            size=(size["height"], size["width"]),
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
 
 
 VALID_SIZE_DICT_KEYS = (
