@@ -372,7 +372,7 @@ class DPTViTSelfOutput(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTAttention with ViTConfig->DPTConfig, ViTSelfAttention->DPTSelfAttention, ViTSelfOutput->DPTViTSelfOutput
-class ViTAttention(nn.Module):
+class DPTViTAttention(nn.Module):
     def __init__(self, config: DPTConfig):
         super().__init__()
         self.attention = DPTSelfAttention(config)
@@ -733,15 +733,15 @@ class DPTPreTrainedModel(PreTrainedModel):
             init.zeros_(module.position_embeddings)
 
 
-class DPTViTEncoder(DPTPreTrainedModel):
+class DPTViTEncoder(nn.Module):
     def __init__(self, config: DPTConfig):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
         self.layer = nn.ModuleList([DPTViTLayer(config) for _ in range(config.num_hidden_layers)])
-        self.post_init()
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
-    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+    def forward(
+        self, hidden_states: torch.Tensor, output_hidden_states: bool = False, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutput:
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states)
 
@@ -777,7 +777,8 @@ class DPTModel(DPTPreTrainedModel):
         else:
             return self.embeddings.patch_embeddings
 
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -797,8 +798,6 @@ class DPTModel(DPTPreTrainedModel):
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             intermediate_activations=embedding_output.intermediate_activations,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -1031,7 +1030,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         return DepthEstimatorOutput(
             loss=loss,
             predicted_depth=predicted_depth,
-            hidden_states=hidden_states if user_requested_hidden_states else None,
+            hidden_states=outputs.hidden_states if user_requested_hidden_states else None,
             attentions=outputs.attentions,
         )
 
@@ -1178,7 +1177,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
-            hidden_states=hidden_states if user_requested_hidden_states else None,
+            hidden_states=outputs.hidden_states if user_requested_hidden_states else None,
             attentions=outputs.attentions,
         )
 

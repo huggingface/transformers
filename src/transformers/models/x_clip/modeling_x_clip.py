@@ -459,7 +459,7 @@ class XCLIPPreTrainedModel(PreTrainedModel):
             OutputRecorder(XCLIPEncoderLayer, layer_name="text_model"),
             XCLIPVisionEncoderLayer,
         ],
-        "attentions": OutputRecorder(GradientCheckpointingLayer, layer_name="model", index=1),
+        "attentions": OutputRecorder(XCLIPAttention, layer_name="self_attn", index=1),
     }
 
     @torch.no_grad()
@@ -547,7 +547,6 @@ class XCLIPEncoder(nn.Module):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-
         """
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:

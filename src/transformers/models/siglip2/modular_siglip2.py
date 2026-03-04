@@ -286,8 +286,8 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
 
-    # Update: add `spatial_shapes` and `attention_mask`
-    @auto_docstring
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -321,8 +321,6 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooler_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -371,9 +369,7 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
 
 
 class Siglip2VisionModel(SiglipVisionModel):
-    # Update: add `spatial_shapes` and `pixel_attention_mask`
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

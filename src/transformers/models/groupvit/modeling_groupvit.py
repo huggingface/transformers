@@ -537,8 +537,7 @@ class GroupViTStage(nn.Module):
 
         cat_x = self.concat_x(x, group_token)
         for layer in self.layers:
-            layer_out = layer(cat_x, attention_mask=None)
-            cat_x = layer_out[0]
+            cat_x = layer(cat_x, attention_mask=None)
 
         x, group_token = self.split_x(cat_x)
 
@@ -833,7 +832,6 @@ class GroupViTTextEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([GroupViTEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,

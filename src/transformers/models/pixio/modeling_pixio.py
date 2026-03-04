@@ -322,9 +322,9 @@ class PixioLayer(GradientCheckpointingLayer):
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = PixioMLP(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
         hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output = self.attention(hidden_states_norm)
+        self_attention_output = self.attention(hidden_states_norm, **kwargs)
 
         hidden_states = self.drop_path(self_attention_output) + hidden_states
 
@@ -370,17 +370,17 @@ class PixioPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.mask_token)
 
 
-class PixioEncoder(nn.Module):
+class PixioEncoder(PixioPreTrainedModel):
     def __init__(self, config: PixioConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         self.layer = nn.ModuleList([PixioLayer(config) for _ in range(config.num_hidden_layers)])
+        self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
-    def forward(self, hidden_states: torch.Tensor) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states)
+            hidden_states = layer_module(hidden_states, **kwargs)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
