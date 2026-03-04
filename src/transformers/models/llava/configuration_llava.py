@@ -26,7 +26,7 @@ class LlavaConfig(PreTrainedConfig):
     Llava model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Llava-9B.
 
-    e.g. [llava-hf/llava-9b](https://huggingface.co/llava-hf/llava-9b)
+    e.g. [llava-hf/llava-1.5-7b-hf](https://huggingface.co/llava-hf/llava-1.5-7b-hf)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
