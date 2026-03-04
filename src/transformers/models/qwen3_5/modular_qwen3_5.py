@@ -22,7 +22,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
@@ -791,6 +791,10 @@ class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
         self.model = Qwen3_5TextModel(config)
 
 
+class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
+    config: Qwen3_5TextConfig
+
+
 class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
     def get_video_features(
         self,
@@ -812,6 +816,7 @@ __all__ = [
     "Qwen3_5TextModel",
     "Qwen3_5Model",
     "Qwen3_5ForCausalLM",
+    "Qwen3_5ForSequenceClassification",
     "Qwen3_5ForConditionalGeneration",
     "Qwen3_5PreTrainedModel",
 ]

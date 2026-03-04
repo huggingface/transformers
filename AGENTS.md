@@ -1,5 +1,5 @@
 ## Useful commands
-- `make style`: runs formatters and linters, necessary to pass code style checks
+- `make style`: runs formatters, linters and type checker, necessary to pass code style checks
 - `make fix-repo`: auto-fixes copies, modular conversions, doc TOCs, docstrings in addition to the `make style` fixes
 - `make check-repo` — CI-style consistency checks
 - Many tests are marked as 'slow' and skipped by default in the CI. To run them, use: `RUN_SLOW=1 pytest ...`
