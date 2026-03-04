@@ -251,6 +251,7 @@ class GitSelfAttention(nn.Module):
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         cache_position: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         batch_size = hidden_states.shape[0]
         query_layer = (
@@ -330,12 +331,14 @@ class GitAttention(nn.Module):
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         cache_position: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         attn_output, _ = self.self(
             hidden_states,
             attention_mask,
             past_key_values,
             cache_position=cache_position,
+            **kwargs,
         )
         attention_output = self.output(attn_output, hidden_states)
         return attention_output
@@ -387,12 +390,14 @@ class GitLayer(GradientCheckpointingLayer):
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         cache_position: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        attention_output, _ = self.attention(
+        attention_output = self.attention(
             hidden_states,
             attention_mask,
             past_key_values=past_key_values,
             cache_position=cache_position,
+            **kwargs,
         )
 
         layer_output = apply_chunking_to_forward(
