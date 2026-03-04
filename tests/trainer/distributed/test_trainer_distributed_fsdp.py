@@ -473,14 +473,12 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
     # -------------------------------------------------------------------
     # FSDP eval tests
     # -------------------------------------------------------------------
-    @unittest.skip("Shape mismatch in compute_metrics — to be fixed")
     def test_fsdp_eval(self):
         output_dir = self.get_auto_remove_tmp_dir()
-        script = os.path.join(SCRIPTS_DIR, "eval.py")
         cmd = self.get_accelerate_cmd(
-            script,
+            TRAIN_SCRIPT,
             config_file=FSDP_CONFIG_FILE,
-            extra_args=["--output_dir", output_dir, "--report_to", "none"],
+            extra_args=["--output_dir", output_dir, "--do_eval"],
         )
         execute_subprocess_async(cmd, env=self.get_env())
 

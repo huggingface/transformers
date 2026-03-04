@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Simple causal LM training script for FSDP distributed tests.
+"""Simple causal LM script for distributed tests (FSDP, DeepSpeed).
 
 Uses a tiny Qwen2 model with synthetic data so tests run fast
 and don't require downloading real datasets.
+
+Supports --do_train (default) and --do_eval via TrainingArguments.
 
 32 training samples are created; with per_device_train_batch_size=4
 and 2 GPUs this gives 4 steps per epoch.
@@ -55,10 +57,17 @@ def main():
 
     # Parse custom args (not TrainingArguments fields)
     loss_output_file = _pop_custom_arg("--loss_output_file")
+    eval_output_file = _pop_custom_arg("--eval_output_file")
     model_dtype = _pop_custom_arg("--model_dtype")
+    attn_impl = _pop_custom_arg("--attn_implementation")
+    pad_to_multiple_of = _pop_custom_arg("--pad_to_multiple_of")
 
     parser = HfArgumentParser((TrainingArguments,))
     (training_args,) = parser.parse_args_into_dataclasses()
+
+    # Default to training if neither --do_train nor --do_eval is set
+    if not training_args.do_train and not training_args.do_eval:
+        training_args.do_train = True
 
     torch_dtype = DTYPE_MAP[model_dtype] if model_dtype else None
 
@@ -66,7 +75,12 @@ def main():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch_dtype)
+    model_kwargs = {}
+    if torch_dtype:
+        model_kwargs["torch_dtype"] = torch_dtype
+    if attn_impl:
+        model_kwargs["attn_implementation"] = attn_impl
+    model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
     model.generation_config.pad_token_id = tokenizer.pad_token_id
 
     # Synthetic dataset — 32 samples of tokenized text
@@ -78,7 +92,16 @@ def main():
         "All that glitters is not gold, all that wanders is not lost. " * 5,
     ] * 8
 
-    train_dataset = [tokenizer(text, max_length=128, truncation=True, padding="max_length") for text in texts]
+    train_dataset = None
+    eval_dataset = None
+    if training_args.do_train:
+        train_dataset = [tokenizer(text, max_length=128, truncation=True, padding="max_length") for text in texts]
+    if training_args.do_eval:
+        eval_dataset = [tokenizer(text, max_length=128, truncation=True, padding="max_length") for text in texts[:8]]
+
+    collator_kwargs = {}
+    if pad_to_multiple_of:
+        collator_kwargs["pad_to_multiple_of"] = int(pad_to_multiple_of)
 
     training_args.disable_tqdm = True
 
@@ -86,13 +109,21 @@ def main():
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
+        eval_dataset=eval_dataset,
+        data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, **collator_kwargs),
     )
 
-    trainer.train()
+    if training_args.do_train:
+        trainer.train()
+
+    if training_args.do_eval:
+        eval_metrics = trainer.evaluate()
+        if eval_output_file and training_args.process_index == 0:
+            with open(eval_output_file, "w") as f:
+                json.dump(eval_metrics, f)
 
     # Save per-step losses for equivalence testing
-    if loss_output_file and training_args.process_index == 0:
+    if training_args.do_train and loss_output_file and training_args.process_index == 0:
         losses = [log["loss"] for log in trainer.state.log_history if "loss" in log]
         with open(loss_output_file, "w") as f:
             json.dump(losses, f)
