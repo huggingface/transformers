@@ -151,7 +151,7 @@ class Zamba2Config(PreTrainedConfig):
     chunk_size: int = 256
     use_mem_eff_path: bool = False
     add_bias_linear: bool = False
-    intermediate_size: int = None
+    intermediate_size: int | None = None
     hidden_act: str = "gelu"
     num_attention_heads: int = 32
     num_key_value_heads: int | None = None

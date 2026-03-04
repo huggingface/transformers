@@ -93,6 +93,8 @@ class XcodecConfig(PreTrainedConfig):
         "hidden_size": 256,
     }
 
+    _default_semantic_model_config_kwargs = {}
+
     target_bandwidths: list[float | int] | None = None
     sample_rate: int = 16000
     kernel_size: int = 3

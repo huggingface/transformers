@@ -124,7 +124,7 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
     max_2d_position_embeddings: int = 1024
     type_vocab_size: int = 1
     vocab_size: int = 4
-    initializer_range: int = 0.01
+    initializer_range: float = 0.01
     start_token_id: int = 0
     pad_token_id: int | None = 1
     end_token_id: int = 2
@@ -272,14 +272,14 @@ class PPDocLayoutV2Config(PreTrainedConfig):
     backbone_config: PreTrainedConfig | dict | None = None
     freeze_backbone_batch_norms: bool = True
     encoder_hidden_dim: int = 256
-    encoder_in_channels: list[int] | tuple[int] | None = (512, 1024, 2048)
-    feat_strides: list[int] | tuple[int] | None = (8, 16, 32)
+    encoder_in_channels: list[int] | tuple[int, ...] | None = (512, 1024, 2048)
+    feat_strides: list[int] | tuple[int, ...] | None = (8, 16, 32)
     encoder_layers: int = 1
     encoder_ffn_dim: int = 1024
     encoder_attention_heads: int = 8
     dropout: float | int = 0.0
     activation_dropout: float | int = 0.0
-    encode_proj_layers: list[int] | tuple[int] | None = (2,)
+    encode_proj_layers: list[int] | tuple[int, ...] | None = (2,)
     positional_encoding_temperature: int = 10000
     encoder_activation_function: str = "gelu"
     activation_function: str = "silu"
@@ -288,7 +288,7 @@ class PPDocLayoutV2Config(PreTrainedConfig):
     hidden_expansion: float = 1.0
     d_model: int = 256
     num_queries: int = 300
-    decoder_in_channels: list[int] | tuple[int] | None = (256, 256, 256)
+    decoder_in_channels: list[int] | tuple[int, ...] | None = (256, 256, 256)
     decoder_ffn_dim: int = 1024
     num_feature_levels: int = 3
     decoder_n_points: int = 4

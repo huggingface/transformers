@@ -180,7 +180,7 @@ class Wav2Vec2BertConfig(PreTrainedConfig):
 
     model_type = "wav2vec2-bert"
 
-    vocab_size: int = None
+    vocab_size: int | None = None
     hidden_size: int = 1024
     num_hidden_layers: int = 24
     num_attention_heads: int = 16
