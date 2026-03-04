@@ -327,7 +327,7 @@ class PixioModel(PixioPreTrainedModel):
 
         embedding_output = self.embeddings(pixel_values)
 
-        encoder_outputs: BaseModelOutput = self.encoder(embedding_output)
+        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, **kwargs)
         sequence_output = encoder_outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
         pooled_output = sequence_output[:, : self.embeddings.n_cls_tokens, :].mean(dim=1)
