@@ -673,7 +673,7 @@ class ProgressCallback(TrainerCallback):
                         f"[String too long to display, length: {len(v)} > {self.max_str_len}. "
                         "Consider increasing `max_str_len` if needed.]"
                     )
-                if isinstance(v, float):
+                elif isinstance(v, float):
                     # Format floats for better readability
                     shallow_logs[k] = f"{v:.4g}"
                 else:
