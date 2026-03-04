@@ -306,7 +306,6 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             use_cache=use_cache,
             position_ids=position_ids,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
@@ -373,7 +372,6 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             position_ids=position_ids,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
@@ -455,7 +453,6 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             position_ids=position_ids,
-            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )

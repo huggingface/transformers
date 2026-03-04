@@ -23,6 +23,7 @@ from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_dinov3_convnext import DINOv3ConvNextConfig
 
@@ -134,7 +135,6 @@ class DINOv3ConvNextLayer(nn.Module):
 
 
 class DINOv3ConvNextStage(nn.Module):
-    """ """
 
     def __init__(self, config: DINOv3ConvNextConfig, stage_idx: int):
         super().__init__()
@@ -188,6 +188,7 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["DINOv3ConvNextLayer"]
+    _can_record_outputs = {"hidden_states": DINOv3ConvNextStage}
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -200,8 +201,6 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
-    _can_record_outputs = {"hidden_states": DINOv3ConvNextStage}
-
     def __init__(self, config: DINOv3ConvNextConfig):
         super().__init__(config)
         self.config = config
@@ -210,6 +209,7 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.post_init()
 
+    @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BaseModelOutputWithPoolingAndNoAttention:
@@ -237,10 +237,6 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
 
 @auto_docstring
 class DINOv3ConvNextBackbone(BackboneMixin, DINOv3ConvNextPreTrainedModel):
-    config: DINOv3ConvNextConfig
-    _can_record_outputs = {"hidden_states": DINOv3ConvNextStage}
-    has_attentions = False
-
     def __init__(self, config: DINOv3ConvNextConfig):
         super().__init__(config)
 
@@ -253,6 +249,7 @@ class DINOv3ConvNextBackbone(BackboneMixin, DINOv3ConvNextPreTrainedModel):
     def get_input_embeddings(self):
         return None
 
+    @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BackboneOutput:

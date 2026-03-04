@@ -810,6 +810,7 @@ class ClapAudioEncoder(nn.Module):
 
         return normalized_input_features
 
+    @can_return_tuple
     def forward(
         self,
         input_features,
@@ -820,6 +821,10 @@ class ClapAudioEncoder(nn.Module):
         always_partition: bool | None = False,
         return_dict: bool | None = True,
     ) -> tuple | ClapAudioModelOutput:
+        # Unique logic so no refactor here yet
+        output_hidden_states = output_hidden_states or self.config.output_hidden_states
+        output_attentions = output_attentions or self.config.output_attentions
+
         input_features = input_features.transpose(1, 3)
         normalized_input_features = self.batch_norm(input_features)
         normalized_input_features = normalized_input_features.transpose(1, 3)
@@ -904,18 +909,6 @@ class ClapAudioEncoder(nn.Module):
         )
         latent_output = self.avgpool(torch.flatten(last_hidden_state, 2))
         latent_output = torch.flatten(latent_output, 1)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    last_hidden_state,
-                    latent_output,
-                    all_reshaped_hidden_states,
-                    all_self_attentions,
-                ]
-                if v is not None
-            )
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -1325,8 +1318,6 @@ class ClapAudioModel(ClapPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.audio_encoder.patch_embed.proj
 
-    @merge_with_config_defaults
-    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -1359,8 +1350,7 @@ class ClapAudioModel(ClapPreTrainedModel):
         return self.audio_encoder(
             input_features=input_features,
             is_longer=is_longer,
-            output_attentions=kwargs.get("output_attentions", self.config.output_attentions),
-            output_hidden_states=kwargs.get("output_hidden_states", self.config.output_hidden_states),
+            **kwargs,
         )
 
 
@@ -1523,7 +1513,6 @@ class ClapModel(ClapPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            return_dict=True,
             **kwargs,
         )
         text_features = self.text_projection(text_outputs.pooler_output)
@@ -1560,7 +1549,7 @@ class ClapModel(ClapPreTrainedModel):
         ...     audio_features = model.get_audio_features(**inputs)
         ```"""
         audio_outputs: BaseModelOutputWithPooling = self.audio_model(
-            input_features=input_features, is_longer=is_longer, return_dict=True, **kwargs
+            input_features=input_features, is_longer=is_longer, **kwargs
         )
         audio_features = self.audio_projection(audio_outputs.pooler_output)
         audio_outputs.pooler_output = F.normalize(audio_features, dim=-1)
@@ -1609,7 +1598,6 @@ class ClapModel(ClapPreTrainedModel):
         audio_outputs = self.audio_model(
             input_features=input_features,
             is_longer=is_longer,
-            return_dict=True,
             **kwargs,
         )
 
@@ -1617,7 +1605,6 @@ class ClapModel(ClapPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            return_dict=True,
             **kwargs,
         )
 
@@ -1764,7 +1751,6 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         audio_outputs: BaseModelOutputWithPooling = self.audio_model(
             input_features=input_features,
             is_longer=is_longer,
-            return_dict=True,
             **kwargs,
         )
 

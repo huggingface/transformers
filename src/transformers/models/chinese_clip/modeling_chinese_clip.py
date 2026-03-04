@@ -508,7 +508,7 @@ class ChineseCLIPVisionLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states,
             **kwargs,
         )
@@ -519,7 +519,7 @@ class ChineseCLIPVisionLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        return hidden_states, attn_weights
+        return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->ChineseCLIPText
@@ -641,7 +641,7 @@ class ChineseCLIPVisionEncoder(nn.Module):
         self,
         inputs_embeds,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
+    ) -> BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -651,12 +651,10 @@ class ChineseCLIPVisionEncoder(nn.Module):
         """
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,

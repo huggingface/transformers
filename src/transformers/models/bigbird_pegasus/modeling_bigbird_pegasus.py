@@ -1508,10 +1508,6 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BigBirdPegasusEncoderLayer", "BigBirdPegasusDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _can_compile_fullgraph = True
-    _can_record_outputs = {
-        "hidden_states": (BigBirdPegasusEncoderLayer, BigBirdPegasusDecoderLayer),
-        "attentions": (BigBirdPegasusEncoderAttention, BigBirdPegasusDecoderAttention),
-    }
 
     def _init_weights(self, module):
         super()._init_weights(module)

@@ -33,7 +33,7 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_bros import BrosConfig
 
 
@@ -254,11 +254,7 @@ class BrosSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs)
-
-        if self.is_decoder:
-            outputs = outputs + (None,)
-        return outputs
+        return context_layer, attention_probs
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Bros
@@ -289,17 +285,17 @@ class BrosAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor]:
-        self_outputs = self.self(
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states, _ = self.self(
             hidden_states,
             bbox_pos_emb=bbox_pos_emb,
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        hidden_states = self.output(hidden_states, residual)
+        return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Bros
@@ -355,19 +351,12 @@ class BrosLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
-        self_attention_outputs = self.attention(
+    ) -> torch.Tensor:
+        hidden_states = self.attention(
             hidden_states,
             bbox_pos_emb=bbox_pos_emb,
             attention_mask=attention_mask,
         )
-        attention_output = self_attention_outputs[0]
-
-        # if decoder, the last output is tuple of self-attn cache
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-        else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         if self.is_decoder and encoder_hidden_states is not None:
             if hasattr(self, "crossattention"):
@@ -375,67 +364,27 @@ class BrosLayer(GradientCheckpointingLayer):
                     f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
                 )
 
-            cross_attention_outputs = self.crossattention(
-                attention_output,
+            hidden_states, _ = self.crossattention(
+                hidden_states,
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 **kwargs,
             )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
 
-        layer_output = apply_chunking_to_forward(
+        hidden_states = apply_chunking_to_forward(
             self.feed_forward_chunk,
             self.chunk_size_feed_forward,
             self.seq_len_dim,
-            attention_output,
+            hidden_states,
         )
-        outputs = (layer_output,) + outputs
 
-        # if decoder, return the attn key/values as the last output
-        if self.is_decoder:
-            outputs = outputs + (None,)
-
-        return outputs
+        return hidden_states
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
-
-
-class BrosEncoder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([BrosLayer(config) for _ in range(config.num_hidden_layers)])
-
-    @can_return_tuple
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        bbox_pos_emb: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | BaseModelOutputWithCrossAttentions:
-        for i, layer_module in enumerate(self.layer):
-            layer_outputs = layer_module(
-                hidden_states,
-                bbox_pos_emb=bbox_pos_emb,
-                attention_mask=attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                **kwargs,
-            )
-
-            hidden_states = layer_outputs[0]
-
-        return BaseModelOutputWithCrossAttentions(
-            last_hidden_state=hidden_states,
-        )
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Bros
@@ -494,7 +443,8 @@ class BrosPreTrainedModel(PreTrainedModel):
     base_model_prefix = "bros"
     _can_record_outputs = {
         "hidden_states": BrosLayer,
-        "attentions": BrosSelfAttention,
+        "attentions": OutputRecorder(BrosSelfAttention, index=1, layer_name="attention"),
+        "cross_attentions": OutputRecorder(BrosSelfAttention, index=1, layer_name="crossattention"),
     }
 
     @torch.no_grad()
@@ -512,6 +462,38 @@ class BrosPreTrainedModel(PreTrainedModel):
                 10000 ** (torch.arange(0.0, module.dim_bbox_sinusoid_emb_1d, 2.0) / module.dim_bbox_sinusoid_emb_1d)
             )
             init.copy_(module.inv_freq, inv_freq)
+
+
+class BrosEncoder(BrosPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.layer = nn.ModuleList([BrosLayer(config) for _ in range(config.num_hidden_layers)])
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        bbox_pos_emb: torch.Tensor,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithCrossAttentions:
+        for layer_module in self.layer:
+            hidden_states = layer_module(
+                hidden_states,
+                bbox_pos_emb=bbox_pos_emb,
+                attention_mask=attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                **kwargs,
+            )
+
+        return BaseModelOutputWithCrossAttentions(
+            last_hidden_state=hidden_states,
+        )
 
 
 @auto_docstring
@@ -538,8 +520,7 @@ class BrosModel(BrosPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,

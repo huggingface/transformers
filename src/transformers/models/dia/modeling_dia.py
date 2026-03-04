@@ -428,7 +428,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
-        self_attn_output, self_attn_weights = self.self_attention(
+        self_attn_output, _ = self.self_attention(
             normed_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
@@ -441,7 +441,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
         mlp_out = self.mlp(normed_states)
         hidden_states = residual + mlp_out
 
-        return hidden_states, self_attn_weights
+        return hidden_states
 
 
 class DiaEncoder(DiaPreTrainedModel):
@@ -487,14 +487,13 @@ class DiaEncoder(DiaPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for encoder_layer in self.layers:
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-            hidden_states = layer_outputs[0]
 
         hidden_states = self.norm(hidden_states)
 
@@ -529,7 +528,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
 
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
-        self_attn_output, self_attn_weights = self.self_attention(
+        self_attn_output, _ = self.self_attention(
             normed_states,
             position_embeddings,
             attention_mask,
@@ -543,7 +542,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
 
         residual = hidden_states
         normed_states = self.pre_ca_norm(hidden_states)
-        cross_states, cross_attn_weights = self.cross_attention(
+        cross_states, _ = self.cross_attention(
             normed_states,
             encoder_hidden_states,
             attention_mask=encoder_attention_mask,
@@ -557,7 +556,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         mlp_out = self.mlp(normed_states)
         hidden_states = residual + mlp_out
 
-        return hidden_states, self_attn_weights, cross_attn_weights
+        return hidden_states
 
 
 class DiaDecoder(DiaPreTrainedModel):
@@ -635,7 +634,7 @@ class DiaDecoder(DiaPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for layer in self.layers:
-            layer_outputs = layer(
+            hidden_states = layer(
                 hidden_states,
                 # Needs to be an arg in order to function properly
                 # on inplace operations to be carried (e.g. compile)
@@ -648,7 +647,6 @@ class DiaDecoder(DiaPreTrainedModel):
                 position_ids=position_ids,
                 **kwargs,
             )
-            hidden_states = layer_outputs[0]
 
         hidden_states = self.norm(hidden_states)
 

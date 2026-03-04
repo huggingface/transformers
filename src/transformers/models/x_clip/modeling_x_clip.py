@@ -344,7 +344,7 @@ class XCLIPEncoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             **kwargs,
@@ -356,7 +356,7 @@ class XCLIPEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        return hidden_states, attn_weights
+        return hidden_states
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -550,14 +550,12 @@ class XCLIPEncoder(nn.Module):
 
         """
         hidden_states = inputs_embeds
-        for idx, encoder_layer in enumerate(self.layers):
-            layer_outputs = encoder_layer(
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask,
                 **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
