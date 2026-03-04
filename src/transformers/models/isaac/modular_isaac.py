@@ -196,15 +196,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         **kwargs,
     ) -> torch.Tensor:
-        resize_kwargs: dict[str, Any] = {"align_corners": False}
-        resize_mode = "bilinear"
-
-        return F.interpolate(
-            image,
-            size=(size.height, size.width),
-            mode=resize_mode,
-            **resize_kwargs,
-        )
+        return F.interpolate(image, size=(size.height, size.width), mode="bilinear", align_corners=False)
 
     def _preprocess(
         self,
