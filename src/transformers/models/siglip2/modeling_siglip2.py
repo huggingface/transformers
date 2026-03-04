@@ -540,7 +540,7 @@ class Siglip2VisionTransformer(Siglip2PreTrainedModel):
 
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 
@@ -598,7 +598,7 @@ class Siglip2TextTransformer(Siglip2PreTrainedModel):
         # note: Siglip2's text model does not use a causal mask, unlike the original CLIP model.
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 
@@ -699,7 +699,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
             target_len, source_len = probe.shape[1], hidden_state.shape[1]
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=probe,
+                inputs_embeds=probe,
                 attention_mask=attention_mask,
                 encoder_hidden_states=hidden_state,
             )

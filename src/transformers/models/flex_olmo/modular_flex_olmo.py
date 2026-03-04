@@ -126,8 +126,9 @@ class FlexOlmoConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.v_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the added norm on q and k
-        "layers.*.mlp.experts.gate_up_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -314,7 +315,7 @@ class FlexOlmoModel(MixtralModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

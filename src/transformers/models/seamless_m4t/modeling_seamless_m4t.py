@@ -38,6 +38,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_seamless_m4t import SeamlessM4TConfig
 
 
@@ -827,7 +828,7 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
             attention_mask = _compute_new_attention_mask(hidden_states=hidden_states, seq_lens=sub_sampled_lengths)
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=hidden_states,
+                inputs_embeds=hidden_states,
                 attention_mask=attention_mask,
             )
 
@@ -1673,7 +1674,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
         if attention_mask is not None:
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
             )
 
@@ -1831,7 +1832,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -1841,7 +1842,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )
@@ -2265,7 +2266,8 @@ class SeamlessM4THifiGan(nn.Module):
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 
-    def forward(self, input_embeds: torch.FloatTensor) -> torch.FloatTensor:
+    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
+    def forward(self, inputs_embeds: torch.FloatTensor) -> torch.FloatTensor:
         r"""
         Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
         of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a single, un-batched speech
@@ -2282,7 +2284,7 @@ class SeamlessM4THifiGan(nn.Module):
             shape `(batch_size, num_frames,)`. If un-batched, will be of shape `(num_frames,)`.
         """
 
-        hidden_states = self.conv_pre(input_embeds)
+        hidden_states = self.conv_pre(inputs_embeds)
         for i in range(self.num_upsamples):
             hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
             hidden_states = self.upsampler[i](hidden_states)
@@ -2309,7 +2311,7 @@ class SeamlessM4THifiGan(nn.Module):
 )
 class SeamlessM4TCodeHifiGan(PreTrainedModel):
     config: SeamlessM4TConfig
-    main_input_name = "input_embeds"
+    main_input_name = "inputs_embeds"
     input_modalities = "audio"
     _no_split_modules = []
 
@@ -2923,7 +2925,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
         input_features = input_features if input_features is not None else kwargs.pop("inputs")
         if tgt_lang is not None:
-            inputs = kwargs.get("input_embeds") if input_features is None else input_features
+            inputs = kwargs.get("inputs_embeds") if input_features is None else input_features
             inputs = (
                 inputs
                 if inputs is not None

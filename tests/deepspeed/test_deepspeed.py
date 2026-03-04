@@ -23,9 +23,8 @@ from functools import partial
 import datasets
 from parameterized import parameterized
 
-import tests.trainer.test_trainer
 import transformers
-from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
+from tests.trainer.trainer_test_utils import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.integrations.deepspeed import (
     HfDeepSpeedConfig,
@@ -60,13 +59,16 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
-    from tests.trainer.test_trainer import (  # noqa
+    from tests.trainer.trainer_test_utils import (  # noqa
         RegressionModelConfig,
         RegressionPreTrainedModel,
     )
+    from tests.trainer.trainer_test_utils import (
+        get_regression_trainer as _get_regression_trainer,
+    )
 
     # hack to restore original logging level pre #21700
-    get_regression_trainer = partial(tests.trainer.test_trainer.get_regression_trainer, log_level="info")
+    get_regression_trainer = partial(_get_regression_trainer, log_level="info")
 
 
 set_seed(42)
@@ -274,6 +276,59 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                     AutoModel.from_pretrained(T5_TINY)
         self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
 
+    @require_torch_accelerator
+    def test_from_config_zero3_weight_init(self):
+        # test that from_config() correctly initializes weights under zero3
+        # (regression test: without the fix, _init_weights runs on partitioned empty tensors
+        # and custom initialization is silently skipped)
+        import deepspeed
+        import torch
+
+        from transformers import AutoConfig, AutoModelForCausalLM
+
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+            "bf16": {
+                "enabled": True,
+            },
+        }
+
+        config = AutoConfig.from_pretrained(GPT2_TINY)
+
+        # 1. Baseline: from_config without DeepSpeed, in bf16 to match ZeRO-3 dtype
+        torch.manual_seed(42)
+        baseline_model = AutoModelForCausalLM.from_config(config, dtype=torch.bfloat16)
+        baseline_std = baseline_model.transformer.h[0].attn.c_attn.weight.data.float().std().item()
+        del baseline_model
+
+        # 2. ZeRO-3: from_config with DeepSpeed
+        torch.manual_seed(42)
+        HfDeepSpeedConfig(ds_config)
+
+        with mockenv_context(**self.dist_env_1_gpu):
+            model = AutoModelForCausalLM.from_config(config)
+
+        param = model.transformer.h[0].attn.c_attn.weight
+        with deepspeed.zero.GatheredParameters([param]):
+            zero3_std = param.data.float().std().item()
+
+        # Weight std should be in the same ballpark between baseline and ZeRO-3.
+        # The seeds produce slightly different values due to different init ordering,
+        # but delta=0.3 catches the buggy case (ratio ~0.58, i.e. 42% off).
+        ratio = zero3_std / baseline_std
+        self.assertAlmostEqual(
+            ratio,
+            1.0,
+            delta=0.3,
+            msg=(
+                f"ZeRO-3 from_config() weight init diverges from baseline: "
+                f"baseline_std={baseline_std:.6f}, zero3_std={zero3_std:.6f}, ratio={ratio:.4f}"
+            ),
+        )
+
     def test_init_zero3_missing_params(self):
         # test that zero.Init() for missing parameters works correctly under zero3
         import deepspeed
@@ -390,11 +445,12 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         torch.testing.assert_close(good_torch_sin_cos, good_deepspeed_sin_cos.cpu())
 
     def test_init_zero3_moe_weight_conversion(self):
-        # Test that weight conversions (MoE expert fusion) work correctly with DeepSpeed Zero3
-        # This tests the fix for the issue where DeepSpeed Zero3 loading was bypassing weight conversions
+        # test that weight conversions (MoE expert fusion) work correctly under zero3
         import tempfile
 
-        from transformers import Qwen3MoeConfig, Qwen3MoeModel
+        import deepspeed
+
+        from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
 
         tiny_config = Qwen3MoeConfig(
             vocab_size=99,
@@ -423,93 +479,32 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with LoggingLevel(logging.INFO):
                 with mockenv_context(**self.dist_env_1_gpu):
-                    model = Qwen3MoeModel(tiny_config)
+                    model = Qwen3MoeForCausalLM(tiny_config)
+                    reference_weights = {k: v.clone() for k, v in model.state_dict().items()}
                     model.save_pretrained(tmpdirname)
 
-            # Manually create an "old" checkpoint format with separate expert weights
-            # to simulate loading a checkpoint saved before the v5 refactor
-            old_checkpoint_dir = f"{tmpdirname}_old"
-            import os
-            import shutil
-
-            os.makedirs(old_checkpoint_dir, exist_ok=True)
-            shutil.copy(f"{tmpdirname}/config.json", f"{old_checkpoint_dir}/config.json")
-
-            from safetensors.torch import load_file, save_file
-
-            new_state_dict = load_file(f"{tmpdirname}/model.safetensors")
-            old_state_dict = {}
-
-            for key, tensor in new_state_dict.items():
-                if "mlp.experts.gate_up_proj" in key:
-                    layer_prefix = key.replace(".mlp.experts.gate_up_proj", "")
-                    num_experts = tensor.shape[0]
-                    intermediate_size = tensor.shape[1] // 2
-
-                    for expert_idx in range(num_experts):
-                        expert_tensor = tensor[expert_idx]
-                        gate_tensor = expert_tensor[:intermediate_size, :]
-                        up_tensor = expert_tensor[intermediate_size:, :]
-
-                        old_state_dict[f"{layer_prefix}.mlp.experts.{expert_idx}.gate_proj.weight"] = gate_tensor
-                        old_state_dict[f"{layer_prefix}.mlp.experts.{expert_idx}.up_proj.weight"] = up_tensor
-                elif (
-                    "mlp.experts.down_proj" in key
-                    and key[key.rfind(".mlp.experts.down_proj") :] == ".mlp.experts.down_proj"
-                ):
-                    layer_prefix = key.replace(".mlp.experts.down_proj", "")
-                    num_experts = tensor.shape[0]
-
-                    for expert_idx in range(num_experts):
-                        expert_tensor = tensor[expert_idx]
-                        old_state_dict[f"{layer_prefix}.mlp.experts.{expert_idx}.down_proj.weight"] = expert_tensor
-                else:
-                    old_state_dict[key] = tensor
-
-            save_file(old_state_dict, f"{old_checkpoint_dir}/model.safetensors")
-
-            # Load the old checkpoint with DeepSpeed Zero3 and verify weight conversions are applied
             with LoggingLevel(logging.INFO):
                 with mockenv_context(**self.dist_env_1_gpu):
                     logger = logging.get_logger("transformers.modeling_utils")
                     with CaptureLogger(logger) as cl:
-                        loaded_model = Qwen3MoeModel.from_pretrained(old_checkpoint_dir)
-
+                        loaded_model, loading_info = Qwen3MoeForCausalLM.from_pretrained(
+                            tmpdirname, output_loading_info=True
+                        )
             self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
-
-            # Without weight conversion, gate_up_proj and down_proj would be MISSING
-            # This regex fails the test if expert fusion weights are missing from checkpoint
-            self.assertNotRegex(cl.out, r"mlp\.experts\.(gate_up_proj|down_proj)\s*\|\s*MISSING")
-
-            # Verify the model structure is correct (fused experts in v5 format)
-            # DeepSpeed Zero3 partitions parameters, so we need to gather them to check shapes
-            import deepspeed
-
-            expert_params_to_check = []
-            for name, param in loaded_model.named_parameters():
-                if "mlp.experts.gate_up_proj" in name or "mlp.experts.down_proj" in name:
-                    expert_params_to_check.append((name, param))
-                self.assertNotRegex(name, r"mlp\.experts\.\d+\.(gate_proj|up_proj|down_proj)\.weight")
-
-            # Without the fix, expert_params_to_check would be empty (all MISSING)
-            self.assertGreater(
-                len(expert_params_to_check),
-                0,
-                "No expert weights found - weight conversion failed! "
-                "Expected fused gate_up_proj and down_proj but found none.",
+            self.assertEqual(len(loading_info["missing_keys"]), 0, f"Missing keys: {loading_info['missing_keys']}")
+            self.assertEqual(
+                len(loading_info["unexpected_keys"]), 0, f"Unexpected keys: {loading_info['unexpected_keys']}"
             )
 
-            with deepspeed.zero.GatheredParameters([param for _, param in expert_params_to_check], modifier_rank=0):
-                for name, param in expert_params_to_check:
-                    if "mlp.experts.gate_up_proj" in name:
-                        self.assertEqual(len(param.shape), 3, f"gate_up_proj should be 3D, got {param.shape}")
-                        self.assertEqual(param.shape[0], 8, f"Should have 8 experts, got {param.shape[0]}")
-                    elif (
-                        "mlp.experts.down_proj" in name
-                        and name[name.rfind(".mlp.experts.down_proj") :] == ".mlp.experts.down_proj"
-                    ):
-                        self.assertEqual(len(param.shape), 3, f"down_proj should be 3D, got {param.shape}")
-                        self.assertEqual(param.shape[0], 8, f"Should have 8 experts, got {param.shape[0]}")
+            # gather all params and verify they match the original weights exactly
+            all_params = list(loaded_model.named_parameters())
+            with deepspeed.zero.GatheredParameters([p for _, p in all_params], modifier_rank=0):
+                for name, param in all_params:
+                    torch.testing.assert_close(
+                        param.data.cpu(),
+                        reference_weights[name].cpu(),
+                        msg=f"Parameter '{name}' doesn't match reference weights",
+                    )
 
     def test_init_zero3_variance_scaling(self):
         """
@@ -1461,7 +1456,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --predict_with_generate
             --save_steps 0
             --eval_steps {eval_steps}
-            --group_by_length
+            --train_sampling_strategy group_by_length
             --label_smoothing_factor 0.1
             --source_lang en
             --target_lang ro

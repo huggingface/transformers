@@ -469,7 +469,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             position_ids=position_ids,

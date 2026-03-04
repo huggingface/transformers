@@ -183,6 +183,7 @@ class LongcatFlashExperts(nn.Module):
         self.zero_expert_num = config.zero_expert_num or 0
         self.total_experts = self.num_routed_experts + self.zero_expert_num
         self.act_fn = ACT2FN[config.hidden_act]
+        self.identity_expert = nn.Identity()
 
         if self.num_routed_experts > 0:
             self.gate_up_proj = nn.Parameter(
@@ -211,7 +212,7 @@ class LongcatFlashExperts(nn.Module):
             current_state = hidden_states[token_idx]
 
             if expert_idx >= self.num_routed_experts or self.gate_up_proj is None:
-                current_hidden_states = current_state
+                current_hidden_states = self.identity_expert(current_state)
             else:
                 gate, up = F.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
                 current_hidden_states = self.act_fn(gate) * up
@@ -556,6 +557,10 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
         "hidden_states": LongcatFlashDecoderLayer,
         "attentions": LongcatFlashMLA,
     }
+    _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
+    _keep_in_fp32_modules = [
+        "classifier.weight"
+    ]  # TODO let's make sure orignal code base has this, for now it fixes quantization
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -571,8 +576,6 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class LongcatFlashModel(LongcatFlashPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
-
     def __init__(self, config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -627,7 +630,7 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

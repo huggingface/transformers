@@ -30,7 +30,6 @@ from transformers import (
     AutoTokenizer,
     DistilBertForSequenceClassification,
     MaskGenerationPipeline,
-    T5ForConditionalGeneration,
     TextClassificationPipeline,
     TextGenerationPipeline,
     pipeline,
@@ -686,24 +685,11 @@ class PipelineUtilsTest(unittest.TestCase):
         auto_model_cls = relevant_auto_classes[0]
 
         # retrieve correct model ids
-        if task == "translation":
-            # special case for translation pipeline which has multiple languages
-            model_ids = []
-            revisions = []
-            tasks = []
-            for translation_pair in task_dict["default"]:
-                model_id, revision = task_dict["default"][translation_pair]["model"]
+        model_id, revision = task_dict["default"]["model"]
 
-                model_ids.append(model_id)
-                revisions.append(revision)
-                tasks.append(task + f"_{'_to_'.join(translation_pair)}")
-        else:
-            # normal case - non-translation pipeline
-            model_id, revision = task_dict["default"]["model"]
-
-            model_ids = [model_id]
-            revisions = [revision]
-            tasks = [task]
+        model_ids = [model_id]
+        revisions = [revision]
+        tasks = [task]
 
         # check for equality
         for model_id, revision, task in zip(model_ids, revisions, tasks):
