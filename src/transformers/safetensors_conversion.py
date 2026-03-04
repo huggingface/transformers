@@ -2,6 +2,7 @@ from typing import Optional
 
 import httpx
 from huggingface_hub import Discussion, HfApi, get_repo_discussions
+from huggingface_hub.errors import HfHubHTTPError
 
 from .utils import cached_file, http_user_agent, logging
 
@@ -11,12 +12,15 @@ logger = logging.get_logger(__name__)
 
 def previous_pr(api: HfApi, model_id: str, pr_title: str, token: str) -> Optional["Discussion"]:
     main_commit = api.list_repo_commits(model_id, token=token)[0].commit_id
-    for discussion in get_repo_discussions(repo_id=model_id, token=token):
-        if discussion.title == pr_title and discussion.status == "open" and discussion.is_pull_request:
-            commits = api.list_repo_commits(model_id, revision=discussion.git_reference, token=token)
+    try:
+        for discussion in get_repo_discussions(repo_id=model_id, token=token):
+            if discussion.title == pr_title and discussion.status == "open" and discussion.is_pull_request:
+                commits = api.list_repo_commits(model_id, revision=discussion.git_reference, token=token)
 
-            if main_commit == commits[1].commit_id:
-                return discussion
+                if main_commit == commits[1].commit_id:
+                    return discussion
+    except HfHubHTTPError:
+        logger.debug(f"Could not list discussions for {model_id}. Discussions may be disabled for this repo.")
     return None
 
 
