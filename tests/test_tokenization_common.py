@@ -457,9 +457,7 @@ Hey how are you doing"""  # noqa: W293
                 if normalizer.get("type") == "Precompiled" and "precompiled_charsmap" in normalizer:
                     import base64
 
-                    extra_kwargs["_spm_precompiled_charsmap"] = base64.b64decode(
-                        normalizer["precompiled_charsmap"]
-                    )
+                    extra_kwargs["_spm_precompiled_charsmap"] = base64.b64decode(normalizer["precompiled_charsmap"])
                     break
 
         # Convert added_tokens list to added_tokens_decoder dict format
