@@ -1660,3 +1660,4 @@ if __name__ == "__main__":
 
 
 # "Pop2PianoConfig" Require `pip install essentia==2.1b6.dev1034`
+# NemotronConfig ==> can't convert fast tokenizer because `Exception: Unk token `<unk>` not found in the vocabulary`
