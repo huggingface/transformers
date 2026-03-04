@@ -480,6 +480,27 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             else:
                 raise ValueError("VLMs should only receive content as lists.")
 
+    def test_apply_chat_template_tokenize_for_vlm(self):
+        from transformers import AutoProcessor
+
+        processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM-Instruct")
+
+        messages = [{"role": "user", "content": "Hello"}]
+        processor_inputs = Serve.get_processor_inputs_from_inbound_messages(messages, Modality.VLM)
+        result = processor.apply_chat_template(
+            processor_inputs, return_tensors="pt", add_generation_prompt=True, return_dict=True, tokenize=True
+        )
+        self.assertIn("input_ids", result)
+        self.assertTrue(hasattr(result, "to"))
+
+        messages_list = [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]
+        processor_inputs = Serve.get_processor_inputs_from_inbound_messages(messages_list, Modality.VLM)
+        result_list = processor.apply_chat_template(
+            processor_inputs, return_tensors="pt", add_generation_prompt=True, return_dict=True, tokenize=True
+        )
+        self.assertIn("input_ids", result_list)
+        self.assertTrue(hasattr(result_list, "to"))
+
 
 @slow  # server startup time is slow on our push CI
 @require_openai
