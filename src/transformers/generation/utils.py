@@ -20,7 +20,7 @@ import warnings
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional, Protocol, cast
 
 import torch
 import torch.distributed as dist
@@ -110,10 +110,17 @@ from .stopping_criteria import (
 
 
 if TYPE_CHECKING:
-    from .._typing import GenerativePreTrainedModel
+    from .._typing import GenerativePreTrainedModel as _GenerativePreTrainedModel
     from ..modeling_utils import PreTrainedModel
     from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .streamers import BaseStreamer
+
+    class GenerativePreTrainedModel(_GenerativePreTrainedModel, Protocol):
+        _cache: Cache
+
+        # GenerationMixin calls many of its own helper methods through `self`; keep those dynamic lookups valid.
+        def __getattr__(self, name: str) -> Any: ...
+
 
 logger = logging.get_logger(__name__)
 
@@ -335,19 +342,7 @@ GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderO
 GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
-if TYPE_CHECKING:
-    # `GenerationMixin` accesses many attributes/methods provided by `PreTrainedModel`.
-    # We use a type-checking-only host that combines the mixin and protocol so `ty` can
-    # resolve `self.<attr>` across the whole file without changing runtime inheritance.
-
-    class _GenerationMixinHost(ContinuousMixin, GenerativePreTrainedModel):
-        pass
-
-else:
-    _GenerationMixinHost = ContinuousMixin
-
-
-class GenerationMixin(_GenerationMixinHost):
+class GenerationMixin(ContinuousMixin):
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in model classes.
     Inheriting from this class causes the model to have special generation-related behavior, such as loading a
@@ -380,7 +375,7 @@ class GenerationMixin(_GenerationMixinHost):
     output_modalities = ("text",)
 
     def adjust_generation_fn(
-        self,
+        self: "GenerativePreTrainedModel",
         generation_config,
         from_auto_class,
         from_pipeline,
@@ -530,9 +525,8 @@ class GenerationMixin(_GenerationMixinHost):
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step for every prompt.
         if not self.config.is_encoder_decoder and inputs_embeds is not None and is_first_iteration:
             model_inputs[input_ids_key] = None
-            prompt_embeds = cast(
-                torch.FloatTensor,
-                inputs_embeds[:, -next_sequence_length:, :] if next_sequence_length is not None else inputs_embeds,
+            prompt_embeds = (
+                inputs_embeds[:, -next_sequence_length:, :] if next_sequence_length is not None else inputs_embeds
             )
             model_inputs["inputs_embeds"] = prompt_embeds.clone(memory_format=torch.contiguous_format)
             batch_size, sequence_length = prompt_embeds.shape[:2]
@@ -605,7 +599,7 @@ class GenerationMixin(_GenerationMixinHost):
         return model_inputs
 
     def _prepare_model_inputs(
-        self,
+        self: "GenerativePreTrainedModel",
         inputs: torch.Tensor | None,
         bos_token_id: torch.Tensor | None,
         model_kwargs: dict[str, torch.Tensor],
@@ -761,7 +755,7 @@ class GenerationMixin(_GenerationMixinHost):
         return attention_mask
 
     def _prepare_encoder_decoder_kwargs_for_generation(
-        self,
+        self: "GenerativePreTrainedModel",
         inputs_tensor: torch.Tensor,
         model_kwargs,
         model_input_name: str | None,
@@ -802,7 +796,7 @@ class GenerationMixin(_GenerationMixinHost):
         return model_kwargs
 
     def _prepare_decoder_input_ids_for_generation(
-        self,
+        self: "GenerativePreTrainedModel",
         batch_size: int,
         model_input_name: str,
         model_kwargs: dict[str, torch.Tensor],
@@ -956,7 +950,7 @@ class GenerationMixin(_GenerationMixinHost):
         return model_kwargs
 
     def _get_candidate_generator(
-        self,
+        self: "GenerativePreTrainedModel",
         generation_config: GenerationConfig,
         input_ids: torch.LongTensor,
         inputs_tensor: torch.Tensor,
@@ -1041,7 +1035,7 @@ class GenerationMixin(_GenerationMixinHost):
         return candidate_generator
 
     def _get_logits_processor(
-        self,
+        self: "GenerativePreTrainedModel",
         generation_config: GenerationConfig,
         input_ids_seq_length: int | None = None,
         encoder_input_ids: torch.LongTensor | None = None,
@@ -1264,7 +1258,7 @@ class GenerationMixin(_GenerationMixinHost):
         return processors
 
     def _get_stopping_criteria(
-        self,
+        self: "GenerativePreTrainedModel",
         generation_config: GenerationConfig,
         stopping_criteria: StoppingCriteriaList | None,
         tokenizer: Optional["PreTrainedTokenizerBase"] = None,
@@ -1339,7 +1333,7 @@ class GenerationMixin(_GenerationMixinHost):
         return final_list
 
     def compute_transition_scores(
-        self,
+        self: "GenerativePreTrainedModel",
         sequences: torch.Tensor,
         scores: tuple[torch.Tensor],
         beam_indices: torch.Tensor | None = None,
@@ -1462,7 +1456,9 @@ class GenerationMixin(_GenerationMixinHost):
 
         return transition_scores
 
-    def _validate_generation_mode(self, generation_mode, generation_config, generation_mode_kwargs):
+    def _validate_generation_mode(
+        self: "GenerativePreTrainedModel", generation_mode, generation_config, generation_mode_kwargs
+    ):
         if generation_mode == GenerationMode.BEAM_SEARCH and "streamer" in generation_mode_kwargs:
             raise ValueError(
                 "`streamer` cannot be used with beam search (yet!). Make sure that `num_beams` is set to 1."
@@ -1508,7 +1504,7 @@ class GenerationMixin(_GenerationMixinHost):
                         f"The main and assistant models have different tokenizers. Please provide `tokenizer` and `assistant_tokenizer` to `generate()` {doc_reference}."
                     )
 
-    def _validate_model_kwargs(self, model_kwargs: dict[str, Any]):
+    def _validate_model_kwargs(self: "GenerativePreTrainedModel", model_kwargs: dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         # Excludes arguments that are handled before calling any model function
         if self.config.is_encoder_decoder:
@@ -1563,7 +1559,9 @@ class GenerationMixin(_GenerationMixinHost):
                 " generate arguments will also show up in this list)"
             )
 
-    def _validate_generated_length(self, generation_config, input_ids_length, has_default_max_length):
+    def _validate_generated_length(
+        self: "GenerativePreTrainedModel", generation_config, input_ids_length, has_default_max_length
+    ):
         """Performs validation related to the resulting generated length"""
         # 1. Max length warnings related to poor parameterization
         if has_default_max_length and generation_config.max_new_tokens is None:
@@ -1608,7 +1606,7 @@ class GenerationMixin(_GenerationMixinHost):
                 )
 
     def _prepare_generated_length(
-        self,
+        self: "GenerativePreTrainedModel",
         generation_config,
         has_default_max_length,
         has_default_min_length,
@@ -1757,7 +1755,7 @@ class GenerationMixin(_GenerationMixinHost):
         return model_kwargs
 
     def _prepare_static_cache(
-        self, cache_implementation: str, batch_size: int, max_cache_len: int, model_kwargs
+        self: "GenerativePreTrainedModel", cache_implementation: str, batch_size: int, max_cache_len: int, model_kwargs
     ) -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
@@ -1808,7 +1806,7 @@ class GenerationMixin(_GenerationMixinHost):
         return self._cache
 
     @classmethod
-    def _supports_default_dynamic_cache(cls) -> bool:
+    def _supports_default_dynamic_cache(cls: type["GenerativePreTrainedModel"]) -> bool:
         """
         Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
         This adds exception for some models like `Mamba` models which use their own caches.
@@ -1827,7 +1825,7 @@ class GenerationMixin(_GenerationMixinHost):
         )
 
     def _prepare_cache_for_generation(
-        self,
+        self: "GenerativePreTrainedModel",
         generation_config: GenerationConfig,
         model_kwargs: dict,
         generation_mode: GenerationMode,
@@ -1930,7 +1928,7 @@ class GenerationMixin(_GenerationMixinHost):
                 DynamicCache(**dynamic_cache_kwargs),  # cross-attention cache
             )
 
-    def _supports_logits_to_keep(self) -> bool:
+    def _supports_logits_to_keep(self: "GenerativePreTrainedModel") -> bool:
         """
         Return True if the current model supports the keyword argument `logits_to_keep` in forward()
         to save memory. Checking it in this way allows to avoid using a new model attribute.
@@ -1938,7 +1936,7 @@ class GenerationMixin(_GenerationMixinHost):
         return "logits_to_keep" in set(inspect.signature(self.forward).parameters.keys())
 
     def _prepare_special_tokens(
-        self,
+        self: "GenerativePreTrainedModel",
         generation_config: GenerationConfig,
         kwargs_has_attention_mask: bool | None = None,
         device: torch.device | str | None = None,
@@ -2016,7 +2014,9 @@ class GenerationMixin(_GenerationMixinHost):
         generation_config._pad_token_tensor = pad_token_tensor
         generation_config._decoder_start_token_tensor = decoder_start_token_tensor
 
-    def _valid_auto_compile_criteria(self, model_kwargs: dict[str, Any], generation_config: GenerationConfig) -> bool:
+    def _valid_auto_compile_criteria(
+        self: "GenerativePreTrainedModel", model_kwargs: dict[str, Any], generation_config: GenerationConfig
+    ) -> bool:
         """
         Determines whether to trigger auto-compilation of the model's forward pass at generation time.
         """
@@ -2072,7 +2072,7 @@ class GenerationMixin(_GenerationMixinHost):
         return can_compile
 
     @contextmanager
-    def _optimize_model_for_decode(self):
+    def _optimize_model_for_decode(self: "GenerativePreTrainedModel"):
         original_experts_implementation = self.config._experts_implementation
         # On non-CPU devices, 'batched_mm' can trade off a bit of memory (by duplicating selected experts weights)
         # for much better speed during decoding, especially for smaller inputs. On CPU, grouped_mm is usually better.
@@ -2114,7 +2114,7 @@ class GenerationMixin(_GenerationMixinHost):
         return repo
 
     def _extract_generation_mode_kwargs(
-        self: "GenerativePreTrainedModel",
+        self,
         custom_generate,
         kwargs,
         synced_gpus,
@@ -2148,7 +2148,7 @@ class GenerationMixin(_GenerationMixinHost):
 
     @torch.no_grad()
     def generate(
-        self,
+        self: "GenerativePreTrainedModel",
         inputs: torch.Tensor | None = None,
         generation_config: GenerationConfig | None = None,
         logits_processor: LogitsProcessorList | None = None,
@@ -2571,9 +2571,7 @@ class GenerationMixin(_GenerationMixinHost):
 
         return result
 
-    def _has_unfinished_sequences(
-        self: "GenerativePreTrainedModel", this_peer_finished: bool, synced_gpus: bool, device: torch.device
-    ) -> bool:
+    def _has_unfinished_sequences(self, this_peer_finished: bool, synced_gpus: bool, device: torch.device) -> bool:
         """
         Returns whether there are still unfinished sequences in the device. The existence of unfinished sequences is
         fed through `this_peer_finished`. ZeRO stage 3-friendly.
@@ -2677,7 +2675,7 @@ class GenerationMixin(_GenerationMixinHost):
         return input_ids
 
     def _sample(
-        self,
+        self: "GenerativePreTrainedModel",
         input_ids: torch.LongTensor,
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
@@ -3095,7 +3093,7 @@ class GenerationMixin(_GenerationMixinHost):
     # end of auxiliary functions for beam search
 
     def _beam_search(
-        self,
+        self: "GenerativePreTrainedModel",
         input_ids: torch.LongTensor,
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
@@ -3444,7 +3442,7 @@ class GenerationMixin(_GenerationMixinHost):
             return sequences
 
     def _assisted_decoding(
-        self,
+        self: "GenerativePreTrainedModel",
         input_ids: torch.LongTensor,
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
@@ -3754,7 +3752,7 @@ class GenerationMixin(_GenerationMixinHost):
 
     # TODO: v5.1: make public once API stabilized
     def _prefill(
-        self,
+        self: "GenerativePreTrainedModel",
         input_ids: torch.LongTensor,
         generation_config: GenerationConfig,
         model_kwargs: dict,
