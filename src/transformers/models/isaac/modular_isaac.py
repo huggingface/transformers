@@ -47,7 +47,7 @@ from ...models.qwen3.modeling_qwen3 import (
     Qwen3PreTrainedModel,
 )
 from ...processing_utils import ProcessorMixin, Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, torch_compilable_check
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
 from ...utils.generic import TransformersKwargs, can_return_tuple, maybe_autocast, merge_with_config_defaults
@@ -481,51 +481,65 @@ def pixel_shuffle_padded(
             - attention mask `(num_images, max_tokens)`
             - per-image valid token lengths `(num_images,)`
     """
-    num_images, _, embed_dim = x.shape
-
-    output_lengths: list[int] = []
-    for image_idx in range(num_images):
-        height_tokens, width_tokens = token_grids[image_idx].to(torch.long).tolist()
-        if height_tokens == 0 or width_tokens == 0:
-            output_lengths.append(0)
-            continue
-        if not is_torchdynamo_compiling() and ((height_tokens % scale_factor) or (width_tokens % scale_factor)):
-            raise ValueError(
-                f"Every (H, W) grid must be divisible by pixel_shuffle_scale={scale_factor}, got {(height_tokens, width_tokens)}."
-            )
-        output_lengths.append((height_tokens // scale_factor) * (width_tokens // scale_factor))
-
-    max_output_tokens = max(output_lengths, default=0)
+    num_images, max_patches, embed_dim = x.shape
     output_dim = embed_dim * scale_factor * scale_factor
 
-    shuffled = x.new_zeros((num_images, max_output_tokens, output_dim))
-    shuffled_attention_mask = torch.zeros((num_images, max_output_tokens), device=x.device, dtype=torch.long)
+    token_grids = token_grids.to(device=x.device, dtype=torch.long)
+    heights = token_grids[:, 0]
+    widths = token_grids[:, 1]
+    full_lengths = heights * widths
 
-    for image_idx in range(num_images):
-        out_length = output_lengths[image_idx]
-        if out_length == 0:
-            continue
+    non_empty = full_lengths > 0
+    if not is_torchdynamo_compiling():
+        divisible = ((heights % scale_factor) == 0) & ((widths % scale_factor) == 0)
+        torch_compilable_check(
+            (~non_empty) | divisible,
+            f"Every non-empty (H, W) grid must be divisible by pixel_shuffle_scale={scale_factor}.",
+        )
 
-        height_tokens, width_tokens = token_grids[image_idx].to(torch.long).tolist()
-        seq_length = height_tokens * width_tokens
-        if attention_mask is not None:
-            seq_length = min(seq_length, int(attention_mask[image_idx].sum().item()))
-        if seq_length == 0:
-            continue
+    torch_compilable_check(
+        full_lengths <= max_patches,
+        "token_grids imply more tokens than available padded patches.",
+    )
 
-        # Vision patches are contiguous in row-major order.
-        height_blocks = height_tokens // scale_factor
-        width_blocks = width_tokens // scale_factor
-        tokens = x[image_idx, :seq_length]
-        tokens = tokens.view(height_tokens, width_tokens, embed_dim).permute(2, 0, 1).unsqueeze(0)
-        tokens = F.pixel_unshuffle(tokens, downscale_factor=scale_factor)
-        tokens = tokens.view(1, embed_dim, scale_factor, scale_factor, height_blocks, width_blocks)
-        tokens = tokens.permute(0, 4, 5, 2, 3, 1).contiguous().view(out_length, output_dim)
-        shuffled[image_idx, :out_length] = tokens
-        shuffled_attention_mask[image_idx, :out_length] = 1
+    if attention_mask is not None:
+        attention_mask = attention_mask.to(device=x.device, dtype=torch.long)
+        valid_lengths = attention_mask.sum(dim=1)
+        torch_compilable_check(
+            valid_lengths == full_lengths,
+            "attention_mask valid-token counts must match token_grids H*W for each image.",
+        )
 
-    shuffled_lengths = torch.tensor(output_lengths, device=x.device, dtype=torch.long)
-    return shuffled, shuffled_attention_mask, shuffled_lengths
+    output_lengths = (heights // scale_factor) * (widths // scale_factor)
+    max_output_tokens = (
+        output_lengths.max() if output_lengths.numel() > 0 else torch.zeros((), device=x.device, dtype=torch.long)
+    )
+
+    shuffled_4d = x.new_zeros((num_images, max_output_tokens, scale_factor * scale_factor, embed_dim))
+
+    token_positions = torch.arange(max_patches, device=x.device, dtype=torch.long).unsqueeze(0).expand(num_images, -1)
+    valid_token_mask = token_positions < full_lengths.unsqueeze(1)
+
+    safe_widths = torch.where(widths > 0, widths, torch.ones_like(widths))
+    row_index = torch.div(token_positions, safe_widths.unsqueeze(1), rounding_mode="floor")
+    col_index = token_positions.remainder(safe_widths.unsqueeze(1))
+
+    output_widths = widths.div(scale_factor, rounding_mode="floor")
+    output_index = row_index.div(scale_factor, rounding_mode="floor") * output_widths.unsqueeze(1)
+    output_index = output_index + col_index.div(scale_factor, rounding_mode="floor")
+    sub_index = row_index.remainder(scale_factor) * scale_factor + col_index.remainder(scale_factor)
+
+    batch_index = torch.arange(num_images, device=x.device, dtype=torch.long).unsqueeze(1).expand_as(token_positions)
+    shuffled_4d[batch_index[valid_token_mask], output_index[valid_token_mask], sub_index[valid_token_mask]] = x[
+        valid_token_mask
+    ]
+
+    shuffled = shuffled_4d.view(num_images, max_output_tokens, output_dim)
+    shuffled_attention_mask = (
+        torch.arange(max_output_tokens, device=x.device, dtype=torch.long).unsqueeze(0) < output_lengths.unsqueeze(1)
+    ).to(torch.long)
+
+    return shuffled, shuffled_attention_mask, output_lengths
 
 
 class IsaacVisionTransformer(PreTrainedModel):
