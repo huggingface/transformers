@@ -277,7 +277,6 @@ class PixioLayer(GradientCheckpointingLayer):
         return layer_output
 
 
-
 class PixioPreTrainedModel(ViTPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": PixioLayer,

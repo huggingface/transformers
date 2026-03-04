@@ -321,6 +321,7 @@ class VitPoseBackboneEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([VitPoseBackboneLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     # Ignore copy
     def forward(

@@ -135,7 +135,6 @@ class DINOv3ConvNextLayer(nn.Module):
 
 
 class DINOv3ConvNextStage(nn.Module):
-
     def __init__(self, config: DINOv3ConvNextConfig, stage_idx: int):
         super().__init__()
 
