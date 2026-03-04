@@ -134,6 +134,7 @@ from .import_utils import (
     is_flash_attn_3_available,
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
+    is_flashoptim_available,
     is_flute_available,
     is_fouroversix_available,
     is_fp_quant_available,

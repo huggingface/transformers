@@ -93,6 +93,7 @@ from .utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flashoptim_available,
     is_flute_available,
     is_fouroversix_available,
     is_fp_quant_available,
@@ -446,6 +447,13 @@ def require_lomo(test_case):
     https://github.com/OpenLMLab/LOMO
     """
     return unittest.skipUnless(is_lomo_available(), "test requires LOMO")(test_case)
+
+
+def require_flashoptim(test_case):
+    """
+    Decorator marking a test that requires flashoptim. These tests are skipped when flashoptim isn't installed.
+    """
+    return unittest.skipUnless(is_flashoptim_available(), "test requires flashoptim")(test_case)
 
 
 def require_grokadamw(test_case):

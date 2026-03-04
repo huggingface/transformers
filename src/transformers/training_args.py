@@ -154,6 +154,11 @@ class OptimizerNames(ExplicitEnum):
     APOLLO_ADAMW = "apollo_adamw"
     APOLLO_ADAMW_LAYERWISE = "apollo_adamw_layerwise"
     STABLE_ADAMW = "stable_adamw"
+    FLASH_ADAMW = "flash_adamw"
+    FLASH_ADAM = "flash_adam"
+    FLASH_SGD = "flash_sgd"
+    FLASH_SGDW = "flash_sgdw"
+    FLASH_LION = "flash_lion"
 
 
 def _convert_str_dict(passed_value: dict):
