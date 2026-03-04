@@ -1318,27 +1318,22 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             position_ids=None,
             **kwargs,
         )
-        has_multimodal = (
-            modality_tensor is not None
-            or vision_patches is not None
-            or vision_patch_attention_mask is not None
-            or vision_token_grids is not None
-            or vision_token_offsets is not None
-            or vision_token_lengths is not None
-            or vision_image_attention_mask is not None
-        )
-        if not has_multimodal:
+        multimodal_inputs = {
+            "modality_tensor": modality_tensor,
+            "vision_patches": vision_patches,
+            "vision_patch_attention_mask": vision_patch_attention_mask,
+            "vision_token_grids": vision_token_grids,
+            "vision_token_offsets": vision_token_offsets,
+            "vision_token_lengths": vision_token_lengths,
+            "vision_image_attention_mask": vision_image_attention_mask,
+        }
+        if not any(value is not None for value in multimodal_inputs.values()):
             return model_inputs
 
         past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
         first_step = past_len == 0
-        model_inputs["modality_tensor"] = modality_tensor if first_step else None
-        model_inputs["vision_patches"] = vision_patches if first_step else None
-        model_inputs["vision_patch_attention_mask"] = vision_patch_attention_mask if first_step else None
-        model_inputs["vision_token_grids"] = vision_token_grids if first_step else None
-        model_inputs["vision_token_offsets"] = vision_token_offsets if first_step else None
-        model_inputs["vision_token_lengths"] = vision_token_lengths if first_step else None
-        model_inputs["vision_image_attention_mask"] = vision_image_attention_mask if first_step else None
+        for key, value in multimodal_inputs.items():
+            model_inputs[key] = value if first_step else None
         model_inputs["position_ids"] = position_ids if first_step else None
 
         return model_inputs
