@@ -151,9 +151,6 @@ class LasrTokenizer(TokenizersBackend):
             ],
         )
 
-        if _spm_precompiled_charsmap is not None:
-            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
-
     def get_sentinel_tokens(self):
         """Get the list of sentinel tokens (extra_id tokens) from additional_special_tokens."""
         return list(
