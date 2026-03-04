@@ -119,9 +119,7 @@ class T5Tokenizer(TokenizersBackend):
         )
 
         if _spm_precompiled_charsmap is not None:
-            self._tokenizer.normalizer = normalizers.Sequence(
-                [normalizers.Precompiled(_spm_precompiled_charsmap), Replace(pattern=Regex(" {2,}"), content=" ")]
-            )
+            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
