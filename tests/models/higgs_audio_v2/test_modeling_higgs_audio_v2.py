@@ -191,6 +191,22 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         self.model_tester = HiggsAudioV2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=HiggsAudioV2Config)
 
+    def _get_logits_processor_kwargs(self, do_sample=False, config=None):
+        # The base `GenerationTesterMixin` adds logits processors (e.g. repetition_penalty, bad_words_ids)
+        # that index into scores using `input_ids`. HiggsAudioV2 outputs audio codebook logits with shape
+        # (batch, num_codebooks, codebook_size), so those processors cause index-out-of-bounds errors.
+        # Override to return an empty dict (or only sampling params) to skip incompatible processors.
+        logits_processor_kwargs = {}
+        if do_sample:
+            logits_processor_kwargs.update(
+                {
+                    "top_k": 10,
+                    "top_p": 0.7,
+                    "temperature": 0.7,
+                }
+            )
+        return logits_processor_kwargs
+
     def test_config(self):
         self.config_tester.run_common_tests()
 

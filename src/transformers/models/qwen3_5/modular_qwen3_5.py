@@ -694,6 +694,8 @@ class Qwen3_5TextModel(Qwen3NextModel):
 
 
 class Qwen3_5Model(Qwen3VLModel):
+    _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
+
     def get_video_features(
         self,
         **super_kwargs,

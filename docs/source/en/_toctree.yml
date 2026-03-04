@@ -16,6 +16,8 @@
       title: Loading models
     - local: custom_models
       title: Customizing models
+    - local: monkey_patching
+      title: Monkey patching
     - local: how_to_hack_models
       title: Customizing model components
     - local: model_sharing
@@ -276,12 +278,16 @@
       title: MLX
     title: Local deployment
   - sections:
+    - local: community_integrations/nemo_automodel_pretraining
+      title: NeMo Automodel
     - local: community_integrations/nanotron
       title: Nanotron
     - local: community_integrations/torchtitan
       title: torchtitan
     title: Pretraining
   - sections:
+    - local: community_integrations/nemo_automodel_finetuning
+      title: NeMo Automodel
     - local: community_integrations/axolotl
       title: Axolotl
     - local: community_integrations/trl
@@ -700,6 +706,8 @@
         title: NanoChat
       - local: model_doc/nemotron
         title: Nemotron
+      - local: model_doc/nemotron_h
+        title: NemotronH
       - local: model_doc/nllb
         title: NLLB
       - local: model_doc/nllb-moe
@@ -1042,6 +1050,8 @@
         title: UnivNet
       - local: model_doc/vibevoice_acoustic_tokenizer
         title: VibeVoice Acoustic Tokenizer
+      - local: model_doc/vibevoice_asr
+        title: VibeVoice ASR
       - local: model_doc/vits
         title: VITS
       - local: model_doc/wav2vec2
