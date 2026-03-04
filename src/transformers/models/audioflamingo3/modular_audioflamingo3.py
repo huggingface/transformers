@@ -197,7 +197,6 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
@@ -283,22 +282,20 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
             past_key_values=past_key_values,
             labels=labels,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
         return outputs
 
-    def prepare_inputs_for_generation(self, *args, **kwargs):
+    def prepare_inputs_for_generation(self, *args, is_first_iteration: bool = False, **kwargs):
         # Overwritten -- we should not pass input_features when we are in cached decoding stage
 
         input_features = kwargs.pop("input_features", None)
         input_features_mask = kwargs.pop("input_features_mask", None)
-        cache_position = kwargs.get("cache_position")
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if cache_position is not None and model_inputs["cache_position"][0] == 0:
+        if is_first_iteration or not model_inputs.get("use_cache", False):
             # input_features should only be passed when we are not in cached decoding stage
             if input_features is not None:
                 model_inputs["input_features"] = input_features

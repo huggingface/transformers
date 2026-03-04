@@ -311,7 +311,6 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: EncoderDecoderCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         self_attn_cache = past_key_values
@@ -327,7 +326,6 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
             # Needs to be an arg in order to function properly
             # on inplace operations to be carried (e.g. compile)
             self_attn_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = residual + self_attn_output
@@ -383,9 +381,8 @@ class DiaDecoder(DiaPreTrainedModel):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
         past_key_values: EncoderDecoderCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPastAndCrossAttentions:
+    ) -> BaseModelOutputWithPastAndCrossAttentions | tuple:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks)`):
             The original `decoder_input_ids` in 3D shape to facilitate more efficient computations.
@@ -395,12 +392,10 @@ class DiaDecoder(DiaPreTrainedModel):
 
         batch_size, seq_length = input_ids.size()[:-1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=input_ids.device
-            )
+
         if position_ids is None:
-            position_ids = cache_position[None, :]
+            position_ids = torch.arange(seq_length, device=input_ids.device) + past_key_values_length
+            position_ids = position_ids.unsqueeze(0)
 
         # RoPE
         hidden_states = self.embeddings(input_ids)
@@ -414,7 +409,6 @@ class DiaDecoder(DiaPreTrainedModel):
             config=self.config,
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
         encoder_attention_mask = create_bidirectional_mask(
@@ -435,7 +429,6 @@ class DiaDecoder(DiaPreTrainedModel):
                 encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 position_ids=position_ids,
                 **kwargs,
             )
@@ -473,7 +466,6 @@ class DiaModel(DiaPreTrainedModel):
         encoder_outputs: BaseModelOutput | tuple | None = None,
         past_key_values: EncoderDecoderCache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqModelOutput:
         r"""
@@ -545,7 +537,6 @@ class DiaModel(DiaPreTrainedModel):
             encoder_attention_mask=attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -598,7 +589,6 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
         past_key_values: EncoderDecoderCache | None = None,
         use_cache: bool | None = None,
         labels: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqLMOutput:
         r"""
@@ -636,7 +626,6 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
