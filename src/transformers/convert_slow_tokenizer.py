@@ -192,6 +192,7 @@ class SentencePieceExtractor:
             AddedToken(token, normalized=False, special=special)
             for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
         ]
+        kwargs["_spm_precompiled_charsmap"] = getattr(self.proto.normalizer_spec, "precompiled_charsmap", None)
         return kwargs
 
 
