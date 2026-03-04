@@ -210,7 +210,6 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
     config: VibeVoiceConfig
     base_model_prefix = "model"
     main_input_name = "input_ids"
-    _no_split_modules = ["VibeVoiceDiffusionHead"]
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"

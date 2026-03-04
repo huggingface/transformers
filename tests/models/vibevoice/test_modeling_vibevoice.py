@@ -175,6 +175,14 @@ class VibeVoiceModelTester:
 
 class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (VibeVoiceForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "text-to-audio": VibeVoiceForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
+    _is_composite = True
 
     test_resize_embeddings = False
 
@@ -277,14 +285,6 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     def test_sample_generate_dict_output(self):
         pass
 
-    @pytest.mark.skip(reason="VibeVoice has composite model structure.")
-    def test_model_get_set_embeddings(self):
-        pass
-
-    @pytest.mark.skip(reason="VibeVoice has composite model structure.")
-    def test_tie_model_weights(self):
-        pass
-
     @pytest.mark.generate
     @unittest.skip(reason="VibeVoice generation requires specific audio/text setup.")
     def test_generate_from_inputs_embeds_1_beam_search(self):
@@ -328,6 +328,14 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
     @unittest.skip(reason="VibeVoice has composite model structure.")
     def test_tied_weights_keys(self):
+        pass
+
+    @unittest.skip(reason="VibeVoice has nested PreTrainedModels (acoustic_tokenizer contains encoder/decoder).")
+    def test_internal_model_config_and_subconfig_are_same(self):
+        pass
+
+    @unittest.skip("Submodel (VibeVoiceAcousticTokenizerEncoderModel) does not have attention")
+    def test_can_set_attention_dynamically_composite_model(self):
         pass
 
     @pytest.mark.generate
@@ -394,7 +402,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = VibeVoiceForConditionalGeneration.from_pretrained(
             self.model_checkpoint,
             dtype=torch.float32,
-            device_map=torch_device,
+            device_map="auto",
         )
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 
@@ -461,7 +469,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = VibeVoiceForConditionalGeneration.from_pretrained(
             self.model_checkpoint,
             dtype=torch.float32,
-            device_map=torch_device,
+            device_map="auto",
         )
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 
