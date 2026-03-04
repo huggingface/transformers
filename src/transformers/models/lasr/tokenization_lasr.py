@@ -21,9 +21,8 @@
 import itertools
 import re
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
-from tokenizers.normalizers import Replace
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
 
@@ -122,9 +121,7 @@ class LasrTokenizer(TokenizersBackend):
         )
 
         if _spm_precompiled_charsmap is not None:
-            self._tokenizer.normalizer = normalizers.Sequence(
-                [normalizers.Precompiled(_spm_precompiled_charsmap), Replace(pattern=Regex(" {2,}"), content=" ")]
-            )
+            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
