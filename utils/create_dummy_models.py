@@ -878,7 +878,10 @@ def build_model(model_arch, tiny_config, output_dir):
     # breakpoint()
     model = model_arch(config=tiny_config)
     model.save_pretrained(checkpoint_dir)
-    model.from_pretrained(checkpoint_dir)
+
+    # can't call from_pretrained from saved one
+    if not tiny_config.__class__.__name__.endswith(("TimmBackboneConfig",)):
+        model.from_pretrained(checkpoint_dir)
 
     return model
 
@@ -1223,7 +1226,7 @@ def build(config_class, models_to_create, output_dir):
 
     if len(result["processor"]) == 0:
         # TODO: Some models use NO processor (and no processor files exist on their hub repos.)
-        if config_class.__name__ not in ["PatchTSMixerConfig", "PatchTSTConfig"]:
+        if config_class.__name__ not in ["PatchTSMixerConfig", "PatchTSTConfig", "TimesFmConfig", "TimmBackboneConfig", "TimmWrapperConfig", "VitDetConfig"]:
             # breakpoint()
             error = f"No processor could be built for {config_class.__name__}."
             fill_result_with_error(result, error, None, models_to_create)
@@ -1257,7 +1260,7 @@ def build(config_class, models_to_create, output_dir):
     if len(processors) == 0:
         # breakpoint()
         # TODO: Some models use NO processor (and no processor files exist on their hub repos.)
-        if config_class.__name__ not in ["PatchTSMixerConfig", "PatchTSTConfig"]:
+        if config_class.__name__ not in ["PatchTSMixerConfig", "PatchTSTConfig", "TimesFmConfig", "TimmBackboneConfig", "TimmWrapperConfig", "VitDetConfig"]:
             error = f"No processor is returned by `convert_processors` for {config_class.__name__}."
             fill_result_with_error(result, error, None, models_to_create)
             logger.error(result["error"][0])
