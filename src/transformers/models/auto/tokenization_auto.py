@@ -350,7 +350,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "jamba",
     "llava",
     "llava_next",
-    "longt5",
     "opencua",
     "phi3",
     "step3p5",
