@@ -845,7 +845,7 @@ class HmllScatteredLoadSpec(HmllLoadSpec):
 
     def execute(self) -> torch.Tensor:
         dst = torch.empty(self.shape, dtype=self.dtype, device=self.device)
-        if (n_read := self.registry.fetchv(self.name, self.ranges, dst.data_ptr(), dst.nbytes)) <= 0:
+        if (n_read := self.registry.fetchv(self.name, self.ranges, dst.data_ptr())) <= 0:
             raise RuntimeError(f"Failed to fetch tensor {self.name} (error code: {n_read})")
         return dst
 
