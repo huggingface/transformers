@@ -23,10 +23,12 @@ from transformers import (
     HiggsAudioV2Config,
     HiggsAudioV2ForConditionalGeneration,
     HiggsAudioV2Model,
+    PreTrainedModel,
     is_torch_available,
 )
 from transformers.testing_utils import (
     cleanup,
+    require_flash_attn,
     require_torch,
     require_torch_accelerator,
     slow,
