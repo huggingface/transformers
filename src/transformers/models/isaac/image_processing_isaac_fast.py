@@ -174,12 +174,6 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     disable_grouping = False
 
-    def __init__(
-        self,
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-
     def _validate_preprocess_kwargs(self, **kwargs):
         # Allow callers to omit resize-related placeholders that BaseImageProcessorFast checks for.
         kwargs.pop("do_resize", None)
