@@ -462,6 +462,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     # TODO: we need to make sure the kwargs are actually arguments!
     #   But we are likely NOT to override anymore! Let's do something easy and quick here despite ugly.
     try:
+        # breakpoint()
         model_tester = model_tester_class(parent=None, **model_tester_kwargs)
     except TypeError as e:
         if "vocab_size" in model_tester_kwargs:
@@ -873,6 +874,7 @@ def fill_result_with_error(result, error, trace, models_to_create):
     #   otherwise, we could not build with these obtained processors, as we get the error
     #   `error = f"No processor is returned by `convert_processors` for {config_class.__name__}."`
     if len(result["processor"]) == 0:
+
         result["processor"] = {p.__class__.__name__: p.__class__.__name__ for p in result["processor"].values()}
 
 
@@ -1196,11 +1198,13 @@ def build(config_class, models_to_create, output_dir):
         fill_result_with_error(result, error, trace, models_to_create)
 
     if len(result["processor"]) == 0:
-        # breakpoint()
-        error = f"No processor could be built for {config_class.__name__}."
-        fill_result_with_error(result, error, None, models_to_create)
-        logger.error(result["error"][0])
-        return result
+        # TODO: Some models use NO processor (and no processor files exist on their hub repos.)
+        if config_class.__name__ not in ["PatchTSMixerConfig"]:
+            # breakpoint()
+            error = f"No processor could be built for {config_class.__name__}."
+            fill_result_with_error(result, error, None, models_to_create)
+            logger.error(result["error"][0])
+            return result
 
     # breakpoint()
     try:
@@ -1226,10 +1230,12 @@ def build(config_class, models_to_create, output_dir):
 
     if len(processors) == 0:
         # breakpoint()
-        error = f"No processor is returned by `convert_processors` for {config_class.__name__}."
-        fill_result_with_error(result, error, None, models_to_create)
-        logger.error(result["error"][0])
-        return result
+        # TODO: Some models use NO processor (and no processor files exist on their hub repos.)
+        if config_class.__name__ not in ["PatchTSMixerConfig"]:
+            error = f"No processor is returned by `convert_processors` for {config_class.__name__}."
+            fill_result_with_error(result, error, None, models_to_create)
+            logger.error(result["error"][0])
+            return result
 
     try:
         config_overrides = get_config_overrides(config_class, processors)
@@ -1600,7 +1606,7 @@ if __name__ == "__main__":
     if not args.all and not args.model_types:
         raise ValueError("Please provide at least one model type or pass `--all` to export all architectures.")
 
-    # os.environ["HF_TOKEN"] = args.token
+    os.environ["HF_TOKEN"] = args.token
 
     create_tiny_models(
         args.output_path,
