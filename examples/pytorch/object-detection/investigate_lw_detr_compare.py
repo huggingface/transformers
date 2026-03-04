@@ -752,7 +752,9 @@ def compute_hf_loss_on_original_outputs(
     labels: list[dict[str, torch.Tensor]],
     device: torch.device,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor], dict[str, float]]:
-    matcher = LwDetrHungarianMatcher(class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost)
+    matcher = LwDetrHungarianMatcher(
+        class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
+    )
     criterion = LwDetrImageLoss(
         matcher=matcher,
         num_classes=config.num_labels,
@@ -885,7 +887,9 @@ def evaluate_gradient_parity(
     )
     original_loss.backward()
 
-    hf_grads = {name: param.grad.detach().cpu() for name, param in hf_model.named_parameters() if param.grad is not None}
+    hf_grads = {
+        name: param.grad.detach().cpu() for name, param in hf_model.named_parameters() if param.grad is not None
+    }
     original_grads = {
         name: param.grad.detach().cpu() for name, param in original_model.named_parameters() if param.grad is not None
     }
@@ -896,11 +900,15 @@ def evaluate_gradient_parity(
     per_key_max_abs_diff: dict[str, float] = {}
     for key in shared_keys:
         if hf_grads[key].shape == converted_original_grads[key].shape:
-            per_key_max_abs_diff[key] = float(torch.max(torch.abs(hf_grads[key] - converted_original_grads[key])).item())
+            per_key_max_abs_diff[key] = float(
+                torch.max(torch.abs(hf_grads[key] - converted_original_grads[key])).item()
+            )
 
     top_keys = sorted(per_key_max_abs_diff.items(), key=lambda item: item[1], reverse=True)[:20]
     max_abs_diff = max(per_key_max_abs_diff.values()) if per_key_max_abs_diff else 0.0
-    mean_abs_diff = float(sum(per_key_max_abs_diff.values()) / len(per_key_max_abs_diff)) if per_key_max_abs_diff else 0.0
+    mean_abs_diff = (
+        float(sum(per_key_max_abs_diff.values()) / len(per_key_max_abs_diff)) if per_key_max_abs_diff else 0.0
+    )
 
     # Control check: verify key conversion correctness on current parameter values.
     original_weights = {name: param.detach().cpu() for name, param in original_model.named_parameters()}
