@@ -25,6 +25,7 @@ from ...processing_utils import Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
+from ...utils.import_utils import requires
 from ..auto import CONFIG_MAPPING
 from ..auto.modeling_auto import AutoModel
 from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
@@ -114,6 +115,8 @@ class ColModernVBertProcessorKwargs(Idefics3ProcessorKwargs, total=False):
     }
 
 
+@requires(backends=("torch",))
+@auto_docstring
 class ColModernVBertProcessor(Idefics3Processor):
     r"""
     Constructs a ColModernVBert processor which wraps a ModernVBertProcessor and special methods to process images and queries, as
