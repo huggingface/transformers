@@ -62,7 +62,7 @@ import requests
 from PIL import Image
 from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("google/siglip2-base-patch16-224", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModel.from_pretrained("google/siglip2-base-patch16-224", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -92,7 +92,7 @@ import requests
 from PIL import Image
 from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("google/siglip2-base-patch16-naflex", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModel.from_pretrained("google/siglip2-base-patch16-naflex", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-naflex")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
