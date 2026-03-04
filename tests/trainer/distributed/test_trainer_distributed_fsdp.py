@@ -41,15 +41,14 @@ from transformers.testing_utils import (
     torch_device,
     torchrun,
 )
-from transformers.trainer_callback import TrainerState
-from transformers.trainer_utils import FSDPOption, get_last_checkpoint, set_seed
+from transformers.trainer_utils import FSDPOption, set_seed
 from transformers.utils import (
     is_accelerate_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
 
-from .test_trainer_distributed import CONFIGS_DIR, SCRIPTS_DIR
+from .test_trainer_distributed import CONFIGS_DIR, SCRIPTS_DIR, TRAIN_SCRIPT, TrainerDistributedCommon
 
 
 if is_torch_available():
@@ -61,7 +60,6 @@ if is_torch_available():
 FSDP_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp.yaml")
 FSDP2_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp2.yaml")
 FSDP2_CP_CONFIG_FILE = os.path.join(CONFIGS_DIR, "fsdp2_cp.yaml")
-TRAIN_SCRIPT = os.path.join(SCRIPTS_DIR, "train.py")
 FSDP_GENERATE_SCRIPT = os.path.join(SCRIPTS_DIR, "fsdp_generate.py")
 
 FSDP_CONFIGS = {
@@ -122,7 +120,7 @@ def _parameterized_custom_name_func(func, param_num, param):
 class FSDPCommandsMixin:
     """Provides ``get_torchrun_cmd`` and ``get_accelerate_cmd`` for FSDP."""
 
-    def get_torchrun_cmd(self, script, extra_args=None, num_processes=None):
+    def get_torchrun_cmd(self, script, script_args=None, num_processes=None):
         if num_processes is None:
             num_processes = backend_device_count(torch_device)
         port = get_torch_dist_unique_port()
@@ -133,11 +131,13 @@ class FSDPCommandsMixin:
             f"--master_port={port}",
             script,
         ]
-        if extra_args:
-            cmd.extend(extra_args)
+        if script_args:
+            cmd.extend(script_args)
         return cmd
 
-    def get_accelerate_cmd(self, script, config_file, launch_args=None, extra_args=None, num_processes=None):
+    def get_accelerate_cmd(
+        self, script, config_file, launch_args=None, script_args=None, num_processes=None, **kwargs
+    ):
         if num_processes is None:
             num_processes = backend_device_count(torch_device)
         port = get_torch_dist_unique_port()
@@ -154,8 +154,8 @@ class FSDPCommandsMixin:
         if launch_args:
             cmd.extend(launch_args)
         cmd.append(script)
-        if extra_args:
-            cmd.extend(extra_args)
+        if script_args:
+            cmd.extend(script_args)
         return cmd
 
 
@@ -272,7 +272,7 @@ class TestFSDPConfig(TestCasePlus):
 @run_first
 @require_accelerate
 @require_torch_multi_accelerator
-class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegrationCommon):
+class TestTrainerDistributedFSDP(TrainerDistributedCommon, FSDPCommandsMixin, TestCasePlus, TrainerIntegrationCommon):
     # -------------------------------------------------------------------
     # FSDP training — accelerate (parameterized over fsdp version)
     # -------------------------------------------------------------------
@@ -280,86 +280,49 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
     # Pure dtype training: model loaded in target dtype, no mixed precision
     @parameterized.expand(pure_dtype_params, name_func=_parameterized_custom_name_func)
     def test_training(self, dtype, fsdp_version):
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir) + ["--model_dtype", dtype]
-        cmd = self.get_accelerate_cmd(
-            TRAIN_SCRIPT,
-            config_file=FSDP_CONFIGS[fsdp_version],
-            launch_args=self._get_launch_args(),
-            extra_args=args,
-        )
-        execute_subprocess_async(cmd, env=self.get_env())
+        self.run_training(dtype, config_file=FSDP_CONFIGS[fsdp_version])
 
     # Mixed precision: model loaded in fp32, training with --bf16/--fp16
     @parameterized.expand(mixed_precision_params, name_func=_parameterized_custom_name_func)
     def test_training_mixed_precision(self, sharding_strategy, dtype, fsdp_version):
-        output_dir = self.get_auto_remove_tmp_dir()
         sharding_idx = FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1
-        args = self._get_train_args(output_dir) + ["--model_dtype", "fp32", f"--{dtype}"]
-        if dtype == "fp16":
-            args += ["--optim", "adamw_torch"]
-        launch_args = self._get_launch_args() + ["--fsdp_sharding_strategy", str(sharding_idx)]
-        cmd = self.get_accelerate_cmd(
-            TRAIN_SCRIPT,
-            config_file=FSDP_CONFIGS[fsdp_version],
-            launch_args=launch_args,
-            extra_args=args,
-        )
-        execute_subprocess_async(cmd, env=self.get_env())
+        launch_args = list(TRAIN_LAUNCH_ARGS) + ["--fsdp_sharding_strategy", str(sharding_idx)]
+        self.run_mixed_precision(dtype, config_file=FSDP_CONFIGS[fsdp_version], launch_args=launch_args)
 
     @parameterized.expand(["true", "false"], name_func=_parameterized_custom_name_func)
     def test_fsdp2_cpu_ram_efficient_loading(self, cpu_ram_efficient_loading):
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir) + ["--model_dtype", "bf16"]
-        launch_args = self._get_launch_args() + [
+        launch_args = list(TRAIN_LAUNCH_ARGS) + [
             "--fsdp_cpu_ram_efficient_loading",
             cpu_ram_efficient_loading,
         ]
-        cmd = self.get_accelerate_cmd(
-            TRAIN_SCRIPT,
-            config_file=FSDP2_CONFIG_FILE,
-            launch_args=launch_args,
-            extra_args=args,
-        )
-        execute_subprocess_async(cmd, env=self.get_env())
+        self.run_training("bf16", config_file=FSDP2_CONFIG_FILE, launch_args=launch_args)
 
     @parameterized.expand(fsdp_versions, name_func=_parameterized_custom_name_func)
     def test_training_with_gradient_accumulation(self, fsdp_version):
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir) + ["--bf16", "--gradient_accumulation_steps", "2"]
-        cmd = self.get_accelerate_cmd(
-            TRAIN_SCRIPT,
-            config_file=FSDP_CONFIGS[fsdp_version],
-            launch_args=self._get_launch_args(),
-            extra_args=args,
-        )
-        execute_subprocess_async(cmd, env=self.get_env())
+        self.run_gradient_accumulation(config_file=FSDP_CONFIGS[fsdp_version])
 
     @parameterized.expand(fsdp_versions, name_func=_parameterized_custom_name_func)
     def test_basic_run_with_cpu_offload(self, fsdp_version):
         output_dir = self.get_auto_remove_tmp_dir()
         args = self._get_train_args(output_dir) + ["--bf16", "--max_steps", "10"]
-        launch_args = self._get_launch_args() + ["--fsdp_offload_params", "true"]
-        cmd = self.get_accelerate_cmd(
-            TRAIN_SCRIPT,
-            config_file=FSDP_CONFIGS[fsdp_version],
-            launch_args=launch_args,
-            extra_args=args,
+        launch_args = list(TRAIN_LAUNCH_ARGS) + ["--fsdp_offload_params", "true"]
+        execute_subprocess_async(
+            self.get_accelerate_cmd(
+                TRAIN_SCRIPT, script_args=args, config_file=FSDP_CONFIGS[fsdp_version], launch_args=launch_args
+            ),
+            env=self.get_env(),
         )
-        execute_subprocess_async(cmd, env=self.get_env())
 
     @parameterized.expand(resume_params, name_func=_parameterized_custom_name_func)
     def test_training_and_can_resume_normally(self, state_dict_type, fsdp_version):
         output_dir = self.get_auto_remove_tmp_dir()
         args = self._get_train_args(output_dir, num_epochs=2, logging_steps=2, save_steps=2)
 
-        launch_args = self._get_launch_args()
-        launch_args += ["--fsdp_state_dict_type", state_dict_type]
+        launch_args = list(TRAIN_LAUNCH_ARGS) + ["--fsdp_state_dict_type", state_dict_type]
+        cmd_kwargs = {"config_file": FSDP_CONFIGS[fsdp_version], "launch_args": launch_args}
 
         logs = self._run_and_get_logs(
-            self.get_accelerate_cmd(
-                TRAIN_SCRIPT, config_file=FSDP_CONFIGS[fsdp_version], launch_args=launch_args, extra_args=args
-            ),
+            self.get_accelerate_cmd(TRAIN_SCRIPT, script_args=args, **cmd_kwargs),
             output_dir,
         )
 
@@ -380,9 +343,7 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
         self.assertTrue(is_fsdp_ckpt)
 
         logs_resume = self._run_and_get_logs(
-            self.get_accelerate_cmd(
-                TRAIN_SCRIPT, config_file=FSDP_CONFIGS[fsdp_version], launch_args=launch_args, extra_args=resume_args
-            ),
+            self.get_accelerate_cmd(TRAIN_SCRIPT, script_args=resume_args, **cmd_kwargs),
             output_dir,
         )
 
@@ -397,8 +358,8 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
         """Test that CP produces the same losses as without CP."""
 
         # CP doesn't work with Qwen2 (DTensor mixing error), so we use Llama here.
-        launch_args = self._get_launch_args() + ["--fsdp_state_dict_type", "SHARDED_STATE_DICT"]
-        cp_extra_args = [
+        launch_args = list(TRAIN_LAUNCH_ARGS) + ["--fsdp_state_dict_type", "SHARDED_STATE_DICT"]
+        cp_script_args = [
             "--model_name",
             "hf-internal-testing/tiny-random-LlamaForCausalLM",
             "--max_steps",
@@ -426,8 +387,8 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
             TRAIN_SCRIPT,
             config_file=FSDP2_CP_CONFIG_FILE,
             launch_args=launch_args,
-            extra_args=["--output_dir", str(cp_yes_output_dir), "--loss_output_file", str(cp_yes_losses_path)]
-            + cp_extra_args,
+            script_args=["--output_dir", str(cp_yes_output_dir), "--loss_output_file", str(cp_yes_losses_path)]
+            + cp_script_args,
         )
         execute_subprocess_async(cmd, env=self.get_env())
 
@@ -439,13 +400,13 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
             TRAIN_SCRIPT,
             config_file=FSDP2_CONFIG_FILE,
             launch_args=launch_args,
-            extra_args=[
+            script_args=[
                 "--output_dir",
                 str(cp_no_output_dir),
                 "--loss_output_file",
                 str(cp_no_losses_path),
             ]
-            + cp_extra_args,
+            + cp_script_args,
             num_processes=1,
         )
         execute_subprocess_async(cmd, env=self.get_env())
@@ -474,14 +435,8 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
     # -------------------------------------------------------------------
     # FSDP eval tests
     # -------------------------------------------------------------------
-    def test_fsdp_eval(self):
-        output_dir = self.get_auto_remove_tmp_dir()
-        cmd = self.get_accelerate_cmd(
-            TRAIN_SCRIPT,
-            config_file=FSDP_CONFIG_FILE,
-            extra_args=["--output_dir", output_dir, "--do_eval"],
-        )
-        execute_subprocess_async(cmd, env=self.get_env())
+    def test_eval(self):
+        self.run_eval(config_file=FSDP_CONFIG_FILE)
 
     # -------------------------------------------------------------------
     # FSDP generation tests (moved from tests/generation/test_fsdp.py)
@@ -490,7 +445,7 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
         cmd = self.get_accelerate_cmd(
             FSDP_GENERATE_SCRIPT,
             config_file=FSDP_CONFIG_FILE,
-            extra_args=["--fsdp"],
+            script_args=["--fsdp"],
         )
         execute_subprocess_async(cmd, env=self.get_env())
 
@@ -498,40 +453,9 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
         cmd = self.get_accelerate_cmd(
             FSDP_GENERATE_SCRIPT,
             config_file=FSDP2_CONFIG_FILE,
-            extra_args=["--fsdp2"],
+            script_args=["--fsdp2"],
         )
         execute_subprocess_async(cmd, env=self.get_env())
-
-    # -------------------------------------------------------------------
-    # Helpers
-    # -------------------------------------------------------------------
-    def _run_and_get_logs(self, cmd, output_dir):
-        execute_subprocess_async(cmd, env=self.get_env())
-        checkpoint = get_last_checkpoint(output_dir)
-        state_file = os.path.join(checkpoint, "trainer_state.json")
-        return TrainerState.load_from_json(state_file).log_history
-
-    def _get_launch_args(self):
-        return list(TRAIN_LAUNCH_ARGS)
-
-    def _get_train_args(self, output_dir, num_epochs=1, logging_steps=5, save_steps=None):
-        args = [
-            "--output_dir",
-            output_dir,
-            "--num_train_epochs",
-            str(num_epochs),
-            "--logging_steps",
-            str(logging_steps),
-            "--per_device_train_batch_size",
-            "4",
-            "--learning_rate",
-            "5e-5",
-        ]
-        if save_steps is not None:
-            args += ["--save_steps", str(save_steps)]
-        else:
-            args += ["--save_strategy", "no"]
-        return args
 
 
 # ---------------------------------------------------------------------------

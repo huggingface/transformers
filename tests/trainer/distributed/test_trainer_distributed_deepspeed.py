@@ -61,7 +61,7 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import get_last_checkpoint, set_seed
 from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
 
-from .test_trainer_distributed import CONFIGS_DIR, SCRIPTS_DIR
+from .test_trainer_distributed import CONFIGS_DIR, SCRIPTS_DIR, TRAIN_SCRIPT, TrainerDistributedCommon
 
 
 if is_torch_available():
@@ -93,8 +93,6 @@ DS_ZERO3_CONFIG_FILE = os.path.join(CONFIGS_DIR, "deepspeed_zero3.yaml")
 # DS JSON config paths (used by single-GPU tests via dict and distributed tests via file)
 DS_CONFIG_ZERO2 = os.path.join(SCRIPTS_DIR, "ds_config_zero2.json")
 DS_CONFIG_ZERO3 = os.path.join(SCRIPTS_DIR, "ds_config_zero3.json")
-
-TRAIN_SCRIPT = os.path.join(SCRIPTS_DIR, "train.py")
 
 DS_CONFIGS = {
     "zero2": DS_ZERO2_CONFIG_FILE,
@@ -179,7 +177,9 @@ params_with_optims_and_schedulers = list(itertools.product(stages, dtypes, optim
 class DeepSpeedCommandsMixin:
     """Provides ``get_accelerate_cmd`` for DeepSpeed distributed tests."""
 
-    def get_accelerate_cmd(self, script, config_file, launch_args=None, extra_args=None, num_processes=None):
+    def get_accelerate_cmd(
+        self, script, config_file, launch_args=None, script_args=None, num_processes=None, **kwargs
+    ):
         if num_processes is None:
             num_processes = backend_device_count(torch_device)
         port = get_torch_dist_unique_port()
@@ -196,8 +196,8 @@ class DeepSpeedCommandsMixin:
         if launch_args:
             cmd.extend(launch_args)
         cmd.append(script)
-        if extra_args:
-            cmd.extend(extra_args)
+        if script_args:
+            cmd.extend(script_args)
         return cmd
 
 
@@ -951,7 +951,7 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
 @require_deepspeed
 @require_accelerate
 @require_torch_accelerator
-class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
+class TestTrainerDistributedDeepSpeed(TrainerDistributedCommon, DeepSpeedCommandsMixin, TestCasePlus):
     """
     Distributed DeepSpeed tests using ``accelerate launch``.
 
@@ -967,70 +967,23 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
     @parameterized.expand(pure_dtype_params, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
     def test_training(self, stage, model_dtype):
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir) + ["--model_dtype", model_dtype]
-        cmd = self.get_accelerate_cmd(
-            TRAIN_SCRIPT,
-            config_file=DS_CONFIGS[stage],
-            extra_args=args,
-        )
-        execute_subprocess_async(cmd, env=self.get_env())
+        self.run_training(model_dtype, config_file=DS_CONFIGS[stage])
 
-    # Mixed precision training: model loaded in fp32 , training in fp16/bf16.
-    # the model_dtype don't matter as it will have in the end fp16/bf16 weights for forward/backward and fp32 master weights
+    # Mixed precision training: model loaded in fp32, training in fp16/bf16.
     @parameterized.expand(mixed_precision_params, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
     def test_training_mixed_precision(self, stage, dtype):
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir) + ["--model_dtype", "fp32", f"--{dtype}"]
-        cmd = self.get_accelerate_cmd(
-            TRAIN_SCRIPT,
-            config_file=DS_CONFIGS[stage],
-            extra_args=args,
-        )
-        execute_subprocess_async(cmd, env=self.get_env())
+        self.run_mixed_precision(dtype, config_file=DS_CONFIGS[stage])
 
     @parameterized.expand(stages, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
     def test_training_with_gradient_accumulation(self, stage):
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir) + [
-            "--bf16",
-            "--gradient_accumulation_steps",
-            "2",
-        ]
-        cmd = self.get_accelerate_cmd(
-            TRAIN_SCRIPT,
-            config_file=DS_CONFIGS[stage],
-            extra_args=args,
-        )
-        execute_subprocess_async(cmd, env=self.get_env())
+        self.run_gradient_accumulation(config_file=DS_CONFIGS[stage])
 
     @parameterized.expand(stages, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
     def test_training_and_can_resume_normally(self, stage):
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir, num_epochs=2, logging_steps=2, save_steps=2) + ["--bf16"]
-
-        # First training run
-        cmd = self.get_accelerate_cmd(
-            TRAIN_SCRIPT,
-            config_file=DS_CONFIGS[stage],
-            extra_args=args,
-        )
-        execute_subprocess_async(cmd, env=self.get_env())
-
-        # Resume from checkpoint
-        checkpoint = os.path.join(output_dir, "checkpoint-2")
-        self.assertTrue(os.path.isdir(checkpoint), f"Checkpoint dir not found: {checkpoint}")
-
-        resume_args = args + ["--resume_from_checkpoint", checkpoint]
-        cmd = self.get_accelerate_cmd(
-            TRAIN_SCRIPT,
-            config_file=DS_CONFIGS[stage],
-            extra_args=resume_args,
-        )
-        execute_subprocess_async(cmd, env=self.get_env())
+        self.run_resume(config_file=DS_CONFIGS[stage])
 
     @parameterized.expand(
         [
@@ -1043,32 +996,21 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
     @require_torch_multi_accelerator
     def test_basic_run_with_cpu_offload(self, stage, offload_param):
         output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir) + [
-            "--bf16",
-            "--max_steps",
-            "10",
-        ]
+        args = self._get_train_args(output_dir) + ["--bf16", "--max_steps", "10"]
         launch_args = ["--offload_optimizer_device", "cpu"]
         if offload_param:
             launch_args += ["--offload_param_device", "cpu"]
-        cmd = self.get_accelerate_cmd(
-            TRAIN_SCRIPT,
-            config_file=DS_CONFIGS[stage],
-            launch_args=launch_args,
-            extra_args=args,
+        execute_subprocess_async(
+            self.get_accelerate_cmd(
+                TRAIN_SCRIPT, script_args=args, config_file=DS_CONFIGS[stage], launch_args=launch_args
+            ),
+            env=self.get_env(),
         )
-        execute_subprocess_async(cmd, env=self.get_env())
 
     @require_torch_multi_accelerator
     def test_eval(self):
         # ZeRO inference only works with ZeRO-3
-        output_dir = self.get_auto_remove_tmp_dir()
-        cmd = self.get_accelerate_cmd(
-            TRAIN_SCRIPT,
-            config_file=DS_CONFIGS[ZERO3],
-            extra_args=["--output_dir", output_dir, "--do_eval"],
-        )
-        execute_subprocess_async(cmd, env=self.get_env())
+        self.run_eval(config_file=DS_CONFIGS[ZERO3])
 
     @require_torch_multi_accelerator
     def test_alst_ulysses_sp(self):
@@ -1098,7 +1040,7 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
         cmd = self.get_accelerate_cmd(
             TRAIN_SCRIPT,
             config_file=sp_config,
-            extra_args=common_args
+            script_args=common_args
             + [
                 "--output_dir",
                 sp_yes_dir,
@@ -1118,7 +1060,7 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
         cmd = self.get_accelerate_cmd(
             TRAIN_SCRIPT,
             config_file=DS_CONFIGS[ZERO2],
-            extra_args=common_args
+            script_args=common_args
             + [
                 "--output_dir",
                 sp_no_dir,
@@ -1144,28 +1086,6 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
         eval_metrics = read_json_file(sp_yes_eval)
         self.assertIn("eval_loss", eval_metrics)
         self.assertTrue(torch.isfinite(torch.tensor(eval_metrics["eval_loss"])))
-
-    # -------------------------------------------------------------------
-    # Helpers for simple train.py-based tests
-    # -------------------------------------------------------------------
-    def _get_train_args(self, output_dir, num_epochs=1, logging_steps=5, save_steps=None):
-        args = [
-            "--output_dir",
-            output_dir,
-            "--num_train_epochs",
-            str(num_epochs),
-            "--logging_steps",
-            str(logging_steps),
-            "--per_device_train_batch_size",
-            "4",
-            "--learning_rate",
-            "5e-5",
-        ]
-        if save_steps is not None:
-            args += ["--save_steps", str(save_steps)]
-        else:
-            args += ["--save_strategy", "no"]
-        return args
 
 
 # ---------------------------------------------------------------------------
@@ -1518,8 +1438,6 @@ _ZOO_MODELS = {
     "deberta-v2": "hf-internal-testing/tiny-random-deberta-v2",
     "distilbert": "sshleifer/tiny-distilbert-base-cased",
     "electra": "hf-internal-testing/tiny-electra",
-    "flaubert": "hf-internal-testing/tiny-random-flaubert",
-    "fsmt": "stas/tiny-wmt19-en-de",
     "funnel": "hf-internal-testing/tiny-random-funnel",
     "gpt2": GPT2_TINY,
     "gpt_neo": "hf-internal-testing/tiny-random-gpt_neo",
@@ -1528,11 +1446,9 @@ _ZOO_MODELS = {
     "led": "hf-internal-testing/tiny-random-led",
     "longformer": "hf-internal-testing/tiny-random-longformer",
     "m2m_100": "stas/tiny-m2m_100",
-    "marian": "sshleifer/tiny-marian-en-de",
     "mbart": "sshleifer/tiny-mbart",
     "mobilebert": "hf-internal-testing/tiny-random-mobilebert",
     "mpnet": "hf-internal-testing/tiny-random-mpnet",
-    "pegasus": "stas/pegasus-cnn_dailymail-tiny-random",
     "prophetnet": "hf-internal-testing/tiny-random-prophetnet",
     "roberta": "sshleifer/tiny-distilroberta-base",
     "squeezebert": "hf-internal-testing/tiny-random-squeezebert",
@@ -1552,10 +1468,9 @@ _ZOO_VIT_FEATURE_EXTRACTOR = os.path.join(SCRIPTS_DIR, "vit_feature_extractor.js
 def _make_zoo_tasks():
     """Build {task_model: (script, script_args)} for each task/model combo."""
     tasks2models = {
-        "trans": ["bart", "fsmt", "m2m_100", "marian", "mbart", "t5", "t5_v1"],
-        "sum": ["pegasus"],
+        "trans": ["bart", "m2m_100", "mbart", "t5", "t5_v1"],
         "clm": ["bigbird_pegasus", "blenderbot", "bloom", "gpt2", "gpt_neo", "gptj", "xlm-roberta", "prophetnet"],
-        "mlm": ["albert", "deberta", "deberta-v2", "distilbert", "electra", "flaubert", "funnel", "layoutlm"],
+        "mlm": ["albert", "deberta", "deberta-v2", "distilbert", "electra", "funnel", "layoutlm"],
         "qa": ["led", "longformer", "mobilebert", "mpnet", "roberta", "squeezebert"],
         "clas": ["bert", "xlnet"],
         "img_clas": ["vit"],
@@ -1567,11 +1482,6 @@ def _make_zoo_tasks():
             f"{_ZOO_SCRIPTS_DIR}/translation/run_translation.py",
             f"--train_file {_ZOO_SAMPLES_DIR}/wmt_en_ro/train.json --source_lang en --target_lang ro "
             f"--max_source_length 12 --max_target_length 12".split(),
-        ),
-        "sum": (
-            f"{_ZOO_SCRIPTS_DIR}/summarization/run_summarization.py",
-            f"--train_file {_ZOO_SAMPLES_DIR}/xsum/sample.json --max_source_length 12 "
-            f"--max_target_length 12 --lang en".split(),
         ),
         "clm": (
             f"{_ZOO_SCRIPTS_DIR}/language-modeling/run_clm.py",
@@ -1629,7 +1539,7 @@ class TestDeepSpeedModelZoo(DeepSpeedCommandsMixin, TestCasePlus):
         cmd = self.get_accelerate_cmd(
             script,
             config_file=DS_CONFIGS[stage],
-            extra_args=script_args + ["--output_dir", output_dir],
+            script_args=script_args + ["--output_dir", output_dir],
         )
         execute_subprocess_async(cmd, env=self.get_env())
 

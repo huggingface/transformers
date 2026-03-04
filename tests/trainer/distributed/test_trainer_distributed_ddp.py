@@ -22,7 +22,6 @@ import os
 import yaml
 from parameterized import parameterized
 
-from transformers import is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
@@ -33,18 +32,12 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer_callback import TrainerState
-from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
 
-from .test_trainer_distributed import CONFIGS_DIR, SCRIPTS_DIR
+from .test_trainer_distributed import CONFIGS_DIR, SCRIPTS_DIR, TrainerDistributedCommon
 
-
-if is_torch_available():
-    import torch
 
 DDP_CONFIG_FILE = os.path.join(CONFIGS_DIR, "ddp.yaml")
-TRAIN_SCRIPT = os.path.join(SCRIPTS_DIR, "train.py")
 
 dtypes = []
 if is_torch_bf16_available_on_device(torch_device):
@@ -69,23 +62,24 @@ def _load_ddp_config():
 class DDPCommandsMixin:
     """Provides ``get_torchrun_cmd`` and ``get_accelerate_cmd`` for DDP."""
 
-    def get_torchrun_cmd(self, script, extra_args=None, num_processes=None):
-        config = _load_ddp_config()
+    def get_torchrun_cmd(self, script, script_args=None, num_processes=None):
         if num_processes is None:
             num_processes = backend_device_count(torch_device)
         port = get_torch_dist_unique_port()
         cmd = [
             "torchrun",
             f"--nproc_per_node={num_processes}",
-            f"--nnodes={config.get('num_machines', 1)}",
+            f"--nnodes=1",
             f"--master_port={port}",
             script,
         ]
-        if extra_args:
-            cmd.extend(extra_args)
+        if script_args:
+            cmd.extend(script_args)
         return cmd
 
-    def get_accelerate_cmd(self, script, extra_args=None, num_processes=None):
+    def get_accelerate_cmd(
+        self, script, config_file, launch_args=None, script_args=None, num_processes=None, **kwargs
+    ):
         if num_processes is None:
             num_processes = backend_device_count(torch_device)
         port = get_torch_dist_unique_port()
@@ -93,15 +87,17 @@ class DDPCommandsMixin:
             "accelerate",
             "launch",
             "--config_file",
-            DDP_CONFIG_FILE,
+            config_file,
             "--num_processes",
             str(num_processes),
             "--main_process_port",
             str(port),
-            script,
         ]
-        if extra_args:
-            cmd.extend(extra_args)
+        if launch_args:
+            cmd.extend(launch_args)
+        cmd.append(script)
+        if script_args:
+            cmd.extend(script_args)
         return cmd
 
 
@@ -116,7 +112,8 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
         script = os.path.join(SCRIPTS_DIR, "eval_ddp.py")
         cmd = self.get_accelerate_cmd(
             script,
-            extra_args=["--output_dir", output_dir],
+            DDP_CONFIG_FILE,
+            script_args=["--output_dir", output_dir],
         )
         execute_subprocess_async(cmd, env=self.get_env())
 
@@ -131,7 +128,8 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
         # Launch 1: single-GPU baseline
         cmd = self.get_accelerate_cmd(
             script,
-            extra_args=[
+            DDP_CONFIG_FILE,
+            script_args=[
                 "--output_dir",
                 f"{output_dir}/base",
                 "--per_device_train_batch_size",
@@ -146,7 +144,8 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
         # Launch 2: multi-GPU with both averaging modes in one process
         cmd = self.get_accelerate_cmd(
             script,
-            extra_args=[
+            DDP_CONFIG_FILE,
+            script_args=[
                 "--output_dir",
                 f"{output_dir}/multi",
                 "--per_device_train_batch_size",
@@ -181,7 +180,8 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
         script = os.path.join(SCRIPTS_DIR, "worker_seed.py")
         cmd = self.get_accelerate_cmd(
             script,
-            extra_args=["--output_dir", output_dir],
+            DDP_CONFIG_FILE,
+            script_args=["--output_dir", output_dir],
         )
         execute_subprocess_async(cmd, env=self.get_env())
 
@@ -195,11 +195,11 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
         script = os.path.join(SCRIPTS_DIR, "training_parity.py")
 
         torchrun_dir = self.get_auto_remove_tmp_dir()
-        cmd = self.get_torchrun_cmd(script, extra_args=["--output_dir", torchrun_dir])
+        cmd = self.get_torchrun_cmd(script, script_args=["--output_dir", torchrun_dir])
         execute_subprocess_async(cmd, env=self.get_env())
 
         accelerate_dir = self.get_auto_remove_tmp_dir()
-        cmd = self.get_accelerate_cmd(script, extra_args=["--output_dir", accelerate_dir])
+        cmd = self.get_accelerate_cmd(script, DDP_CONFIG_FILE, script_args=["--output_dir", accelerate_dir])
         execute_subprocess_async(cmd, env=self.get_env())
 
         with open(os.path.join(torchrun_dir, "losses.json")) as f:
@@ -220,108 +220,25 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
 @slow
 @run_first
 @require_torch_multi_accelerator
-class TestTrainerDistributedDDPTraining(DDPCommandsMixin, TestCasePlus):
+class TestTrainerDistributedDDPTraining(TrainerDistributedCommon, DDPCommandsMixin, TestCasePlus):
     """
     Distributed DDP training tests using ``accelerate launch`` with the shared
     train.py script. Mirrors the test structure used in FSDP and DeepSpeed.
     """
 
-    # -------------------------------------------------------------------
-    # Pure dtype training: model loaded in target dtype, no mixed precision
-    # -------------------------------------------------------------------
     @parameterized.expand(pure_dtype_params, name_func=_parameterized_custom_name_func)
     def test_training(self, dtype):
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir) + ["--model_dtype", dtype]
-        cmd = self.get_accelerate_cmd(TRAIN_SCRIPT, extra_args=args)
-        execute_subprocess_async(cmd, env=self.get_env())
+        self.run_training(dtype, config_file=DDP_CONFIG_FILE)
 
-    # -------------------------------------------------------------------
-    # Mixed precision: model loaded in fp32, training with --bf16/--fp16
-    # -------------------------------------------------------------------
     @parameterized.expand(mixed_precision_params, name_func=_parameterized_custom_name_func)
     def test_training_mixed_precision(self, dtype):
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir) + ["--model_dtype", "fp32", f"--{dtype}"]
-        if dtype == "fp16":
-            args += ["--optim", "adamw_torch"]
-        cmd = self.get_accelerate_cmd(TRAIN_SCRIPT, extra_args=args)
-        execute_subprocess_async(cmd, env=self.get_env())
+        self.run_mixed_precision(dtype, config_file=DDP_CONFIG_FILE)
 
-    # -------------------------------------------------------------------
-    # Gradient accumulation
-    # -------------------------------------------------------------------
     def test_training_with_gradient_accumulation(self):
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir) + ["--bf16", "--gradient_accumulation_steps", "2"]
-        cmd = self.get_accelerate_cmd(TRAIN_SCRIPT, extra_args=args)
-        execute_subprocess_async(cmd, env=self.get_env())
+        self.run_gradient_accumulation(config_file=DDP_CONFIG_FILE)
 
-    # -------------------------------------------------------------------
-    # Checkpoint save and resume
-    # -------------------------------------------------------------------
     def test_training_and_can_resume_normally(self):
-        output_dir = self.get_auto_remove_tmp_dir()
-        args = self._get_train_args(output_dir, num_epochs=2, logging_steps=2, save_steps=2) + ["--bf16"]
+        self.run_resume(config_file=DDP_CONFIG_FILE)
 
-        # First training run
-        logs = self._run_and_get_logs(
-            self.get_accelerate_cmd(TRAIN_SCRIPT, extra_args=args),
-            output_dir,
-        )
-
-        # Resume from checkpoint
-        checkpoint = os.path.join(output_dir, "checkpoint-2")
-        self.assertTrue(os.path.isdir(checkpoint), f"Checkpoint dir not found: {checkpoint}")
-
-        resume_args = args + ["--resume_from_checkpoint", checkpoint]
-        logs_resume = self._run_and_get_logs(
-            self.get_accelerate_cmd(TRAIN_SCRIPT, extra_args=resume_args),
-            output_dir,
-        )
-
-        for log, log1 in zip(logs, logs_resume):
-            if "learning_rate" in log:
-                self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
-
-    # -------------------------------------------------------------------
-    # Eval
-    # -------------------------------------------------------------------
     def test_eval(self):
-        output_dir = self.get_auto_remove_tmp_dir()
-        eval_output = os.path.join(output_dir, "eval_metrics.json")
-        args = self._get_train_args(output_dir) + ["--eval_output_file", eval_output]
-        cmd = self.get_accelerate_cmd(TRAIN_SCRIPT, extra_args=args)
-        execute_subprocess_async(cmd, env=self.get_env())
-
-        eval_metrics = json.loads(open(eval_output).read())
-        self.assertIn("eval_loss", eval_metrics)
-        self.assertTrue(torch.isfinite(torch.tensor(eval_metrics["eval_loss"])))
-
-    # -------------------------------------------------------------------
-    # Helpers
-    # -------------------------------------------------------------------
-    def _run_and_get_logs(self, cmd, output_dir):
-        execute_subprocess_async(cmd, env=self.get_env())
-        checkpoint = get_last_checkpoint(output_dir)
-        state_file = os.path.join(checkpoint, "trainer_state.json")
-        return TrainerState.load_from_json(state_file).log_history
-
-    def _get_train_args(self, output_dir, num_epochs=1, logging_steps=5, save_steps=None):
-        args = [
-            "--output_dir",
-            output_dir,
-            "--num_train_epochs",
-            str(num_epochs),
-            "--logging_steps",
-            str(logging_steps),
-            "--per_device_train_batch_size",
-            "4",
-            "--learning_rate",
-            "5e-5",
-        ]
-        if save_steps is not None:
-            args += ["--save_steps", str(save_steps)]
-        else:
-            args += ["--save_strategy", "no"]
-        return args
+        self.run_eval(config_file=DDP_CONFIG_FILE)
