@@ -556,9 +556,9 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    def test_eager_matches_sdpa_inference(self, *args):
-        self.skipTest("Owlv2ObjectDetectionOutput has no top-level hidden_states; SDPA tested in sub-models")
+    @unittest.skip(reason="Owlv2ObjectDetectionOutput has no top-level hidden_states; tested in sub-models")
+    def test_eager_matches_sdpa_inference(self):
+        pass
 
     @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
     def test_inputs_embeds(self):
