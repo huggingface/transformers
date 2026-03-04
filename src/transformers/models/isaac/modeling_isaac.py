@@ -767,8 +767,10 @@ class IsaacModel(PreTrainedModel):
             (flat_vision_patches, flat_token_grids, flat_patch_attention_mask)
         )
 
-        max_chunk_length = int(flat_lengths.max().item()) if flat_lengths.numel() > 0 else 0
-        token_positions = torch.arange(max_chunk_length, device=embeds.device, dtype=torch.long)
+        if flat_lengths.numel() > 0:
+            token_positions = torch.arange(flat_lengths.max(), device=embeds.device, dtype=torch.long)
+        else:
+            token_positions = torch.zeros((0,), device=embeds.device, dtype=torch.long)
         gather_positions = flat_offsets[:, None] + token_positions[None, :]
         gather_mask = token_positions[None, :] < flat_lengths[:, None]
         image_features = vision_embeddings[
@@ -805,13 +807,13 @@ class IsaacModel(PreTrainedModel):
             if cp.ndim == 1:
                 cp = cp.view(1, -1).expand(batch_size or 1, -1)
 
-            is_new_prefill = bool(torch.all(cp[:, :1] == 0))
-            base_delta = torch.as_tensor(
-                0 if is_new_prefill or self.rope_deltas is None else self.rope_deltas,
-                device=device,
-                dtype=torch.long,
-            ).reshape(-1, 1)
-            base_delta = torch.broadcast_to(base_delta, (batch_size, 1))
+            is_new_prefill = cp[:, :1].eq(0).all(dim=1, keepdim=True)
+            if self.rope_deltas is None:
+                base_delta = torch.zeros((batch_size, 1), device=device, dtype=torch.long)
+            else:
+                previous_delta = torch.as_tensor(self.rope_deltas, device=device, dtype=torch.long).reshape(-1, 1)
+                previous_delta = torch.broadcast_to(previous_delta, (batch_size, 1))
+                base_delta = torch.where(is_new_prefill, torch.zeros_like(previous_delta), previous_delta)
 
             mask_delta = attention_mask.to(device=device, dtype=torch.long).sum(1, keepdim=True) - attention_mask.size(
                 1
