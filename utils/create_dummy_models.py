@@ -1199,7 +1199,7 @@ def build(config_class, models_to_create, output_dir):
 
     if len(result["processor"]) == 0:
         # TODO: Some models use NO processor (and no processor files exist on their hub repos.)
-        if config_class.__name__ not in ["PatchTSMixerConfig"]:
+        if config_class.__name__ not in ["PatchTSMixerConfig", "PatchTSTConfig"]:
             # breakpoint()
             error = f"No processor could be built for {config_class.__name__}."
             fill_result_with_error(result, error, None, models_to_create)
@@ -1231,7 +1231,7 @@ def build(config_class, models_to_create, output_dir):
     if len(processors) == 0:
         # breakpoint()
         # TODO: Some models use NO processor (and no processor files exist on their hub repos.)
-        if config_class.__name__ not in ["PatchTSMixerConfig"]:
+        if config_class.__name__ not in ["PatchTSMixerConfig", "PatchTSTConfig"]:
             error = f"No processor is returned by `convert_processors` for {config_class.__name__}."
             fill_result_with_error(result, error, None, models_to_create)
             logger.error(result["error"][0])

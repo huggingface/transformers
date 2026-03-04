@@ -24,7 +24,7 @@ class PatchTSTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`PatchTSTModel`]. It is used to instantiate an
     PatchTST model according to the specified arguments, defining the model architecture.
-    [ibm/patchtst](https://huggingface.co/ibm/patchtst) architecture.
+    [ibm-granite/granite-timeseries-patchtst](https://huggingface.co/ibm-granite/granite-timeseries-patchtst) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
