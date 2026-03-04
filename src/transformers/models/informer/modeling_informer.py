@@ -837,7 +837,7 @@ class InformerEncoder(InformerPreTrainedModel):
         self,
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        **encoder_kwargs: Unpack[TransformersKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         hidden_states = self.value_embedding(inputs_embeds)
         embed_pos = self.embed_positions(inputs_embeds.size())
@@ -863,7 +863,7 @@ class InformerEncoder(InformerPreTrainedModel):
                 hidden_states = encoder_layer(
                     hidden_states,
                     attention_mask,
-                    **encoder_kwargs,
+                    **kwargs,
                 )
                 if conv_layer is not None:
                     hidden_states = conv_layer(hidden_states)

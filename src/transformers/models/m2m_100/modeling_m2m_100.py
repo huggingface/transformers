@@ -559,7 +559,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
         input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        **encoder_kwargs: Unpack[TransformersKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -591,7 +591,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
                 hidden_states = encoder_layer(
                     hidden_states,
                     attention_mask,
-                    **encoder_kwargs,
+                    **kwargs,
                 )
 
         hidden_states = self.layer_norm(hidden_states)

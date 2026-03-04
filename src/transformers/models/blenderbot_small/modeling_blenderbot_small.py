@@ -448,7 +448,7 @@ class BlenderbotSmallEncoder(BlenderbotSmallPreTrainedModel):
         input_ids=None,
         attention_mask=None,
         inputs_embeds=None,
-        **encoder_kwargs: Unpack[TransformersKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -481,7 +481,7 @@ class BlenderbotSmallEncoder(BlenderbotSmallPreTrainedModel):
                 hidden_states = encoder_layer(
                     hidden_states,
                     attention_mask,
-                    **encoder_kwargs,
+                    **kwargs,
                 )
 
         return BaseModelOutput(

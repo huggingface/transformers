@@ -1581,7 +1581,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        **encoder_kwargs: Unpack[TransformersKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1661,7 +1661,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                     to_mask=to_mask,
                     from_blocked_mask=blocked_encoder_mask,
                     to_blocked_mask=blocked_encoder_mask,
-                    **encoder_kwargs,
+                    **kwargs,
                 )
 
         hidden_states = self.layernorm_embedding(hidden_states)

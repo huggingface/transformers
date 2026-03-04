@@ -717,7 +717,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        **encoder_kwargs: Unpack[TransformersKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -740,7 +740,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 continue
             else:
-                hidden_states = encoder_layer(hidden_states, attention_mask, **encoder_kwargs)
+                hidden_states = encoder_layer(hidden_states, attention_mask, **kwargs)
 
         last_hidden_state = self.layer_norm(hidden_states)
         return MoEModelOutput(last_hidden_state=last_hidden_state)

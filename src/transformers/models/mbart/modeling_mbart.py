@@ -537,7 +537,7 @@ class MBartEncoder(MBartPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        **encoder_kwargs: Unpack[TransformersKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""
         Args:
@@ -591,7 +591,7 @@ class MBartEncoder(MBartPreTrainedModel):
                 hidden_states = encoder_layer(
                     hidden_states,
                     attention_mask,
-                    **encoder_kwargs,
+                    **kwargs,
                 )
 
         hidden_states = self.layer_norm(hidden_states)
