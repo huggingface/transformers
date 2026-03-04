@@ -7,7 +7,7 @@ from transformers.tokenization_utils_tokenizers import PreTrainedTokenizerFast
 
 class MistralConverter:
     """
-    Converter for Mistral's Tekken tokenizer format to a feature-complete tokenizers.Tokenizer.
+    Converter for Mistral's Tekken tokenizer format to [`TokenizersBackend`].
     """
 
     def __init__(
