@@ -288,6 +288,7 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
