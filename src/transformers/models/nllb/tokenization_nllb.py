@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_python import AddedToken, BatchEncoding
@@ -99,6 +99,7 @@ class NllbTokenizer(TokenizersBackend):
         mask_token="<mask>",
         src_lang=None,
         tgt_lang=None,
+        _spm_precompiled_charsmap: str | None = None,
         additional_special_tokens=None,
         extra_special_tokens=None,
         legacy_behaviour=False,
@@ -139,13 +140,8 @@ class NllbTokenizer(TokenizersBackend):
             )
         )
 
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Replace(Regex(r"[\n\r\t]"), " "),
-                normalizers.NFKC(),
-                normalizers.Replace(Regex(r" {2,}"), " "),
-            ]
-        )
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
