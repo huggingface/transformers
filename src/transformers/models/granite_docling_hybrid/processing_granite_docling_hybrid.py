@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 Processor class for GraniteDoclingHybrid.
 """
 
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, Unpack
@@ -43,6 +42,7 @@ class GraniteDoclingHybridProcessorKwargs(ProcessingKwargs, total=False):
             "return_mm_token_type_ids": False,
         },
     }
+
 
 class GraniteDoclingHybridProcessor(Idefics3Processor):
     r"""
@@ -81,11 +81,11 @@ class GraniteDoclingHybridProcessor(Idefics3Processor):
 
     def __call__(
         self,
-        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         audio=None,
         videos=None,
-        image_seq_len: Optional[int] = None,
+        image_seq_len: int | None = None,
         **kwargs: Unpack[GraniteDoclingHybridProcessorKwargs],
     ) -> BatchEncoding:
         """
