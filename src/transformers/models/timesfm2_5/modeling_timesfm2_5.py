@@ -106,6 +106,8 @@ class TimesFm2_5ResidualBlock(nn.Module):
         use_bias = use_bias if use_bias is not None else config.use_bias
 
     def forward(self, x):
+        # Align activations to block parameter dtype for mixed precision stability
+        x = x.to(self.input_layer.weight.dtype)
         hidden = self.input_layer(x)
         hidden = self.activation(hidden)
         output = self.output_layer(hidden)
@@ -841,11 +843,14 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
 
         loss = None
         if future_values is not None:
-            mse_loss = F.mse_loss(mean_predictions, future_values)
-            quantile_indices = [i for i in range(full_predictions.shape[-1]) if i != decode_index]
+            target_len = future_values.shape[1]
+            valid_mean_predictions = mean_predictions[:, :target_len]
+            valid_full_predictions = full_predictions[:, :target_len]
+            mse_loss = F.mse_loss(valid_mean_predictions, future_values)
+            quantile_indices = [i for i in range(valid_full_predictions.shape[-1]) if i != decode_index]
             if quantile_indices:
-                index_tensor = torch.tensor(quantile_indices, device=full_predictions.device, dtype=torch.long)
-                quantile_tensor = torch.index_select(full_predictions, dim=-1, index=index_tensor)
+                index_tensor = torch.tensor(quantile_indices, device=valid_full_predictions.device, dtype=torch.long)
+                quantile_tensor = torch.index_select(valid_full_predictions, dim=-1, index=index_tensor)
                 quantile_loss = self._quantile_loss(quantile_tensor, future_values)
                 loss = mse_loss + quantile_loss
             else:

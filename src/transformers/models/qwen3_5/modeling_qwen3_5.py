@@ -34,7 +34,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -1407,7 +1407,7 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Qwen3_5Config
-    _no_split_modules = ["Qwen3_5TextDecoderLayer", "Qwen3_5VisionBlock"]
+    _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1871,6 +1871,10 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
         )
 
 
+class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
+    config: Qwen3_5TextConfig
+
+
 @dataclass
 @auto_docstring(
     custom_intro="""
@@ -2283,6 +2287,7 @@ __all__ = [
     "Qwen3_5TextModel",
     "Qwen3_5Model",
     "Qwen3_5ForCausalLM",
+    "Qwen3_5ForSequenceClassification",
     "Qwen3_5ForConditionalGeneration",
     "Qwen3_5PreTrainedModel",
 ]

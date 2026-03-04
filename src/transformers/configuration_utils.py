@@ -263,11 +263,13 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         # Additional attributes without default values
         for key, value in kwargs.items():
-            try:
-                setattr(self, key, value)
-            except AttributeError as err:
-                logger.error(f"Can't set {key} with value {value} for {self}")
-                raise err
+            # Check this to avoid deserializing problematic fields from hub configs - they should use the public field
+            if key not in ("_attn_implementation_internal", "_experts_implementation_internal"):
+                try:
+                    setattr(self, key, value)
+                except AttributeError as err:
+                    logger.error(f"Can't set {key} with value {value} for {self}")
+                    raise err
 
     def _create_id_label_maps(self, num_labels: int):
         self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}

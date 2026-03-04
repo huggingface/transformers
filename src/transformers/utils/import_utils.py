@@ -1441,12 +1441,12 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
     if callable(cond):
         cond = cond()
 
+    # These checks are also compiler hints for TorchDynamo telling
+    # it that the condition is expected to be True during compilation
     if isinstance(cond, torch.Tensor):
         torch._check_tensor_all_with(error_type, cond, msg_callable)
     else:
-        if not cond:
-            raise error_type(msg_callable())
-        torch._check(cond)
+        torch._check_with(error_type, cond, msg_callable)
 
 
 @lru_cache
