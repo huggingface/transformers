@@ -182,7 +182,7 @@ class AfmoeTokenChoiceRouter(nn.Module):
 class AfmoeExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    def __init__(self, config: AfmoeConfig):
+    def __init__(self, config):
         super().__init__()
         self.num_experts = config.num_experts
         self.hidden_dim = config.hidden_size
@@ -218,7 +218,7 @@ class AfmoeExperts(nn.Module):
         return final_hidden_states
 
 
-class AfmoeMoE(nn.Module):
+class AfmoeSparseMoeBlock(nn.Module):
     """
     Mixture of Experts (MoE) module for AFMoE.
 
@@ -438,7 +438,7 @@ class AfmoeDecoderLayer(GradientCheckpointingLayer):
         # MoE or dense FFN
         self.moe_enabled = layer_idx >= config.num_dense_layers
         if self.moe_enabled:
-            self.mlp = AfmoeMoE(config)
+            self.mlp = AfmoeSparseMoeBlock(config)
         else:
             self.mlp = AfmoeMLP(config)
 
@@ -523,7 +523,7 @@ class AfmoePreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, AfmoeTokenChoiceRouter):
             init.zeros_(module.gate.weight)
-        elif isinstance(module, AfmoeMoE):
+        elif isinstance(module, AfmoeSparseMoeBlock):
             init.zeros_(module.expert_bias)
 
 
