@@ -107,7 +107,6 @@ class HiggsAudioV2DelayPatternLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        # Clone to avoid modifying the original logits (reshape returns a view, and we modify scores in-place below)
         scores = scores.clone().reshape(-1, self.num_codebooks, self.codebook_size)
         batch_size = scores.shape[0]
 
