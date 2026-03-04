@@ -429,10 +429,10 @@ else:
         scaI_act = torch.exp(igate - scaM_state_new)
 
         vecQ_scaled = query * (dhqk ** (-0.5))
-        matC_state_new = scaF_act[:, :, :, None] * matC_old + scaI_act[:, :, :, None] * (
+        matC_state_new = scaF_act[:, :, :, None] * matC_old.clone() + scaI_act[:, :, :, None] * (
             key[:, :, :, None] @ value[:, :, None, :]
         )
-        vecN_state_new = scaF_act * vecN_old + scaI_act * key
+        vecN_state_new = scaF_act * vecN_old.clone() + scaI_act * key
         h_num = vecQ_scaled[:, :, None, :] @ matC_state_new.to(dtype=dtype_qkv)
         h_num = h_num.squeeze(2).to(dtype=dtype_state)
 
