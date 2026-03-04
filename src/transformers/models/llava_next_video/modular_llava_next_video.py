@@ -34,7 +34,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging, torch_compilable_check
-from ...utils.generic import can_return_tuple
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -280,6 +280,7 @@ class LlavaNextVideoModel(LlavaNextModel):
         self.vision_resampler = LlavaNextVideoPooler(config)
         self.post_init()
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
@@ -352,6 +353,7 @@ class LlavaNextVideoModel(LlavaNextModel):
 
         return image_outputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
@@ -444,6 +446,7 @@ class LlavaNextVideoModel(LlavaNextModel):
             )
         return special_image_mask, special_video_mask
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -523,6 +526,8 @@ class LlavaNextVideoModel(LlavaNextModel):
 
 
 class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
+    @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring
     def get_video_features(
         self,
@@ -549,6 +554,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             **kwargs,
         )
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(

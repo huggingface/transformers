@@ -48,7 +48,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, logging
-from ...utils.generic import can_return_tuple
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
 
@@ -310,6 +310,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         image_features = image_features.view(batch_frames, -1, dim)
         return image_features
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
@@ -386,6 +387,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         return image_outputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower, apply multimodal projection and pooling."
@@ -436,6 +438,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         return vision_outputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -527,6 +530,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
 
 class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGeneration):
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -675,6 +679,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
 
         return model_inputs
 
+    @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,

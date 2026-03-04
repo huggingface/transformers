@@ -27,7 +27,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
-from ...utils.generic import can_return_tuple
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ..auto import AutoModel
 from .configuration_video_llava import VideoLlavaConfig
 
@@ -170,6 +170,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
@@ -218,6 +219,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
         return image_outputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
@@ -301,6 +303,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -403,6 +406,8 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
+    @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
@@ -429,6 +434,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             **kwargs,
         )
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
     def forward(
