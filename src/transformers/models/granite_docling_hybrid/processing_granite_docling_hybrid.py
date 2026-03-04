@@ -19,12 +19,11 @@ Processor class for GraniteDoclingHybrid.
 from typing import TYPE_CHECKING, Optional, Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ..got_ocr2.image_processing_got_ocr2 import get_optimal_tiled_canvas
 from ..idefics3.processing_idefics3 import (
     Idefics3Processor,
-    Idefics3ProcessorKwargs,
     get_image_prompt_string,
     is_url,
     load_image,
@@ -34,6 +33,16 @@ from ..idefics3.processing_idefics3 import (
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
 
+
+class GraniteDoclingHybridProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "is_split_into_words": False,
+            "return_mm_token_type_ids": False,
+        },
+    }
 
 class GraniteDoclingHybridProcessor(Idefics3Processor):
     r"""
@@ -77,7 +86,7 @@ class GraniteDoclingHybridProcessor(Idefics3Processor):
         audio=None,
         videos=None,
         image_seq_len: Optional[int] = None,
-        **kwargs: Unpack[Idefics3ProcessorKwargs],
+        **kwargs: Unpack[GraniteDoclingHybridProcessorKwargs],
     ) -> BatchEncoding:
         """
         Processes the input prompts and returns a BatchEncoding.
@@ -105,13 +114,10 @@ class GraniteDoclingHybridProcessor(Idefics3Processor):
             raise ValueError("You must provide either `text` or `images`.")
 
         output_kwargs = self._merge_kwargs(
-            Idefics3ProcessorKwargs,
+            GraniteDoclingHybridProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
-        # GotOcr2ImageProcessor doesn't use return_row_col_info
-        output_kwargs["images_kwargs"].pop("return_row_col_info", None)
 
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
