@@ -883,7 +883,10 @@ class RowwiseParallel(TensorParallelLayer):
 
     def update_module_attributes(self, module: nn.Module):
         if hasattr(module, "in_features"):
-            module.in_features = self.get_expected_sharded_shape((module.in_features,))[0]
+            # To fall in the 2D case in get_expected_sharded_shape,
+            # otherwise it will be treated as 1D and not sharded
+            shape = (1, module.in_features)
+            module.in_features = self.get_expected_sharded_shape(shape)[1]
 
 
 class PackedColwiseParallel(ColwiseParallel):
