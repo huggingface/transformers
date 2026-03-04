@@ -465,7 +465,9 @@ class OneFormerImageProcessorPil(PilBackend):
         do_reduce_labels = self.do_reduce_labels if do_reduce_labels is None else do_reduce_labels
         if task_inputs is None:
             task_inputs = ["panoptic"]
-        pixel_values_list = self._prepare_image_like_inputs(pixel_values_list)
+        pixel_values_list = self._prepare_image_like_inputs(
+            pixel_values_list, input_data_format=ChannelDimension.FIRST
+        )
         if segmentation_maps is not None:
             segmentation_maps = self._prepare_image_like_inputs(
                 images=segmentation_maps,
