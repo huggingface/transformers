@@ -26,11 +26,11 @@ from safetensors.torch import load_file
 from transformers import (
     Qwen2TokenizerFast,
     VibeVoiceAcousticTokenizerConfig,
+    VibeVoiceAcousticTokenizerEncoderConfig,
     VibeVoiceAcousticTokenizerFeatureExtractor,
     VibeVoiceConfig,
     VibeVoiceForConditionalGeneration,
     VibeVoiceProcessor,
-    VibeVoiceAcousticTokenizerEncoderConfig,
 )
 
 
@@ -300,7 +300,9 @@ def convert_checkpoint(
     logger.info(f"Semantic connector dtype: {next(vibevoice_model.model.semantic_connector.parameters()).dtype}")
     logger.info(f"Language model dtype: {next(vibevoice_model.model.language_model.parameters()).dtype}")
     logger.info(f"Acoustic tokenizer dtype: {next(vibevoice_model.model.acoustic_tokenizer.parameters()).dtype}")
-    logger.info(f"Semantic tokenizer dtype: {next(vibevoice_model.model.semantic_tokenizer_encoder.parameters()).dtype}")
+    logger.info(
+        f"Semantic tokenizer dtype: {next(vibevoice_model.model.semantic_tokenizer_encoder.parameters()).dtype}"
+    )
     logger.info(f"Diffusion head dtype: {next(vibevoice_model.model.diffusion_head.parameters()).dtype}")
 
     # -- load into HF model

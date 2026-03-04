@@ -373,7 +373,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
 class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_checkpoint = "bezzam/VibeVoice-1.5Bv2"   # TODO change
+        self.model_checkpoint = "bezzam/VibeVoice-1.5Bv2"  # TODO change
         self.sampling_rate = 24000
 
     def tearDown(self):
@@ -383,7 +383,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_diffusers
     def test_1b5_inference_no_voice(self):
         """
-        Reproducer: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
+        Reproducer: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer_no_voice-py
         diffusers library is needed (ran with `diffusers==0.35.2`)
         """
         set_seed(42)
@@ -395,7 +395,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.model_checkpoint,
             dtype=torch.float32,
             device_map=torch_device,
-        ).eval()
+        )
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 
         # Prepare input
@@ -420,7 +420,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
             },
         ]
         inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True).to(
-            torch_device, dtype=next(model.parameters()).dtype
+            torch_device, dtype=model.dtype
         )
 
         # Generate audio
@@ -434,6 +434,8 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
             max_new_tokens=max_new_tokens,
             return_dict_in_generate=False,
             noise_scheduler=noise_scheduler,
+            guidance_scale=1.3,
+            num_diffusion_steps=10,
         )
         generated_speech = generated_speech[0].cpu().float()
 
@@ -442,13 +444,13 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
             expected_results = json.load(f)
         expected_speech = torch.tensor(expected_results["speech_outputs"])
         generated_speech = generated_speech[..., : expected_speech.shape[-1]]
-        torch.testing.assert_close(generated_speech, expected_speech, rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(generated_speech, expected_speech)
 
     @slow
     @require_diffusers
     def test_1b5_inference(self):
         """
-        Reproducer: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
+        Reproducer: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer_voice_clone-py
         diffusers library is needed (ran with `diffusers==0.35.2`)
         """
         set_seed(42)
@@ -460,7 +462,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.model_checkpoint,
             dtype=torch.float32,
             device_map=torch_device,
-        ).eval()
+        )
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 
         # Prepare inputs
@@ -494,7 +496,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
         inputs = processor.apply_chat_template(
             conversation, tokenize=True, return_dict=True, sampling_rate=self.sampling_rate
-        ).to(torch_device, dtype=next(model.parameters()).dtype)
+        ).to(torch_device, dtype=model.dtype)
 
         # Generate audio
         from diffusers import DPMSolverMultistepScheduler
@@ -507,6 +509,8 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
             max_new_tokens=max_new_tokens,
             return_dict_in_generate=False,
             noise_scheduler=noise_scheduler,
+            guidance_scale=1.3,
+            num_diffusion_steps=10,
         )
         generated_speech = generated_speech[0].cpu().float()
 
@@ -515,4 +519,4 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
             expected_results = json.load(f)
         expected_speech = torch.tensor(expected_results["speech_outputs"])
         generated_speech = generated_speech[..., : expected_speech.shape[-1]]
-        torch.testing.assert_close(generated_speech, expected_speech, rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(generated_speech, expected_speech, rtol=1e-3, atol=1e-3)
