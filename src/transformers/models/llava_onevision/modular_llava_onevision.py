@@ -48,7 +48,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, logging
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple
 from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
 

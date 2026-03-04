@@ -21,7 +21,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple
 from ..auto import CONFIG_MAPPING
 from ..llava.configuration_llava import LlavaConfig
 from ..llava.modeling_llava import (
