@@ -38,7 +38,7 @@ class TransformersLogger(Protocol):
     handlers: list[logging.Handler]
 
     # Exists on Logger; default is True. (Not heavily used, but is part of API.)
-    raiseExceptions: bool  # type: ignore[assignment]
+    raiseExceptions: bool
 
     # ---- Standard methods ----
     def setLevel(self, level: Level) -> None: ...

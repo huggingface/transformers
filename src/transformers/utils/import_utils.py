@@ -1431,10 +1431,11 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
 
     import torch
 
-    if not callable(msg):
-        # torch._check requires msg to be a callable but we want to keep the API simple for users
-        def msg_callable():
-            return msg
+    if isinstance(msg, str):
+        _msg = msg
+
+        def msg_callable() -> str:
+            return _msg
     else:
         msg_callable = msg
 
