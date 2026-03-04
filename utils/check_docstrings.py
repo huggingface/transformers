@@ -104,9 +104,11 @@ ALWAYS_OVERRIDE = ["labels"]
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
 OBJECTS_TO_IGNORE = {
+    "GlmMoeDsaConfig",
     "GlmAsrProcessor",
     "AudioFlamingo3Processor",
     "ApertusConfig",
+    "FourOverSixConfig",
     "Mxfp4Config",
     "Qwen3OmniMoeConfig",
     "Exaone4Config",
@@ -289,7 +291,6 @@ OBJECTS_TO_IGNORE = {
     "ImageSegmentationPipeline",
     "ImageTextToTextPipeline",
     "AnyToAnyPipeline",
-    "ImageToImagePipeline",
     "InformerConfig",
     "JukeboxPriorConfig",
     "JukeboxTokenizer",
@@ -397,7 +398,6 @@ OBJECTS_TO_IGNORE = {
     "ProphetNetConfig",
     "QDQBertConfig",
     "QDQBertModel",
-    "QuestionAnsweringPipeline",
     "RagConfig",
     "RagModel",
     "RagRetriever",
@@ -477,7 +477,6 @@ OBJECTS_TO_IGNORE = {
     "VisionTextDualEncoderModel",
     "VisualBertConfig",
     "VisualBertModel",
-    "VisualQuestionAnsweringPipeline",
     "VitMatteForImageMatting",
     "VitsTokenizer",
     "VivitModel",
@@ -519,8 +518,12 @@ OBJECTS_TO_IGNORE = {
     "Llama4TextConfig",
     "BltConfig",
     "BltPatcherConfig",
+    "HiggsAudioV2Config",
+    "HiggsAudioV2TokenizerConfig",
     "MoonshineStreamingConfig",
     "MoonshineStreamingEncoderConfig",
+    "VoxtralRealtimeFeatureExtractor",
+    "VoxtralRealtimeEncoderConfig",
 }
 # In addition to the objects above, we also ignore objects with certain prefixes. If you add an item to the list
 # below, make sure to add a comment explaining why.

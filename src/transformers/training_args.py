@@ -896,7 +896,7 @@ class TrainingArguments:
     gradient_checkpointing: bool = field(
         default=False,
         metadata={
-            "help": "Enable gradient checkpointing to trade compute for memory. Reduces memory at the cost of ~20% slower training."
+            "help": "Enable gradient checkpointing to trade compute for memory. Reduces memory at the cost of ~20%% slower training."
         },
     )
     gradient_checkpointing_kwargs: dict[str, Any] | str | None = field(
@@ -925,7 +925,7 @@ class TrainingArguments:
     use_liger_kernel: bool = field(
         default=False,
         metadata={
-            "help": "Enable Liger Kernel optimizations. Increases throughput by ~20% and reduces memory by ~60%."
+            "help": "Enable Liger Kernel optimizations. Increases throughput by ~20%% and reduces memory by ~60%%."
         },
     )
     liger_kernel_config: dict[str, bool] | None = field(
@@ -951,7 +951,7 @@ class TrainingArguments:
     torch_empty_cache_steps: int | None = field(
         default=None,
         metadata={
-            "help": "Number of steps to wait before calling `torch.<device>.empty_cache()`. Helps avoid CUDA OOM at a cost of ~10% slower performance. If None, cache will not be emptied."
+            "help": "Number of steps to wait before calling `torch.<device>.empty_cache()`. Helps avoid CUDA OOM at a cost of ~10%% slower performance. If None, cache will not be emptied."
         },
     )
     auto_find_batch_size: bool = field(
@@ -1515,7 +1515,11 @@ class TrainingArguments:
         if self.greater_is_better is None and self.metric_for_best_model is not None:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
 
-        if self.report_to == "none" or self.report_to == ["none"]:
+        if self.report_to == "all" or self.report_to == ["all"]:
+            from .integrations import get_available_reporting_integrations
+
+            self.report_to = get_available_reporting_integrations()
+        elif self.report_to == "none" or self.report_to == ["none"]:
             self.report_to = []
         elif not isinstance(self.report_to, list):
             self.report_to = [self.report_to]

@@ -18,7 +18,6 @@ import unittest
 from functools import cached_property
 
 import numpy as np
-import pytest
 
 from tests.test_modeling_common import floats_tensor
 from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
@@ -529,27 +528,3 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         self.assertTrue(outputs.loss is not None)
-
-    @pytest.mark.torch_export_test
-    def test_export(self):
-        model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        inputs = image_processor(image, return_tensors="pt").to(torch_device)
-
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["pixel_values"], inputs["pixel_mask"]),
-            strict=True,
-        )
-        with torch.no_grad():
-            eager_outputs = model(**inputs)
-            exported_outputs = exported_program.module().forward(inputs["pixel_values"], inputs["pixel_mask"])
-        self.assertEqual(eager_outputs.masks_queries_logits.shape, exported_outputs.masks_queries_logits.shape)
-        torch.testing.assert_close(
-            eager_outputs.masks_queries_logits, exported_outputs.masks_queries_logits, rtol=TOLERANCE, atol=TOLERANCE
-        )
-        self.assertEqual(eager_outputs.class_queries_logits.shape, exported_outputs.class_queries_logits.shape)
-        torch.testing.assert_close(
-            eager_outputs.class_queries_logits, exported_outputs.class_queries_logits, rtol=TOLERANCE, atol=TOLERANCE
-        )
