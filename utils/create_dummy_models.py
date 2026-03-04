@@ -271,7 +271,12 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
 
     processor = None
     try:
-        processor = processor_class.from_pretrained(checkpoint)
+        # breakpoint()
+        revision = None
+        # TODO: a better handle for revisions
+        if config_class.__name__ == 'NanoChatConfig':
+            revision = "refs/pr/1"
+        processor = processor_class.from_pretrained(checkpoint, revision=revision)
     except Exception as e:
         logger.error(f"{e.__class__.__name__}: {e}")
 
@@ -288,7 +293,11 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
     ):
         try:
             # breakpoint()
-            config = AutoConfig.from_pretrained(checkpoint)
+            revision = None
+            # TODO: a better handle for revisions
+            if config_class.__name__ == 'NanoChatConfig':
+                revision = "refs/pr/1"
+            config = AutoConfig.from_pretrained(checkpoint, revision=revision)
         except Exception as e:
             # breakpoint()
             logger.error(f"{e.__class__.__name__}: {e}")
@@ -659,8 +668,12 @@ def convert_processors(processors, tiny_config, output_folder, result):
     # if num_types >= 2:
     #     raise ValueError(f"`feature_extractors` should contain at most 1 type, but it contains {num_types} types!")
     num_types = len({x.__class__.__name__.replace("Fast", "") for x in tokenizers})
-    if num_types >= 2:
-        raise ValueError(f"`tokenizers` should contain at most 1 tokenizer type, but it contains {num_types} types!")
+    # breakpoint()
+
+    # TODO: we might have {'TokenizersBackend', 'MistralCommonBackend'} now! For example, mixtral!
+    # TODO: Question: if we need to have "tokenizer.model" or "special_tokens_map.json"?
+    # if num_types >= 2:
+    #     raise ValueError(f"`tokenizers` should contain at most 1 tokenizer type, but it contains {num_types} types!")
 
     fast_tokenizer = None
     slow_tokenizer = None
