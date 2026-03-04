@@ -69,12 +69,10 @@ FSDP_CONFIGS = {
     "fsdp2": FSDP2_CONFIG_FILE,
 }
 
-# Launch args shared by all training tests (auto-wrap for Qwen2)
+# Launch args shared by all training tests
 TRAIN_LAUNCH_ARGS = [
     "--fsdp_auto_wrap_policy",
     "TRANSFORMER_BASED_WRAP",
-    "--fsdp_transformer_layer_cls_to_wrap",
-    "Qwen2DecoderLayer",
 ]
 
 dtypes = []
@@ -398,30 +396,34 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
     def test_cp_equivalence(self):
         """Test that CP produces the same losses as without CP."""
 
-        script = os.path.join(SCRIPTS_DIR, "context_parallel.py")
-
-        launch_args = [
-            "--fsdp_auto_wrap_policy",
-            "TRANSFORMER_BASED_WRAP",
-            "--fsdp_transformer_layer_cls_to_wrap",
-            "LlamaDecoderLayer",
-            "--fsdp_state_dict_type",
-            "SHARDED_STATE_DICT",
-        ]
+        # CP doesn't work with Qwen2 (DTensor mixing error), so we use Llama here.
+        launch_args = self._get_launch_args() + ["--fsdp_state_dict_type", "SHARDED_STATE_DICT"]
         cp_extra_args = [
+            "--model_name",
+            "hf-internal-testing/tiny-random-LlamaForCausalLM",
             "--max_steps",
             "10",
             "--per_device_train_batch_size",
             "1",
             "--seed",
             "42",
+            "--logging_steps",
+            "1",
+            "--save_strategy",
+            "no",
+            "--model_dtype",
+            "fp32",
+            "--attn_implementation",
+            "sdpa",
+            "--pad_to_multiple_of",
+            "4",
         ]
 
         # Step 1: Run with CP enabled (cp_size=2)
         cp_yes_output_dir = Path(self.get_auto_remove_tmp_dir()).resolve()
         cp_yes_losses_path = cp_yes_output_dir / "cp_yes_losses.json"
         cmd = self.get_accelerate_cmd(
-            script,
+            TRAIN_SCRIPT,
             config_file=FSDP2_CP_CONFIG_FILE,
             launch_args=launch_args,
             extra_args=["--output_dir", str(cp_yes_output_dir), "--loss_output_file", str(cp_yes_losses_path)]
@@ -434,7 +436,7 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
         cp_no_losses_path = cp_no_output_dir / "cp_no_losses.json"
 
         cmd = self.get_accelerate_cmd(
-            script,
+            TRAIN_SCRIPT,
             config_file=FSDP2_CONFIG_FILE,
             launch_args=launch_args,
             extra_args=[
@@ -524,8 +526,6 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus, TrainerIntegra
             "4",
             "--learning_rate",
             "5e-5",
-            "--report_to",
-            "none",
         ]
         if save_steps is not None:
             args += ["--save_steps", str(save_steps)]

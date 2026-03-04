@@ -78,7 +78,6 @@ def run_distributed_training(training_args, loss_file):
     training_args.learning_rate = 3e-4
     training_args.disable_tqdm = True
     training_args.dataloader_drop_last = True
-    training_args.report_to = []
 
     trainer = Trainer(
         model,

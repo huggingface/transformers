@@ -27,7 +27,7 @@ CONFIGS_DIR = os.path.join(DISTRIBUTED_DIR, "accelerate_configs")
 SCRIPTS_DIR = os.path.join(DISTRIBUTED_DIR, "scripts")
 
 
-class TestTrainerDistributedDDPCommon:
+class TestTrainerDistributedCommon:
     """Common distributed trainer tests shared across frameworks.
 
     Empty for now — will hold launcher-agnostic tests in the future.

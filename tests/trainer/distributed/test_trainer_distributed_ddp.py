@@ -319,8 +319,6 @@ class TestTrainerDistributedDDPTraining(DDPCommandsMixin, TestCasePlus):
             "4",
             "--learning_rate",
             "5e-5",
-            "--report_to",
-            "none",
         ]
         if save_steps is not None:
             args += ["--save_steps", str(save_steps)]

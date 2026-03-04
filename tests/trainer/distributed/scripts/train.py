@@ -53,9 +53,8 @@ def _pop_custom_arg(name):
 
 
 def main():
-    model_name = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
-
     # Parse custom args (not TrainingArguments fields)
+    model_name = _pop_custom_arg("--model_name") or "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
     loss_output_file = _pop_custom_arg("--loss_output_file")
     eval_output_file = _pop_custom_arg("--eval_output_file")
     model_dtype = _pop_custom_arg("--model_dtype")

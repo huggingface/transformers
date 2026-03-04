@@ -80,7 +80,6 @@ if __name__ == "__main__":
     training_args.per_device_train_batch_size = 1
     training_args.max_steps = 1
     training_args.accelerator_config.dispatch_batches = False
-    training_args.report_to = []
 
     train_dataset = FiniteIterableDataset(label_names=["labels", "extra"], length=1)
     model = RegressionModel()
