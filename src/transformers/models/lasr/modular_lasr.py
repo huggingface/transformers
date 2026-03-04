@@ -16,8 +16,6 @@ import itertools
 from collections.abc import Callable
 
 import torch
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
-from tokenizers.models import Unigram
 from torch import nn
 
 from ...masking_utils import create_bidirectional_mask
@@ -46,7 +44,6 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        _spm_precompiled_charsmap=None,
         extra_ids=100,
         additional_special_tokens=None,
         vocab=None,
@@ -57,31 +54,12 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
-            _spm_precompiled_charsmap=_spm_precompiled_charsmap,
             extra_ids=extra_ids,
             additional_special_tokens=additional_special_tokens,
             vocab=vocab,
             vocab_file=vocab_file,
             **kwargs,
         )
-        self._tokenizer = Tokenizer(
-            Unigram(
-                self._vocab_scores,
-                unk_id=3,
-                byte_fallback=False,
-            )
-        )
-
-        if _spm_precompiled_charsmap is not None:
-            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
-
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.WhitespaceSplit(),
-                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
-            ]
-        )
-        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
     def _decode(
         self,

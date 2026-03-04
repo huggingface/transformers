@@ -159,9 +159,7 @@ class MBart50Tokenizer(TokenizersBackend):
             )
         )
 
-        normalizers_ = [
-                normalizers.Replace(Regex(r" {2,}"), "▁")
-                ]
+        normalizers_ = [normalizers.Replace(Regex(r" {2,}"), "▁")]
         if _spm_precompiled_charsmap is not None:
             normalizers_ = [normalizers.Precompiled(_spm_precompiled_charsmap)] + normalizers_
 
@@ -306,7 +304,6 @@ class MBart50Tokenizer(TokenizersBackend):
         tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
         inputs["forced_bos_token_id"] = tgt_lang_id
         return inputs
-
 
 
 __all__ = ["MBart50Tokenizer"]
