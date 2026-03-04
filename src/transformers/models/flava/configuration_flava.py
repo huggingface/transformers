@@ -580,8 +580,8 @@ class FlavaConfig(PreTrainedConfig):
         # Finally we can convert back our unified text/vision configs to `PretrainedConfig`
         self.text_config = FlavaTextConfig(**text_config)
         self.image_config = FlavaImageConfig(**image_config)
-        self.multimodal_config = FlavaMultimodalConfig(**text_config)
-        self.image_codebook_config = FlavaImageCodebookConfig(**image_config)
+        self.multimodal_config = FlavaMultimodalConfig(**multimodal_config)
+        self.image_codebook_config = FlavaImageCodebookConfig(**image_codebook_config)
 
         super().__post_init__(**kwargs)
 

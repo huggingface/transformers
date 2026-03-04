@@ -114,6 +114,7 @@ class MT5Config(PreTrainedConfig):
             self.dense_act_fn = "gelu_new"
 
         # Force because official weights have False serialized, but we have to tie always
+        kwargs.pop("tie_word_embeddings", None)
         self.tie_word_embeddings = True
         super().__post_init__(**kwargs)
 

@@ -319,7 +319,7 @@ class PPDocLayoutV2Config(PreTrainedConfig):
     hidden_expansion: float = 1.0
     d_model: int = 256
     num_queries: int = 300
-    decoder_in_channels: list[int] | tuple[int] | None = (256, 256, 256)
+    decoder_in_channels: list[int] | tuple[int, ...] | None = (256, 256, 256)
     decoder_ffn_dim: int = 1024
     num_feature_levels: int = 3
     decoder_n_points: int = 4

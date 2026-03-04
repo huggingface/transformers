@@ -103,6 +103,10 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
         "hidden_size": 256,
     }
 
+    _default_semantic_model_config_kwargs = {
+        "mask_time_prob": 0.0,
+    }
+
     target_bandwidths: list[float | int] | None = None
 
     sample_rate: int = 24000
@@ -116,10 +120,6 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     acoustic_model_config: dict | PreTrainedConfig | None = None
     semantic_model_config: dict | PreTrainedConfig | None = None
-
-    _default_semantic_model_config_kwargs = {
-        "mask_time_prob": 0.0,
-    }
     semantic_sample_rate: int = 16000
     downsample_factor: int = 320
 

@@ -110,6 +110,7 @@ class UMT5Config(PreTrainedConfig):
         if self.feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
+        kwargs.pop("tie_word_embeddings", None)
         self.tie_word_embeddings = True  # force it for T5 family
 
         super().__post_init__(**kwargs)

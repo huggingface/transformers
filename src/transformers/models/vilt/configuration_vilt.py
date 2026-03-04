@@ -119,6 +119,7 @@ class ViltConfig(PreTrainedConfig):
     pad_token_id: int | None = None
 
     def __post_init__(self, **kwargs):
+        kwargs.pop("tie_word_embeddings", None)
         self.tie_word_embeddings = True  # force it
         super().__post_init__(**kwargs)
 

@@ -132,6 +132,7 @@ class UdopConfig(PreTrainedConfig):
         self.dense_act_fn = act_info[-1]
         self.is_gated_act = act_info[0] == "gated"
 
+        kwargs.pop("tie_word_embeddings", None)
         self.tie_word_embeddings = True
         super().__post_init__(**kwargs)
 
