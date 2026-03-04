@@ -60,8 +60,6 @@ def _get_cutlass_kernel():
 
     if _cutlass_kernel_available is None:
         try:
-            from .hub_kernels import get_kernel
-
             # this kernel's build was not updated since torch 2.8
             _cutlass_kernel = get_kernel("RedHatAI/quantization")
             _cutlass_kernel_available = True
@@ -137,7 +135,7 @@ def w8a8_block_fp8_matmul_cutlass(
 
     Handles all layout conversions required by CUTLASS:
       - A:  [M, K]           row-major    float8_e4m3fn
-      - B:  [K, N]           column-major float8_e4m3fn  (our [N, K] transposed)
+      - B:  [K, N]           column-major float8_e4m3fn
       - As: [M,  K//128]     M-major      (stride(0)==1)
       - Bs: [K//128, N//128] K-major      (stride(0)==1)
     """
@@ -165,7 +163,7 @@ def w8a8_block_fp8_matmul_cutlass(
     return C.view(original_shape[:-1] + (N,))
 
 
-def w8a8_block_fp8_matmul(
+def w8a8_fp8_matmul(
     A: torch.Tensor,
     B: torch.Tensor,
     As: torch.Tensor,
@@ -187,14 +185,11 @@ def w8a8_block_fp8_matmul(
     """
 
     if _supports_cutlass(A, B, block_size, output_dtype):
-        try:
-            return w8a8_block_fp8_matmul_cutlass(A, B, As, Bs, output_dtype)
-        except Exception as e:
-            logger.warning_once(f"CUTLASS kernel failed: {e}. Falling back to Triton.")
+        return w8a8_block_fp8_matmul_cutlass(A, B, As, Bs, output_dtype)
 
     # Fall back to Triton
     kernel = _get_triton_kernel()
-    return kernel.w8a8_block_fp8_matmul(A, B, As, Bs, block_size, output_dtype)
+    return kernel.w8a8_fp8_matmul(A, B, As, Bs, block_size, output_dtype)
 
 
 class FP8Linear(nn.Linear):
@@ -202,16 +197,16 @@ class FP8Linear(nn.Linear):
         self,
         in_features: int,
         out_features: int,
-        bias: bool = False,
-        dtype=torch.float8_e4m3fn,
         block_size: tuple[int, int] | None = None,
-        activation_scheme="dynamic",
+        activation_scheme: str = "dynamic",
+        has_bias: bool = False,
+        dtype=_FP8_DTYPE,
     ):
         super().__init__(in_features, out_features)
 
+        self.has_bias = has_bias
         self.block_size = block_size
         self.activation_scheme = activation_scheme
-
         self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
 
         if self.block_size is None:
@@ -226,8 +221,10 @@ class FP8Linear(nn.Linear):
 
         if self.activation_scheme == "static":
             self.activation_scale = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
+        else:
+            self.register_parameter("activation_scale", None)
 
-        if bias:
+        if self.has_bias:
             self.bias = nn.Parameter(torch.empty(self.out_features))
         else:
             self.register_parameter("bias", None)
@@ -240,19 +237,22 @@ class FP8Linear(nn.Linear):
             weight = self.weight._local_tensor.contiguous()
             scale_inv = self.weight_scale_inv._local_tensor.contiguous()
         else:
+            # why wouldn't it be contiguous?
             weight = self.weight.contiguous()
             scale_inv = self.weight_scale_inv.contiguous()
 
         if self.activation_scheme == "dynamic":
             kernel = _get_triton_kernel()
-            qinput, scale = kernel.fp8_act_quant(input, self.block_size[1])
+            qinput, scale = kernel.fp8_act_quant(
+                input, self.block_size[1] if self.block_size is not None else input.shape[-1]
+            )
         elif self.activation_scheme == "static":
             scale = self.activation_scale.to(torch.float32)
             qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
         else:
-            raise NotImplementedError("Not supported")
+            raise NotImplementedError(f"Unsupported activation scheme: {self.activation_scheme}")
 
-        output = w8a8_block_fp8_matmul(
+        output = w8a8_fp8_matmul(
             qinput,
             weight,
             scale,
@@ -289,13 +289,13 @@ def fp8_batched_mm_experts_forward(
     selected_hidden_states = hidden_states[token_idx]
 
     # --- Up projection per expert (FP8 batched) ---
-    proj_out = kernel.w8a8_block_fp8_matmul_batched(
+    proj_out = kernel.w8a8_fp8_matmul_batched(
         selected_hidden_states,
         self.gate_up_proj if self.has_gate else self.up_proj,
         self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
-        expert_ids=expert_ids,
         block_size=self.block_size,
-    )  # (S, 2 * intermediate_dim)
+        expert_ids=expert_ids,
+    )  # (S, 2 * intermediate_dim) or (S, intermediate_dim) depending on gating
 
     # Apply gating or activation
     if self.has_gate:
@@ -306,16 +306,20 @@ def fp8_batched_mm_experts_forward(
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 batched) ---
-    proj_out = kernel.w8a8_block_fp8_matmul_batched(
-        proj_out, self.down_proj, self.down_proj_scale_inv, expert_ids=expert_ids, block_size=self.block_size
+    proj_out = kernel.w8a8_fp8_matmul_batched(
+        proj_out,
+        self.down_proj,
+        self.down_proj_scale_inv,
+        block_size=self.block_size,
+        expert_ids=expert_ids,
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    out_per_sample = proj_out * sample_weights.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out = proj_out * sample_weights.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
-    final_hidden_states = out_per_sample.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+    final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
 
     return final_hidden_states.to(hidden_states.dtype)
 
@@ -356,7 +360,7 @@ def fp8_grouped_mm_experts_forward(
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (FP8 grouped) ---
-    proj_out = kernel.w8a8_block_fp8_matmul_grouped(
+    proj_out = kernel.w8a8_fp8_matmul_grouped(
         selected_hidden_states_g,
         self.gate_up_proj if self.has_gate else self.up_proj,
         self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
@@ -374,7 +378,7 @@ def fp8_grouped_mm_experts_forward(
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 grouped) ---
-    proj_out = kernel.w8a8_block_fp8_matmul_grouped(
+    proj_out = kernel.w8a8_fp8_matmul_grouped(
         proj_out,
         self.down_proj,
         self.down_proj_scale_inv,
@@ -384,14 +388,14 @@ def fp8_grouped_mm_experts_forward(
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    out_per_sample_g = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
     # Restore original order
-    out_per_sample = out_per_sample_g[inv_perm]
+    weighted_out = weighted_out[inv_perm]
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
-    final_hidden_states = out_per_sample.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+    final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
 
     return final_hidden_states.to(hidden_states.dtype)
 
@@ -401,49 +405,67 @@ ALL_EXPERTS_FUNCTIONS["grouped_mm"] = fp8_grouped_mm_experts_forward
 
 
 class FP8Experts(nn.Module):
-    def __init__(self, config, block_size, has_gate=True, dtype=torch.float8_e4m3fn):
+    def __init__(
+        self,
+        config,
+        block_size: tuple[int, int] | None = None,
+        activation_scheme: str = "dynamic",
+        has_bias: bool = False,
+        has_gate: bool = True,
+        dtype=_FP8_DTYPE,
+    ):
         super().__init__()
 
+        assert has_bias is False, (
+            "FP8Experts does not support bias for now, please open an issue if you want this feature"
+        )
+        assert activation_scheme == "dynamic", (
+            "Only dynamic activation quantization is supported for now, please open an issue if you want others"
+        )
+
         self.config = config
+        self.has_bias = has_bias
         self.has_gate = has_gate
         self.block_size = block_size
         self.hidden_dim = config.hidden_size
+        self.activation_scheme = activation_scheme
         self.num_experts = config.num_local_experts if hasattr(config, "num_local_experts") else config.num_experts
         self.intermediate_dim = (
             config.moe_intermediate_size if hasattr(config, "moe_intermediate_size") else config.intermediate_size
         )
 
-        bo, bi = self.block_size
-
         if self.has_gate:
             gu_proj_out, gu_proj_in = 2 * self.intermediate_dim, self.hidden_dim
-            gu_scale_out, gu_scale_in = triton.cdiv(gu_proj_out, bo), triton.cdiv(gu_proj_in, bi)
-            self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, gu_proj_out, gu_proj_in, dtype=dtype))
+            self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, gu_proj_out, gu_proj_in, dtype=dtype))
+            gu_scale_out = triton.cdiv(gu_proj_out, self.block_size[0]) if self.block_size is not None else 1
+            gu_scale_in = triton.cdiv(gu_proj_in, self.block_size[1]) if self.block_size is not None else 1
             self.gate_up_proj_scale_inv = nn.Parameter(
-                torch.zeros(self.num_experts, gu_scale_out, gu_scale_in, dtype=torch.float32)
+                torch.empty(self.num_experts, gu_scale_out, gu_scale_in, dtype=torch.float32)
             )
             self.register_parameter("gate_up_proj_bias", None)
         else:
             u_proj_out, u_proj_in = self.intermediate_dim, self.hidden_dim
-            u_scale_out, u_scale_in = triton.cdiv(u_proj_out, bo), triton.cdiv(u_proj_in, bi)
-            self.up_proj = nn.Parameter(torch.zeros(self.num_experts, u_proj_out, u_proj_in, dtype=dtype))
+            self.up_proj = nn.Parameter(torch.empty(self.num_experts, u_proj_out, u_proj_in, dtype=dtype))
+            u_scale_out = triton.cdiv(u_proj_out, self.block_size[0]) if self.block_size is not None else 1
+            u_scale_in = triton.cdiv(u_proj_in, self.block_size[1]) if self.block_size is not None else 1
             self.up_proj_scale_inv = nn.Parameter(
-                torch.zeros(self.num_experts, u_scale_out, u_scale_in, dtype=torch.float32)
+                torch.empty(self.num_experts, u_scale_out, u_scale_in, dtype=torch.float32)
             )
             self.register_parameter("up_proj_bias", None)
 
         d_proj_out, d_proj_in = self.hidden_dim, self.intermediate_dim
-        d_scale_out, d_scale_in = triton.cdiv(d_proj_out, bo), triton.cdiv(d_proj_in, bi)
-        self.down_proj = nn.Parameter(torch.zeros(self.num_experts, d_proj_out, d_proj_in, dtype=dtype))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, d_proj_out, d_proj_in, dtype=dtype))
+        d_scale_out = triton.cdiv(d_proj_out, self.block_size[0]) if self.block_size is not None else 1
+        d_scale_in = triton.cdiv(d_proj_in, self.block_size[1]) if self.block_size is not None else 1
         self.down_proj_scale_inv = nn.Parameter(
-            torch.zeros(self.num_experts, d_scale_out, d_scale_in, dtype=torch.float32)
+            torch.empty(self.num_experts, d_scale_out, d_scale_in, dtype=torch.float32)
         )
         self.register_parameter("down_proj_bias", None)
 
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def _apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
-        gate, up = gate_up_out.chunk(2, dim=-1)
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
         return self.act_fn(gate) * up
 
     def forward(
@@ -459,27 +481,21 @@ class FP8Experts(nn.Module):
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False).view(-1)
 
         for expert_idx in expert_hit:
-            if expert_idx == self.gate_up_proj.size(0):
+            if expert_idx == self.num_experts:
                 continue
 
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            current_hidden_states = self.linear(
+            proj_out = self.linear(
                 current_state,
                 self.gate_up_proj[expert_idx] if self.has_gate else self.up_proj[expert_idx],
                 self.gate_up_proj_scale_inv[expert_idx] if self.has_gate else self.up_proj_scale_inv[expert_idx],
             )
-            if self.has_gate:
-                current_hidden_states = self._apply_gate(current_hidden_states)
-            else:
-                current_hidden_states = self.act_fn(current_hidden_states)
-            current_hidden_states = self.linear(
-                current_hidden_states, self.down_proj[expert_idx], self.down_proj_scale_inv[expert_idx]
-            )
+            proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
+            proj_out = self.linear(proj_out, self.down_proj[expert_idx], self.down_proj_scale_inv[expert_idx])
             routing_weights = top_k_weights[token_idx, top_k_pos, None]
-            current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
-
+            weighted_out = proj_out * routing_weights.to(proj_out.dtype)
+            final_hidden_states.index_add_(0, token_idx, weighted_out.to(final_hidden_states.dtype))
         return final_hidden_states.to(hidden_states.dtype)
 
     def linear(self, input: torch.Tensor, weight: torch.Tensor, weight_scale_inv: torch.Tensor) -> torch.Tensor:
@@ -487,8 +503,10 @@ class FP8Experts(nn.Module):
             return F.linear(input, weight, None)
 
         kernel = _get_triton_kernel()
-        qinput, scale = kernel.fp8_act_quant(input, self.block_size[1])
-        output = w8a8_block_fp8_matmul(
+        qinput, scale = kernel.fp8_act_quant(
+            input, self.block_size[1] if self.block_size is not None else input.shape[-1]
+        )
+        output = w8a8_fp8_matmul(
             qinput,
             weight,
             scale,
@@ -529,21 +547,25 @@ def replace_with_fp8_linear(
         new_module = None
         with torch.device("meta"):
             if module_name.endswith(".experts"):
-                # these are added by @use_experts_implementation
-                config = getattr(module, "config", model.config.get_text_config())
                 has_gate = getattr(module, "has_gate", True)
-                # we wrap the class here to have access to has_gate and has_bias
-                new_class = use_experts_implementation(experts_class=FP8Experts, has_gate=has_gate)
+                has_bias = getattr(module, "has_bias", False)
+                config = getattr(module, "config", model.config.get_text_config())
+                new_class = use_experts_implementation(FP8Experts, has_bias=has_bias, has_gate=has_gate)
                 new_module = new_class(
-                    config=config, block_size=quantization_config.weight_block_size, has_gate=has_gate, **module_kwargs
+                    config=config,
+                    block_size=quantization_config.weight_block_size,
+                    activation_scheme=quantization_config.activation_scheme,
+                    has_bias=has_bias,
+                    has_gate=has_gate,
+                    **module_kwargs,
                 )
             elif isinstance(module, nn.Linear):
                 new_module = FP8Linear(
                     in_features=module.in_features,
                     out_features=module.out_features,
-                    bias=module.bias is not None,
-                    activation_scheme=quantization_config.activation_scheme,
                     block_size=quantization_config.weight_block_size,
+                    activation_scheme=quantization_config.activation_scheme,
+                    has_bias=module.bias is not None,
                     **module_kwargs,
                 )
             if new_module is not None:
