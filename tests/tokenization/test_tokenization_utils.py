@@ -352,3 +352,32 @@ class TokenizerUtilsTest(unittest.TestCase):
             new_tokenizer.decode(new_tokenizer.encode(text_with_nonspecial_tokens), skip_special_tokens=True)
             == text_with_nonspecial_tokens
         )
+
+    @require_tokenizers
+    def test_save_pretrained_preserves_tokenizer_class(self):
+        """Test that save_pretrained preserves the original tokenizer_class from config (fixes #44297)."""
+        import json
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Load a tokenizer with a known tokenizer_class
+            tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
+
+            # Save it
+            tokenizer.save_pretrained(tmpdirname)
+
+            # Check the saved config
+            with open(os.path.join(tmpdirname, "tokenizer_config.json")) as f:
+                saved_config = json.load(f)
+
+            # The tokenizer_class should be preserved as "BertTokenizer"
+            self.assertEqual(saved_config["tokenizer_class"], "BertTokenizer")
+
+            # Now load it again and save again - should still preserve the class
+            reloaded_tokenizer = AutoTokenizer.from_pretrained(tmpdirname)
+            reloaded_tokenizer.save_pretrained(tmpdirname)
+
+            with open(os.path.join(tmpdirname, "tokenizer_config.json")) as f:
+                resaved_config = json.load(f)
+
+            # Should still be "BertTokenizer", not "PreTrainedTokenizerFast" or similar
+            self.assertEqual(resaved_config["tokenizer_class"], "BertTokenizer")
