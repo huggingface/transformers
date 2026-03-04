@@ -454,7 +454,6 @@ class IsaacVisionEncoder(Siglip2Encoder):
 def pixel_shuffle_padded(
     x: torch.Tensor,
     token_grids: torch.Tensor,
-    attention_mask: torch.Tensor | None = None,
     scale_factor: int = 1,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Apply pixel shuffle per image on padded batched vision embeddings.
@@ -464,8 +463,6 @@ def pixel_shuffle_padded(
             Vision embeddings of shape `(num_images, max_patches, hidden_size)`.
         token_grids (`torch.Tensor`):
             Grid sizes `(height, width)` per image, shape `(num_images, 2)`.
-        attention_mask (`torch.Tensor`, *optional*):
-            Patch validity mask of shape `(num_images, max_patches)`.
         scale_factor (`int`, *optional*, defaults to 1):
             Spatial down-sampling factor.
 
@@ -516,11 +513,7 @@ def pixel_shuffle_padded(
     ]
 
     shuffled = shuffled_4d.view(num_images, max_output_tokens, output_dim)
-    shuffled_attention_mask = (
-        torch.arange(max_output_tokens, device=x.device, dtype=torch.long).unsqueeze(0) < output_lengths.unsqueeze(1)
-    ).to(torch.long)
-
-    return shuffled, shuffled_attention_mask, output_lengths
+    return shuffled
 
 
 class IsaacVisionTransformer(PreTrainedModel):
@@ -591,7 +584,6 @@ class IsaacVisionTransformer(PreTrainedModel):
         return pixel_shuffle_padded(
             x=hidden_states,
             token_grids=token_grids,
-            attention_mask=vision_patch_attention_mask,
             scale_factor=self.pixel_shuffle_scale_factor,
         )
 
@@ -629,11 +621,9 @@ class IsaacVisionEmbedding(nn.Module):
         vision_tokens: tuple[torch.Tensor, torch.Tensor, torch.Tensor | None],
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         vision_patches, token_grids, vision_patch_attention_mask = vision_tokens
-        hidden_states, token_attention_mask, token_lengths = self.vision_tower(
-            (vision_patches, token_grids, vision_patch_attention_mask)
-        )
+        hidden_states = self.vision_tower((vision_patches, token_grids, vision_patch_attention_mask))
         projected = self.multimodal_projector(hidden_states)
-        return projected, token_attention_mask, token_lengths
+        return projected
 
 
 def get_scaled_image_size(
@@ -1317,9 +1307,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         flat_offsets = offsets[image_attention_mask]
         flat_lengths = lengths[image_attention_mask]
 
-        vision_embeddings, _, per_image_lengths = self.vision_embedding(
-            (flat_vision_patches, flat_token_grids, flat_patch_attention_mask)
-        )
+        vision_embeddings = self.vision_embedding((flat_vision_patches, flat_token_grids, flat_patch_attention_mask))
 
         if flat_lengths.numel() > 0:
             token_positions = torch.arange(flat_lengths.max(), device=embeds.device, dtype=torch.long)
