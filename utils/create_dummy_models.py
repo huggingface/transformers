@@ -1308,9 +1308,16 @@ def build(config_class, models_to_create, output_dir):
             # breakpoint()
             model = build_model(pytorch_arch, tiny_config, output_dir=output_dir)
         except Exception as e:
-            model = None
-            error = f"Failed to create the pytorch model for {pytorch_arch}: {e}"
-            trace = traceback.format_exc()
+
+            # TODO: hacky way to make `T5GemmaEncoderModel` work
+            if pytorch_arch.__name__ == "T5GemmaEncoderModel":
+                _tiny_config = copy.deepcopy(tiny_config)
+                _tiny_config.is_encoder_decoder = False
+                model = build_model(pytorch_arch, _tiny_config, output_dir=output_dir)
+            else:
+                model = None
+                error = f"Failed to create the pytorch model for {pytorch_arch}: {e}"
+                trace = traceback.format_exc()
 
         result["pytorch"][pytorch_arch.__name__]["model"] = model.__class__.__name__ if model is not None else None
         result["pytorch"][pytorch_arch.__name__]["checkpoint"] = (
