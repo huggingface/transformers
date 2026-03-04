@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,20 +15,18 @@
 Audio processor class for Wav2Vec2
 """
 
-from typing import Optional, Union
 
 import torch
 
-from ...audio_processing_utils import BaseAudioProcessor
-from ...audio_utils import AudioInput
+from ...audio_processing_backends import TorchBackend
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Wav2Vec2AudioProcessor(BaseAudioProcessor):
+class Wav2Vec2AudioProcessor(TorchBackend):
     r"""
     Constructs a Wav2Vec2 audio processor.
 
@@ -69,7 +66,7 @@ class Wav2Vec2AudioProcessor(BaseAudioProcessor):
         truncation,
         pad_to_multiple_of,
         return_tensors,
-        do_normalize: Optional[bool] = None,
+        do_normalize: bool | None = None,
         **kwargs,
     ) -> BatchFeature:
         if do_normalize is None:

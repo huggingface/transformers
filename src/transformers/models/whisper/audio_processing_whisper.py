@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,21 +15,19 @@
 Audio processor class for Whisper
 """
 
-from typing import Optional, Union
 
-import numpy as np
 import torch
 
-from ...audio_processing_utils import BaseAudioProcessor
-from ...audio_utils import AudioInput, mel_filter_bank
+from ...audio_processing_backends import TorchBackend
+from ...audio_utils import mel_filter_bank
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class WhisperAudioProcessor(BaseAudioProcessor):
+class WhisperAudioProcessor(TorchBackend):
     r"""
     Constructs a Whisper audio processor.
 
@@ -97,8 +94,8 @@ class WhisperAudioProcessor(BaseAudioProcessor):
         truncation,
         pad_to_multiple_of,
         return_tensors,
-        do_normalize: Optional[bool] = None,
-        device: Optional[str] = "cpu",
+        do_normalize: bool | None = None,
+        device: str | None = "cpu",
         **kwargs,
     ) -> BatchFeature:
         # Default max_length to n_samples (chunk_length * sample_rate)

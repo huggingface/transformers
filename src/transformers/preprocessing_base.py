@@ -79,6 +79,10 @@ class PreprocessingMixin(PushToHubMixin):
             kwargs.pop(key, None)
         # Pop "processor_class", should not be saved in config
         kwargs.pop("processor_class", None)
+
+        if hasattr(self, "valid_kwargs") and hasattr(self.valid_kwargs, "__annotations__"):
+            self._init_kwargs_from_valid_kwargs(kwargs)
+
         # Additional attributes without default values
         for key, value in kwargs.items():
             try:

@@ -14,7 +14,6 @@
 
 import math
 from collections.abc import Iterable
-from copy import deepcopy
 from functools import partial
 from typing import Any
 
@@ -197,6 +196,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         # We don't call self._set_attributes in BaseImageProcessor for backward compatibility with remote code
         # We call it instead in the backend subclasses' __init__ methods.
 
+<<<<<<< HEAD
     def _set_attributes(self, **kwargs):
         """Resolve and set instance attributes from kwargs and class-level defaults for all valid kwargs."""
         attributes = {}
@@ -206,12 +206,18 @@ class BaseImageProcessor(ImageProcessingMixin):
                 attributes[key] = kwarg
             else:
                 attributes[key] = deepcopy(getattr(self, key, None))
+=======
+        attributes = {key: getattr(self, key) for key in self._valid_kwargs_names}
+>>>>>>> draft update
         attributes = self._standardize_kwargs(**attributes)
         for key, value in attributes.items():
             setattr(self, key, value)
 
+<<<<<<< HEAD
         self._valid_kwargs_names = list(self.valid_kwargs.__annotations__.keys())
 
+=======
+>>>>>>> draft update
     def __call__(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
         """Preprocess an image or a batch of images."""
         return self.preprocess(images, *args, **kwargs)
