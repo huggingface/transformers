@@ -56,7 +56,7 @@ from .core_model_loading import (
     _compute_tp_elem_ranges,
     convert_and_load_state_dict_in_model,
     rename_source_key,
-    revert_weight_conversion,
+    revert_weight_conversion, HmllScatteredLoadSpec,
 )
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
@@ -4285,13 +4285,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                     empty_param = meta_model_state_dict[renamed_key]
                                     shard_shape = tuple(empty_param.shape)
 
-                                    merged_state_dict[original_key] = HmllLoadSpec(
+                                    merged_state_dict[original_key] = HmllScatteredLoadSpec(
                                         registry=registry,
                                         name=original_key,
                                         ranges=elem_ranges,
                                         shape=shard_shape,
                                         dtype=dtype_torch,
                                         device=device,
+                                        nbytes
                                     )
 
                                 # todo(mfuntowicz): wtf
@@ -4302,7 +4303,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                 merged_state_dict[original_key] = HmllLoadSpec(
                                     registry=registry,
                                     name=original_key,
-                                    ranges=[],
                                     shape=full_shape,
                                     dtype=dtype_torch,
                                     device=device,

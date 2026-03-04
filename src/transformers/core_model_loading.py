@@ -819,29 +819,34 @@ class NativeLoadSpec(DeferredLoadSpec):
 class HmllLoadSpec(DeferredLoadSpec):
     """
     Deferred load via hmll.
-    - If ranges is non-empty: uses fetchv for TP slice-based loading (each rank loads its shard).
-    - If ranges is empty: uses fetch for full-tensor loading (replicated parameters).
+    """
 
+    registry: Any
+    name: str
+    shape: tuple[int, ...]
+    dtype: torch.dtype
+    device: torch.device
+
+    def execute(self) -> torch.Tensor:
+        dst = torch.empty(self.shape, dtype=self.dtype, device=self.device)
+        if (n_read := self.registry.fetch(self.name, dst.data_ptr())) <= 0:
+            raise RuntimeError(f"Failed to fetch tensor {self.name} (error code: {n_read})")
+        return dst
+
+
+@dataclass(slots=True, frozen=True)
+class HmllScatteredLoadSpec(HmllLoadSpec):
+    """
     dst is allocated lazily inside execute() to avoid pre-allocating the entire model's
     worth of GPU memory before any I/O begins.
     """
 
-    registry: Any  # SafetensorsAccessor
-    name: str
     ranges: list[tuple[int, int]]  # element (start, end) per slice; empty means full fetch
-    shape: tuple[int, ...]
-    dtype: torch.dtype
-    device: torch.device
-    nbytes: int = 0  # total bytes to read; required when ranges is empty
 
     def execute(self) -> torch.Tensor:
         dst = torch.empty(self.shape, dtype=self.dtype, device=self.device)
-        if self.ranges:
-            nread = self.registry.fetchv(self.name, self.ranges, dst.data_ptr())
-        else:
-            nread = self.registry.fetch(self.name, dst.data_ptr(), self.nbytes)
-        if nread <= 0:
-            raise RuntimeError("Failed to fetch tensor")
+        if (n_read := self.registry.fetchv(self.name, self.ranges, dst.data_ptr())) <= 0:
+            raise RuntimeError(f"Failed to fetch tensor {self.name} (error code: {n_read})")
         return dst
 
 
