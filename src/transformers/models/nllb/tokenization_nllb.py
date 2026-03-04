@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_python import AddedToken, BatchEncoding
@@ -141,7 +141,12 @@ class NllbTokenizer(TokenizersBackend):
         )
 
         if _spm_precompiled_charsmap is not None:
-            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
+            self._tokenizer.normalizer = normalizers.Sequence(
+                [
+                    normalizers.Precompiled(_spm_precompiled_charsmap),
+                    normalizers.Replace(Regex(r" {2,}"), " "),
+                ]
+            )
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
@@ -273,13 +278,10 @@ class NllbTokenizer(TokenizersBackend):
             self.prefix_tokens = [self.cur_lang_code]
             self.suffix_tokens = [self.eos_token_id]
 
-        prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
-        suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
-
         self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
-            pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
-            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
+            single=["$A", self.eos_token, self.unk_token],
+            pair=["$A", "$B", self.eos_token, self.unk_token],
+            special_tokens=[(self.eos_token, self.eos_token_id), (self.unk_token, self.unk_token_id)],
         )
 
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
@@ -295,13 +297,10 @@ class NllbTokenizer(TokenizersBackend):
             self.prefix_tokens = [self.cur_lang_code]
             self.suffix_tokens = [self.eos_token_id]
 
-        prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
-        suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
-
         self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
-            pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
-            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
+            single=["$A", self.eos_token, self.unk_token],
+            pair=["$A", "$B", self.eos_token, self.unk_token],
+            special_tokens=[(self.eos_token, self.eos_token_id), (self.unk_token, self.unk_token_id)],
         )
 
 
