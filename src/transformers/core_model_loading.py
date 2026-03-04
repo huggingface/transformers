@@ -31,11 +31,11 @@ from itertools import chain
 from typing import TYPE_CHECKING, Any, Tuple
 
 import torch
+import torch.cuda.nvtx as nvtx
 
 from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import (
     ALL_PARALLEL_STYLES,
-    _get_parameter_tp_plan,
     compute_flattened_tensor_shard_slices,
     get_shard_dim_for_tp_style,
 )
@@ -810,8 +810,11 @@ class NativeLoadSpec(DeferredLoadSpec):
     fetch: Callable[[], int]
 
     def execute(self) -> torch.Tensor:
+        nvtx.range_push("NativeLoadSpec.execute")
         if self.fetch() <= 0:
+            nvtx.range_pop()
             raise RuntimeError("Failed to fetch tensor")
+        nvtx.range_pop()
         return self.dst
 
 
@@ -828,9 +831,13 @@ class HmllLoadSpec(DeferredLoadSpec):
     device: torch.device
 
     def execute(self) -> torch.Tensor:
+        nvtx.range_push("HmllLoadSpec.execute")
+
         dst = torch.empty(self.shape, dtype=self.dtype, device=self.device)
         if (n_read := self.registry.fetch(self.name, dst.data_ptr(), dst.nbytes)) <= 0:
+            nvtx.range_pop()
             raise RuntimeError(f"Failed to fetch tensor {self.name} (error code: {n_read})")
+        nvtx.range_pop()
         return dst
 
 
@@ -844,9 +851,12 @@ class HmllScatteredLoadSpec(HmllLoadSpec):
     ranges: list[tuple[int, int]]  # element (start, end) per slice; empty means full fetch
 
     def execute(self) -> torch.Tensor:
+        nvtx.range_push("HmllScatteredLoadSpec.execute")
         dst = torch.empty(self.shape, dtype=self.dtype, device=self.device)
         if (n_read := self.registry.fetchv(self.name, self.ranges, dst.data_ptr())) <= 0:
+            nvtx.range_pop()
             raise RuntimeError(f"Failed to fetch tensor {self.name} (error code: {n_read})")
+        nvtx.range_pop()
         return dst
 
 
