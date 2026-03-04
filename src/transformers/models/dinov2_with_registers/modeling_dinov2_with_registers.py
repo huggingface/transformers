@@ -629,7 +629,9 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps.append(hidden_state)
 
-        return BackboneOutput(feature_maps=tuple(feature_maps), hidden_states=hidden_states, attentions=output.attentions)
+        return BackboneOutput(
+            feature_maps=tuple(feature_maps), hidden_states=hidden_states, attentions=output.attentions
+        )
 
 
 __all__ = [

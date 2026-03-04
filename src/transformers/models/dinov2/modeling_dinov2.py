@@ -608,7 +608,9 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps.append(hidden_state)
 
-        return BackboneOutput(feature_maps=tuple(feature_maps), hidden_states=hidden_states, attentions=output.attentions)
+        return BackboneOutput(
+            feature_maps=tuple(feature_maps), hidden_states=hidden_states, attentions=output.attentions
+        )
 
 
 __all__ = ["Dinov2ForImageClassification", "Dinov2Model", "Dinov2PreTrainedModel", "Dinov2Backbone"]
