@@ -370,7 +370,6 @@ class DeepseekV2Attention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
@@ -399,9 +398,7 @@ class DeepseekV2Attention(nn.Module):
         key_states = torch.cat((k_nope, k_pe), dim=-1)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
