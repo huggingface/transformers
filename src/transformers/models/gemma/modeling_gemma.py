@@ -371,6 +371,8 @@ class GemmaPreTrainedModel(PreTrainedModel):
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         if "RMSNorm" in module.__class__.__name__:
             init.zeros_(module.weight)
+        elif isinstance(module, GemmaTextScaledWordEmbedding):
+            init.constant_(module.embed_scale, module.scalar_embed_scale)
 
 
 @auto_docstring
