@@ -17,9 +17,14 @@ URL: https://huggingface.co/xbsu/LW-DETR/tree/main/pretrain_weights
 """
 
 import argparse
+import copy
+import importlib.util
 import os
 import re
+import sys
+import types
 from io import BytesIO
+from types import SimpleNamespace
 
 import httpx
 import torch
@@ -29,6 +34,7 @@ from torchvision import transforms
 
 from transformers import DeformableDetrImageProcessor, LwDetrConfig, LwDetrForObjectDetection
 from transformers.image_utils import load_image
+from transformers.loss.loss_lw_detr import LwDetrHungarianMatcher, LwDetrImageLoss
 
 
 # All available LW-DETR checkpoints from the Hugging Face repository
@@ -103,6 +109,7 @@ MODEL_CONFIGS = {
         "decoder_cross_attention_heads": 16,
         "decoder_n_points": 2,
         "d_model": 256,
+        "dropout": 0.0,
     },
     "small": {
         "projector_scale_factors": [1.0],
@@ -112,6 +119,7 @@ MODEL_CONFIGS = {
         "decoder_cross_attention_heads": 16,
         "decoder_n_points": 2,
         "d_model": 256,
+        "dropout": 0.0,
     },
     "medium": {
         "projector_scale_factors": [1.0],
@@ -121,6 +129,7 @@ MODEL_CONFIGS = {
         "decoder_cross_attention_heads": 16,
         "decoder_n_points": 2,
         "d_model": 256,
+        "dropout": 0.0,
     },
     "large": {
         "projector_scale_factors": [2.0, 0.5],
@@ -130,6 +139,7 @@ MODEL_CONFIGS = {
         "decoder_cross_attention_heads": 24,
         "decoder_n_points": 4,
         "d_model": 384,
+        "dropout": 0.0,
     },
     "xlarge": {
         "projector_scale_factors": [2.0, 0.5],
@@ -139,7 +149,15 @@ MODEL_CONFIGS = {
         "decoder_cross_attention_heads": 24,
         "decoder_n_points": 4,
         "d_model": 384,
+        "dropout": 0.0,
     },
+}
+
+
+DUMMY_IMAGE_URL = "http://images.cocodataset.org/val2017/000000039769.jpg"
+DUMMY_ANNOTATIONS = {
+    "image_id": 0,
+    "annotations": [{"bbox": [250, 250, 350, 350], "category_id": 0, "iscrowd": 0, "area": 122500}],
 }
 
 # Key mapping for converting original checkpoint keys to HuggingFace format
@@ -254,13 +272,11 @@ def get_model_config(model_name: str):
     sizes = ["tiny", "small", "medium", "large", "xlarge"]
     for size in sizes:
         if size in model_name:
-            config = MODEL_CONFIGS[size]
-            config["backbone_config"] = BACKBONE_CONFIGS[size]
+            config = copy.deepcopy(MODEL_CONFIGS[size])
+            config["backbone_config"] = copy.deepcopy(BACKBONE_CONFIGS[size])
 
-    # Default to base configuration
     if config is None:
-        config = MODEL_CONFIGS["base"]
-        config["backbone_config"] = BACKBONE_CONFIGS["base"]
+        raise ValueError(f"Could not infer model size from model name: {model_name}")
     config["backbone_config"]["model_type"] = "lw_detr_vit"
 
     if "objects365" in model_name:
@@ -293,25 +309,333 @@ def get_backbone_projector_sampling_key_mapping(config: LwDetrConfig):
             })
     return key_mapping
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
-        image = Image.open(BytesIO(response.read()))
-
-    return image
-
-
 def original_preprocess_image(image_url):
     with httpx.stream("GET", image_url) as response:
         image = Image.open(BytesIO(response.read())).convert("RGB")
-    transform = transforms.Compose([
+    transform = transforms.Compose(
+        [
             transforms.Resize([640, 640]),
             transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ])
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        ]
+    )
     image = transform(image)
     return image
+
+
+def get_checkpoint_state_dict(checkpoint):
+    if "state_dict" in checkpoint:
+        return checkpoint["state_dict"]
+    if "model" in checkpoint:
+        return checkpoint["model"]
+    return checkpoint
+
+
+def convert_original_checkpoint_state_dict(state_dict, config):
+    state_dict = copy.deepcopy(state_dict)
+    backbone_projector_sampling_key_mapping = get_backbone_projector_sampling_key_mapping(config)
+    state_dict = backbone_read_in_q_k_v(state_dict, config)
+    state_dict = read_in_q_k_v(state_dict, config)
+    key_mapping = ORIGINAL_TO_CONVERTED_KEY_MAPPING | backbone_projector_sampling_key_mapping
+    all_keys = list(state_dict.keys())
+    new_keys = convert_old_keys_to_new_keys(all_keys, key_mapping)
+    converted_state_dict = {}
+    for key in all_keys:
+        if not any(key.startswith(prefix) for prefix in ["class_embed", "bbox_embed"]):
+            converted_state_dict[f"model.{new_keys[key]}"] = state_dict[key]
+        else:
+            converted_state_dict[key] = state_dict[key]
+    return converted_state_dict
+
+
+def summarize_tensor_diff(name: str, converted: torch.Tensor, original: torch.Tensor, atol: float, rtol: float):
+    max_abs_diff = (converted - original).abs().max().item()
+    mean_abs_diff = (converted - original).abs().mean().item()
+    is_close = torch.allclose(converted, original, atol=atol, rtol=rtol)
+    print(
+        f"{name}: close={is_close}, max_abs_diff={max_abs_diff:.8f}, "
+        f"mean_abs_diff={mean_abs_diff:.8f}, shape={tuple(converted.shape)}"
+    )
+    return is_close
+
+
+def _register_original_repo_dependency_stubs():
+    if importlib.util.find_spec("fairscale") is None:
+        fairscale_module = types.ModuleType("fairscale")
+        fairscale_nn_module = types.ModuleType("fairscale.nn")
+        fairscale_checkpoint_module = types.ModuleType("fairscale.nn.checkpoint")
+
+        def checkpoint_wrapper(module, *args, **kwargs):
+            del args, kwargs
+            return module
+
+        fairscale_checkpoint_module.checkpoint_wrapper = checkpoint_wrapper
+        fairscale_nn_module.checkpoint = fairscale_checkpoint_module
+        fairscale_module.nn = fairscale_nn_module
+        sys.modules["fairscale"] = fairscale_module
+        sys.modules["fairscale.nn"] = fairscale_nn_module
+        sys.modules["fairscale.nn.checkpoint"] = fairscale_checkpoint_module
+
+    if importlib.util.find_spec("MultiScaleDeformableAttention") is None:
+        extension_stub = types.ModuleType("MultiScaleDeformableAttention")
+
+        def _missing_extension(*args, **kwargs):
+            del args, kwargs
+            raise RuntimeError(
+                "MultiScaleDeformableAttention is not available. "
+                "Use the Python fallback path by setting `MSDeformAttn._export = True`."
+            )
+
+        extension_stub.ms_deform_attn_forward = _missing_extension
+        extension_stub.ms_deform_attn_backward = _missing_extension
+        sys.modules["MultiScaleDeformableAttention"] = extension_stub
+
+
+def load_original_repo_components(original_repo_path: str, checkpoint_path: str, device: str):
+    _register_original_repo_dependency_stubs()
+
+    if original_repo_path not in sys.path:
+        sys.path.insert(0, original_repo_path)
+
+    # Imported lazily to avoid hard dependency on the original LW-DETR repository.
+    from models import build_model
+    from models.ops.modules.ms_deform_attn import MSDeformAttn
+    from util.misc import nested_tensor_from_tensor_list
+
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    if "model" not in checkpoint or "args" not in checkpoint:
+        raise ValueError(
+            "Parity checking against the original implementation requires a checkpoint with `model` and `args` keys."
+        )
+
+    original_args = copy.deepcopy(checkpoint["args"])
+    original_args.device = device
+    original_args.pretrained_encoder = None
+    original_args.pretrain_weights = None
+
+    original_model, original_criterion, original_postprocessors = build_model(original_args)
+    original_model.load_state_dict(checkpoint["model"], strict=True)
+
+    # If the custom CUDA extension is unavailable, force the PyTorch fallback path.
+    for module in original_model.modules():
+        if isinstance(module, MSDeformAttn):
+            module._export = True
+
+    return original_model, original_criterion, original_postprocessors, nested_tensor_from_tensor_list
+
+
+def compute_original_total_loss(original_criterion, original_outputs, original_targets):
+    original_loss_dict = original_criterion(original_outputs, original_targets)
+    original_total_loss = sum(
+        original_loss_dict[key] * original_criterion.weight_dict[key]
+        for key in original_loss_dict
+        if key in original_criterion.weight_dict
+    )
+    return original_total_loss, original_loss_dict
+
+
+def compute_hf_total_loss_on_raw_outputs(config, outputs, labels, device):
+    matcher = LwDetrHungarianMatcher(class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost)
+    criterion = LwDetrImageLoss(
+        matcher=matcher,
+        num_classes=config.num_labels,
+        focal_alpha=config.focal_alpha,
+        losses=["labels", "boxes", "cardinality"],
+        group_detr=config.group_detr,
+    ).to(device)
+    criterion.train()
+
+    outputs_loss = {
+        "logits": outputs["pred_logits"],
+        "pred_boxes": outputs["pred_boxes"],
+        "enc_outputs": {
+            "logits": outputs["enc_outputs"]["pred_logits"],
+            "pred_boxes": outputs["enc_outputs"]["pred_boxes"],
+        },
+    }
+    if "aux_outputs" in outputs:
+        outputs_loss["auxiliary_outputs"] = [
+            {"logits": aux_output["pred_logits"], "pred_boxes": aux_output["pred_boxes"]}
+            for aux_output in outputs["aux_outputs"]
+        ]
+
+    hf_loss_dict = criterion(outputs_loss, labels)
+
+    base_weight_dict = {
+        "loss_ce": 1,
+        "loss_bbox": config.bbox_loss_coefficient,
+        "loss_giou": config.giou_loss_coefficient,
+    }
+    weight_dict = dict(base_weight_dict)
+    for decoder_layer in range(config.decoder_layers - 1):
+        weight_dict.update({f"{key}_{decoder_layer}": value for key, value in base_weight_dict.items()})
+    enc_weight_dict = {f"{key}_enc": value for key, value in base_weight_dict.items()}
+    weight_dict.update(enc_weight_dict)
+    hf_total_loss = sum(hf_loss_dict[key] * weight_dict[key] for key in hf_loss_dict if key in weight_dict)
+    return hf_total_loss, hf_loss_dict, weight_dict
+
+
+def compare_loss_dicts(
+    hf_loss_dict: dict,
+    original_loss_dict: dict,
+    keys_to_compare: set[str] | None = None,
+    atol: float = 1e-6,
+    rtol: float = 1e-6,
+):
+    all_close = True
+    shared_keys = set(hf_loss_dict.keys()) & set(original_loss_dict.keys())
+    if keys_to_compare is not None:
+        shared_keys &= keys_to_compare
+    for key in sorted(shared_keys):
+        hf_value = hf_loss_dict[key]
+        original_value = original_loss_dict[key]
+        if not torch.is_tensor(hf_value) or not torch.is_tensor(original_value):
+            continue
+        max_abs_diff = (hf_value - original_value).abs().item()
+        is_close = torch.allclose(hf_value, original_value, atol=atol, rtol=rtol)
+        print(f"loss_dict[{key}]: close={is_close}, abs_diff={max_abs_diff:.8f}")
+        all_close = all_close and is_close
+    return all_close
+
+
+@torch.no_grad()
+def test_original_parity(
+    converted_model: LwDetrForObjectDetection,
+    image_processor: DeformableDetrImageProcessor,
+    model_name: str,
+    checkpoint_path: str,
+    original_repo_path: str,
+    strict: bool = False,
+):
+    del model_name
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    image = load_image(DUMMY_IMAGE_URL)
+    original_pixel_values = original_preprocess_image(DUMMY_IMAGE_URL).unsqueeze(0).to(device)
+    hf_inputs = image_processor(images=image, annotations=DUMMY_ANNOTATIONS, return_tensors="pt").to(device)
+
+    checks = {}
+    checks["preprocess_pixel_values"] = summarize_tensor_diff(
+        "preprocess/pixel_values",
+        hf_inputs["pixel_values"],
+        original_pixel_values,
+        atol=1e-6,
+        rtol=1e-6,
+    )
+
+    original_model, original_criterion, original_postprocessors, nested_tensor_from_tensor_list = load_original_repo_components(
+        original_repo_path=original_repo_path,
+        checkpoint_path=checkpoint_path,
+        device=device,
+    )
+    original_model = original_model.to(device)
+    original_criterion = original_criterion.to(device)
+    converted_model = converted_model.to(device)
+
+    original_nested_inputs = nested_tensor_from_tensor_list([original_pixel_values[0]])
+
+    converted_model.eval()
+    original_model.eval()
+    converted_model.config._attn_implementation = "eager"
+    converted_eval_outputs = converted_model(pixel_values=hf_inputs["pixel_values"], pixel_mask=hf_inputs["pixel_mask"])
+    original_eval_outputs = original_model(original_nested_inputs)
+
+    checks["eval_logits"] = summarize_tensor_diff(
+        "eval/logits", converted_eval_outputs.logits, original_eval_outputs["pred_logits"], atol=5e-4, rtol=5e-4
+    )
+    checks["eval_boxes"] = summarize_tensor_diff(
+        "eval/pred_boxes",
+        converted_eval_outputs.pred_boxes,
+        original_eval_outputs["pred_boxes"],
+        atol=5e-4,
+        rtol=5e-4,
+    )
+    print("eval/logits first 5 hf:", converted_eval_outputs.logits.flatten()[:5])
+    print("eval/logits first 5 original:", original_eval_outputs["pred_logits"].flatten()[:5])
+
+    # Postprocessing parity check on identical logits/boxes to isolate pre/postprocessing logic from model mismatch.
+    target_sizes = torch.tensor([image.size[::-1]], device=device)
+    original_postprocessed = original_postprocessors["bbox"](original_eval_outputs, target_sizes)
+    hf_postprocessed = image_processor.post_process_object_detection(
+        SimpleNamespace(logits=original_eval_outputs["pred_logits"], pred_boxes=original_eval_outputs["pred_boxes"]),
+        threshold=0.0,
+        target_sizes=target_sizes,
+        top_k=100,
+    )
+    checks["postprocess_scores"] = summarize_tensor_diff(
+        "postprocess/scores", hf_postprocessed[0]["scores"], original_postprocessed[0]["scores"], atol=1e-6, rtol=1e-6
+    )
+    checks["postprocess_boxes"] = summarize_tensor_diff(
+        "postprocess/boxes", hf_postprocessed[0]["boxes"], original_postprocessed[0]["boxes"], atol=1e-6, rtol=1e-6
+    )
+    checks["postprocess_labels"] = torch.equal(hf_postprocessed[0]["labels"], original_postprocessed[0]["labels"])
+    print(f"postprocess/labels: close={checks['postprocess_labels']}")
+
+    # Training parity check.
+    converted_model.train()
+    original_model.train()
+    converted_train_outputs = converted_model(pixel_values=hf_inputs["pixel_values"], pixel_mask=hf_inputs["pixel_mask"])
+    original_train_outputs = original_model(original_nested_inputs)
+
+    checks["train_logits"] = summarize_tensor_diff(
+        "train/logits", converted_train_outputs.logits, original_train_outputs["pred_logits"], atol=5e-4, rtol=5e-4
+    )
+    checks["train_boxes"] = summarize_tensor_diff(
+        "train/pred_boxes",
+        converted_train_outputs.pred_boxes,
+        original_train_outputs["pred_boxes"],
+        atol=5e-4,
+        rtol=5e-4,
+    )
+    print("train/logits first 5 hf:", converted_train_outputs.logits.flatten()[:5])
+    print("train/logits first 5 original:", original_train_outputs["pred_logits"].flatten()[:5])
+
+    hf_labels = hf_inputs["labels"]
+    original_targets = [{"labels": label["class_labels"], "boxes": label["boxes"]} for label in hf_labels]
+
+    converted_train_with_loss = converted_model(
+        pixel_values=hf_inputs["pixel_values"], pixel_mask=hf_inputs["pixel_mask"], labels=hf_labels
+    )
+    original_total_loss, original_loss_dict = compute_original_total_loss(
+        original_criterion=original_criterion,
+        original_outputs=original_train_outputs,
+        original_targets=original_targets,
+    )
+    checks["model_loss"] = summarize_tensor_diff(
+        "train/model_loss",
+        converted_train_with_loss.loss.unsqueeze(0),
+        original_total_loss.unsqueeze(0),
+        atol=1e-4,
+        rtol=1e-4,
+    )
+
+    # Isolate whether mismatch comes from loss implementation or model outputs.
+    hf_total_loss_on_original_outputs, hf_loss_dict_on_original_outputs, hf_weight_dict = compute_hf_total_loss_on_raw_outputs(
+        config=converted_model.config,
+        outputs=original_train_outputs,
+        labels=hf_labels,
+        device=device,
+    )
+    checks["loss_impl_total_loss"] = summarize_tensor_diff(
+        "train/loss_impl_total_loss",
+        hf_total_loss_on_original_outputs.unsqueeze(0),
+        original_total_loss.unsqueeze(0),
+        atol=1e-6,
+        rtol=1e-6,
+    )
+    checks["loss_impl_loss_dict"] = compare_loss_dicts(
+        hf_loss_dict=hf_loss_dict_on_original_outputs,
+        original_loss_dict=original_loss_dict,
+        keys_to_compare=set(hf_weight_dict.keys()),
+        atol=1e-6,
+        rtol=1e-6,
+    )
+
+    if strict and not all(checks.values()):
+        mismatches = [key for key, value in checks.items() if not value]
+        raise AssertionError(f"Original parity checks failed for: {', '.join(mismatches)}")
+
+    return checks
 
 def test_models_outputs(model: LwDetrForObjectDetection, image_processor: DeformableDetrImageProcessor, model_name: str):
     expected_outputs = {
@@ -368,18 +692,10 @@ def test_models_outputs(model: LwDetrForObjectDetection, image_processor: Deform
 }
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    image_path = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = load_image(image_path)
-    # Fake annotation for testing
-    annotations = {
-        "image_id": 0,
-        "annotations": [
-            {"bbox": [250, 250, 350, 350], "category_id": 0, "iscrowd": 0, "area": 122500}
-        ],
-    }
+    image = load_image(DUMMY_IMAGE_URL)
 
-    original_pixel_values = original_preprocess_image(image_path).unsqueeze(0).to(device)
-    inputs = image_processor(images=image, annotations=annotations, return_tensors="pt").to(device)
+    original_pixel_values = original_preprocess_image(DUMMY_IMAGE_URL).unsqueeze(0).to(device)
+    inputs = image_processor(images=image, annotations=DUMMY_ANNOTATIONS, return_tensors="pt").to(device)
 
     torch.testing.assert_close(original_pixel_values, inputs["pixel_values"], atol=1e-6, rtol=1e-6)
     print("Preprocessing looks ok!")
@@ -409,6 +725,8 @@ def convert_lw_detr_checkpoint(
     pytorch_dump_folder_path: str,
     push_to_hub: bool = False,
     organization: str = "huggingface",
+    original_repo_path: str | None = None,
+    strict_original_parity: bool = False,
 ):
     """
     Convert a LW-DETR checkpoint to HuggingFace format.
@@ -419,6 +737,8 @@ def convert_lw_detr_checkpoint(
         pytorch_dump_folder_path: Path to save the converted model
         push_to_hub: Whether to push the model to the hub
         organization: Organization to push the model to
+        original_repo_path: Path to the original LW-DETR repository for direct parity checks
+        strict_original_parity: Whether to raise an error when original parity checks fail
     """
     print(f"Converting {model_name} checkpoint...")
 
@@ -441,30 +761,8 @@ def convert_lw_detr_checkpoint(
     print("Creating model and loading weights...")
     model = LwDetrForObjectDetection(lw_detr_config)
 
-    # Handle different checkpoint formats
-    if "state_dict" in checkpoint:
-        state_dict = checkpoint["state_dict"]
-    elif "model" in checkpoint:
-        state_dict = checkpoint["model"]
-    else:
-        state_dict = checkpoint
-
-    # Convert keys if needed
-    if ORIGINAL_TO_CONVERTED_KEY_MAPPING:
-        backbone_projector_sampling_key_mapping = get_backbone_projector_sampling_key_mapping(lw_detr_config)
-        state_dict = backbone_read_in_q_k_v(state_dict, lw_detr_config)
-        state_dict = read_in_q_k_v(state_dict, lw_detr_config)
-        key_mapping = ORIGINAL_TO_CONVERTED_KEY_MAPPING | backbone_projector_sampling_key_mapping
-        all_keys = list(state_dict.keys())
-        new_keys = convert_old_keys_to_new_keys(all_keys, key_mapping)
-        prefix = "model."
-        converted_state_dict = {}
-        for key in all_keys:
-            if not any(key.startswith(prefix) for prefix in ["class_embed", "bbox_embed"]):
-                new_key = new_keys[key]
-                converted_state_dict[prefix + new_key] = state_dict[key]
-            else:
-                converted_state_dict[key] = state_dict[key]
+    state_dict = get_checkpoint_state_dict(checkpoint)
+    converted_state_dict = convert_original_checkpoint_state_dict(state_dict, lw_detr_config)
 
     # Load state dict
     missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False)
@@ -483,6 +781,17 @@ def convert_lw_detr_checkpoint(
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
     test_models_outputs(model, image_processor, model_name)
+
+    if original_repo_path is not None:
+        print(f"Running parity checks against original repository at: {original_repo_path}")
+        test_original_parity(
+            converted_model=model,
+            image_processor=image_processor,
+            model_name=model_name,
+            checkpoint_path=checkpoint_path,
+            original_repo_path=original_repo_path,
+            strict=strict_original_parity,
+        )
 
     if push_to_hub:
         print("Pushing model to hub...")
@@ -507,6 +816,17 @@ def main():
     parser.add_argument("--checkpoint_path", type=str, help="Path to the checkpoint file (if not using hub download)")
     parser.add_argument("--push_to_hub", action="store_true", help="Push model to the hub")
     parser.add_argument("--organization", type=str, default="AnnaZhang", help="Organization to push the model to")
+    parser.add_argument(
+        "--original_repo_path",
+        type=str,
+        default=None,
+        help="Optional path to the original LW-DETR repository for direct parity checks.",
+    )
+    parser.add_argument(
+        "--strict_original_parity",
+        action="store_true",
+        help="Raise an error if any original parity check fails.",
+    )
 
     args = parser.parse_args()
 
@@ -526,6 +846,8 @@ def main():
         pytorch_dump_folder_path=args.pytorch_dump_folder_path,
         push_to_hub=args.push_to_hub,
         organization=args.organization,
+        original_repo_path=args.original_repo_path,
+        strict_original_parity=args.strict_original_parity,
     )
 
 

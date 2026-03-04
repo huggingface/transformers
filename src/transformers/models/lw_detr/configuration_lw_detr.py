@@ -191,7 +191,7 @@ class LwDetrConfig(PreTrainedConfig):
             The epsilon value for batch normalization layers.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the model layers and the number of expected features in the decoder inputs.
-        dropout (`float`, *optional*, defaults to 0.1):
+        dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         decoder_ffn_dim (`int`, *optional*, defaults to 2048):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
@@ -272,7 +272,7 @@ class LwDetrConfig(PreTrainedConfig):
         batch_norm_eps=1e-5,
         # decoder
         d_model=256,
-        dropout=0.1,
+        dropout=0.0,
         decoder_ffn_dim=2048,
         decoder_n_points=4,
         decoder_layers: int = 3,

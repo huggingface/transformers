@@ -226,7 +226,7 @@ class LwDetrConfig(PreTrainedConfig):
             The epsilon value for batch normalization layers.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the model layers and the number of expected features in the decoder inputs.
-        dropout (`float`, *optional*, defaults to 0.1):
+        dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         decoder_ffn_dim (`int`, *optional*, defaults to 2048):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
@@ -307,7 +307,7 @@ class LwDetrConfig(PreTrainedConfig):
         batch_norm_eps=1e-5,
         # decoder
         d_model=256,
-        dropout=0.1,
+        dropout=0.0,
         decoder_ffn_dim=2048,
         decoder_n_points=4,
         decoder_layers: int = 3,
@@ -827,8 +827,6 @@ class LwDetrAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, _ = hidden_states.shape
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
 
         hidden_states_original = hidden_states
         if position_embeddings is not None:
@@ -842,6 +840,8 @@ class LwDetrAttention(nn.Module):
             )
             hidden_states = torch.cat(hidden_states.split(seq_len // self.config.group_detr, dim=1), dim=0)
 
+        attention_input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*attention_input_shape, -1, self.head_dim)
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states_original).view(hidden_shape).transpose(1, 2)
@@ -860,7 +860,7 @@ class LwDetrAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.reshape(*attention_input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
         if self.training:
