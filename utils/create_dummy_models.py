@@ -465,9 +465,16 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
         # breakpoint()
         model_tester = model_tester_class(parent=None, **model_tester_kwargs)
     except TypeError as e:
-        if "vocab_size" in model_tester_kwargs:
-            model_tester_kwargs_new = {k: v for k, v in model_tester_kwargs.items() if k != "vocab_size"}
-            model_tester = model_tester_class(parent=None, **model_tester_kwargs_new)
+
+        # if "vocab_size" in model_tester_kwargs:
+        model_tester_kwargs_new = {k: v for k, v in model_tester_kwargs.items() if k != "vocab_size"}
+
+        # we need to handle unusual arguments, like "config_kwargs" in `PeVideoTextModelTester` (not good practice but understandable)
+        for k, v in model_tester_kwargs_new.items():
+            if isinstance(v, dict):
+                model_tester_kwargs_new[k] = {k1: v1 for k1, v1 in v.items() if k1 != "vocab_size"}
+
+        model_tester = model_tester_class(parent=None, **model_tester_kwargs_new)
 
     # breakpoint()
     if hasattr(model_tester, "get_pipeline_config"):
