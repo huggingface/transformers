@@ -108,11 +108,17 @@ class ParakeetProcessor(ProcessorMixin):
                 tokenizer_init_kwargs=self.tokenizer.init_kwargs,
                 **kwargs,
             )
-            frame_rate = self.feature_extractor.hop_length / self.feature_extractor.sampling_rate * output_kwargs["audio_kwargs"]["subsampling_factor"]
+            frame_rate = (
+                self.feature_extractor.hop_length
+                / self.feature_extractor.sampling_rate
+                * output_kwargs["audio_kwargs"]["subsampling_factor"]
+            )
             proc_timestamps = []
             for batch_ids, timestamps, durations in zip(token_ids, token_timestamps, token_durations):
                 # Original NeMo: https://github.com/NVIDIA-NeMo/NeMo/blob/1692a8fb97e1aadc883cfadd2a57c4e8a1b793aa/nemo/collections/asr/parts/submodules/rnnt_decoding.py#L993
-                non_blank_indices = [i for i, token_id in enumerate(batch_ids) if token_id != self.tokenizer.vocab_size]
+                non_blank_indices = [
+                    i for i, token_id in enumerate(batch_ids) if token_id != self.tokenizer.vocab_size
+                ]
                 non_blank_ids = [batch_ids[i] for i in non_blank_indices]
                 decoded_tokens = [self.tokenizer.decode([token_id]) for token_id in non_blank_ids]
                 timestamp_dict = [
@@ -131,15 +137,13 @@ class ParakeetProcessor(ProcessorMixin):
         return decoded
 
     def _refine_timestamps_tdt(
-        self,
-        char_offsets,
-        supported_punctuation=['?', "'", '¡', '¿', '-', ':', ',', '%', '/', '.', '!']
+        self, char_offsets, supported_punctuation=["?", "'", "¡", "¿", "-", ":", ",", "%", "/", ".", "!"]
     ):
         for i, offset in enumerate(char_offsets):
             # If token is a punctuation mark, set its start and end offset as start and end of previous token
-            if offset['token'] in supported_punctuation and i > 0:
-                offset['start'] = char_offsets[i - 1]['end']
-                offset['end'] = offset['start']
+            if offset["token"] in supported_punctuation and i > 0:
+                offset["start"] = char_offsets[i - 1]["end"]
+                offset["end"] = offset["start"]
 
         return char_offsets
 

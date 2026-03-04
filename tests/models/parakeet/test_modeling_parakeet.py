@@ -662,7 +662,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
             output.sequences,
             token_timestamps=output.token_timestamps,
             token_durations=output.token_durations,
-            skip_special_tokens=True
+            skip_special_tokens=True,
         )
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
@@ -670,8 +670,8 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         self.assertIsNotNone(
             output.token_timestamps, "token_timestamps should be returned when return_timestamps=True"
         )
-        predicted_start_times = [[entry['start'] for entry in el] for el in predicted_timestamps]
-        predicted_end_times = [[entry['end'] for entry in el] for el in predicted_timestamps]
+        predicted_start_times = [[entry["start"] for entry in el] for el in predicted_timestamps]
+        predicted_end_times = [[entry["end"] for entry in el] for el in predicted_timestamps]
         torch.testing.assert_close(predicted_start_times, EXPECTED_START_TIMESTAMPS)
         torch.testing.assert_close(predicted_end_times, EXPECTED_END_TIMESTAMPS)
         self.assertListEqual(output.token_durations.cpu().tolist(), EXPECTED_DURATIONS)
