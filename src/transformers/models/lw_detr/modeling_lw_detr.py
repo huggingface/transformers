@@ -1582,6 +1582,26 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
         self.bbox_embed = LwDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
 
         self.post_init()
+        self._init_two_stage_heads_like_original()
+
+    def _init_two_stage_heads_like_original(self):
+        """
+        Match the original LW-DETR initialization behavior for two-stage heads.
+
+        In the reference implementation, encoder output heads are deep-copied from
+        ``class_embed``/``bbox_embed`` after focal-prior and bbox last-layer
+        initialization are applied. This keeps all two-stage heads aligned at
+        initialization time, including custom-label remaps where these heads are
+        freshly initialized.
+        """
+        if self.model.enc_out_class_embed is None or self.model.enc_out_bbox_embed is None:
+            return
+
+        for enc_class_head in self.model.enc_out_class_embed:
+            enc_class_head.load_state_dict(self.class_embed.state_dict())
+
+        for enc_bbox_head in self.model.enc_out_bbox_embed:
+            enc_bbox_head.load_state_dict(self.bbox_embed.state_dict())
 
     @can_return_tuple
     @auto_docstring
