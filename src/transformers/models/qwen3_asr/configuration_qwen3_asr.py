@@ -361,6 +361,7 @@ class Qwen3ASRConfig(PretrainedConfig):
         self,
         thinker_config=None,
         support_languages=None,
+        attn_implementation=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -369,6 +370,7 @@ class Qwen3ASRConfig(PretrainedConfig):
 
         self.thinker_config = Qwen3ASRThinkerConfig(**thinker_config)
         self.support_languages = support_languages
+        self._attn_implementation = attn_implementation
 
     def get_text_config(self, decoder=False) -> "PretrainedConfig":
         """
@@ -383,6 +385,22 @@ class Qwen3ASRConfig(PretrainedConfig):
         # except for Qwen yet. This has to be generalized if more deeply nested configs are
         # added. NOTE: currently method used only by vLLM
         return self.thinker_config.get_text_config()
+
+    @property
+    def num_attention_heads(self):
+        return self.thinker_config.text_config.num_attention_heads
+
+    @property
+    def hidden_size(self):
+        return self.thinker_config.text_config.hidden_size
+
+    @property
+    def vocab_size(self):
+        return self.thinker_config.text_config.vocab_size
+
+    @vocab_size.setter
+    def vocab_size(self, value):
+        self.thinker_config.text_config.vocab_size = value
 
 
 __all__ = ["Qwen3ASRAudioEncoderConfig", "Qwen3ASRThinkerConfig", "Qwen3ASRConfig"]
