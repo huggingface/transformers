@@ -212,7 +212,7 @@ class BenchmarkRunner:
         self.logger.debug(f"Loading model {model_id} on device {config.device}...")
         dtype = getattr(torch, config.dtype.removeprefix("torch."))
         use_kernels = config.kernelize and kernelize is not None and Mode is not None
-        device_map = None if config.tp_plan is not None else config.device
+        device_map = config.device if config.tp_plan is None else None
         self.model = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=dtype,

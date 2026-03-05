@@ -143,9 +143,6 @@ class BenchmarkConfig:
 
     def infer_name(self, compact: bool = True) -> str:
         """Infer a human-readable name for the benchmark config, either compact or verbose."""
-        tp_str = "no_tp"
-        if self.tp_plan is not None:
-            tp_str = f"tp_{self.tp_plan}"
         if compact:
             iter_str = f"w{self.warmup_iterations}_i{self.measurement_iterations}"
             gpu_monitor_str = "monitored" if self.gpu_monitoring else "unmonitored"
@@ -154,6 +151,7 @@ class BenchmarkConfig:
             compile_str = f"compiled_{self.compile_config.mode}" if self.compile_config is not None else "uncompiled"
             kernelize_str = "kernelized" if self.kernelize else "unkernelized"
             continuous_batching_str = "cb" if self.continuous_batching else "generate"
+            tp_str = "tp" if self.tp_plan is not None else "no_tp"
             sep = "-"
         else:
             iter_str = f"{self.warmup_iterations} warmup, {self.measurement_iterations} iterations"
@@ -163,6 +161,10 @@ class BenchmarkConfig:
             compile_str = "compiled" if self.compile_config is not None else "not compiled"
             kernelize_str = "kernelized" if self.kernelize else "not kernelized"
             continuous_batching_str = "continuous batching" if self.continuous_batching else "regular generate"
+            if self.tp_plan is None:
+                tp_str = "no_tp"
+            else:
+                tp_str = "tp_custom" if isinstance(self.tp_plan, dict) else "tp_auto"
             sep = ", "
         return sep.join(
             [
