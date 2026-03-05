@@ -49,6 +49,8 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
+    from transformers.models.mllama.modeling_mllama import _prepare_cross_attention_mask
+
 if is_vision_available():
     from PIL import Image
 
@@ -728,3 +730,90 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             expected_output,
             f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
         )
+
+
+@require_torch
+class MllamaPrepareCrossAttentionMaskTest(unittest.TestCase):
+    """Tests for _prepare_cross_attention_mask torch.compile compatibility."""
+
+    def _reference_prepare_cross_attention_mask(self, cross_attention_mask, num_vision_tokens, dtype):
+        """Original implementation using repeat_interleave and masked_fill (pre-fix)."""
+        batch_size, text_total_length, *_ = cross_attention_mask.shape
+        cross_attention_mask = cross_attention_mask.repeat_interleave(num_vision_tokens, dim=3)
+        cross_attention_mask = cross_attention_mask.view(batch_size, text_total_length, -1)
+        cross_attention_mask = cross_attention_mask.unsqueeze(1)
+
+        inverted_cross_attn_mask = (1.0 - cross_attention_mask).to(dtype)
+        cross_attention_mask = inverted_cross_attn_mask.masked_fill(
+            inverted_cross_attn_mask.to(torch.bool), torch.finfo(dtype).min
+        )
+
+        negative_inf_value = torch.finfo(dtype).min
+        full_text_row_masked_out_mask = (
+            (cross_attention_mask != negative_inf_value).any(dim=-1).type_as(cross_attention_mask)[..., None]
+        )
+        cross_attention_mask *= full_text_row_masked_out_mask
+
+        return cross_attention_mask, full_text_row_masked_out_mask
+
+    def test_output_shapes(self):
+        """Test that output shapes are correct."""
+        batch_size, text_length, num_images, image_tiles = 2, 6, 2, 4
+        num_vision_tokens = 3
+        dtype = torch.float32
+
+        cross_attention_mask = torch.randint(0, 2, (batch_size, text_length, num_images, image_tiles)).float()
+
+        mask, full_row_mask = _prepare_cross_attention_mask(cross_attention_mask, num_vision_tokens, dtype)
+
+        expected_last_dim = num_images * image_tiles * num_vision_tokens
+        self.assertEqual(mask.shape, (batch_size, 1, text_length, expected_last_dim))
+        self.assertEqual(full_row_mask.shape, (batch_size, 1, text_length, 1))
+
+    def test_equivalence_with_original(self):
+        """Test that the compile-friendly implementation matches the original."""
+        batch_size, text_length, num_images, image_tiles = 2, 8, 2, 4
+        num_vision_tokens = 5
+
+        for dtype in [torch.float32, torch.bfloat16]:
+            cross_attention_mask = torch.randint(0, 2, (batch_size, text_length, num_images, image_tiles)).float()
+
+            new_mask, new_full_row = _prepare_cross_attention_mask(cross_attention_mask, num_vision_tokens, dtype)
+            ref_mask, ref_full_row = self._reference_prepare_cross_attention_mask(
+                cross_attention_mask, num_vision_tokens, dtype
+            )
+
+            torch.testing.assert_close(new_mask, ref_mask, msg=f"Mask mismatch for {dtype}")
+            torch.testing.assert_close(new_full_row, ref_full_row, msg=f"Full row mask mismatch for {dtype}")
+
+    def test_all_ones_mask(self):
+        """Test with all-ones mask (fully attending)."""
+        cross_attention_mask = torch.ones(1, 4, 1, 2)
+        num_vision_tokens = 3
+        dtype = torch.float32
+
+        mask, full_row_mask = _prepare_cross_attention_mask(cross_attention_mask, num_vision_tokens, dtype)
+
+        # All ones -> inverted to 0 -> multiplied by min_dtype -> all zeros (attend everywhere)
+        self.assertTrue(torch.all(mask == 0.0))
+        self.assertTrue(torch.all(full_row_mask == 1.0))
+
+    def test_all_zeros_mask(self):
+        """Test with all-zeros mask (fully masked out)."""
+        cross_attention_mask = torch.zeros(1, 4, 1, 2)
+        num_vision_tokens = 3
+        dtype = torch.float32
+
+        mask, full_row_mask = _prepare_cross_attention_mask(cross_attention_mask, num_vision_tokens, dtype)
+
+        # All zeros -> inverted to 1 -> multiplied by min_dtype -> all min_dtype
+        # Then full_row_mask is 0 (all negative inf), so mask *= 0 -> all zeros
+        self.assertTrue(torch.all(full_row_mask == 0.0))
+
+    def test_no_compile_unfriendly_ops(self):
+        """Test that the implementation does not use repeat_interleave or masked_fill with bool conversion."""
+        import inspect
+
+        source = inspect.getsource(_prepare_cross_attention_mask)
+        self.assertNotIn("repeat_interleave", source, "repeat_interleave is not torch.compile friendly")
+        self.assertNotIn("masked_fill", source, "masked_fill with bool conversion causes torch.compile graph breaks")
