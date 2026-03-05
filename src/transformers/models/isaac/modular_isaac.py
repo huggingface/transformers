@@ -685,6 +685,7 @@ class IsaacProcessor(ProcessorMixin):
     Args:
         image_processor: Vision preprocessor (fast) used for patch extraction.
         tokenizer: Qwen2 tokenizer instance.
+        chat_template (str or dict, optional): Chat template used by `apply_chat_template`.
         vision_token (str, optional): Placeholder token marking image locations. Defaults to "<image>".
         max_sequence_length (int, optional): Maximum combined text+vision tokens kept. Defaults to 16384.
         rescale_factor (float, optional): Image rescale factor; defaults to 1/255.
@@ -698,6 +699,7 @@ class IsaacProcessor(ProcessorMixin):
         self,
         image_processor,
         tokenizer,
+        chat_template: str | dict[str, str] | None = None,
         vision_token: str = "<image>",
         max_sequence_length: int = 16384,
         rescale_factor: float | None = None,
@@ -715,8 +717,11 @@ class IsaacProcessor(ProcessorMixin):
         if config is not None:
             config.vision_rescale_factor = resolved_rescale_factor
 
+        if chat_template is None:
+            chat_template = getattr(tokenizer, "chat_template", None)
+
         self.image_processor = image_processor
-        super().__init__(image_processor, tokenizer)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         text_pad_token_id = getattr(self.tokenizer, "pad_token_id", None)
         image_pad_token_id = self.tokenizer.convert_tokens_to_ids("<|image_pad|>")
@@ -726,7 +731,6 @@ class IsaacProcessor(ProcessorMixin):
         self.pad_token_id = self.text_pad_token_id
 
         self.current_processor = self.image_processor
-        self.chat_template = getattr(self.tokenizer, "chat_template", None)
         self.vision_token = vision_token
         self.max_sequence_length = max_sequence_length
 
