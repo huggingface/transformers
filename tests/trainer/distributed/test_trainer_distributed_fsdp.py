@@ -266,13 +266,126 @@ class TestFSDPConfig(TestCasePlus):
 
 
 # ---------------------------------------------------------------------------
+# FSDP distributed tests
+# ---------------------------------------------------------------------------
+
+
+class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
+    def _run_env_check(self, cmd, num_processes):
+        """Run the env check script and return per-rank results."""
+        execute_subprocess_async(cmd, env=self.get_env())
+        # output_dir is always the last script_arg value
+        output_dir = cmd[cmd.index("--output_dir") + 1]
+        results = []
+        for rank in range(num_processes):
+            with open(os.path.join(output_dir, f"env_rank{rank}.json")) as f:
+                results.append(json.load(f))
+        return results
+
+    @run_first
+    @require_accelerate
+    @require_torch_multi_accelerator
+    def test_torchrun_accelerate_fsdp1_env_parity(self):
+        """Verify torchrun+--fsdp and accelerate launch produce the same FSDP1 env."""
+        script = os.path.join(SCRIPTS_DIR, "torchrun_env_check.py")
+        num_processes = backend_device_count(torch_device)
+
+        torchrun_dir = self.get_auto_remove_tmp_dir()
+        torchrun_results = self._run_env_check(
+            self.get_torchrun_cmd(
+                script,
+                script_args=[
+                    "--output_dir", torchrun_dir,
+                    "--fsdp", "full_shard",
+                    "--fsdp_config", '{"fsdp_version": 1}',
+                ],
+                num_processes=num_processes,
+            ),
+            num_processes,
+        )
+
+        accel_dir = self.get_auto_remove_tmp_dir()
+        accel_results = self._run_env_check(
+            self.get_accelerate_cmd(
+                script, FSDP_CONFIG_FILE, script_args=["--output_dir", accel_dir], num_processes=num_processes
+            ),
+            num_processes,
+        )
+
+        self._check_parity(torchrun_results, accel_results, num_processes, expected_fsdp_version=1)
+
+    @run_first
+    @require_accelerate
+    @require_torch_multi_accelerator
+    def test_torchrun_accelerate_fsdp2_env_parity(self):
+        """Verify torchrun+--fsdp and accelerate launch produce the same FSDP2 env."""
+        script = os.path.join(SCRIPTS_DIR, "torchrun_env_check.py")
+        num_processes = backend_device_count(torch_device)
+
+        torchrun_dir = self.get_auto_remove_tmp_dir()
+        torchrun_results = self._run_env_check(
+            self.get_torchrun_cmd(
+                script,
+                script_args=[
+                    "--output_dir", torchrun_dir,
+                    "--fsdp", "full_shard",
+                    "--fsdp_config", '{"fsdp_version": 2}',
+                ],
+                num_processes=num_processes,
+            ),
+            num_processes,
+        )
+
+        accel_dir = self.get_auto_remove_tmp_dir()
+        accel_results = self._run_env_check(
+            self.get_accelerate_cmd(
+                script, FSDP2_CONFIG_FILE, script_args=["--output_dir", accel_dir], num_processes=num_processes
+            ),
+            num_processes,
+        )
+
+        self._check_parity(torchrun_results, accel_results, num_processes, expected_fsdp_version=2)
+
+    def _check_parity(self, torchrun_results, accel_results, num_processes, expected_fsdp_version):
+        for rank in range(num_processes):
+            tr, ac = torchrun_results[rank], accel_results[rank]
+
+            # Both should agree on distributed env
+            self.assertEqual(tr["args_world_size"], ac["args_world_size"])
+            self.assertEqual(tr["args_process_index"], ac["args_process_index"])
+            self.assertEqual(tr["args_parallel_mode"], ac["args_parallel_mode"])
+            self.assertEqual(tr["accelerator_num_processes"], ac["accelerator_num_processes"])
+            self.assertEqual(tr["accelerator_use_distributed"], ac["accelerator_use_distributed"])
+
+            for info in (tr, ac):
+                # Rank consistency across all layers
+                self.assertEqual(info["env_world_size"], str(num_processes))
+                self.assertEqual(info["env_rank"], str(rank))
+                self.assertEqual(info["args_process_index"], rank)
+                self.assertEqual(info["args_local_process_index"], rank)
+                self.assertEqual(info["accelerator_process_index"], rank)
+                self.assertEqual(info["accelerator_local_process_index"], rank)
+                self.assertEqual(info["args_n_gpu"], 1)
+                self.assertEqual(info["accelerator_is_main_process"], rank == 0)
+                self.assertEqual(info["accelerator_is_local_main_process"], rank == 0)
+                self.assertIn(f"cuda:{rank}", info["accelerator_device"])
+
+                # Both should have FSDP enabled with the correct version
+                self.assertEqual(info["accelerator_distributed_type"], "DistributedType.FSDP")
+                self.assertTrue(info["trainer_is_fsdp_enabled"])
+                self.assertFalse(info["trainer_is_deepspeed_enabled"])
+                self.assertEqual(info["fsdp_version"], expected_fsdp_version)
+                self.assertNotIn("deepspeed_zero_stage", info)
+
+
+# ---------------------------------------------------------------------------
 # All distributed FSDP training tests
 # ---------------------------------------------------------------------------
 @slow
 @run_first
 @require_accelerate
 @require_torch_multi_accelerator
-class TestTrainerDistributedFSDP(TrainerDistributedCommon, FSDPCommandsMixin, TestCasePlus, TrainerIntegrationCommon):
+class TestTrainerDistributedFSDPCommon(FSDPCommandsMixin, TrainerDistributedCommon, TestCasePlus, TrainerIntegrationCommon):
     # -------------------------------------------------------------------
     # FSDP training — accelerate (parameterized over fsdp version)
     # -------------------------------------------------------------------

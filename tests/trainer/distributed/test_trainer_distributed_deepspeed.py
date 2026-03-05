@@ -175,7 +175,22 @@ params_with_optims_and_schedulers = list(itertools.product(stages, dtypes, optim
 
 
 class DeepSpeedCommandsMixin:
-    """Provides ``get_accelerate_cmd`` for DeepSpeed distributed tests."""
+    """Provides ``get_torchrun_cmd`` and ``get_accelerate_cmd`` for DeepSpeed distributed tests."""
+
+    def get_torchrun_cmd(self, script, script_args=None, num_processes=None):
+        if num_processes is None:
+            num_processes = backend_device_count(torch_device)
+        port = get_torch_dist_unique_port()
+        cmd = [
+            "torchrun",
+            f"--nproc_per_node={num_processes}",
+            "--nnodes=1",
+            f"--master_port={port}",
+            script,
+        ]
+        if script_args:
+            cmd.extend(script_args)
+        return cmd
 
     def get_accelerate_cmd(
         self, script, config_file, launch_args=None, script_args=None, num_processes=None, **kwargs
@@ -942,6 +957,114 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
 
 
 # ---------------------------------------------------------------------------
+# DeepSpeed distributed tests
+# ---------------------------------------------------------------------------
+
+
+class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
+    def _run_env_check(self, cmd, num_processes):
+        """Run the env check script and return per-rank results."""
+        execute_subprocess_async(cmd, env=self.get_env())
+        output_dir = cmd[cmd.index("--output_dir") + 1]
+        results = []
+        for rank in range(num_processes):
+            with open(os.path.join(output_dir, f"env_rank{rank}.json")) as f:
+                results.append(json.load(f))
+        return results
+
+    @run_first
+    @require_deepspeed
+    @require_accelerate
+    @require_torch_multi_accelerator
+    def test_torchrun_accelerate_deepspeed_zero2_env_parity(self):
+        """Verify torchrun+--deepspeed and accelerate launch produce the same DeepSpeed ZeRO-2 env."""
+        script = os.path.join(SCRIPTS_DIR, "torchrun_env_check.py")
+        num_processes = backend_device_count(torch_device)
+
+        torchrun_dir = self.get_auto_remove_tmp_dir()
+        torchrun_results = self._run_env_check(
+            self.get_torchrun_cmd(
+                script,
+                script_args=["--output_dir", torchrun_dir, "--deepspeed", DS_CONFIG_ZERO2],
+                num_processes=num_processes,
+            ),
+            num_processes,
+        )
+
+        accel_dir = self.get_auto_remove_tmp_dir()
+        accel_results = self._run_env_check(
+            self.get_accelerate_cmd(
+                script, DS_ZERO2_CONFIG_FILE, script_args=["--output_dir", accel_dir], num_processes=num_processes
+            ),
+            num_processes,
+        )
+
+        self._check_parity(torchrun_results, accel_results, num_processes, expected_zero_stage=2)
+
+    @run_first
+    @require_deepspeed
+    @require_accelerate
+    @require_torch_multi_accelerator
+    def test_torchrun_accelerate_deepspeed_zero3_env_parity(self):
+        """Verify torchrun+--deepspeed and accelerate launch produce the same DeepSpeed ZeRO-3 env."""
+        script = os.path.join(SCRIPTS_DIR, "torchrun_env_check.py")
+        num_processes = backend_device_count(torch_device)
+
+        torchrun_dir = self.get_auto_remove_tmp_dir()
+        torchrun_results = self._run_env_check(
+            self.get_torchrun_cmd(
+                script,
+                script_args=["--output_dir", torchrun_dir, "--deepspeed", DS_CONFIG_ZERO3],
+                num_processes=num_processes,
+            ),
+            num_processes,
+        )
+
+        accel_dir = self.get_auto_remove_tmp_dir()
+        accel_results = self._run_env_check(
+            self.get_accelerate_cmd(
+                script, DS_ZERO3_CONFIG_FILE, script_args=["--output_dir", accel_dir], num_processes=num_processes
+            ),
+            num_processes,
+        )
+
+        self._check_parity(torchrun_results, accel_results, num_processes, expected_zero_stage=3)
+
+    def _check_parity(self, torchrun_results, accel_results, num_processes, expected_zero_stage):
+        for rank in range(num_processes):
+            tr, ac = torchrun_results[rank], accel_results[rank]
+
+            # Both should agree on distributed env
+            self.assertEqual(tr["args_world_size"], ac["args_world_size"])
+            self.assertEqual(tr["args_process_index"], ac["args_process_index"])
+            self.assertEqual(tr["args_parallel_mode"], ac["args_parallel_mode"])
+            self.assertEqual(tr["accelerator_num_processes"], ac["accelerator_num_processes"])
+            self.assertEqual(tr["accelerator_use_distributed"], ac["accelerator_use_distributed"])
+
+            for info in (tr, ac):
+                # Rank consistency across all layers
+                self.assertEqual(info["env_world_size"], str(num_processes))
+                self.assertEqual(info["env_rank"], str(rank))
+                self.assertEqual(info["args_process_index"], rank)
+                self.assertEqual(info["args_local_process_index"], rank)
+                self.assertEqual(info["accelerator_process_index"], rank)
+                self.assertEqual(info["accelerator_local_process_index"], rank)
+                self.assertEqual(info["args_n_gpu"], 1)
+                self.assertEqual(info["accelerator_is_main_process"], rank == 0)
+                self.assertEqual(info["accelerator_is_local_main_process"], rank == 0)
+                self.assertIn(f"cuda:{rank}", info["accelerator_device"])
+
+                # Both should have DeepSpeed enabled with the correct stage
+                self.assertEqual(info["accelerator_distributed_type"], "DistributedType.DEEPSPEED")
+                self.assertTrue(info["trainer_is_deepspeed_enabled"])
+                self.assertFalse(info["trainer_is_fsdp_enabled"])
+                self.assertEqual(info["deepspeed_zero_stage"], expected_zero_stage)
+                self.assertEqual(info["deepspeed_offload_optimizer_device"], "none")
+                self.assertEqual(info["deepspeed_offload_param_device"], "none")
+                self.assertNotIn("fsdp_version", info)
+
+
+# ---------------------------------------------------------------------------
 # Multi-GPU distributed DeepSpeed training tests
 # ---------------------------------------------------------------------------
 
@@ -951,7 +1074,7 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
 @require_deepspeed
 @require_accelerate
 @require_torch_accelerator
-class TestTrainerDistributedDeepSpeed(TrainerDistributedCommon, DeepSpeedCommandsMixin, TestCasePlus):
+class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistributedCommon, TestCasePlus):
     """
     Distributed DeepSpeed tests using ``accelerate launch``.
 

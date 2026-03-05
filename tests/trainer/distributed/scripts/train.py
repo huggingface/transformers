@@ -68,6 +68,10 @@ def main():
     if not training_args.do_train and not training_args.do_eval:
         training_args.do_train = True
 
+    # Auto-enable eval when an eval output file is requested
+    if eval_output_file:
+        training_args.do_eval = True
+
     torch_dtype = DTYPE_MAP[model_dtype] if model_dtype else None
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
