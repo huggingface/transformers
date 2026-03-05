@@ -44,6 +44,7 @@ from .utils import (
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_musa_available,
+    is_torch_neuron_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
@@ -1812,6 +1813,7 @@ class TrainingArguments:
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
+
         if is_torch_xla_available():
             device = self.distributed_state.device
             self._n_gpu = 0
@@ -1837,6 +1839,9 @@ class TrainingArguments:
             elif is_torch_hpu_available():
                 device = torch.device("hpu:0")
                 torch.hpu.set_device(device)
+            elif is_torch_neuron_available():
+                device = torch.device("neuron:0")
+                torch.neuron.set_device(device)
             else:
                 # Default to cuda:0 (respects CUDA_VISIBLE_DEVICES); nn.DataParallel handles n_gpu > 1
                 device = torch.device(
