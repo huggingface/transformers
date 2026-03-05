@@ -469,7 +469,6 @@ class Dots1PreTrainedModel(PreTrainedModel):
         "attentions": Dots1Attention,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
-    _preload_module_classes = ["Dots1MoE"]
     _keys_to_ignore_on_load_unexpected = None
 
     @torch.no_grad()

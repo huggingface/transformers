@@ -455,7 +455,6 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
         "hidden_states": DeepseekV2DecoderLayer,
         "attentions": DeepseekV2Attention,
     }
-    _preload_module_classes = ["DeepseekV2Moe"]
 
     @torch.no_grad()
     def _init_weights(self, module):

@@ -96,9 +96,9 @@ def _attach_align_device_hook_on_blocks_for_preload(
         return
 
     if not isinstance(execution_device, Mapping):
-        execution_device = {key: execution_device for key in offload.keys()}
+        execution_device = dict.fromkeys(offload.keys(), execution_device)
     if not isinstance(offload, Mapping):
-        offload = {key: offload for key in execution_device.keys()}
+        offload = dict.fromkeys(execution_device.keys(), offload)
 
     should_stop_recursion = (
         preload_module_classes is not None
