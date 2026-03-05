@@ -32,6 +32,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_func_from_hub
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -41,20 +42,9 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import maybe_autocast
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
+from ...utils.import_utils import resolve_internal_import
 from .configuration_zamba2 import Zamba2Config
 
-
-if is_mamba_ssm_available():
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
-else:
-    selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined = None, None, None
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
 
 logger = logging.get_logger(__name__)
 
@@ -190,24 +180,11 @@ class Zamba2HybridDynamicCache:
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
-    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the mask"""
         kv_offset = 0
-        query_length = cache_position.shape[0]
         kv_length = self.get_seq_length(layer_idx) + query_length
         return kv_length, kv_offset
-
-    def update_conv_state(
-        self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
-    ) -> torch.Tensor:
-        conv_state = self.conv_states[layer_idx]
-        cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
-
-        conv_state = conv_state.roll(shifts=-1, dims=-1)
-        conv_state[:, :, cache_position] = new_conv_state.to(conv_state.device)
-        self.conv_states[layer_idx].zero_()
-        self.conv_states[layer_idx] += conv_state
-        return self.conv_states[layer_idx]
 
     def reset(self):
         self.conv_states.zero_()
@@ -306,8 +283,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -528,9 +504,6 @@ def segment_sum(input_tensor):
     return tensor_segsum
 
 
-is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
-
-
 class Zamba2MambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
@@ -594,6 +567,34 @@ class Zamba2MambaMixer(nn.Module):
         self.D = nn.Parameter(torch.ones(self.num_heads))
 
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
+
+        global causal_conv1d_update, causal_conv1d_fn
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+
+        global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
+        mamba_ssm = lazy_load_kernel("mamba-ssm")
+        selective_state_update = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
+        )
+        mamba_chunk_scan_combined = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.ssd_combined.mamba_chunk_scan_combined"
+        )
+        mamba_split_conv1d_scan_combined = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.ssd_combined.mamba_split_conv1d_scan_combined"
+        )
+
+        global is_fast_path_available
+        is_fast_path_available = all(
+            (
+                selective_state_update,
+                mamba_chunk_scan_combined,
+                mamba_split_conv1d_scan_combined,
+                causal_conv1d_fn,
+                causal_conv1d_update,
+            )
+        )
 
         if not is_fast_path_available:
             logger.warning_once(
@@ -1332,7 +1333,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

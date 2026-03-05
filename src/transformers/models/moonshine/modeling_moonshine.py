@@ -43,8 +43,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs, maybe_autocast
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_moonshine import MoonshineConfig
 
 
@@ -183,8 +183,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -288,7 +287,6 @@ class MoonshineAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         key_value_states: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
@@ -325,19 +323,14 @@ class MoonshineAttention(nn.Module):
                 .transpose(1, 2)
             )
             if is_cross_attention and past_key_values is not None:
-                key_states, value_states = past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         if not is_cross_attention:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
             if past_key_values is not None:
-                cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-                key_states, value_states = past_key_values.update(
-                    key_states, value_states, self.layer_idx, cache_kwargs
-                )
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -394,7 +387,6 @@ class MoonshineEncoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -407,7 +399,6 @@ class MoonshineEncoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -456,7 +447,6 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
         encoder_position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         encoder_position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -470,7 +460,6 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -558,7 +547,8 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_values: torch.FloatTensor,
@@ -596,7 +586,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             encoder_hidden_states=hidden_states,
         )
@@ -644,7 +634,8 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -653,7 +644,6 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -677,26 +667,21 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
         )
@@ -713,7 +698,6 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -769,7 +753,6 @@ class MoonshineModel(MoonshinePreTrainedModel):
         decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqModelOutput:
         r"""
@@ -814,7 +797,6 @@ class MoonshineModel(MoonshinePreTrainedModel):
             inputs_embeds=decoder_inputs_embeds,
             position_ids=decoder_position_ids,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -884,7 +866,6 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqLMOutput:
@@ -938,7 +919,6 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             decoder_inputs_embeds=decoder_inputs_embeds,
             decoder_position_ids=decoder_position_ids,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         logits = self.proj_out(outputs.last_hidden_state)

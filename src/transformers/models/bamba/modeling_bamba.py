@@ -44,6 +44,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import maybe_autocast
+from ...utils.import_utils import resolve_internal_import
 from .configuration_bamba import BambaConfig
 
 
@@ -165,10 +166,9 @@ class HybridMambaAttentionDynamicCache:
                 device = self.ssm_states[layer_idx].device
                 self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
 
-    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the mask"""
         kv_offset = 0
-        query_length = cache_position.shape[0]
         kv_length = self.get_seq_length(layer_idx) + query_length
         return kv_length, kv_offset
 
@@ -280,8 +280,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -363,7 +362,6 @@ class BambaAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -377,9 +375,7 @@ class BambaAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -562,12 +558,26 @@ class BambaMixer(nn.Module):
 
         global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
         mamba_ssm = lazy_load_kernel("mamba-ssm")
-        selective_state_update = getattr(mamba_ssm, "selective_state_update", None)
-        mamba_chunk_scan_combined = getattr(mamba_ssm, "mamba_chunk_scan_combined", None)
-        mamba_split_conv1d_scan_combined = getattr(mamba_ssm, "mamba_split_conv1d_scan_combined", None)
+        selective_state_update = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
+        )
+        mamba_chunk_scan_combined = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.ssd_combined.mamba_chunk_scan_combined"
+        )
+        mamba_split_conv1d_scan_combined = resolve_internal_import(
+            mamba_ssm, chained_path="ops.triton.ssd_combined.mamba_split_conv1d_scan_combined"
+        )
 
         global is_fast_path_available
-        is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
+        is_fast_path_available = all(
+            (
+                selective_state_update,
+                mamba_chunk_scan_combined,
+                mamba_split_conv1d_scan_combined,
+                causal_conv1d_fn,
+                causal_conv1d_update,
+            )
+        )
 
         if not is_fast_path_available:
             logger.warning_once(
@@ -1200,7 +1210,7 @@ class BambaModel(BambaPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

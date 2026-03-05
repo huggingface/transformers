@@ -19,8 +19,6 @@ from collections.abc import Callable
 import torch
 from torch import nn
 
-from transformers.utils.generic import check_model_inputs
-
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -35,6 +33,8 @@ from ...utils import (
     TransformersKwargs,
     logging,
 )
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
@@ -149,6 +149,8 @@ class Exaone4Config(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
@@ -260,7 +262,6 @@ class Exaone4Attention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -280,10 +281,7 @@ class Exaone4Attention(nn.Module):
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            cache_kwargs = {
-                "cache_position": cache_position,
-            }
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -330,7 +328,8 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -339,7 +338,6 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -351,23 +349,18 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
@@ -389,7 +382,6 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -412,7 +404,6 @@ class Exaone4ForCausalLM(LlamaForCausalLM):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
@@ -455,7 +446,6 @@ class Exaone4ForCausalLM(LlamaForCausalLM):
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )

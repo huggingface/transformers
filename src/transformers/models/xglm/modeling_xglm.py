@@ -90,7 +90,7 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
     @torch.no_grad()
     def forward(self, position_ids: torch.Tensor | None = None, past_key_values_length: int = 0):
         bsz, seq_len = position_ids.size()
-        position_ids += self.offset
+        position_ids = position_ids + self.offset
 
         max_pos = 2 + seq_len + past_key_values_length
         if max_pos > self.weights.size(0):
@@ -471,7 +471,7 @@ class XGLMModel(XGLMPreTrainedModel):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -490,7 +490,7 @@ class XGLMModel(XGLMPreTrainedModel):
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )

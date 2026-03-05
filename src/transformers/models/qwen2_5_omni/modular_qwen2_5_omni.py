@@ -42,8 +42,9 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import check_model_inputs, is_flash_attention_requested
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.hub import cached_file
+from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import LlamaRotaryEmbedding, rotate_half
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -304,6 +305,8 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
             with longer `max_position_embeddings`.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -368,6 +371,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         pad_token_id: int | None = None,
         bos_token_id: int | None = None,
         eos_token_id: int | None = None,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -382,6 +386,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -1673,7 +1678,8 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
         return attention_mask
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(self, input_features, feature_lens=None, aftercnn_lens=None, **kwargs: Unpack[TransformersKwargs]):
         r"""
@@ -1911,7 +1917,8 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.blocks = nn.ModuleList([Qwen2_5OmniVisionBlock(config) for _ in range(config.depth)])
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:

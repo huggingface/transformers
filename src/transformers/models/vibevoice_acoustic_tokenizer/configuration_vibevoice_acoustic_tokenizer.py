@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import math
+
 from ...configuration_utils import PretrainedConfig
 
 
@@ -30,7 +32,7 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
 
     Args:
         channels (`int`, *optional*, defaults to 1):
-            Number of input channels.
+            Number of input/output channels.
         hidden_size (`int`, *optional*, defaults to 64):
             Dimensionality of latent representations.
         kernel_size (`int`, *optional*, defaults to 7):
@@ -42,18 +44,17 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.01):
             Standard deviation for weight initialization.
         num_filters (`int`, *optional*, defaults to 32):
-            Number of filters in initial convolutional layer, and doubles after each downsampling.
+            Number of filters in initial convolutional layer, doubles after each downsampling.
         downsampling_ratios (`List[int]`, *optional*, defaults to `[2, 2, 4, 5, 5, 8]`):
-            Downsampling ratios for each layer.
+            Downsampling ratios for each encoder layer.
         depths (`List[int]`, *optional*, defaults to `[3, 3, 3, 3, 3, 3, 8]`):
-            Number of ConvNeXt blocks at each stage.
+            Number of ConvNeXt blocks at each encoder stage.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             Activation function to use.
         ffn_expansion (`int`, *optional*, defaults to 4):
             Expansion factor for feed-forward networks.
         vae_std (`float`, *optional*, defaults to 0.625):
             Standard deviation used for VAE sampling after encoder.
-    Example:
 
     ```python
     >>> from transformers import VibeVoiceAcousticTokenizerModel, VibeVoiceAcousticTokenizerConfig
@@ -101,12 +102,54 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         self.vae_std = vae_std
 
     @property
-    def upsampling_ratios(self):
-        return self.downsampling_ratios[::-1]
+    def hop_length(self):
+        return int(math.prod(self.downsampling_ratios))
 
     @property
-    def decoder_depths(self):
-        return self.depths[::-1]
+    def encoder_config(self):
+        return VibeVoiceAcousticTokenizerEncoderConfig(**self.to_dict())
+
+    @property
+    def decoder_config(self):
+        config_dict = self.to_dict()
+        config_dict["depths"] = list(reversed(config_dict["depths"]))
+        return VibeVoiceAcousticTokenizerDecoderConfig(**config_dict)
 
 
-__all__ = ["VibeVoiceAcousticTokenizerConfig"]
+class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`VibeVoiceAcousticTokenizerEncoderModel`]. It is
+    used to instantiate a VibeVoice acoustic tokenizer encoder model according to the specified arguments, defining the
+    model architecture. Instantiating a configuration with the defaults will yield a similar configuration of the
+    acoustic tokenizer within the VibeVoice architecture.
+
+    e.g. [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B)
+    """
+
+    model_type = "vibevoice_acoustic_tokenizer_encoder"
+    base_config_key = "encoder_config"
+
+
+class VibeVoiceAcousticTokenizerDecoderConfig(VibeVoiceAcousticTokenizerConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`VibeVoiceAcousticTokenizerDecoderModel`]. It is
+    used to instantiate a VibeVoice acoustic tokenizer decoder model according to the specified arguments, defining the
+    model architecture. Instantiating a configuration with the defaults will yield a similar configuration of the
+    acoustic tokenizer within the VibeVoice architecture.
+
+    e.g. [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B)
+    """
+
+    model_type = "vibevoice_acoustic_tokenizer_decoder"
+    base_config_key = "decoder_config"
+
+    @property
+    def upsampling_ratios(self):
+        return list(reversed(self.downsampling_ratios))
+
+
+__all__ = [
+    "VibeVoiceAcousticTokenizerConfig",
+    "VibeVoiceAcousticTokenizerEncoderConfig",
+    "VibeVoiceAcousticTokenizerDecoderConfig",
+]

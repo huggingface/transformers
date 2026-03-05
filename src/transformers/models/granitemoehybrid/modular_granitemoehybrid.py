@@ -24,7 +24,8 @@ from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated, HybridMambaAttentionDynamicCache
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
@@ -210,7 +211,8 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         self.rotary_emb = GraniteMoeHybridRotaryEmbedding(config) if config.position_embedding_type == "rope" else None
 
     @auto_docstring
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -240,11 +242,11 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = create_causal_mask(
-            self.config,
-            inputs_embeds,
-            attention_mask,
-            cache_position,
-            past_key_values,
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
         mamba_mask = self._update_mamba_mask(attention_mask, cache_position)
 

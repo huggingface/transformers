@@ -43,7 +43,9 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 
@@ -296,9 +298,8 @@ def eager_attention_forward(
         attn_weights = attn_weights / softcap
         attn_weights = torch.tanh(attn_weights)
         attn_weights = attn_weights * softcap
-    if attention_mask is not None:  # no matter the length, we just slice it
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
@@ -520,7 +521,8 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -556,7 +558,7 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
@@ -757,9 +759,10 @@ def token_type_ids_mask_function(
     return inner_mask
 
 
+@deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
 def create_causal_mask_mapping(
     config: PreTrainedConfig,
-    input_embeds: torch.Tensor,
+    inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
     cache_position: torch.Tensor,
     past_key_values: Cache | None,
@@ -781,7 +784,7 @@ def create_causal_mask_mapping(
 
     mask_kwargs = {
         "config": config.get_text_config(),
-        "input_embeds": input_embeds,
+        "inputs_embeds": inputs_embeds,
         "attention_mask": attention_mask,
         "cache_position": cache_position,
         "past_key_values": past_key_values,
@@ -1143,7 +1146,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         is_first_iteration=False,
         **kwargs,
     ):
-        # Overwritten -- custom `position_ids` and `pixel_values` handling
+        # Overwritten -- custom `pixel_values` handling
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1159,7 +1162,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         )
 
         # Pixel values are used only in the first iteration if available
-        # In subsquent iterations, they are already merged with text and cached
+        # In subsequent iterations, they are already merged with text and cached
         # NOTE: first iteration doesn't have to be prefill, it can be the first
         # iteration with a question and cached system prompt (continue generate from cache). NOTE: use_cache=False needs pixel_values always
         if is_first_iteration or not use_cache:
@@ -1168,9 +1171,10 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         return model_inputs
 
     @staticmethod
+    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def create_masks_for_generate(
         config: PreTrainedConfig,
-        input_embeds: torch.Tensor,
+        inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None,
         cache_position: torch.Tensor,
         past_key_values: Cache | None,
@@ -1182,7 +1186,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         # Uses the overwritten `create_masks_for_generate` with `token_type_ids` masking
         return create_causal_mask_mapping(
             config,
-            input_embeds,
+            inputs_embeds,
             attention_mask,
             cache_position,
             past_key_values,

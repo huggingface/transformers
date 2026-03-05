@@ -43,7 +43,8 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 
 
 class Siglip2Tokenizer(GemmaTokenizer):
@@ -80,9 +81,6 @@ class Siglip2Tokenizer(GemmaTokenizer):
         backend = getattr(self, "_tokenizer", None)
         if backend is not None and backend.normalizer is not None:
             backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), backend.normalizer])
-
-    def _unk_id(self) -> int:
-        raise AttributeError("_unk_id is not needed for SigLIP2.")
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -312,7 +310,7 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
 
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 
@@ -355,7 +353,7 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
             target_len, source_len = probe.shape[1], hidden_state.shape[1]
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=probe,
+                inputs_embeds=probe,
                 attention_mask=attention_mask,
                 encoder_hidden_states=hidden_state,
             )
@@ -382,7 +380,8 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
 
 class Siglip2VisionModel(SiglipVisionModel):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,

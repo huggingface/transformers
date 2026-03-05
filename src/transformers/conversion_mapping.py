@@ -27,11 +27,6 @@ from .core_model_loading import (
     WeightConverter,
     WeightRenaming,
 )
-from .utils import is_torch_available
-
-
-if is_torch_available():
-    import torch
 
 
 if TYPE_CHECKING:
@@ -66,12 +61,21 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "olmoe": "qwen2_moe",
     "exaone_moe": "qwen2_moe",
     "rt_detr_v2": "rt_detr",
+    "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
 }
 
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "timesfm2_5": [
+            WeightRenaming("ff0", "fc1"),
+            WeightRenaming("ff1", "fc2"),
+        ],
+        "olmo_hybrid": [
+            WeightRenaming("attention_layer_norm", "input_layernorm"),
+            WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
+        ],
         "qwen3_5_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
         ],
@@ -146,17 +150,14 @@ def _build_checkpoint_conversion_mapping():
         ],
         "qwen3_vl_moe": [
             WeightConverter(
-                source_patterns=[
-                    "mlp.experts.*.gate_proj.weight",
-                    "mlp.experts.*.up_proj.weight",
-                ],
+                source_patterns="mlp.experts.gate_up_proj",
                 target_patterns="mlp.experts.gate_up_proj",
-                operations=[MergeModulelist(dim=0), Concatenate(dim=1), Transpose(1, 2)],
+                operations=[Transpose(1, 2, check_dims=True), Force16BytesAlignment()],
             ),
             WeightConverter(
-                source_patterns="mlp.experts.*.down_proj.weight",
+                source_patterns="mlp.experts.down_proj",
                 target_patterns="mlp.experts.down_proj",
-                operations=[MergeModulelist(dim=0), Transpose(1, 2)],
+                operations=[Transpose(1, 2, check_dims=True), Force16BytesAlignment()],
             ),
         ],
         "phimoe": [
@@ -288,6 +289,24 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.layers.1"),
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
+        "nemotron_h": [
+            WeightRenaming("backbone.", "model."),
+            WeightRenaming("embedding.weight", "embeddings.weight"),
+            WeightConverter(
+                source_patterns=[
+                    "mixer.experts.*.up_proj.weight",
+                ],
+                target_patterns="mixer.experts.up_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "mixer.experts.*.down_proj.weight",
+                ],
+                target_patterns="mixer.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
         "jamba": [
             WeightConverter(
                 source_patterns=[
@@ -322,32 +341,32 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
     }
-    if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
-        mapping["legacy"] += [
-            WeightRenaming(
-                source_patterns=".weight_g$",
-                target_patterns=".parametrizations.weight.original0",
-            ),
-            WeightRenaming(
-                source_patterns=".weight_v$",
-                target_patterns=".parametrizations.weight.original1",
-            ),
-        ]
-    else:
-        mapping["legacy"] += [
-            WeightRenaming(
-                source_patterns="parametrizations.weight.original0",
-                target_patterns="weight_g",
-            ),
-            WeightRenaming(
-                source_patterns="parametrizations.weight.original1",
-                target_patterns="weight_v",
-            ),
-        ]
+    mapping["legacy"] += [
+        WeightRenaming(
+            source_patterns=".weight_g$",
+            target_patterns=".parametrizations.weight.original0",
+        ),
+        WeightRenaming(
+            source_patterns=".weight_v$",
+            target_patterns=".parametrizations.weight.original1",
+        ),
+    ]
 
-    mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
-    mapping["ernie4_5_moe"] += [
-        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
+    mapping["ernie4_5_moe"] = [
+        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias"),
+        WeightConverter(
+            source_patterns=[
+                "mlp.experts.*.gate_proj.weight",
+                "mlp.experts.*.up_proj.weight",
+            ],
+            target_patterns="mlp.experts.gate_up_proj",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1), Force16BytesAlignment()],
+        ),
+        WeightConverter(
+            source_patterns="mlp.experts.*.down_proj.weight",
+            target_patterns="mlp.experts.down_proj",
+            operations=[MergeModulelist(dim=0), Force16BytesAlignment()],
+        ),
     ]
     mapping["minimax_m2"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] += [
@@ -355,6 +374,22 @@ def _build_checkpoint_conversion_mapping():
     ]
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
+
+    mapping["solar_open"] = [
+        WeightConverter(
+            source_patterns=[
+                "mlp.experts.*.gate_proj.weight",
+                "mlp.experts.*.up_proj.weight",
+            ],
+            target_patterns="mlp.experts.gate_up_proj",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1), Force16BytesAlignment()],
+        ),
+        WeightConverter(
+            source_patterns="mlp.experts.*.down_proj.weight",
+            target_patterns="mlp.experts.down_proj",
+            operations=[MergeModulelist(dim=0), Force16BytesAlignment()],
+        ),
+    ]
 
     mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()
     mapping["qwen3_5_moe_text"] += mapping["qwen2_moe"].copy()
@@ -412,7 +447,9 @@ VLMS = [
     "sam3_tracker",
     "sam3_tracker_video",
     "paddleocrvl",
-    "ernie4_5_vl_moe",
+    # NOTE: Slightly different from `model_type` (to follow naming conventions in vllm/sglang)
+    "ernie4_5_vlmoe",
+    "ernie4_5_vl_moe",  # BC alias
     "detr",
 ]
 

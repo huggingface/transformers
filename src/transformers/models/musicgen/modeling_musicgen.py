@@ -163,7 +163,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -551,14 +550,14 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
         )
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
         )
@@ -1957,9 +1956,9 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
 
     def _maybe_initialize_input_ids_for_generation(
         self,
-        inputs: torch.Tensor | None = None,
-        bos_token_id: int | None = None,
-        model_kwargs: dict[str, torch.Tensor] | None = None,
+        inputs: torch.Tensor | None,
+        bos_token_id: int | None,
+        model_kwargs: dict[str, torch.Tensor],
     ) -> torch.LongTensor:
         """Initializes input ids for generation, if necessary."""
         if inputs is not None:

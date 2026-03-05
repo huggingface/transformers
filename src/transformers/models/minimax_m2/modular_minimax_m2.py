@@ -26,7 +26,8 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..flex_olmo.modeling_flex_olmo import FlexOlmoAttention
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeRotaryEmbedding,
@@ -131,11 +132,10 @@ class MiniMaxM2Config(PreTrainedConfig):
     model_type = "minimax_m2"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_rep",
-        "layers.*.self_attn.k_proj": "colwise_rep",
-        "layers.*.self_attn.v_proj": "colwise_rep",
-        "layers.*.self_attn.o_proj": "rowwise_rep",
-        "layers.*.mlp.gate": "colwise_rep",  # we need to replicate here to correctly route experts
+        "layers.*.self_attn.q_proj": "colwise_gather_output",
+        "layers.*.self_attn.k_proj": "colwise_gather_output",
+        "layers.*.self_attn.v_proj": "colwise_gather_output",
+        "layers.*.self_attn.o_proj": "rowwise_split_input",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -271,7 +271,8 @@ class MiniMaxM2PreTrainedModel(MixtralPreTrainedModel):
 
 
 class MiniMaxM2Model(MixtralModel):
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -281,7 +282,6 @@ class MiniMaxM2Model(MixtralModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -293,20 +293,16 @@ class MiniMaxM2Model(MixtralModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         # No sliding window opposed to mixtral
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -321,7 +317,6 @@ class MiniMaxM2Model(MixtralModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )

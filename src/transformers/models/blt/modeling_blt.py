@@ -38,8 +38,9 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs, maybe_autocast
-from ...utils.output_capturing import OutputRecorder
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_blt import (
     BltConfig,
     BltGlobalTransformerConfig,
@@ -251,8 +252,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -817,21 +817,22 @@ class BltGlobalTransformer(BltPreTrainedModel):
 
         self.post_init()
 
+    @deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
     def forward(
         self,
-        input_embeds: torch.Tensor,
+        inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        batch_size, seq_len, _ = input_embeds.shape
-        hidden_states = self.token_embedding_projection(input_embeds)
+        batch_size, seq_len, _ = inputs_embeds.shape
+        hidden_states = self.token_embedding_projection(inputs_embeds)
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
         if position_ids is None:
             position_ids = (
-                torch.arange(input_embeds.shape[1], device=input_embeds.device).unsqueeze(0).expand(batch_size, -1)
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0).expand(batch_size, -1)
             )
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         for i, layer in enumerate(self.layers):
@@ -943,7 +944,7 @@ class BltPatcher(BltPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -1213,7 +1214,8 @@ class BltModel(BltPreTrainedModel):
             self.patcher = None
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1284,7 +1286,7 @@ class BltModel(BltPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=encoder_embeds,
+            inputs_embeds=encoder_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
@@ -1315,7 +1317,7 @@ class BltModel(BltPreTrainedModel):
         global_position_ids = global_cache_position.unsqueeze(0)
         global_causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=encoder_cross_states,
+            inputs_embeds=encoder_cross_states,
             attention_mask=None,
             cache_position=global_cache_position,
             past_key_values=None,
@@ -1323,7 +1325,7 @@ class BltModel(BltPreTrainedModel):
         )
 
         global_hidden_states = self.global_transformer(
-            input_embeds=encoder_cross_states,
+            inputs_embeds=encoder_cross_states,
             attention_mask=global_causal_mask,
             position_ids=global_position_ids,
             **kwargs,

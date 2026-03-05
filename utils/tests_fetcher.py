@@ -78,6 +78,8 @@ CORE_FILES = (
     ".circleci/create_circleci_config.py",
     "src/transformers/modeling_utils.py",
     "src/transformers/core_model_loading.py",
+    "src/transformers/cache_utils.py",
+    "src/transformers/generation/utils.py",
 )
 
 
@@ -1056,7 +1058,7 @@ def parse_commit_message(commit_message: str) -> dict[str, bool]:
 
 JOB_TO_TEST_FILE = {
     "tests_torch": r"tests/models/.*/test_modeling_.*",
-    "tests_generate": r"tests/models/.*/test_modeling_.*",
+    "tests_generate": r"(tests/models/.*/test_modeling_.*|tests/generation/test_.*\.py)",
     "tests_tokenization": r"tests/(?:models/.*/test_tokenization.*|test_tokenization_mistral_common\.py)",
     "tests_processors": r"tests/models/.*/test_(?!(?:modeling_|tokenization_)).*",  # takes feature extractors, image processors, processors
     "examples_torch": r"examples/pytorch/.*test_.*",
@@ -1067,6 +1069,7 @@ JOB_TO_TEST_FILE = {
     "tests_hub": r"tests/.*",
     "tests_non_model": r"tests/[^/]*?/test_.*\.py",
     "tests_training_ci": r"tests/models/.*/test_modeling_.*",
+    "tests_tensor_parallel_ci": r"tests/models/.*/test_modeling_.*",
 }
 
 

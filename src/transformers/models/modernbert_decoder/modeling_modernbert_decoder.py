@@ -38,7 +38,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_modernbert_decoder import ModernBertDecoderConfig
 
 
@@ -221,8 +222,7 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     # Use the pre-computed attention mask
-    causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-    attn_weights = attn_weights + causal_mask
+    attn_weights = attn_weights + attention_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
@@ -464,7 +464,8 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.tok_embeddings = value
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -509,7 +510,7 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": hidden_states,
+                "inputs_embeds": hidden_states,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,

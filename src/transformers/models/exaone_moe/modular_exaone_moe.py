@@ -23,7 +23,7 @@ from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, is_grouped_mm_available
+from ...utils import TransformersKwargs
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3MoE,
     DeepseekV3NaiveMoe,
@@ -285,9 +285,7 @@ class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
         "attentions": ExaoneMoeAttention,
         "router_logits": ExaoneMoeSparseMoEBlock,
     }
-    _can_compile_fullgraph = (
-        is_grouped_mm_available()
-    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
+
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
@@ -316,7 +314,6 @@ class ExaoneMoeForCausalLM(Exaone4ForCausalLM):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
@@ -359,7 +356,6 @@ class ExaoneMoeForCausalLM(Exaone4ForCausalLM):
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )

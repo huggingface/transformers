@@ -25,7 +25,8 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..aimv2.modeling_aimv2 import Aimv2Attention, Aimv2EncoderLayer
 from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
@@ -201,7 +202,8 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:

@@ -37,8 +37,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs, maybe_autocast
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_jetmoe import JetMoeConfig
 
 
@@ -419,8 +419,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -577,7 +576,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # TopK gating fails fullgraph compilation at "expert_size = expert_size.tolist()"
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="gate", index=1),
+        "router_logits": [OutputRecorder(JetMoeAttention, index=2), OutputRecorder(JetMoeTopKGating, index=4)],
         "hidden_states": JetMoeDecoderLayer,
         "attentions": OutputRecorder(JetMoeAttention, index=1),
     }
@@ -611,7 +610,8 @@ class JetMoeModel(JetMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -643,7 +643,7 @@ class JetMoeModel(JetMoePreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -767,6 +767,8 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         self.aux_loss_coef = config.aux_loss_coef
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.tie_word_embeddings = config.tie_word_embeddings
+        self.num_experts = config.num_local_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -795,6 +797,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 

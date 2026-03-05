@@ -36,8 +36,8 @@ from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedConfig, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
 from .vision import IdeficsVisionEmbeddings, IdeficsVisionTransformer
@@ -156,7 +156,7 @@ def expand_inputs_for_generation(
     return input_ids, model_kwargs
 
 
-def freeze_model(model, module_exceptions=[]):
+def freeze_model(model, module_exceptions=()):
     mapping = {
         "LayerNorm": nn.LayerNorm,
         "Linear": nn.Linear,
@@ -932,14 +932,15 @@ class IdeficsModel(IdeficsPreTrainedModel):
         if config.freeze_vision_layers:
             freeze_model(self.vision_model, module_exceptions=config.freeze_vision_module_exceptions)
 
-    def freeze_text_layers(self, module_exceptions=[]):
+    def freeze_text_layers(self, module_exceptions=()):
         for module in [self.layers, self.norm]:
             freeze_model(module, module_exceptions=module_exceptions)
 
-    def freeze_vision_layers(self, module_exceptions=[]):
+    def freeze_vision_layers(self, module_exceptions=()):
         freeze_model(self.vision_model, module_exceptions=module_exceptions)
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -1060,7 +1061,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,

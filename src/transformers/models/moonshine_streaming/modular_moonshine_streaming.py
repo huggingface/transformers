@@ -28,8 +28,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..llama.modeling_llama import LlamaMLP, eager_attention_forward
 from ..moonshine.modeling_moonshine import (
     MoonshineDecoder,
@@ -284,7 +284,8 @@ class MoonshineStreamingEncoder(MoonshineStreamingPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_values: torch.FloatTensor,
@@ -311,7 +312,7 @@ class MoonshineStreamingEncoder(MoonshineStreamingPreTrainedModel):
         if attention_mask is not None:
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
             }
             per_layer_attention_mask = [
@@ -348,7 +349,8 @@ class MoonshineStreamingDecoder(MoonshineDecoder):
         else:
             self.proj = nn.Identity()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -357,7 +359,6 @@ class MoonshineStreamingDecoder(MoonshineDecoder):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -385,7 +386,6 @@ class MoonshineStreamingDecoder(MoonshineDecoder):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             **kwargs,

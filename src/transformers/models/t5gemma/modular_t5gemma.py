@@ -22,6 +22,12 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...masking_utils import (
+    create_bidirectional_mask,
+    create_bidirectional_sliding_window_mask,
+    create_causal_mask,
+    create_sliding_window_causal_mask,
+)
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -41,8 +47,8 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -50,8 +56,6 @@ from ..gemma2.modeling_gemma2 import (
     Gemma2PreTrainedModel,
     Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
-    create_causal_mask,
-    create_sliding_window_causal_mask,
     eager_attention_forward,
 )
 
@@ -398,30 +402,6 @@ class T5GemmaCrossAttention(Gemma2Attention):
         return attn_output, attn_weights
 
 
-def bidirectional_mask_function(attention_mask: torch.Tensor | None) -> Callable:
-    """
-    This creates bidirectional attention mask.
-    """
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        if attention_mask is None:
-            return torch.ones((), dtype=torch.bool)
-        return attention_mask[batch_idx, kv_idx].to(torch.bool)
-
-    return inner_mask
-
-
-def sliding_window_bidirectional_mask_function(sliding_window: int) -> Callable:
-    """
-    This creates bidirectional attention mask with sliding window.
-    """
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        return (q_idx - sliding_window < kv_idx) & (kv_idx < q_idx + sliding_window)
-
-    return inner_mask
-
-
 class T5GemmaEncoderLayer(GradientCheckpointingLayer):
     """Encoder sub-layer."""
 
@@ -676,7 +656,8 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -705,22 +686,12 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
-                "past_key_values": None,
-                "position_ids": position_ids,
             }
             self_attn_mask_mapping = {
-                "full_attention": create_causal_mask(
-                    **mask_kwargs,
-                    or_mask_function=bidirectional_mask_function(attention_mask),
-                ),
-                "sliding_attention": create_sliding_window_causal_mask(
-                    **mask_kwargs,
-                    or_mask_function=sliding_window_bidirectional_mask_function(self.config.sliding_window),
-                    and_mask_function=bidirectional_mask_function(attention_mask),
-                ),
+                "full_attention": create_bidirectional_mask(**mask_kwargs),
+                "sliding_attention": create_bidirectional_sliding_window_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds
@@ -770,7 +741,8 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -811,7 +783,7 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
@@ -823,19 +795,13 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
             }
 
         if not isinstance(cross_attn_mask_mapping := encoder_attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "input_embeds": encoder_hidden_states,
-                "attention_mask": encoder_attention_mask,
-                "cache_position": cache_position,
-                "past_key_values": None,
-                "position_ids": None,
-            }
             cross_attn_mask_mapping = {
-                "full_attention": create_causal_mask(
-                    **mask_kwargs,
-                    or_mask_function=bidirectional_mask_function(encoder_attention_mask),
-                ),
+                "full_attention": create_bidirectional_mask(
+                    config=self.config,
+                    inputs_embeds=inputs_embeds,
+                    attention_mask=encoder_attention_mask,
+                    encoder_hidden_states=encoder_hidden_states,
+                )
             }
 
         hidden_states = inputs_embeds

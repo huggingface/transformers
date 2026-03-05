@@ -44,8 +44,8 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
 from ..gemma3.configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 from ..gemma3.modeling_gemma3 import (
@@ -66,7 +66,6 @@ from ..t5gemma.modeling_t5gemma import (
     T5GemmaClassificationHead,
     T5GemmaEncoderLayer,
     T5GemmaLMHead,
-    bidirectional_mask_function,
 )
 
 
@@ -829,7 +828,8 @@ class T5Gemma2TextEncoder(T5Gemma2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -856,7 +856,7 @@ class T5Gemma2TextEncoder(T5Gemma2PreTrainedModel):
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
             }
             self_attn_mask_mapping = {
@@ -961,7 +961,6 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         )
         return special_image_mask
 
-    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -990,16 +989,13 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
 
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
-        hidden_states = self.text_model(
+        outputs = self.text_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             **kwargs,
         )
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-        )
+        return outputs
 
 
 class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
@@ -1032,7 +1028,8 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
         self.rotary_emb = T5Gemma2RotaryEmbedding(config)
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -1068,36 +1065,32 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
+            # this masking function does nothing to masking but forces `allow_is_causal_skip` to be False
+            # as we always need a mask during decoding for merged attention.
+            dummy_and_mask_function = lambda *args: torch.tensor(True, dtype=torch.bool)  # noqa
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
                 "position_ids": position_ids,
+                "and_mask_function": dummy_and_mask_function,
             }
-            # this masking function did nothing to masking but forces `allow_is_causal_skip` to be False
-            # as we always need a mask during decoding for merged attention.
-            mask_kwargs["and_mask_function"] = lambda *args: torch.tensor(True, dtype=torch.bool)
             self_attn_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
         if not isinstance(cross_attn_mask_mapping := encoder_attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "input_embeds": encoder_hidden_states,
-                "attention_mask": encoder_attention_mask,
-                "cache_position": cache_position,
-                "past_key_values": None,
-                "position_ids": None,
-            }
             cross_attn_mask_mapping = {
-                "full_attention": create_causal_mask(
-                    **mask_kwargs,
-                    or_mask_function=bidirectional_mask_function(encoder_attention_mask),
-                ),
+                "full_attention": create_bidirectional_mask(
+                    config=self.config,
+                    inputs_embeds=inputs_embeds,
+                    attention_mask=encoder_attention_mask,
+                    encoder_hidden_states=encoder_hidden_states,
+                    and_mask_function=dummy_and_mask_function,
+                )
             }
 
         merged_attn_mask_mapping = {

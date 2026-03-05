@@ -14,7 +14,6 @@
 
 
 import torch
-from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -23,8 +22,8 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel
 from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RMSNorm, Olmo2RotaryEmbedding
 from ..olmoe.modeling_olmoe import (
@@ -32,6 +31,7 @@ from ..olmoe.modeling_olmoe import (
     OlmoeForCausalLM,
     OlmoeMLP,
     OlmoeSparseMoeBlock,
+    OlmoeTopKRouter,
 )
 
 
@@ -126,8 +126,9 @@ class FlexOlmoConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.v_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the added norm on q and k
-        "layers.*.mlp.experts.gate_up_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -215,6 +216,10 @@ class FlexOlmoAttention(Olmo2Attention):
     pass
 
 
+class FlexOlmoTopKRouter(OlmoeTopKRouter):
+    pass
+
+
 class FlexOlmoSparseMoeBlock(OlmoeSparseMoeBlock):
     pass
 
@@ -235,7 +240,6 @@ class FlexOlmoDecoderLayer(OlmoeDecoderLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.FloatTensor:
@@ -247,7 +251,6 @@ class FlexOlmoDecoderLayer(OlmoeDecoderLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -266,7 +269,7 @@ class FlexOlmoDecoderLayer(OlmoeDecoderLayer):
 # of the transformers library. For example, it uses the newer mechanisms of recording submodule outputs.
 class FlexOlmoPreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(FlexOlmoTopKRouter, index=0),
         "hidden_states": FlexOlmoDecoderLayer,
         "attentions": FlexOlmoAttention,
     }
@@ -277,7 +280,8 @@ class FlexOlmoPreTrainedModel(MixtralPreTrainedModel):
 # FlexOlmo model is identical to Mixtral model except:
 # - FlexOlmo does not use sliding window attention.
 class FlexOlmoModel(MixtralModel):
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -287,7 +291,6 @@ class FlexOlmoModel(MixtralModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -299,19 +302,15 @@ class FlexOlmoModel(MixtralModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -329,7 +328,6 @@ class FlexOlmoModel(MixtralModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 

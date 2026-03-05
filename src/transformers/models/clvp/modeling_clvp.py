@@ -925,7 +925,7 @@ class ClvpEncoder(ClvpPreTrainedModel):
         # expand attention_mask and create position_ids if needed
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
 
@@ -1093,7 +1093,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -1266,9 +1266,9 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
 
     def _prepare_model_inputs(
         self,
-        inputs: torch.Tensor | None = None,
-        bos_token_id: int | None = None,
-        model_kwargs: dict[str, torch.Tensor] | None = None,
+        inputs: torch.Tensor | None,
+        bos_token_id: int | None,
+        model_kwargs: dict[str, torch.Tensor],
     ) -> tuple[torch.Tensor, str | None, dict[str, torch.Tensor]]:
         """
         This function extracts the model-specific `inputs` for generation.

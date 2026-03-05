@@ -22,7 +22,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import is_grouped_mm_available, logging
+from ...utils import logging
 from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -140,12 +140,19 @@ class DeepseekV2Config(LlamaConfig):
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.q_a_proj": "colwise",
         "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
 
     model_type = "deepseek_v2"
@@ -363,7 +370,6 @@ class DeepseekV2Attention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
@@ -384,6 +390,7 @@ class DeepseekV2Attention(nn.Module):
         k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
         k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+
         q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
 
         k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
@@ -391,9 +398,7 @@ class DeepseekV2Attention(nn.Module):
         key_states = torch.cat((k_nope, k_pe), dim=-1)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
@@ -433,10 +438,6 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
 
 
 class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
-    _can_compile_fullgraph = (
-        is_grouped_mm_available()
-    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
-
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)

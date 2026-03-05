@@ -40,8 +40,8 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
-from ...utils.generic import can_return_tuple, check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_switch_transformers import SwitchTransformersConfig
 
 
@@ -640,7 +640,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         "hidden_states": SwitchTransformersBlock,
         "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),
         "cross_attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.1"),
-        "router_logits": SwitchTransformersTop1Router,
+        "router_logits": OutputRecorder(SwitchTransformersTop1Router, index=2),
     }
 
     def __init__(self, config):
@@ -667,7 +667,8 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
         self.gradient_checkpointing = False
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids=None,
@@ -721,7 +722,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         if self.config.is_decoder:
             causal_mask = create_causal_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 cache_position=cache_position,
                 past_key_values=past_key_values,
@@ -971,7 +972,11 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
     ) -> tuple[torch.FloatTensor] | Seq2SeqMoEOutput:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                output_router_logits=output_router_logits,
+                **kwargs,
             )
 
         hidden_states = encoder_outputs[0]
@@ -989,6 +994,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             cache_position=cache_position,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -1049,11 +1055,11 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            decoder_router_logits=decoder_outputs.router_probs,
+            decoder_router_logits=decoder_outputs.router_logits,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            encoder_router_logits=encoder_outputs.router_probs,
+            encoder_router_logits=encoder_outputs.router_logits,
         )
 
     def _unpack_router_logits(self, router_outputs):
