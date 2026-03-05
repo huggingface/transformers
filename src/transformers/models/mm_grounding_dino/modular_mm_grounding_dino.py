@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,9 +16,10 @@ import math
 import torch
 from torch import nn
 
+from ... import initialization as init
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..grounding_dino.modeling_grounding_dino import (
@@ -50,20 +50,8 @@ class MMGroundingDinoConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `SwinConfig()`):
             The configuration of the backbone model.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
-            library.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `BertConfig`):
             The config object or dictionary of the text backbone.
         num_queries (`int`, *optional*, defaults to 900):
@@ -140,6 +128,8 @@ class MMGroundingDinoConfig(PreTrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -166,10 +156,6 @@ class MMGroundingDinoConfig(PreTrainedConfig):
     def __init__(
         self,
         backbone_config=None,
-        backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
         text_config=None,
         num_queries=900,
         encoder_layers=6,
@@ -207,40 +193,17 @@ class MMGroundingDinoConfig(PreTrainedConfig):
         positional_embedding_temperature=20,
         init_std=0.02,
         layer_norm_eps=1e-5,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
-            backbone_config = CONFIG_MAPPING["swin"](
-                window_size=7,
-                image_size=224,
-                embed_dim=96,
-                depths=[2, 2, 6, 2],
-                num_heads=[3, 6, 12, 24],
-                out_indices=[2, 3, 4],
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.pop("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
+        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            default_config_type="swin",
+            default_config_kwargs={"out_indices": [2, 3, 4]},
+            **kwargs,
         )
 
-        if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the text config with default values (`BertConfig`).")
-
         self.backbone_config = backbone_config
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
         self.num_queries = num_queries
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -274,6 +237,7 @@ class MMGroundingDinoConfig(PreTrainedConfig):
             text_config["model_type"] = text_config.get("model_type", "bert")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
+            logger.info("text_config is None. Initializing the text config with default values (`BertConfig`).")
             text_config = CONFIG_MAPPING["bert"]()
 
         self.text_config = text_config
@@ -290,6 +254,7 @@ class MMGroundingDinoConfig(PreTrainedConfig):
         self.positional_embedding_temperature = positional_embedding_temperature
         self.init_std = init_std
         self.layer_norm_eps = layer_norm_eps
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
@@ -318,10 +283,11 @@ class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):
 
 
 class MMGroundingDinoPreTrainedModel(GroundingDinoPreTrainedModel):
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MMGroundingDinoContrastiveEmbedding):
-            nn.init.constant_(module.bias, -math.log((1 - 0.01) / 0.01))
+            init.constant_(module.bias, -math.log((1 - 0.01) / 0.01))
 
 
 class MMGroundingDinoConvEncoder(GroundingDinoConvEncoder):
@@ -397,12 +363,12 @@ class MMGroundingDinoMLPPredictionHead(GroundingDinoMLPPredictionHead):
 
 
 class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroundingDinoPreTrainedModel):
-    _tied_weights_keys = [
-        r"bbox_embed\.[1-9]\d*",
-        r"model\.decoder\.bbox_embed\.[0-9]\d*",
-        r"class_embed\.[1-9]\d*",
-        r"model\.decoder\.class_embed\.[0-9]\d*",
-    ]
+    _tied_weights_keys = {
+        r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
+        r"class_embed.(?![0])\d+": r"^class_embed.0",
+        "model.decoder.bbox_embed": "bbox_embed",
+        "model.decoder.class_embed": "class_embed",
+    }
 
     def __init__(self, config: MMGroundingDinoConfig):
         MMGroundingDinoPreTrainedModel.__init__(self, config)
@@ -421,13 +387,9 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
                 for _ in range(config.decoder_layers)
             ]
         )
-
-        # hack for box-refinement
-        self.model.decoder.bbox_embed = self.bbox_embed
-        # hack implementation for two-stage
-        self.model.decoder.class_embed = self.class_embed
-
         # Initialize weights and apply final processing
+        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
+        self.model.decoder.bbox_embed = self.bbox_embed
         self.post_init()
 
 

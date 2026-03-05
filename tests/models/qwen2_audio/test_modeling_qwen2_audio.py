@@ -37,6 +37,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -134,13 +135,15 @@ class Qwen2AudioModelTester:
 
 
 @require_torch
-class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Qwen2AudioForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `Qwen2AudioForConditionalGeneration`.
     """
 
     all_model_classes = (Qwen2AudioForConditionalGeneration,) if is_torch_available() else ()
-
+    pipeline_model_mapping = {"any-to-any": Qwen2AudioForConditionalGeneration} if is_torch_available() else {}
     _is_composite = True
 
     def setUp(self):
@@ -154,6 +157,10 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2Audio models")
     def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(reason="Qwen2Audio has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):

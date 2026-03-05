@@ -98,7 +98,7 @@ def bytes_to_giga_bytes(bytes):
   return bytes / 1024 / 1024 / 1024
 ```
 
-دعونا نستدعي [`torch.cuda.max_memory_allocated`](https://pytorch.org/docs/stable/generated/torch.cuda.max_memory_allocated.html) لقياس ذروة تخصيص ذاكرة وحدة معالجة الرسومات (GPU).
+دعونا نستدعي [`torch.cuda.memory.max_memory_allocated`](https://docs.pytorch.org/docs/stable/generated/torch.cuda.memory.max_memory_allocated.html) لقياس ذروة تخصيص ذاكرة وحدة معالجة الرسومات (GPU).
 
 ```python
 bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
@@ -273,7 +273,7 @@ flush()
 
 يسمح تكميم 4 بت بتشغيل النموذج على وحدات معالجة الرسومات مثل RTX3090 و V100 و T4 والتي يمكن الوصول إليها بسهولة لمعظم الأشخاص.
 
-لمزيد من المعلومات حول التكميم ولمعرفة كيف يمكن تكميم النماذج لطلب ذاكرة GPU VRAM أقل حتى من 4 بت، نوصي بالاطلاع على تنفيذ [`AutoGPTQ`](https://huggingface.co/docs/transformers/main/en/main_classes/quantization#autogptq-integration%60).
+لمزيد من المعلومات حول التكميم ولمعرفة كيف يمكن تكميم النماذج لطلب ذاكرة GPU VRAM أقل حتى من 4 بت، نوصي بالاطلاع على تنفيذ [`GPT-QModel`](https://huggingface.co/docs/transformers/main/en/main_classes/quantization#gptqmodel).
 
 > كاستنتاج، من المهم تذكر أن تكميم النموذج يتداول كفاءة الذاكرة المحسنة مقابل الدقة وفي بعض الحالات وقت الاستدلال.
 

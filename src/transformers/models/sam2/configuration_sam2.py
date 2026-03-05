@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -152,7 +151,7 @@ class Sam2VisionConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `Sam2HieraDetConfig()`):
             Configuration for the vision backbone. This is used to instantiate the backbone using
             `AutoModel.from_config`.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):
@@ -369,6 +368,14 @@ class Sam2Config(PreTrainedConfig):
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
+    <Tip>
+
+    SAM2 checkpoints with `model_type="sam2_video"` are compatible with `Sam2Model` since the video variant weights
+    are a superset of the image-only model weights. You may see a warning about model type mismatch when loading
+    such checkpoints, which can be safely ignored in this case.
+
+    </Tip>
+
     Args:
         vision_config (Union[`dict`, `Sam2VisionConfig`], *optional*):
             Dictionary of configuration options used to initialize [`Sam2VisionConfig`].
@@ -390,7 +397,7 @@ class Sam2Config(PreTrainedConfig):
     ... )
 
     >>> # Initializing a Sam2Config with `"facebook/sam2.1_hiera_tiny"` style configuration
-    >>> configuration = Sam2config()
+    >>> configuration = Sam2Config()
 
     >>> # Initializing a Sam2Model (with random weights) from the `"facebook/sam2.1_hiera_tiny"` style configuration
     >>> model = Sam2Model(configuration)

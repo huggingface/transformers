@@ -66,7 +66,7 @@ class FalconMambaModelTester:
         num_labels=3,
         num_choices=4,
         scope=None,
-        tie_word_embeddings=True,
+        tie_word_embeddings=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -270,6 +270,9 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         if is_torch_available()
         else {}
     )
+
+    def test_enable_input_require_grads(self):
+        self.skipTest("FalconMamba currently requires CUDA/Metal/XPU to run enable_input_require_grads.")
 
     def setUp(self):
         self.model_tester = FalconMambaModelTester(self)

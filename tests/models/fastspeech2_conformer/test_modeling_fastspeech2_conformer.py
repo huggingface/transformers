@@ -127,6 +127,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastSpeech2ConformerModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
+    test_torch_exportable = False
     is_encoder_decoder = True
 
     def setUp(self):
@@ -200,7 +201,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
             _, info = FastSpeech2ConformerModel.from_pretrained(tmpdirname, output_loading_info=True)
-        self.assertEqual(info["missing_keys"], [])
+        self.assertEqual(info["missing_keys"], set())
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -222,6 +223,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             "return_dict",
             "output_attentions",
             "output_hidden_states",
+            "kwargs",
         ]
         self.assertListEqual(arg_names, expected_arg_names)
 
@@ -399,7 +401,7 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
         model.to(torch_device)
         # Set self.training manually to keep deterministic but run the training path
         model.training = True
-        set_seed(0)
+        set_seed(42)
 
         tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
         text = "Test that this generates speech"
@@ -547,6 +549,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     is_encoder_decoder = True
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = FastSpeech2ConformerWithHifiGanTester(self)
@@ -618,7 +621,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
             _, info = FastSpeech2ConformerWithHifiGan.from_pretrained(tmpdirname, output_loading_info=True)
-        self.assertEqual(info["missing_keys"], [])
+        self.assertEqual(info["missing_keys"], set())
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -640,6 +643,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
             "return_dict",
             "output_attentions",
             "output_hidden_states",
+            "kwargs",
         ]
         self.assertListEqual(arg_names, expected_arg_names)
 

@@ -80,6 +80,9 @@ class ColQwen2Config(PreTrainedConfig):
                 f"Invalid type for `vlm_config`. Expected `PreTrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
             )
 
+        if not hasattr(vlm_config, "vocab_size"):
+            vlm_config.vocab_size = vlm_config.get_text_config().vocab_size
+
         self.vlm_config = vlm_config
         self.embedding_dim = embedding_dim
         self.initializer_range = initializer_range

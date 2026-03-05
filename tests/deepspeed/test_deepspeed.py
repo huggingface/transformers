@@ -23,9 +23,8 @@ from functools import partial
 import datasets
 from parameterized import parameterized
 
-import tests.trainer.test_trainer
 import transformers
-from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
+from tests.trainer.trainer_test_utils import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.integrations.deepspeed import (
     HfDeepSpeedConfig,
@@ -55,15 +54,21 @@ from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_dev
 
 
 if is_torch_available():
-    import torch
+    import os
 
-    from tests.trainer.test_trainer import (  # noqa
+    import torch
+    import torch.nn as nn
+
+    from tests.trainer.trainer_test_utils import (  # noqa
         RegressionModelConfig,
         RegressionPreTrainedModel,
     )
+    from tests.trainer.trainer_test_utils import (
+        get_regression_trainer as _get_regression_trainer,
+    )
 
     # hack to restore original logging level pre #21700
-    get_regression_trainer = partial(tests.trainer.test_trainer.get_regression_trainer, log_level="info")
+    get_regression_trainer = partial(_get_regression_trainer, log_level="info")
 
 
 set_seed(42)
@@ -271,18 +276,75 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                     AutoModel.from_pretrained(T5_TINY)
         self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
 
+    @require_torch_accelerator
+    def test_from_config_zero3_weight_init(self):
+        # test that from_config() correctly initializes weights under zero3
+        # (regression test: without the fix, _init_weights runs on partitioned empty tensors
+        # and custom initialization is silently skipped)
+        import deepspeed
+        import torch
+
+        from transformers import AutoConfig, AutoModelForCausalLM
+
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+            "bf16": {
+                "enabled": True,
+            },
+        }
+
+        config = AutoConfig.from_pretrained(GPT2_TINY)
+
+        # 1. Baseline: from_config without DeepSpeed, in bf16 to match ZeRO-3 dtype
+        torch.manual_seed(42)
+        baseline_model = AutoModelForCausalLM.from_config(config, dtype=torch.bfloat16)
+        baseline_std = baseline_model.transformer.h[0].attn.c_attn.weight.data.float().std().item()
+        del baseline_model
+
+        # 2. ZeRO-3: from_config with DeepSpeed
+        torch.manual_seed(42)
+        HfDeepSpeedConfig(ds_config)
+
+        with mockenv_context(**self.dist_env_1_gpu):
+            model = AutoModelForCausalLM.from_config(config)
+
+        param = model.transformer.h[0].attn.c_attn.weight
+        with deepspeed.zero.GatheredParameters([param]):
+            zero3_std = param.data.float().std().item()
+
+        # Weight std should be in the same ballpark between baseline and ZeRO-3.
+        # The seeds produce slightly different values due to different init ordering,
+        # but delta=0.3 catches the buggy case (ratio ~0.58, i.e. 42% off).
+        ratio = zero3_std / baseline_std
+        self.assertAlmostEqual(
+            ratio,
+            1.0,
+            delta=0.3,
+            msg=(
+                f"ZeRO-3 from_config() weight init diverges from baseline: "
+                f"baseline_std={baseline_std:.6f}, zero3_std={zero3_std:.6f}, ratio={ratio:.4f}"
+            ),
+        )
+
     def test_init_zero3_missing_params(self):
         # test that zero.Init() for missing parameters works correctly under zero3
         import deepspeed
         import torch
 
-        from transformers.models.gpt2.modeling_gpt2 import GPT2PreTrainedModel
+        from transformers.models.gpt2.modeling_gpt2 import GPT2Model, GPT2PreTrainedModel
 
         class TinyGPT2WithUninitializedWeights(GPT2PreTrainedModel):
             def __init__(self, config):
                 super().__init__(config)
-                self.transformer = AutoModel.from_pretrained(GPT2_TINY, config=config)
+                self.transformer = GPT2Model(config)
+                # AutoModel.from_pretrained(GPT2_TINY, config=config)
                 self.new_head = torch.nn.Linear(config.hidden_size, config.vocab_size, bias=True)
+
+                # Initialize weights and apply final processing
+                self.post_init()
 
             def forward(self, *args, **kwargs):
                 transformer_outputs = self.transformer(*args, **kwargs)
@@ -292,8 +354,8 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             def _init_weights(self, module):
                 super()._init_weights(module)
                 if module is self.new_head:
-                    self.new_head.weight.data.fill_(-100.0)
-                    self.new_head.bias.data.fill_(+100.0)
+                    nn.init.constant_(self.new_head.weight.data, -100.0)
+                    nn.init.constant_(self.new_head.bias.data, 100.0)
 
         ds_config = {
             "train_batch_size": 1,
@@ -313,7 +375,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 with CaptureLogger(logger) as cl:
                     model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
-        self.assertRegex(cl.out, r"newly initialized.*new_head\.bias.*new_head\.weight")
+        self.assertRegex(cl.out, r"new_head\.(weight|bias)\s*\|\s*MISSING")
         with deepspeed.zero.GatheredParameters([model.new_head.weight, model.new_head.bias]):
             self.assertTrue(
                 torch.allclose(model.new_head.weight, torch.tensor(-100.0, device=model.new_head.weight.device)),
@@ -335,7 +397,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 with CaptureLogger(logger) as cl:
                     model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
         self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
-        self.assertRegex(cl.out, r"newly initialized.*new_head\.bias.*new_head\.weight")
+        self.assertRegex(cl.out, r"new_head\.(weight|bias)\s*\|\s*MISSING")
         self.assertTrue(
             torch.allclose(model.new_head.weight, torch.tensor(-100.0, device=model.new_head.weight.device)),
         )
@@ -367,49 +429,143 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             with mockenv_context(**self.dist_env_1_gpu):
                 logger = logging.get_logger("transformers.modeling_utils")
                 with CaptureLogger(logger) as cl:
-                    model = AutoModel.from_pretrained(GPTJ_TINY)
+                    model = AutoModel.from_pretrained(GPTJ_TINY, dtype=torch.float32)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
 
         # The model weights are in BF16 as per deepspeed config
         self.assertTrue(str(model.h[0].attn.q_proj.weight.dtype) == "torch.bfloat16")
         good_deepspeed_sin_cos = model.h[0].attn.embed_positions
 
-        # Monkeypatches the function that creates RoPE embeddings using the INCORRECT torch.arange() pattern, and
-        # then recreates the model
-        def bad_deepspeed_create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
-            inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
-            # Incorrect pattern here: torch.arange has dtype=torch.float32 as its argument, and it will automatically
-            # converted to BF16 by DeepSpeed
-            sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=inv_freq.dtype), inv_freq)
-            return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
-
         good_deepspeed_create_sinusoidal_positions = transformers.models.gptj.modeling_gptj.create_sinusoidal_positions
-        transformers.models.gptj.modeling_gptj.create_sinusoidal_positions = bad_deepspeed_create_sinusoidal_positions
 
-        with LoggingLevel(logging.INFO):
-            with mockenv_context(**self.dist_env_1_gpu):
-                logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
-                    model = AutoModel.from_pretrained(GPTJ_TINY)
-        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
-
-        self.assertTrue(str(model.h[0].attn.q_proj.weight.dtype) == "torch.bfloat16")
-        bad_deepspeed_sin_cos = model.h[0].attn.embed_positions
-
-        # Compares the two values: the two sets of values are different, and the correct one matches the torch
-        # (i.e. outside DeepSpeed) version.
         good_torch_sin_cos = good_deepspeed_create_sinusoidal_positions(
             model.config.max_position_embeddings, model.config.rotary_dim
         )
-        self.assertFalse(torch.allclose(good_deepspeed_sin_cos, bad_deepspeed_sin_cos))
+        # check that we get the same results either with torch or deepspeed
         torch.testing.assert_close(good_torch_sin_cos, good_deepspeed_sin_cos.cpu())
 
-        # Finally, we can see that the incorrect pattern is okay on vanilla torch, demonstrating that this issue is
-        # exclusive to DeepSpeed
-        bad_torch_sin_cos = bad_deepspeed_create_sinusoidal_positions(
-            model.config.max_position_embeddings, model.config.rotary_dim
+    def test_init_zero3_moe_weight_conversion(self):
+        # test that weight conversions (MoE expert fusion) work correctly under zero3
+        import tempfile
+
+        import deepspeed
+
+        from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
+
+        tiny_config = Qwen3MoeConfig(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=32,
+            moe_intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            num_experts=8,
+            num_experts_per_tok=2,
         )
-        torch.testing.assert_close(bad_torch_sin_cos, good_torch_sin_cos)
+
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with LoggingLevel(logging.INFO):
+                with mockenv_context(**self.dist_env_1_gpu):
+                    model = Qwen3MoeForCausalLM(tiny_config)
+                    reference_weights = {k: v.clone() for k, v in model.state_dict().items()}
+                    model.save_pretrained(tmpdirname)
+
+            with LoggingLevel(logging.INFO):
+                with mockenv_context(**self.dist_env_1_gpu):
+                    logger = logging.get_logger("transformers.modeling_utils")
+                    with CaptureLogger(logger) as cl:
+                        loaded_model, loading_info = Qwen3MoeForCausalLM.from_pretrained(
+                            tmpdirname, output_loading_info=True
+                        )
+            self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+            self.assertEqual(len(loading_info["missing_keys"]), 0, f"Missing keys: {loading_info['missing_keys']}")
+            self.assertEqual(
+                len(loading_info["unexpected_keys"]), 0, f"Unexpected keys: {loading_info['unexpected_keys']}"
+            )
+
+            # gather all params and verify they match the original weights exactly
+            all_params = list(loaded_model.named_parameters())
+            with deepspeed.zero.GatheredParameters([p for _, p in all_params], modifier_rank=0):
+                for name, param in all_params:
+                    torch.testing.assert_close(
+                        param.data.cpu(),
+                        reference_weights[name].cpu(),
+                        msg=f"Parameter '{name}' doesn't match reference weights",
+                    )
+
+    def test_init_zero3_variance_scaling(self):
+        """
+        Tests whether variance scaling initializations (`lecun_normal_`, `default_flax_embed_init_`) work correctly
+        with DeepSpeed ZeRO-3, e.g. as in SigLIP models. It indirectly checks for the `_is_hf_initialized` flag to
+        prevent re-initialization in ZeRO-3 environments. See #43574
+        """
+        import tempfile
+
+        from transformers import (
+            SiglipConfig,
+            SiglipModel,
+            SiglipTextConfig,
+            SiglipVisionConfig,
+        )
+
+        text_cfg = SiglipTextConfig(
+            vocab_size=64,
+            hidden_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            intermediate_size=32,
+            max_position_embeddings=16,
+        )
+
+        vision_cfg = SiglipVisionConfig(
+            image_size=4,
+            patch_size=2,
+            num_channels=3,
+            hidden_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            intermediate_size=32,
+        )
+
+        cfg = SiglipConfig(text_config=text_cfg.to_dict(), vision_config=vision_cfg.to_dict())
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model = SiglipModel(cfg).eval()
+            model.save_pretrained(tmpdirname)
+
+            ds_config = {
+                "train_batch_size": 1,
+                "zero_optimization": {
+                    "stage": 3,
+                },
+            }
+
+            dschf = HfDeepSpeedConfig(ds_config)
+
+            self.assertTrue(dschf.is_zero3())
+            self.assertTrue(is_deepspeed_zero3_enabled())
+
+            with LoggingLevel(logging.INFO):
+                with mockenv_context(**self.dist_env_1_gpu):
+                    logger = logging.get_logger("transformers.modeling_utils")
+                    with CaptureLogger(logger) as cl:
+                        model = SiglipModel.from_pretrained(tmpdirname)
+
+        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+        self.assertIsNotNone(model)
 
 
 class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
@@ -1063,10 +1219,10 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 return example
 
             def _convert_to_features(example_batch):
-                input_encodings = tokenizer.batch_encode_plus(
+                input_encodings = tokenizer(
                     example_batch["input_text"], padding="max_length", max_length=512, truncation=True
                 )
-                target_encodings = tokenizer.batch_encode_plus(
+                target_encodings = tokenizer(
                     example_batch["target_text"], padding="max_length", max_length=16, truncation=True
                 )
 
@@ -1300,7 +1456,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --predict_with_generate
             --save_steps 0
             --eval_steps {eval_steps}
-            --group_by_length
+            --train_sampling_strategy group_by_length
             --label_smoothing_factor 0.1
             --source_lang en
             --target_lang ro

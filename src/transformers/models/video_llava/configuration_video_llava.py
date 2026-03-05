@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft Research & University of Wisconsin-Madison and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -57,6 +56,8 @@ class VideoLlavaConfig(PreTrainedConfig):
             Sequence length of one video embedding.
         multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the multimodal projector.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -98,6 +99,7 @@ class VideoLlavaConfig(PreTrainedConfig):
         image_seq_length=256,
         video_seq_length=2056,
         multimodal_projector_bias=True,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -108,6 +110,7 @@ class VideoLlavaConfig(PreTrainedConfig):
         self.image_seq_length = image_seq_length
         self.video_seq_length = video_seq_length
         self.multimodal_projector_bias = multimodal_projector_bias
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.vision_config = vision_config
 

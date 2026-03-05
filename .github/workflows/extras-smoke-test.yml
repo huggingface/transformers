@@ -1,0 +1,198 @@
+name: Extras Smoke Test
+
+on:
+  schedule:
+    # Run every night at 3 AM UTC
+    - cron: "0 3 * * *"
+env:
+  SLACK_CHANNEL_ID: '#transformers-gh-ci-central'
+
+jobs:
+  get-python-versions:
+    name: Get supported Python versions
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.extract-versions.outputs.versions }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install setuptools
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools
+
+      - name: Extract Python versions from setup.py
+        id: extract-versions
+        run: |
+          VERSIONS=$(python utils/extract_metadata.py python-versions)
+          echo "Supported Python versions: $VERSIONS"
+          echo "versions=$VERSIONS" >> $GITHUB_OUTPUT
+
+  test-extras:
+    name: Test extras on Python ${{ matrix.python-version }}
+    needs: get-python-versions
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJson(needs.get-python-versions.outputs.versions) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
+
+      - name: Install base dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools
+
+      - name: Extract extras for this Python version
+        id: get-extras
+        run: |
+          python utils/extract_metadata.py extras > extras_list.txt
+          echo "Found $(wc -l < extras_list.txt) extras for Python ${{ matrix.python-version }}"
+          cat extras_list.txt
+
+      - name: Install base package
+        run: |
+          echo "Installing base package..."
+          pip install -e .
+
+      - name: Test all extras
+        id: test-extras
+        run: |
+          mkdir -p failure_reports
+          failed=0
+
+          while IFS= read -r extra; do
+              echo "=== Testing extra: $extra on Python ${{ matrix.python-version }} ==="
+              if ! pip install -e .[$extra]; then
+                  echo "❌ Failed to install extra: $extra"
+                  cat > failure_reports/failure-${{ matrix.python-version }}-${extra}.json << EOF
+          {
+            "python_version": "${{ matrix.python-version }}",
+            "extra": "${extra}",
+            "job_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+                  failed=$((failed + 1))
+              else
+                  echo "✓ Successfully installed extra: $extra"
+              fi
+          done < extras_list.txt
+
+          if [ $failed -gt 0 ]; then
+              echo "❌ $failed extra(s) failed to install"
+              exit 1
+          fi
+
+      - name: Verify installation
+        run: |
+          python -c "import transformers; print(f'Transformers version: {transformers.__version__}')"
+          python -c "from transformers import pipeline; print('Successfully imported pipeline')"
+
+      - name: Upload failure report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-report-${{ matrix.python-version }}
+          path: failure_reports/
+          retention-days: 1
+          if-no-files-found: ignore
+
+  precheck-slack:
+    name: Check Slack token availability
+    runs-on: ubuntu-latest
+    outputs:
+      has_slack_token: ${{ steps.chk.outputs.has_token }}
+    steps:
+      - id: chk
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+        run: |
+          if [ -n "$SLACK_BOT_TOKEN" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  notify-failures:
+    name: Notify failures to Slack
+    needs: [test-extras, precheck-slack]
+    runs-on: ubuntu-latest
+    if: always() && needs.precheck-slack.outputs.has_slack_token == 'true' && needs.test-extras.result != 'success'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download all failure reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: failure-report-*
+          path: failure_reports/
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Aggregate failures
+        run: |
+          python utils/aggregate_failure_reports.py \
+            --input-dir failure_reports \
+            --output all_failures.json
+
+      - name: Format Slack message
+        env:
+          FAILURES_FILE: all_failures.json
+          WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python utils/format_extras_slack_message.py \
+            --failures "$FAILURES_FILE" \
+            --workflow-url "$WORKFLOW_URL"
+
+      - name: Send Slack notification
+        if: env.SLACK_MESSAGE != ''
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+        with:
+          channel-id: ${{ env.SLACK_CHANNEL_ID }}
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "${{ env.SLACK_TITLE }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ env.SLACK_MESSAGE }}"
+                  }
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "<${{ env.SLACK_WORKFLOW_URL }}|View workflow run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}

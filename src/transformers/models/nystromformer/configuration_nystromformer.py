@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 UW-Madison and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -108,8 +107,15 @@ class NystromformerConfig(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
+        self.add_cross_attention = add_cross_attention
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -126,7 +132,7 @@ class NystromformerConfig(PreTrainedConfig):
         self.conv_kernel_size = conv_kernel_size
         self.inv_coeff_init_option = inv_coeff_init_option
         self.layer_norm_eps = layer_norm_eps
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["NystromformerConfig"]

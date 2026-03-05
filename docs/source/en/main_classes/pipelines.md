@@ -352,12 +352,6 @@ Pipelines available for computer vision tasks include the following.
     - __call__
     - all
 
-### ImageToImagePipeline
-
-[[autodoc]] ImageToImagePipeline
-    - __call__
-    - all
-
 ### KeypointMatchingPipeline
 
 [[autodoc]] KeypointMatchingPipeline
@@ -398,18 +392,6 @@ Pipelines available for natural language processing tasks include the following.
     - __call__
     - all
 
-### QuestionAnsweringPipeline
-
-[[autodoc]] QuestionAnsweringPipeline
-    - __call__
-    - all
-
-### SummarizationPipeline
-
-[[autodoc]] SummarizationPipeline
-    - __call__
-    - all
-
 ### TableQuestionAnsweringPipeline
 
 [[autodoc]] TableQuestionAnsweringPipeline
@@ -427,21 +409,9 @@ Pipelines available for natural language processing tasks include the following.
     - __call__
     - all
 
-### Text2TextGenerationPipeline
-
-[[autodoc]] Text2TextGenerationPipeline
-    - __call__
-    - all
-
 ### TokenClassificationPipeline
 
 [[autodoc]] TokenClassificationPipeline
-    - __call__
-    - all
-
-### TranslationPipeline
-
-[[autodoc]] TranslationPipeline
     - __call__
     - all
 
@@ -473,27 +443,21 @@ Pipelines available for multimodal tasks include the following.
     - __call__
     - all
 
-### ImageToTextPipeline
-
-[[autodoc]] ImageToTextPipeline
-    - __call__
-    - all
-
 ### ImageTextToTextPipeline
 
 [[autodoc]] ImageTextToTextPipeline
     - __call__
     - all
 
-### MaskGenerationPipeline
+### AnyToAnyPipeline
 
-[[autodoc]] MaskGenerationPipeline
+[[autodoc]] AnyToAnyPipeline
     - __call__
     - all
 
-### VisualQuestionAnsweringPipeline
+### MaskGenerationPipeline
 
-[[autodoc]] VisualQuestionAnsweringPipeline
+[[autodoc]] MaskGenerationPipeline
     - __call__
     - all
 

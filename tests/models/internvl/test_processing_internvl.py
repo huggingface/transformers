@@ -13,15 +13,13 @@
 # limitations under the License.
 
 import inspect
-import shutil
-import tempfile
 import unittest
 
 from parameterized import parameterized
 
-from transformers import AutoProcessor, AutoTokenizer, InternVLProcessor
+from transformers import InternVLProcessor
 from transformers.testing_utils import require_av, require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
@@ -30,32 +28,30 @@ if is_torch_available():
     import torch
 
 
-if is_vision_available():
-    from transformers import GotOcr2ImageProcessor, InternVLVideoProcessor
-
-
 @require_vision
 class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = InternVLProcessor
     videos_input_name = "pixel_values"
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-
-        image_processor = GotOcr2ImageProcessor(
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class(
             do_resize=True,
             size={"height": 20, "width": 20},
             max_patches=2,
             do_rescale=True,
             rescale_factor=1 / 255,
             do_normalize=True,
-            do_center_crop=True,
             image_mean=[0.485, 0.456, 0.406],
             image_std=[0.229, 0.224, 0.225],
             do_convert_rgb=True,
         )
-        video_processor = InternVLVideoProcessor(
+
+    @classmethod
+    def _setup_video_processor(cls):
+        video_processor_class = cls._get_component_class_from_processor("video_processor")
+        return video_processor_class(
             do_resize=True,
             size={"height": 20, "width": 20},
             do_rescale=True,
@@ -65,37 +61,24 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_std=[0.229, 0.224, 0.225],
             do_convert_rgb=True,
         )
-        tokenizer = AutoTokenizer.from_pretrained("OpenGVLab/InternVL3-1B-hf", padding_side="left")
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = InternVLProcessor(
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            video_processor=video_processor,
-            **processor_kwargs,
-        )
-        processor.save_pretrained(cls.tmpdirname)
+
+    @classmethod
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        return tokenizer_class.from_pretrained("OpenGVLab/InternVL3-1B-hf", padding_side="left")
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
+
+    @unittest.skip("InternVL requires text")
+    def test_video_processor_defaults(self):
+        pass
 
     @staticmethod
     def prepare_processor_dict():
         return {"image_seq_length": 2}
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_video_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):

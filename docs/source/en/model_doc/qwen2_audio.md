@@ -54,7 +54,7 @@ processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B", trust_remote_co
 prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
 url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-Audio/glass-breaking-151256.mp3"
 audio, sr = librosa.load(BytesIO(urlopen(url).read()), sr=processor.feature_extractor.sampling_rate)
-inputs = processor(text=prompt, audios=audio, return_tensors="pt").to(model.device)
+inputs = processor(text=prompt, audio=audio, return_tensors="pt").to(model.device)
 
 generate_ids = model.generate(**inputs, max_length=256)
 generate_ids = generate_ids[:, inputs.input_ids.size(1):]
@@ -63,7 +63,7 @@ response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_
 
 # We can also omit the audio_bos and audio_eos tokens
 prompt = "<|AUDIO|>Generate the caption in English:"
-inputs = processor(text=prompt, audios=audio, return_tensors="pt").to(model.device)
+inputs = processor(text=prompt, audio=audio, return_tensors="pt").to(model.device)
 
 generate_ids = model.generate(**inputs, max_length=256)
 generate_ids = generate_ids[:, inputs.input_ids.size(1):]
@@ -106,7 +106,7 @@ for message in conversation:
                     sr=processor.feature_extractor.sampling_rate)[0]
                 )
 
-inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
+inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True)
 inputs.input_ids = inputs.input_ids.to(model.device)
 
 generate_ids = model.generate(**inputs, max_length=256)
@@ -156,7 +156,7 @@ for message in conversation:
                         sr=processor.feature_extractor.sampling_rate)[0]
                 )
 
-inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
+inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True)
 inputs.input_ids = inputs.input_ids.to(model.device)
 
 generate_ids = model.generate(**inputs, max_length=256)
@@ -213,7 +213,7 @@ for conversation in conversations:
                             sr=processor.feature_extractor.sampling_rate)[0]
                     )
 
-inputs = processor(text=text, audios=audios, return_tensors="pt", padding=True)
+inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True)
 inputs['input_ids'] = inputs['input_ids'].to(model.device)
 inputs.input_ids = inputs.input_ids.to(model.device)
 

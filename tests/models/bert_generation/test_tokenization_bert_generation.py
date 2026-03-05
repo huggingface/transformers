@@ -45,7 +45,7 @@ class BertGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         token = "<s>"
         token_id = 1
 
-        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
+        self.assertEqual(self.get_tokenizer()._convert_token_to_id_with_added_voc(token), token_id)
         self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
 
     def test_get_vocab(self):
@@ -142,7 +142,7 @@ class BertGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(original_tokenizer_encodings, self.big_tokenizer.encode(symbols))
 
-    @slow
+    #   @slow
     def test_tokenization_base_hard_symbols(self):
         symbols = (
             'This is a very long text with a lot of weird characters, such as: . , ~ ? ( ) " [ ] ! : - . Also we will'
@@ -186,9 +186,7 @@ class BertGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             427,
             916,
             508,
-            405,
-            34324,
-            497,
+            2253,
             391,
             408,
             11342,
@@ -218,8 +216,8 @@ class BertGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Build sequence
         first_ten_tokens = list(self.big_tokenizer.get_vocab().keys())[:10]
         sequence = " ".join(first_ten_tokens)
-        encoded_sequence = self.big_tokenizer.encode_plus(sequence, return_tensors="pt", return_token_type_ids=False)
-        batch_encoded_sequence = self.big_tokenizer.batch_encode_plus(
+        encoded_sequence = self.big_tokenizer(sequence, return_tensors="pt", return_token_type_ids=False)
+        batch_encoded_sequence = self.big_tokenizer(
             [sequence + " " + sequence], return_tensors="pt", return_token_type_ids=False
         )
 

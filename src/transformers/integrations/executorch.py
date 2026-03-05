@@ -11,7 +11,6 @@
 # specific language governing permissions and limitations under the License.
 
 import logging
-from typing import Optional
 
 import torch
 
@@ -21,12 +20,13 @@ from ..cache_utils import (
     DynamicSlidingWindowLayer,
     EncoderDecoderCache,
     StaticCache,
+    StaticLayer,
+    StaticSlidingWindowLayer,
 )
 from ..generation.configuration_utils import GenerationConfig
 from ..modeling_utils import PreTrainedModel
 from ..pytorch_utils import (
     is_torch_greater_or_equal,
-    is_torch_greater_or_equal_than_2_3,
     is_torch_greater_or_equal_than_2_6,
 )
 
@@ -193,9 +193,9 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
     def __init__(
         self,
         model: PreTrainedModel,
-        batch_size: Optional[int] = None,
-        max_cache_len: Optional[int] = None,
-        device: Optional[torch.device] = None,
+        batch_size: int | None = None,
+        max_cache_len: int | None = None,
+        device: torch.device | None = None,
     ) -> None:
         """
         Initializes the exportable module.
@@ -225,9 +225,9 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        cache_position: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Forward pass of the module, which is compatible with the ExecuTorch llm runner.
@@ -248,11 +248,11 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
 
     def export(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
-        dynamic_shapes: Optional[dict] = None,
-        strict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        cache_position: torch.Tensor | None = None,
+        dynamic_shapes: dict | None = None,
+        strict: bool | None = None,
     ) -> torch.export.ExportedProgram:
         """
         Export the wrapped module using `torch.export`.
@@ -461,9 +461,9 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
     def __init__(
         self,
         model: PreTrainedModel,
-        batch_size: Optional[int] = None,
-        max_cache_len: Optional[int] = None,
-        device: Optional[torch.device] = None,
+        batch_size: int | None = None,
+        max_cache_len: int | None = None,
+        device: torch.device | None = None,
     ) -> None:
         """
         Initializes the wrapper module with the pretrained model.
@@ -523,20 +523,28 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         # Initialize the static cache
         self.model = model
         self.static_cache = StaticCache(max_cache_len=max_cache_len, config=config)
+        # Since StaticSlidingWindow have dynamic control flow that cannot be avoided, we have to replace them here by
+        # simple StaticLayer... It means that any generation beyond the window is unfortunately unsupported
+        for i, layer in enumerate(self.static_cache.layers):
+            if isinstance(layer, StaticSlidingWindowLayer):
+                self.static_cache.layers[i] = StaticLayer(layer.max_cache_len)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, dtype, device)
-        for i in range(len(self.static_cache)):
-            self.register_buffer(f"key_cache_{i}", self.static_cache.layers[i].keys, persistent=False)
-            self.register_buffer(f"value_cache_{i}", self.static_cache.layers[i].values, persistent=False)
+
+        # Register cache buffers to make them exportable
+        for i, layer in enumerate(self.static_cache.layers):
+            self.register_buffer(f"key_cache_{i}", layer.keys, persistent=False)
+            self.register_buffer(f"value_cache_{i}", layer.values, persistent=False)
+            self.register_buffer(f"cumulative_length_{i}", layer.cumulative_length, persistent=False)
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        cache_position: torch.Tensor | None = None,
     ):
         """
         Forward pass of the module, which is compatible with the ExecuTorch runtime.
@@ -559,6 +567,12 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             The adapter matches the model's forward signature with that in `executorch/extension/llm/runner`,
             ensuring that the exported model can be executed in `ExecuTorch` out-of-the-box.
         """
+        # Start by resetting static cache (it's needed to be able to run several generations with the same exported program,
+        # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
+        # already exported)
+        for layer in self.static_cache.layers:
+            layer.cumulative_length.copy_(cache_position[0:1])
+
         past_key_values = self.static_cache
 
         outs = self.model(
@@ -640,9 +654,9 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
     def __init__(
         self,
         model: PreTrainedModel,
-        batch_size: Optional[int] = None,
-        max_cache_len: Optional[int] = None,
-        device: Optional[torch.device] = None,
+        batch_size: int | None = None,
+        max_cache_len: int | None = None,
+        device: torch.device | None = None,
     ) -> None:
         """
         Initializes the exportable module.
@@ -689,22 +703,28 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
 
         # Initialize the cache
         self.cache = StaticCache(config=config, max_cache_len=max_cache_len)
+        # Since StaticSlidingWindow have dynamic control flow that cannot be avoided, we have to replace them here by
+        # simple StaticLayer... It means that any generation beyond the window is unfortunately unsupported
+        for i, layer in enumerate(self.cache.layers):
+            if isinstance(layer, StaticSlidingWindowLayer):
+                self.cache.layers[i] = StaticLayer(layer.max_cache_len)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
         self.cache.early_initialization(batch_size, num_heads, head_dim, dtype, device)
 
-        # Register all key and value cache tensors as buffers
-        for i in range(len(self.cache)):
-            self.register_buffer(f"key_cache_{i}", self.cache.layers[i].keys, persistent=False)
-            self.register_buffer(f"value_cache_{i}", self.cache.layers[i].values, persistent=False)
+        # Register cache buffers to make them exportable
+        for i, layer in enumerate(self.cache.layers):
+            self.register_buffer(f"key_cache_{i}", layer.keys, persistent=False)
+            self.register_buffer(f"value_cache_{i}", layer.values, persistent=False)
+            self.register_buffer(f"cumulative_length_{i}", layer.cumulative_length, persistent=False)
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        cache_position: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Forward pass of the module, which is compatible with the ExecuTorch llm runner.
@@ -717,6 +737,12 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         Returns:
             torch.Tensor: Logits output from the model.
         """
+        # Start by resetting static cache (it's needed to be able to run several generations with the same exported program,
+        # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
+        # already exported)
+        for layer in self.cache.layers:
+            layer.cumulative_length.copy_(cache_position[0:1])
+
         # Forward pass with the model
         outputs = self.model(
             input_ids=input_ids,
@@ -733,10 +759,10 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
 
 def convert_and_export_with_cache(
     model: PreTrainedModel,
-    example_input_ids: Optional[torch.Tensor] = None,
-    example_cache_position: Optional[torch.Tensor] = None,
-    dynamic_shapes: Optional[dict] = None,
-    strict: Optional[bool] = None,
+    example_input_ids: torch.Tensor | None = None,
+    example_cache_position: torch.Tensor | None = None,
+    dynamic_shapes: dict | None = None,
+    strict: bool | None = None,
 ):
     """
     Convert a `PreTrainedModel` into an exportable module and export it using `torch.export`,
@@ -752,8 +778,6 @@ def convert_and_export_with_cache(
     Returns:
         Exported program (`torch.export.ExportedProgram`): The exported program generated via `torch.export`.
     """
-    if not is_torch_greater_or_equal_than_2_3:
-        raise ImportError("torch >= 2.3 is required.")
 
     import torch.export._trace
 
@@ -834,6 +858,11 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
 
         # Initialize static cache for decoder and DynamicCache for encoder
         self.static_cache = StaticCache(config=self.config, max_cache_len=max_static_cache_length)
+        # Since StaticSlidingWindow have dynamic control flow that cannot be avoided, we have to replace them here by
+        # simple StaticLayer... It means that any generation beyond the window is unfortunately unsupported
+        for i, layer in enumerate(self.static_cache.layers):
+            if isinstance(layer, StaticSlidingWindowLayer):
+                self.static_cache.layers[i] = StaticLayer(layer.max_cache_len)
         head_dim = getattr(self.config, "head_dim", self.config.hidden_size // self.config.num_attention_heads)
         num_heads = getattr(self.config, "num_key_value_heads", self.config.num_attention_heads)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, torch.float32, model_device)
@@ -842,11 +871,18 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         register_dynamic_cache_export_support()
 
         # Register cache buffers to make them exportable
-        for i in range(len(self.static_cache)):
-            self.register_buffer(f"key_cache_{i}", self.static_cache.layers[i].keys, persistent=False)
-            self.register_buffer(f"value_cache_{i}", self.static_cache.layers[i].values, persistent=False)
+        for i, layer in enumerate(self.static_cache.layers):
+            self.register_buffer(f"key_cache_{i}", layer.keys, persistent=False)
+            self.register_buffer(f"value_cache_{i}", layer.values, persistent=False)
+            self.register_buffer(f"cumulative_length_{i}", layer.cumulative_length, persistent=False)
 
     def forward(self, decoder_input_ids, encoder_hidden_states, cache_position):
+        # Start by resetting static cache (it's needed to be able to run several generations with the same exported program,
+        # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
+        # already exported)
+        for layer in self.static_cache.layers:
+            layer.cumulative_length.copy_(cache_position[0:1])
+
         # Get outputs from decoder
         outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -880,6 +916,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                 "batch_size": batch_size,
                 "max_cache_len": max_cache_length,
             },
+            eos_token_id=model.generation_config.eos_token_id,
         )
         self.exported_encoder = None
         self.exported_decoder = None
@@ -995,7 +1032,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                 decoder_input_ids = torch.tensor([[next_token]], dtype=torch.long, device=model_device)
 
                 # Check if EOS token
-                if next_token == self.config.eos_token_id:
+                if next_token == self.generation_config.eos_token_id:
                     break
 
             return generated_ids
@@ -1003,8 +1040,8 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
 
 def export_with_dynamic_cache(
     model: PreTrainedModel,
-    example_input_ids: Optional[torch.Tensor] = None,
-    example_attention_mask: Optional[torch.Tensor] = None,
+    example_input_ids: torch.Tensor | None = None,
+    example_attention_mask: torch.Tensor | None = None,
 ):
     """
     Export a model with DynamicCache using `torch.export`, ensuring the exported model is compatible with `ExecuTorch`.
@@ -1017,8 +1054,6 @@ def export_with_dynamic_cache(
     Returns:
         Exported program (`torch.export.ExportedProgram`): The exported program generated via `torch.export`.
     """
-    if not is_torch_greater_or_equal_than_2_3:
-        raise ImportError("torch >= 2.3 is required.")
 
     register_dynamic_cache_export_support()
 

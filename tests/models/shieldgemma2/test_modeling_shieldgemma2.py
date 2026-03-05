@@ -22,7 +22,6 @@ from PIL import Image
 from transformers import BitsAndBytesConfig, is_torch_available
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
     require_torch_accelerator,
     slow,
     torch_device,
@@ -35,7 +34,6 @@ if is_torch_available():
 
 @slow
 @require_torch_accelerator
-@require_read_token
 class ShieldGemma2IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)

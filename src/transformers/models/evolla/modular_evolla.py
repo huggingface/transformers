@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Westlake Representational Learning Lab (Fajie Yuan Lab) team and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,11 +13,11 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
@@ -34,7 +33,8 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..esm.modeling_esm import (
     EsmAttention,
     EsmEmbeddings,
@@ -90,6 +90,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
 
     def __init__(self, dim: int):
         super().__init__()
+        self.dim = dim
         # Generate and save the inverse frequency buffer (non trainable)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
         self.register_buffer("inv_freq", inv_freq)
@@ -203,19 +204,10 @@ class EvollaSaProtPreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        """Initialize the weights"""
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+        super()._init_weights(module)
+        if isinstance(module, EvollaSaProtRotaryEmbedding):
+            inv_freq = 1.0 / (10000 ** (torch.arange(0, module.dim, 2, dtype=torch.int64).float() / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
@@ -223,6 +215,7 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
         super().__init__(config)
         self.embeddings = EvollaSaProtEmbeddings(config)
         self.encoder = EvollaSaProtEncoder(config)
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -230,13 +223,14 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
-        input_ids: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
         input_shape = input_ids.size()
         batch_size, seq_length = input_shape
 
@@ -247,7 +241,7 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
 
@@ -379,10 +373,10 @@ class EvollaSequenceCompressorResampler(nn.Module):
 @dataclass
 @auto_docstring
 class EvollaProteinEncoderModelOutput(ModelOutput):
-    sequence_compressor_output: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    sequence_compressor_output: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class EvollaProteinEncoder(nn.Module):
@@ -407,9 +401,9 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
     def __init__(
         self,
         config,
-        protein_encoder_dim: Optional[int] = None,
-        structure_encoder_dim: Optional[int] = None,
-        msa_encoder_dim: Optional[int] = None,
+        protein_encoder_dim: int | None = None,
+        structure_encoder_dim: int | None = None,
+        msa_encoder_dim: int | None = None,
     ):
         super().__init__()
 
@@ -670,19 +664,18 @@ class EvollaDecoderLayer(LlamaDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        protein_kv_states: Optional[torch.Tensor] = None,
-        structure_kv_states: Optional[torch.Tensor] = None,
-        msa_kv_states: Optional[torch.Tensor] = None,
-        protein_batch_mask: Optional[torch.Tensor] = None,
-        structure_batch_mask: Optional[torch.Tensor] = None,
-        msa_batch_mask: Optional[torch.Tensor] = None,
-        query_attn_mask: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        protein_kv_states: torch.Tensor | None = None,
+        structure_kv_states: torch.Tensor | None = None,
+        msa_kv_states: torch.Tensor | None = None,
+        protein_batch_mask: torch.Tensor | None = None,
+        structure_batch_mask: torch.Tensor | None = None,
+        msa_batch_mask: torch.Tensor | None = None,
+        query_attn_mask: torch.Tensor | None = None,
         **kwargs,
     ):
         residual = hidden_states
@@ -696,7 +689,6 @@ class EvollaDecoderLayer(LlamaDecoderLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -733,15 +725,16 @@ class EvollaPreTrainedModel(LlamaPreTrainedModel):
         "EvollaSequenceAlignerCrossAttention",
     ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, EvollaSequenceAlignerCrossAttention):
-            module.gate_attention.zero_()
-            module.gate_ffw.zero_()
-            module.attention_norm.weight.data.fill_(1.0)
+            init.zeros_(module.gate_attention)
+            init.zeros_(module.gate_ffw)
+            init.ones_(module.attention_norm.weight)
         elif isinstance(module, EvollaSequenceCompressorResampler):
-            module.latents.data.normal_(mean=0.0, std=std)
+            init.normal_(module.latents, mean=0.0, std=std)
 
 
 class EvollaModel(EvollaPreTrainedModel):
@@ -773,24 +766,24 @@ class EvollaModel(EvollaPreTrainedModel):
         self.embed_tokens = value
 
     @auto_docstring
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        protein_input_ids: Optional[torch.LongTensor] = None,
-        protein_attention_mask: Optional[torch.Tensor] = None,
-        structure_feats: Optional[torch.FloatTensor] = None,
-        msa_feats: Optional[torch.FloatTensor] = None,
-        structure_batch_mask: Optional[torch.Tensor] = None,
-        msa_batch_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        protein_input_ids: torch.LongTensor | None = None,
+        protein_attention_mask: torch.Tensor | None = None,
+        structure_feats: torch.FloatTensor | None = None,
+        msa_feats: torch.FloatTensor | None = None,
+        structure_batch_mask: torch.Tensor | None = None,
+        msa_batch_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPast]:
+    ) -> tuple | BaseModelOutputWithPast:
         r"""
         protein_input_ids (torch.LongTensor):
             The input IDs for the protein sequence in structure-aware tokens. Should be of shape `(batch_size, protein_seq_length)` and type `torch.LongTensor`.
@@ -814,14 +807,10 @@ class EvollaModel(EvollaPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         protein_feats = None
         protein_batch_mask = None
@@ -832,13 +821,16 @@ class EvollaModel(EvollaPreTrainedModel):
                 attention_mask=protein_attention_mask,
             )
             protein_feats = protein_outputs.sequence_compressor_output
-            protein_batch_mask = torch.tensor([True] * protein_input_ids.shape[0], device=protein_input_ids.device)
+            protein_batch_mask = torch.ones(
+                protein_input_ids.shape[0],
+                device=protein_input_ids.device,
+                dtype=torch.bool,
+            )
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
 
@@ -852,7 +844,6 @@ class EvollaModel(EvollaPreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 protein_kv_states=protein_feats,
                 structure_kv_states=structure_feats,
                 msa_kv_states=msa_feats,
@@ -892,14 +883,14 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,  # text input ids
-        attention_mask: Optional[torch.Tensor] = None,  # text attention mask
-        inputs_embeds: Optional[torch.FloatTensor] = None,  # text input embeddings
-        labels: Optional[torch.LongTensor] = None,
-        protein_input_ids: Optional[torch.LongTensor] = None,
-        protein_attention_mask: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,  # text input ids
+        attention_mask: torch.Tensor | None = None,  # text attention mask
+        inputs_embeds: torch.FloatTensor | None = None,  # text input embeddings
+        labels: torch.LongTensor | None = None,
+        protein_input_ids: torch.LongTensor | None = None,
+        protein_attention_mask: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ):
         r"""

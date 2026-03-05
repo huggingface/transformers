@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_phimoe.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2024 Microsoft and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,15 +20,16 @@
 
 
 from collections.abc import Callable
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_experts_implementation, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -37,7 +37,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_phimoe import PhimoeConfig
 
 
@@ -58,13 +59,13 @@ class PhimoeRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[PhimoeConfig] = None,
+        config: PhimoeConfig | None = None,
         device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
+        seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -102,9 +103,9 @@ class PhimoeRotaryEmbedding(nn.Module):
         seq_len = torch.max(position_ids) + 1
         if self.config.rope_parameters["rope_type"] != "default" and seq_len:
             mscale = (
-                self.long_mscale
+                self.config.rope_parameters["long_mscale"]
                 if seq_len > self.config.rope_parameters["original_max_position_embeddings"]
-                else self.short_mscale
+                else self.config.rope_parameters["short_mscale"]
             )
         inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
         mscale = attention_scaling if mscale is None else mscale
@@ -112,7 +113,7 @@ class PhimoeRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * mscale
@@ -127,7 +128,8 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -135,8 +137,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -171,7 +171,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -181,8 +181,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -192,6 +191,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class PhimoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -221,10 +221,9 @@ class PhimoeAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -238,13 +237,11 @@ class PhimoeAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -260,24 +257,6 @@ class PhimoeAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-
-class PhimoeMLP(nn.Module):
-    def __init__(self, config: PhimoeConfig):
-        super().__init__()
-        self.ffn_dim = config.intermediate_size
-        self.hidden_dim = config.hidden_size
-
-        self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-        self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
-        self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states):
-        current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
-        current_hidden_states = self.w2(current_hidden_states)
-        return current_hidden_states
 
 
 class PhimoeMultiplier(torch.autograd.Function):
@@ -342,56 +321,44 @@ class PhimoeMultiplier(torch.autograd.Function):
         )
 
 
-class PhimoeExperts(nn.ModuleList):
-    """
-    ModuleList of experts.
-    """
+@use_experts_implementation
+class PhimoeExperts(nn.Module):
+    """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config: PhimoeConfig):
         super().__init__()
-        self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
-        for _ in range(self.num_experts):
-            self.append(PhimoeMLP(config))
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states: (batch_size * sequence_length, hidden_dim)
-            top_k_index: (batch_size * sequence_length, top_k)
-            top_k_weights: (batch_size * sequence_length, top_k)
-        Returns:
-            (batch_size * sequence_length, hidden_dim)
-        """
         final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
         return final_hidden_states
-
-
-class PhimoeRouter(nn.Linear):
-    def __init__(self, config: PhimoeConfig):
-        super().__init__(config.hidden_size, config.num_local_experts, bias=False)
-        self.top_k = config.num_experts_per_tok
-        self.hidden_dim = config.hidden_size
-        self.router_jitter_noise = config.router_jitter_noise
-        self.input_jitter_noise = config.router_jitter_noise
-
-    def forward(self, hidden_states):
-        if self.training and self.input_jitter_noise > 0:
-            hidden_states *= torch.empty_like(hidden_states).uniform_(
-                1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
-            )
-        router_logits = super().forward(hidden_states)
-        return router_logits
 
 
 def sparsemixer(scores, jitter_eps, training, top_k=2):
@@ -517,6 +484,25 @@ def sparsemixer(scores, jitter_eps, training, top_k=2):
     )
 
 
+class PhimoeTopKRouter(nn.Linear):
+    def __init__(self, config: PhimoeConfig):
+        super().__init__(config.hidden_size, config.num_local_experts, bias=False)
+        self.router_jitter_noise = config.router_jitter_noise
+        self.input_jitter_noise = config.input_jitter_noise
+        self.top_k = config.num_experts_per_tok
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.training and self.input_jitter_noise > 0:
+            hidden_states *= torch.empty_like(hidden_states).uniform_(
+                1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
+            )
+        router_logits = super().forward(hidden_states)
+        routing_weights, selected_experts = sparsemixer(
+            router_logits, jitter_eps=self.router_jitter_noise, training=self.training, top_k=self.top_k
+        )
+        return router_logits, routing_weights, selected_experts
+
+
 class PhimoeSparseMoeBlock(nn.Module):
     """
     This implementation is
@@ -535,18 +521,9 @@ class PhimoeSparseMoeBlock(nn.Module):
         self.ffn_dim = config.intermediate_size
         self.num_experts = config.num_local_experts
         self.top_k = config.num_experts_per_tok
-        self.router_jitter_noise = config.router_jitter_noise
-        self.gate = PhimoeRouter(config)
+        self.router = PhimoeTopKRouter(config)
         self.experts = PhimoeExperts(config)
         self.input_jitter_noise = config.input_jitter_noise
-
-    def route_tokens_to_experts(self, router_logits):
-        routing_weights, selected_experts = sparsemixer(
-            router_logits,
-            jitter_eps=self.router_jitter_noise,
-            training=self.training,
-        )
-        return routing_weights, selected_experts
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -557,31 +534,9 @@ class PhimoeSparseMoeBlock(nn.Module):
 
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_dim)
-        router_logits = self.gate(hidden_states)
-        routing_weights, selected_experts = self.route_tokens_to_experts(router_logits)
+        _, routing_weights, selected_experts = self.router(hidden_states)
         final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class PhimoeRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        PhimoeRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class PhimoeDecoderLayer(GradientCheckpointingLayer):
@@ -591,18 +546,21 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = PhimoeAttention(config, layer_idx)
 
-        self.block_sparse_moe = PhimoeSparseMoeBlock(config)
-        self.input_layernorm = PhimoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = PhimoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = PhimoeSparseMoeBlock(config)
+
+        # Phimoe uses nn.LayerNorm
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
+        self.post_attention_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True
+        )
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -613,13 +571,12 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = residual + hidden_states
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.block_sparse_moe(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -634,13 +591,24 @@ class PhimoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(PhimoeTopKRouter, index=0),
         "hidden_states": PhimoeDecoderLayer,
         "attentions": PhimoeAttention,
     }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, PhimoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, PhimoeTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
 
 
 @auto_docstring
@@ -661,17 +629,17 @@ class PhimoeModel(PhimoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -683,20 +651,16 @@ class PhimoeModel(PhimoePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
         causal_mask = mask_function(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -711,7 +675,6 @@ class PhimoeModel(PhimoePreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -725,11 +688,11 @@ class PhimoeModel(PhimoePreTrainedModel):
 
 
 def load_balancing_loss_func(
-    gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
-    num_experts: Optional[int] = None,
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts: int | None = None,
     top_k=2,
-    attention_mask: Optional[torch.Tensor] = None,
-) -> Union[torch.Tensor, int]:
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor | int:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
@@ -808,8 +771,8 @@ def load_balancing_loss_func(
 
 @auto_docstring
 class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
-    _tp_plan = {"lm_head": "colwise_rep"}
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
@@ -828,16 +791,15 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_router_logits: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_router_logits: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
@@ -876,7 +838,6 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_router_logits=output_router_logits,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -917,7 +878,6 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         logits_to_keep=None,
@@ -933,7 +893,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
             and hasattr(self.config, "original_max_position_embeddings")
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
-            past_length = cache_position[0]
+            past_length = past_key_values.get_seq_length()
             if past_length <= self.config.original_max_position_embeddings:
                 past_key_values = None
 
@@ -942,7 +902,6 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,
             logits_to_keep=logits_to_keep,

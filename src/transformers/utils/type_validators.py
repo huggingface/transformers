@@ -1,14 +1,17 @@
 from collections.abc import Sequence
-from typing import Union
+from typing import Any, Union, cast
 
 from ..tokenization_utils_base import PaddingStrategy, TruncationStrategy
 from ..video_utils import VideoMetadataType
 from .generic import TensorType
-from .import_utils import is_vision_available
+from .import_utils import is_torch_available, is_vision_available
 
 
 if is_vision_available():
     from ..image_utils import PILImageResampling
+
+if is_torch_available():
+    import torch
 
 
 def positive_any_number(value: int | float | None = None):
@@ -53,6 +56,13 @@ def device_validator(value: str | int | None = None):
     possible_names = ["cpu", "cuda", "xla", "xpu", "mps", "meta"]
     if value is None:
         pass
+    elif is_torch_available() and isinstance(value, torch.device):
+        # Convert torch.device to string for validation
+        device_str = str(value)
+        if device_str.split(":")[0] not in possible_names:
+            raise ValueError(
+                f"If device is a torch.device, the value must be one of {possible_names} but got device={value}"
+            )
     elif isinstance(value, int) and value < 0:
         raise ValueError(
             f"If device is an integer, the value must be a strictly positive integer but got device={value}"
@@ -61,7 +71,7 @@ def device_validator(value: str | int | None = None):
         raise ValueError(f"If device is an string, the value must be one of {possible_names} but got device={value}")
     elif not isinstance(value, (int, str)):
         raise ValueError(
-            f"Device must be either an integer device ID or a string (e.g., 'cpu', 'cuda:0'), but got device={value}"
+            f"Device must be either an integer device ID, a string (e.g., 'cpu', 'cuda:0'), or a torch.device object, but got device={value}"
         )
 
 
@@ -82,7 +92,7 @@ def video_metadata_validator(value: VideoMetadataType | None = None):
 
     valid_keys = ["total_num_frames", "fps", "width", "height", "duration", "video_backend", "frames_indices"]
 
-    def check_dict_keys(d: dict) -> bool:
+    def check_dict_keys(d: dict[str, Any]) -> bool:
         return all(key in valid_keys for key in d.keys())
 
     if isinstance(value, Sequence) and isinstance(value[0], Sequence) and isinstance(value[0][0], dict):
@@ -97,7 +107,7 @@ def video_metadata_validator(value: VideoMetadataType | None = None):
         for item in value:
             if not check_dict_keys(item):
                 raise ValueError(
-                    f"Invalid keys found in video metadata. Valid keys: {valid_keys} got: {list(item.keys())}"
+                    f"Invalid keys found in video metadata. Valid keys: {valid_keys} got: {list(cast(dict, item).keys())}"
                 )
 
     elif isinstance(value, dict):

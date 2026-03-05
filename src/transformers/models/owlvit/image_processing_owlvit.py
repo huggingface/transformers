@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +13,7 @@
 # limitations under the License.
 """Image processor class for OwlViT"""
 
-import warnings
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -205,8 +203,8 @@ class OwlViTImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: dict[str, int],
         resample: PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -242,8 +240,8 @@ class OwlViTImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         crop_size: dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -277,8 +275,8 @@ class OwlViTImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         rescale_factor: float,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Rescale the image by the given factor. image = image * rescale_factor.
@@ -305,19 +303,19 @@ class OwlViTImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[dict[str, int]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        return_tensors: Optional[Union[TensorType, str]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_center_crop: bool | None = None,
+        crop_size: dict[str, int] | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        return_tensors: TensorType | str | None = None,
+        data_format: str | ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> BatchFeature:
         """
         Prepares an image or batch of images for the model.
@@ -440,56 +438,11 @@ class OwlViTImageProcessor(BaseImageProcessor):
         encoded_inputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
         return encoded_inputs
 
-    def post_process(self, outputs, target_sizes):
-        """
-        Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format.
-
-        Args:
-            outputs ([`OwlViTObjectDetectionOutput`]):
-                Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
-                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
-                image size (before any data augmentation). For visualization, this should be the image size after data
-                augment, but before padding.
-        Returns:
-            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
-            in the batch as predicted by the model.
-        """
-        warnings.warn(
-            "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
-            FutureWarning,
-        )
-
-        logits, boxes = outputs.logits, outputs.pred_boxes
-
-        if len(logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-        if target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
-
-        probs = torch.max(logits, dim=-1)
-        scores = torch.sigmoid(probs.values)
-        labels = probs.indices
-
-        # Convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(boxes)
-
-        # Convert from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-        boxes = boxes * scale_fct[:, None, :]
-
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
-
-        return results
-
     def post_process_object_detection(
         self,
         outputs: "OwlViTObjectDetectionOutput",
         threshold: float = 0.1,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
     ):
         """
         Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,

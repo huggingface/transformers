@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_glm4v.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The ZhipuAI Inc. team and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
 
 import numpy as np
 
@@ -26,7 +24,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
 
 
@@ -38,27 +36,14 @@ class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
             "return_token_type_ids": False,
-            "return_mm_token_type_ids": False,
+            "return_mm_token_type_ids": True,
         },
         "videos_kwargs": {"return_metadata": True},
     }
 
 
+@auto_docstring
 class Glm4vProcessor(ProcessorMixin):
-    r"""
-    Constructs a GLM-4V processor which wraps a GLM-4V image processor and a GLM-4 tokenizer into a single processor.
-    [`~Glm4vProcessor.__call__`] and [`~Glm4vProcessor.decode`] for more information.
-    Args:
-        image_processor ([`Glm4vProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        video_processor ([`Glm4vVideoProcessor`], *optional*):
-            The video processor is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
-
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
@@ -73,35 +58,18 @@ class Glm4vProcessor(ProcessorMixin):
             else tokenizer.convert_tokens_to_ids(self.video_token)
         )
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
+        self.video_start_id = tokenizer.convert_tokens_to_ids("<|begin_of_video|>")
+        self.video_end_id = tokenizer.convert_tokens_to_ids("<|end_of_video|>")
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        videos: Optional[VideoInput] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        videos: VideoInput | None = None,
         **kwargs: Unpack[Glm4vProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
-                tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -180,7 +148,7 @@ class Glm4vProcessor(ProcessorMixin):
 
                     for frame_idx in range(num_frames):
                         timestamp_sec = selected_timestamps[frame_idx]
-                        frame_structure = f"<|begin_of_image|>{self.image_token}<|end_of_image|>{int(timestamp_sec)}"
+                        frame_structure = self.replace_frame_token_id(timestamp_sec)
                         video_structure += frame_structure
 
                     text[i] = text[i].replace(self.video_token, video_structure, 1)
@@ -202,7 +170,16 @@ class Glm4vProcessor(ProcessorMixin):
         if return_mm_token_type_ids:
             array_ids = np.array(text_inputs["input_ids"])
             mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
+
+            # Replace 0 -> 2 only inside video segments because GLM4v
+            # uses the same special token to denote images and video
+            # Otherwise replace 0 -> 1 for image modality
+            starts = np.cumsum(array_ids == self.video_start_id, axis=1)
+            ends = np.cumsum(array_ids == self.video_end_id, axis=1)
+            is_video_modality = starts > ends
+
+            mm_token_type_ids[(array_ids == self.image_token_id) & is_video_modality] = 2
+            mm_token_type_ids[(array_ids == self.image_token_id) & (~is_video_modality)] = 1
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
@@ -270,6 +247,15 @@ class Glm4vProcessor(ProcessorMixin):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
+
+    @property
+    def model_input_names(self):
+        model_input_names = super().model_input_names
+        model_input_names.append("mm_token_type_ids")
+        return model_input_names
+
+    def replace_frame_token_id(self, timestamp_sec):
+        return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{int(timestamp_sec)}"
 
 
 __all__ = ["Glm4vProcessor"]

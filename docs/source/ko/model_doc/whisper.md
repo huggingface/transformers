@@ -54,18 +54,14 @@ python src/transformers/models/whisper/convert_openai_to_hf.py --checkpoint_path
 
 [[autodoc]] WhisperTokenizer
     - set_prefix_tokens
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## WhisperTokenizerFast [[whispertokenizerfast]]
 
 [[autodoc]] WhisperTokenizerFast
     - set_prefix_tokens
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## WhisperFeatureExtractor [[whisperfeatureextractor]]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
     require_torch_accelerator,
     slow,
     torch_device,
@@ -279,6 +277,10 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     def test_tied_weights_keys(self):
         pass
 
+    @unittest.skip(reason="CSM has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     def _get_custom_4d_mask_test_data(self):
         """
         Overrides [ModelTesterMixin._get_custom_4d_mask_test_data] to handle third input_ids dimension.
@@ -317,7 +319,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
         return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
 
 
-@require_read_token
 class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         # TODO: @eustlb, update with correct sesame's repo

@@ -17,6 +17,7 @@ import inspect
 import unittest
 from functools import cached_property
 
+import pytest
 from datasets import load_dataset
 
 from transformers import UdopConfig, is_torch_available
@@ -314,20 +315,20 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
-    @unittest.skip(reason="Gradient checkpointing is not supported by this model")
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
+
+    @unittest.skip(reason="Udop has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     def test_forward_signature(self):
@@ -349,6 +350,7 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 "encoder_outputs",
                 "input_ids",
                 "inputs_embeds",
+                "kwargs",
             ]
             if model_class in self.all_generative_model_classes:
                 expected_arg_names.append(

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,22 +16,27 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import Conv1D
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
     logging,
 )
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_decision_transformer import DecisionTransformerConfig
 
 
@@ -40,38 +44,20 @@ logger = logging.get_logger(__name__)
 
 
 # Copied from transformers.models.gpt2.modeling_gpt2.eager_attention_forward
-def eager_attention_forward(module, query, key, value, attention_mask, **kwargs):
-    attn_weights = torch.matmul(query, key.transpose(-1, -2))
+def eager_attention_forward(module, query, key, value, attention_mask, scaling=None, dropout=0.0, **kwargs):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
 
-    if module.scale_attn_weights:
-        attn_weights = attn_weights / torch.full(
-            [], value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
-        )
-
-    # Layer-wise attention scaling
-    if module.scale_attn_by_inverse_layer_idx:
-        attn_weights = attn_weights / float(module.layer_idx + 1)
-
-    if not module.is_cross_attention:
-        # if only "normal" attention layer implements causal mask
-        query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = module.bias[:, :, key_length - query_length : key_length, :key_length]
-        mask_value = torch.finfo(attn_weights.dtype).min
-        # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
-        # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-        mask_value = torch.full([], mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
-        attn_weights = torch.where(causal_mask, attn_weights.to(attn_weights.dtype), mask_value)
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
 
     if attention_mask is not None:
-        # Apply the attention mask
-        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
     # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op otherwise
     attn_weights = attn_weights.type(value.dtype)
-    attn_weights = module.attn_dropout(attn_weights)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2)
@@ -84,16 +70,6 @@ class DecisionTransformerGPT2Attention(nn.Module):
     def __init__(self, config, is_cross_attention=False, layer_idx=None):
         super().__init__()
         self.config = config
-        max_positions = config.max_position_embeddings
-        self.register_buffer(
-            "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
-                1, 1, max_positions, max_positions
-            ),
-            persistent=False,
-        )
-        self.register_buffer("masked_bias", torch.tensor(-1e4), persistent=False)
-
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
@@ -105,12 +81,17 @@ class DecisionTransformerGPT2Attention(nn.Module):
             )
 
         self.scale_attn_weights = config.scale_attn_weights
-        self.is_cross_attention = is_cross_attention
-
-        # Layer-wise attention scaling, reordering, and upcasting
         self.scale_attn_by_inverse_layer_idx = config.scale_attn_by_inverse_layer_idx
-        self.layer_idx = layer_idx
         self.reorder_and_upcast_attn = config.reorder_and_upcast_attn
+        self.is_cross_attention = is_cross_attention
+        self.layer_idx = layer_idx
+
+        # Precompute unified scaling factor (accounts for both head_dim and layer-wise scaling)
+        self.scaling = 1.0
+        if self.scale_attn_weights:
+            self.scaling = self.head_dim**-0.5
+        if self.scale_attn_by_inverse_layer_idx:
+            self.scaling /= float(self.layer_idx + 1)
 
         if self.is_cross_attention:
             self.c_attn = Conv1D(2 * self.embed_dim, self.embed_dim)
@@ -131,29 +112,11 @@ class DecisionTransformerGPT2Attention(nn.Module):
         # Preallocate attn_weights for `baddbmm`
         attn_weights = torch.empty(bsz * num_heads, q_seq_len, k_seq_len, dtype=torch.float32, device=query.device)
 
-        # Compute Scale Factor
-        scale_factor = 1.0
-        if self.scale_attn_weights:
-            scale_factor /= float(value.size(-1)) ** 0.5
-
-        if self.scale_attn_by_inverse_layer_idx:
-            scale_factor /= float(self.layer_idx + 1)
-
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
-        with torch.autocast(query.device.type, enabled=False):
+        with maybe_autocast(query.device.type, enabled=False):
             q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
-            attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
+            attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=self.scaling)
             attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
-
-        if not self.is_cross_attention:
-            # if only "normal" attention layer implements causal mask
-            query_length, key_length = query.size(-2), key.size(-2)
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
-            mask_value = torch.finfo(attn_weights.dtype).min
-            # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
-            # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
-            attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -174,15 +137,15 @@ class DecisionTransformerGPT2Attention(nn.Module):
 
     def forward(
         self,
-        hidden_states: Optional[tuple[torch.FloatTensor]],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
+        hidden_states: tuple[torch.FloatTensor] | None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
         **kwargs,
-    ) -> tuple[Union[torch.Tensor, tuple[torch.Tensor]], ...]:
+    ) -> tuple[torch.Tensor | tuple[torch.Tensor], ...]:
         is_cross_attention = encoder_hidden_states is not None
         if past_key_values is not None:
             if isinstance(past_key_values, EncoderDecoderCache):
@@ -235,9 +198,9 @@ class DecisionTransformerGPT2Attention(nn.Module):
                 past_key_values.is_updated[self.layer_idx] = True
 
         using_eager = self.config._attn_implementation == "eager"
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         if using_eager and self.reorder_and_upcast_attn:
             attn_output, attn_weights = self._upcast_and_reordered_attn(
@@ -251,6 +214,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
                 value_states,
                 attention_mask,
                 dropout=self.attn_dropout.p if self.training else 0.0,
+                scaling=self.scaling,
                 **kwargs,
             )
 
@@ -271,7 +235,7 @@ class DecisionTransformerGPT2MLP(nn.Module):
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
-    def forward(self, hidden_states: Optional[tuple[torch.FloatTensor]]) -> torch.FloatTensor:
+    def forward(self, hidden_states: tuple[torch.FloatTensor] | None) -> torch.FloatTensor:
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.c_proj(hidden_states)
@@ -301,25 +265,23 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
 
     def forward(
         self,
-        hidden_states: Optional[tuple[torch.FloatTensor]],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
+        hidden_states: tuple[torch.FloatTensor] | None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        use_cache: bool | None = False,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], Optional[tuple[torch.Tensor, tuple[torch.FloatTensor, ...]]]]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
-        attn_output, self_attn_weights = self.attn(
+        attn_output, _ = self.attn(
             hidden_states,
             past_key_values=past_key_values,
             cache_position=cache_position,
             attention_mask=attention_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
             **kwargs,
         )
         # residual connection
@@ -334,13 +296,12 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
                 )
             residual = hidden_states
             hidden_states = self.ln_cross_attn(hidden_states)
-            cross_attn_output, cross_attn_weights = self.crossattention(
+            cross_attn_output, _ = self.crossattention(
                 hidden_states,
                 past_key_values=past_key_values,
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions,
             )
             # residual connection
             hidden_states = residual + cross_attn_output
@@ -351,13 +312,7 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
 
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-            if encoder_hidden_states is not None:
-                outputs += (cross_attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 @auto_docstring
@@ -365,25 +320,20 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
     config: DecisionTransformerConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
-
     _can_compile_fullgraph = False
+    _can_record_outputs = {
+        "hidden_states": DecisionTransformerGPT2Block,
+        "attentions": OutputRecorder(DecisionTransformerGPT2Attention, layer_name=".attn", index=1),
+        "cross_attentions": OutputRecorder(DecisionTransformerGPT2Attention, layer_name=".crossattention", index=1),
+    }
 
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
+    # No longer used as we directly use our masks instead
+    _keys_to_ignore_on_load_unexpected = ["attn.bias", "crossattention.bias"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear, Conv1D)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+        super()._init_weights(module)
 
         # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
@@ -391,10 +341,11 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
         #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
         #
         # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-        for name, p in module.named_parameters():
-            if "c_proj" in name and "weight" in name:
-                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
+        if isinstance(module, PreTrainedModel):
+            for name, p in module.named_parameters():
+                if "c_proj" in name and "weight" in name:
+                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+                    init.normal_(p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer))
 
 
 class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
@@ -423,43 +374,32 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        input_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
-            batch_size = input_ids.shape[0]
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size = inputs_embeds.shape[0]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
@@ -481,35 +421,23 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         # Attention mask.
-        if attention_mask is not None:
-            if batch_size <= 0:
-                raise ValueError("batch_size has to be defined and > 0")
-            attention_mask = attention_mask.view(batch_size, -1)
-            # We create a 3D attention mask from a 2D tensor mask.
-            # Sizes are [batch_size, 1, 1, to_seq_length]
-            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-            # this attention mask is more simple than the triangular masking of causal attention
-            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask[:, None, None, :]
+        attention_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
 
-            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-            # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and the dtype's smallest value for masked positions.
-            # Since we are adding it to the raw scores before the softmax, this is
-            # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
-
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.add_cross_attention and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_attention_mask = None
+        encoder_attention_mask = None
+        if encoder_hidden_states is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
@@ -530,12 +458,8 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
-
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-        all_hidden_states = () if output_hidden_states else None
         for block in self.h:
-            outputs = block(
+            hidden_states = block(
                 hidden_states,
                 past_key_values if not (self.gradient_checkpointing and self.training) else None,
                 cache_position,
@@ -543,37 +467,17 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 use_cache=use_cache,
-                output_attentions=output_attentions,
+                **kwargs,
             )
-
-            hidden_states = outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (outputs[2],)
 
         hidden_states = self.ln_f(hidden_states)
 
         hidden_states = hidden_states.view(output_shape)
-        # Add last hidden state
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
 
         past_key_values = past_key_values if use_cache else None
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions, all_cross_attentions]
-                if v is not None
-            )
-
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -593,12 +497,12 @@ class DecisionTransformerOutput(ModelOutput):
         Predicted returns for each state
     """
 
-    state_preds: Optional[torch.FloatTensor] = None
-    action_preds: Optional[torch.FloatTensor] = None
-    return_preds: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[torch.FloatTensor] = None
-    attentions: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
+    state_preds: torch.FloatTensor | None = None
+    action_preds: torch.FloatTensor | None = None
+    return_preds: torch.FloatTensor | None = None
+    hidden_states: torch.FloatTensor | None = None
+    attentions: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
 
 
 class DecisionTransformerPreTrainedModel(PreTrainedModel):
@@ -611,20 +515,6 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "decision_transformer"
     main_input_name = "states"
     supports_gradient_checkpointing = False
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 @auto_docstring(
@@ -668,16 +558,17 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        states: Optional[torch.FloatTensor] = None,
-        actions: Optional[torch.FloatTensor] = None,
-        rewards: Optional[torch.FloatTensor] = None,
-        returns_to_go: Optional[torch.FloatTensor] = None,
-        timesteps: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.FloatTensor], DecisionTransformerOutput]:
+        states: torch.FloatTensor | None = None,
+        actions: torch.FloatTensor | None = None,
+        rewards: torch.FloatTensor | None = None,
+        returns_to_go: torch.FloatTensor | None = None,
+        timesteps: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | DecisionTransformerOutput:
         r"""
         states (`torch.FloatTensor` of shape `(batch_size, episode_length, state_dim)`):
             The states for each step in the trajectory

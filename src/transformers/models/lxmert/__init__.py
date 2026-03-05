@@ -18,10 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from ..bert.tokenization_bert import BertTokenizer as LxmertTokenizer
     from .configuration_lxmert import *
     from .modeling_lxmert import *
-    from .tokenization_lxmert import *
-    from .tokenization_lxmert_fast import *
 else:
     import sys
 

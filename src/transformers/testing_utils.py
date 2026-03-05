@@ -21,6 +21,7 @@ import functools
 import gc
 import importlib
 import inspect
+import json
 import logging
 import multiprocessing
 import os
@@ -37,21 +38,26 @@ import types
 import unittest
 from collections import UserDict, defaultdict
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import MISSING, fields
 from functools import cache, wraps
 from io import StringIO
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any
 from unittest import mock
 from unittest.mock import patch
 
 import httpx
-import urllib3
 from huggingface_hub import create_repo, delete_repo
 from packaging import version
 
-from transformers import Trainer
 from transformers import logging as transformers_logging
+
+
+if TYPE_CHECKING:
+    from .trainer import Trainer
+else:
+    Trainer = Any  # type: ignore
 
 from .integrations import (
     is_clearml_available,
@@ -66,13 +72,13 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
+    SAFE_WEIGHTS_INDEX_NAME,
     TRITON_MIN_VERSION,
+    WEIGHTS_INDEX_NAME,
     is_accelerate_available,
     is_apex_available,
     is_apollo_torch_available,
     is_aqlm_available,
-    is_auto_awq_available,
-    is_auto_gptq_available,
     is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
@@ -82,16 +88,15 @@ from .utils import (
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
-    is_eetq_available,
     is_essentia_available,
     is_faiss_available,
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flute_available,
+    is_fouroversix_available,
     is_fp_quant_available,
     is_fsdp_available,
-    is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
@@ -100,7 +105,6 @@ from .utils import (
     is_hadamard_available,
     is_hqq_available,
     is_huggingface_hub_greater_or_equal,
-    is_ipex_available,
     is_jinja_available,
     is_jmespath_available,
     is_jumanpp_available,
@@ -112,6 +116,7 @@ from .utils import (
     is_mistral_common_available,
     is_natten_available,
     is_nltk_available,
+    is_numba_available,
     is_onnx_available,
     is_onnxruntime_available,
     is_onnxscript_available,
@@ -126,6 +131,7 @@ from .utils import (
     is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytest_available,
+    is_pytest_order_available,
     is_pytorch_quantization_available,
     is_quark_available,
     is_qutlass_available,
@@ -215,14 +221,19 @@ _COMMON_MODEL_NAMES_MAP = {
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file
+
+    from .modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, PreTrainedModel
 
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
     IS_XPU_SYSTEM = getattr(torch.version, "xpu", None) is not None
+    IS_NPU_SYSTEM = getattr(torch, "npu", None) is not None
 else:
     IS_ROCM_SYSTEM = False
     IS_CUDA_SYSTEM = False
     IS_XPU_SYSTEM = False
+    IS_NPU_SYSTEM = False
 
 logger = transformers_logging.get_logger(__name__)
 
@@ -262,6 +273,8 @@ _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=Fa
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
+_run_training_tests = parse_flag_from_env("RUN_TRAINING_TESTS", default=True)
+_run_tensor_parallel_tests = parse_flag_from_env("RUN_TENSOR_PARALLEL_TESTS", default=True)
 
 
 def is_staging_test(test_case):
@@ -310,6 +323,38 @@ def is_agent_test(test_case):
             return test_case
         else:
             return pytest.mark.is_agent_test()(test_case)
+
+
+def is_training_test(test_case):
+    """
+    Decorator marking a test as a training test. If RUN_TRAINING_TESTS is set to a falsy value, those tests will be
+    skipped.
+    """
+    if not _run_training_tests:
+        return unittest.skip(reason="test is training test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_training_test()(test_case)
+
+
+def is_tensor_parallel_test(test_case):
+    """
+    Decorator marking a test as a tensor parallel test. If RUN_TENSOR_PARALLEL_TESTS is set to a falsy value, those
+    tests will be skipped.
+    """
+    if not _run_tensor_parallel_tests:
+        return unittest.skip(reason="test is tensor parallel test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_tensor_parallel_test()(test_case)
 
 
 def slow(test_case):
@@ -602,7 +647,7 @@ def require_flash_attn(test_case):
     try:
         from kernels import get_kernel
 
-        get_kernel("kernels-community/flash-attn")
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
     except Exception as _:
         kernels_available = False
 
@@ -626,41 +671,6 @@ def require_flash_attn_3(test_case):
     These tests are skipped when Flash Attention 3 isn't installed.
     """
     return unittest.skipUnless(is_flash_attn_3_available(), "test requires Flash Attention 3")(test_case)
-
-
-def require_read_token(test_case):
-    """
-    A decorator that loads the HF token for tests that require to load gated models.
-    """
-    token = os.getenv("HF_HUB_READ_TOKEN")
-
-    if isinstance(test_case, type):
-        for attr_name in dir(test_case):
-            attr = getattr(test_case, attr_name)
-            if isinstance(attr, types.FunctionType):
-                if getattr(attr, "__require_read_token__", False):
-                    continue
-                wrapped = require_read_token(attr)
-                setattr(test_case, attr_name, wrapped)
-        return test_case
-    else:
-        if getattr(test_case, "__require_read_token__", False):
-            return test_case
-
-        @functools.wraps(test_case)
-        def wrapper(*args, **kwargs):
-            if token is not None:
-                with patch("huggingface_hub.utils._headers.get_token", return_value=token):
-                    return test_case(*args, **kwargs)
-            else:  # Allow running locally with the default token env variable
-                # dealing with static/class methods and called by `self.xxx`
-                if "staticmethod" in inspect.getsource(test_case).strip():
-                    if len(args) > 0 and isinstance(args[0], unittest.TestCase):
-                        return test_case(*args[1:], **kwargs)
-                return test_case(*args, **kwargs)
-
-        wrapper.__require_read_token__ = True
-        return wrapper
 
 
 def require_peft(test_case):
@@ -691,21 +701,6 @@ def require_torchcodec(test_case):
 
     """
     return unittest.skipUnless(is_torchcodec_available(), "test requires Torchcodec")(test_case)
-
-
-def require_intel_extension_for_pytorch(test_case):
-    """
-    Decorator marking a test that requires Intel Extension for PyTorch.
-
-    These tests are skipped when Intel Extension for PyTorch isn't installed or it does not match current PyTorch
-    version.
-
-    """
-    return unittest.skipUnless(
-        is_ipex_available(),
-        "test requires Intel Extension for PyTorch to be installed and match current PyTorch version, see"
-        " https://github.com/intel/intel-extension-for-pytorch",
-    )(test_case)
 
 
 def require_torchaudio(test_case):
@@ -780,13 +775,6 @@ def require_vision(test_case):
     installed.
     """
     return unittest.skipUnless(is_vision_available(), "test requires vision")(test_case)
-
-
-def require_ftfy(test_case):
-    """
-    Decorator marking a test that requires ftfy. These tests are skipped when ftfy isn't installed.
-    """
-    return unittest.skipUnless(is_ftfy_available(), "test requires ftfy")(test_case)
 
 
 def require_spacy(test_case):
@@ -918,9 +906,7 @@ def require_torch_xpu(test_case):
     """
     Decorator marking a test that requires XPU (in PyTorch).
 
-    These tests are skipped when XPU backend is not available. XPU backend might be available either via stock
-    PyTorch (>=2.4) or via Intel Extension for PyTorch. In the latter case, if IPEX is installed, its version
-    must match match current PyTorch version.
+    These tests are skipped when XPU backend is not available.
     """
     return unittest.skipUnless(is_torch_xpu_available(), "test requires XPU device")(test_case)
 
@@ -1074,17 +1060,20 @@ def require_torch_large_gpu(test_case, memory: float = 20):
     )(test_case)
 
 
-def require_torch_large_accelerator(test_case, memory: float = 20):
+def require_torch_large_accelerator(test_case=None, *, memory: float = 20):
     """Decorator marking a test that requires an accelerator with more than `memory` GiB of memory."""
-    if torch_device != "cuda" and torch_device != "xpu":
-        return unittest.skip(reason=f"test requires a GPU or XPU with more than {memory} GiB of memory")(test_case)
 
-    torch_accelerator_module = getattr(torch, torch_device)
+    def memory_decorator(tc):
+        if torch_device not in ("cuda", "xpu"):
+            return unittest.skip(f"test requires a GPU or XPU with more than {memory} GiB of memory")(tc)
 
-    return unittest.skipUnless(
-        torch_accelerator_module.get_device_properties(0).total_memory / 1024**3 > memory,
-        f"test requires a GPU or XPU with more than {memory} GiB of memory",
-    )(test_case)
+        torch_accel = getattr(torch, torch_device)
+        return unittest.skipUnless(
+            torch_accel.get_device_properties(0).total_memory / 1024**3 > memory,
+            f"test requires a GPU or XPU with more than {memory} GiB of memory",
+        )(tc)
+
+    return memory_decorator if test_case is None else memory_decorator(test_case)
 
 
 def require_torch_accelerator(test_case):
@@ -1243,23 +1232,6 @@ def require_spqr(test_case):
     return unittest.skipUnless(is_spqr_available(), "test requires spqr")(test_case)
 
 
-def require_eetq(test_case):
-    """
-    Decorator marking a test that requires eetq
-    """
-    eetq_available = is_eetq_available()
-    if eetq_available:
-        try:
-            import eetq  # noqa: F401
-        except ImportError as exc:
-            if "shard_checkpoint" in str(exc):
-                # EETQ 1.0.0 is currently broken with the latest transformers because it tries to import the removed
-                # shard_checkpoint function, see https://github.com/NetEase-FuXi/EETQ/issues/34.
-                # TODO: Remove once eetq releases a fix and this release is used in CI
-                eetq_available = False
-    return unittest.skipUnless(eetq_available, "test requires eetq")(test_case)
-
-
 def require_av(test_case):
     """
     Decorator marking a test that requires av
@@ -1295,13 +1267,11 @@ def require_tensorboard(test_case):
     return unittest.skipUnless(is_tensorboard_available(), "test requires tensorboard")
 
 
-def require_gptq(test_case):
+def require_gptqmodel(test_case):
     """
-    Decorator for auto_gptq dependency
+    Decorator for gptqmodel dependency
     """
-    return unittest.skipUnless(
-        is_gptqmodel_available() or is_auto_gptq_available(), "test requires gptqmodel or auto-gptq"
-    )(test_case)
+    return unittest.skipUnless(is_gptqmodel_available(), "test requires gptqmodel")(test_case)
 
 
 def require_hqq(test_case):
@@ -1309,13 +1279,6 @@ def require_hqq(test_case):
     Decorator for hqq dependency
     """
     return unittest.skipUnless(is_hqq_available(), "test requires hqq")(test_case)
-
-
-def require_auto_awq(test_case):
-    """
-    Decorator for auto_awq dependency
-    """
-    return unittest.skipUnless(is_auto_awq_available(), "test requires autoawq")(test_case)
 
 
 def require_auto_round(test_case):
@@ -1362,6 +1325,13 @@ def require_flute_hadamard(test_case):
     )(test_case)
 
 
+def require_fouroversix(test_case):
+    """
+    Decorator marking a test that requires fouroversix
+    """
+    return unittest.skipUnless(is_fouroversix_available(), "test requires fouroversix")(test_case)
+
+
 def require_fp_quant(test_case):
     """
     Decorator marking a test that requires fp_quant and qutlass
@@ -1388,6 +1358,13 @@ def require_pyctcdecode(test_case):
     Decorator marking a test that requires pyctcdecode
     """
     return unittest.skipUnless(is_pyctcdecode_available(), "test requires pyctcdecode")(test_case)
+
+
+def require_numba(test_case):
+    """
+    Decorator marking a test that requires numba
+    """
+    return unittest.skipUnless(is_numba_available(), "test requires numba")(test_case)
 
 
 def require_librosa(test_case):
@@ -1526,12 +1503,8 @@ def get_steps_per_epoch(trainer: Trainer) -> int:
     training_args = trainer.args
     train_dataloader = trainer.get_train_dataloader()
 
-    initial_training_values = trainer.set_initial_training_values(
-        args=training_args,
-        dataloader=train_dataloader,
-        total_train_batch_size=training_args.per_device_train_batch_size,
-    )
-    steps_per_epoch = initial_training_values[1]
+    initial_training_values = trainer.set_initial_training_values(args=training_args, dataloader=train_dataloader)
+    steps_per_epoch = initial_training_values[5]
 
     return steps_per_epoch
 
@@ -1818,7 +1791,7 @@ class TemporaryHubRepo:
     ```
     """
 
-    def __init__(self, namespace: Optional[str] = None, token: Optional[str] = None) -> None:
+    def __init__(self, namespace: str | None = None, token: str | None = None) -> None:
         self.token = token
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_id = Path(tmp_dir).name
@@ -1835,7 +1808,7 @@ class TemporaryHubRepo:
 
 @contextlib.contextmanager
 # adapted from https://stackoverflow.com/a/64789046/9201239
-def ExtendSysPath(path: Union[str, os.PathLike]) -> Iterator[None]:
+def ExtendSysPath(path: str | os.PathLike) -> Iterator[None]:
     """
     Temporary add given path to `sys.path`.
 
@@ -2015,14 +1988,12 @@ class TestCasePlus(unittest.TestCase):
         paths = [self.repo_root_dir_str, self.src_dir_str]
         if "/examples" in self.test_file_dir_str:
             paths.append(self.examples_dir_str)
-        else:
-            paths.append(self.tests_dir_str)
         paths.append(env.get("PYTHONPATH", ""))
 
         env["PYTHONPATH"] = ":".join(paths)
         return env
 
-    def get_auto_remove_tmp_dir(self, tmp_dir=None, before=None, after=None):
+    def get_auto_remove_tmp_dir(self, tmp_dir=None, before=None, after=None, return_pathlib_obj=False):
         """
         Args:
             tmp_dir (`string`, *optional*):
@@ -2042,6 +2013,8 @@ class TestCasePlus(unittest.TestCase):
             after (`bool`, *optional*):
                 If `True`, delete the `tmp_dir` at the end of the test if `False`, leave the `tmp_dir` and its contents
                 intact at the end of the test.
+            return_pathlib_obj (`bool`, *optional*):
+                If `True` will return a pathlib.Path object
 
         Returns:
             tmp_dir(`string`): either the same value as passed via *tmp_dir* or the path to the auto-selected tmp dir
@@ -2088,7 +2061,7 @@ class TestCasePlus(unittest.TestCase):
             # register for deletion
             self.teardown_tmp_dirs.append(tmp_dir)
 
-        return tmp_dir
+        return Path(tmp_dir).resolve() if return_pathlib_obj else tmp_dir
 
     def python_one_liner_max_rss(self, one_liner_str):
         """
@@ -2546,6 +2519,8 @@ class RequestCounter:
 
             return wrap
 
+        import urllib3
+
         self.patcher = patch.object(
             urllib3.connectionpool.log, "debug", side_effect=patched_with_thread_info(urllib3.connectionpool.log.debug)
         )
@@ -2575,7 +2550,7 @@ class RequestCounter:
         return sum(self._counter.values())
 
 
-def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, description: Optional[str] = None):
+def is_flaky(max_attempts: int = 5, wait_before_retry: float | None = None, description: str | None = None):
     """
     To decorate flaky tests. They will be retried on failures.
 
@@ -2616,7 +2591,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
     return decorator
 
 
-def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
+def hub_retry(max_attempts: int = 5, wait_before_retry: float | None = 2):
     """
     To decorate tests that download from the Hub. They can fail due to a
     variety of network issues such as timeouts, connection resets, etc.
@@ -2668,9 +2643,13 @@ def run_first(test_case):
     single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
     allocation conflicts.
     """
-    import pytest
+    # Without this check, we get unwanted warnings when it's not installed
+    if is_pytest_order_available():
+        import pytest
 
-    return pytest.mark.order(1)(test_case)
+        return pytest.mark.order(1)(test_case)
+    else:
+        return test_case
 
 
 def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
@@ -2847,7 +2826,7 @@ class HfDocTestParser(doctest.DocTestParser):
     # fmt: on
 
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
-    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", "0"))
+    skip_cuda_tests: bool = os.environ.get("SKIP_CUDA_DOCTEST", "0") == "1"
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
 
     def parse(self, string, name="<string>"):
@@ -3166,13 +3145,13 @@ def cleanup(device: str, gc_collect=False):
     if gc_collect:
         gc.collect()
     backend_empty_cache(device)
-    torch._dynamo.reset()
+    torch.compiler.reset()
 
 
 # Type definition of key used in `Expectations` class.
-DeviceProperties = tuple[Optional[str], Optional[int], Optional[int]]
+DeviceProperties = tuple[str | None, int | None, int | None]
 # Helper type. Makes creating instances of `Expectations` smoother.
-PackedDeviceProperties = tuple[Optional[str], Union[None, int, tuple[int, int]]]
+PackedDeviceProperties = tuple[str | None, None | int | tuple[int, int]]
 
 
 @cache
@@ -3196,12 +3175,14 @@ def get_device_properties() -> DeviceProperties:
         gen_mask = 0x000000FF00000000
         gen = (arch & gen_mask) >> 32
         return ("xpu", gen, None)
+    elif IS_NPU_SYSTEM:
+        return ("npu", None, None)
     else:
         return (torch_device, None, None)
 
 
 def unpack_device_properties(
-    properties: Optional[PackedDeviceProperties] = None,
+    properties: PackedDeviceProperties | None = None,
 ) -> DeviceProperties:
     """
     Unpack a `PackedDeviceProperties` tuple into consistently formatted `DeviceProperties` tuple. If properties is None, it is fetched.
@@ -3343,7 +3324,7 @@ def _get_test_info():
         # check frame's function + if it has `self` as locals; double check if self has the (function) name
         # TODO: Question: How about expanded?
         if (
-            frame.function == test_name
+            test_name.startswith(frame.function)
             and "self" in frame.frame.f_locals
             and hasattr(frame.frame.f_locals["self"], test_name)
         ):
@@ -3371,13 +3352,13 @@ def _get_test_info():
     # Between `the test method being called` and `before entering `patched``.
     for frame in reversed(stack_from_inspect):
         if (
-            frame.function == test_name
+            test_name.startswith(frame.function)
             and "self" in frame.frame.f_locals
             and hasattr(frame.frame.f_locals["self"], test_name)
         ):
             to_capture = True
         # TODO: check simply with the name is not robust.
-        elif "patched" == frame.frame.f_code.co_name:
+        elif frame.frame.f_code.co_name == "patched":
             frame_of_patched_obj = frame
             to_capture = False
             break
@@ -3444,7 +3425,7 @@ def _get_call_arguments(code_context):
     Analyze the positional and keyword arguments in a call expression.
 
     This will extract the expressions of the positional and kwyword arguments, and associate them to the positions and
-    the keyword arugment names.
+    the keyword argument names.
     """
 
     def get_argument_name(node):
@@ -3572,7 +3553,7 @@ def _patched_tearDown(self, *args, **kwargs):
     # TODO: How could we show several exceptions in a sinigle test on the terminal? (Maybe not a good idea)
     captured_exceptions = captured_failures[0]["exception"]
     captured_traceback = captured_failures[0]["traceback"]
-    # Show the cpatured information on the terminal.
+    # Show the captured information on the terminal.
     capturued_info = [x["info"] for x in captured_failures]
     capturued_info_str = f"\n\n{'=' * 80}\n\n".join(capturued_info)
 
@@ -3758,7 +3739,7 @@ def patch_testing_methods_to_collect_info():
     _patch_with_call_info(unittest.case.TestCase, "assertGreaterEqual", _parse_call_info, target_args=("a", "b"))
 
 
-def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: Optional[dict] = None):
+def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: dict | None = None):
     """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necessary."""
     with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
         tmp.write(script)
@@ -3785,7 +3766,7 @@ def _format_tensor(t, indent_level=0, sci_mode=None):
     if not isinstance(t, torch.Tensor):
         t = torch.tensor(t)
 
-    # Simply make the processing below simpler (not to hande both case)
+    # Simply make the processing below simpler (not to handle both cases)
     is_scalar = False
     if t.ndim == 0:
         t = torch.tensor([t])
@@ -3824,8 +3805,8 @@ def _format_tensor(t, indent_level=0, sci_mode=None):
 
         return t_str
 
-    # Otherwise, we separte the representations of every elements along an outer dimension by new lines (after a `,`).
-    # The representatioin each element is obtained by calling this function recursively with corrent `indent_level`.
+    # Otherwise, we separate the representations of each element along an outer dimension by new lines (after a `,`).
+    # The representation of each element is obtained by calling this function recursively with current `indent_level`.
     else:
         t_str = str(t)
 
@@ -4038,7 +4019,7 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
 
             # extra conditions for returning one-line representation
             def use_one_line_repr(obj):
-                # interable types
+                # iterable types
                 if type(obj) in (list, tuple, dict):
                     # get all types
                     element_types = []
@@ -4086,3 +4067,277 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
     cache[(id(obj), indent, mode, prefix)] = output
 
     return output
+
+
+def write_file(file, content):
+    with open(file, "w") as f:
+        f.write(content)
+
+
+def read_json_file(file):
+    with open(file, "r") as fh:
+        return json.load(fh)
+
+
+# =============================================================================
+# Training CI Utilities - Logging and Memory Monitoring
+# =============================================================================
+
+
+# ANSI color codes for terminal output
+class Colors:
+    """ANSI color codes for terminal output formatting."""
+
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
+
+    # Foreground colors
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    BLUE = "\033[34m"
+    MAGENTA = "\033[35m"
+    CYAN = "\033[36m"
+    WHITE = "\033[37m"
+
+    # Bright variants
+    BRIGHT_RED = "\033[91m"
+    BRIGHT_GREEN = "\033[92m"
+    BRIGHT_YELLOW = "\033[93m"
+    BRIGHT_BLUE = "\033[94m"
+    BRIGHT_CYAN = "\033[96m"
+
+
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter that adds colors based on log level."""
+
+    LEVEL_COLORS = {
+        logging.DEBUG: Colors.DIM + Colors.CYAN,
+        logging.INFO: Colors.WHITE,
+        logging.WARNING: Colors.BRIGHT_YELLOW,
+        logging.ERROR: Colors.BRIGHT_RED,
+        logging.CRITICAL: Colors.BOLD + Colors.BRIGHT_RED,
+    }
+
+    # Loggers that should be dimmed (less important/verbose)
+    DIMMED_LOGGERS = {"httpx", "httpcore", "urllib3", "requests"}
+
+    def __init__(self, fmt: str | None = None, datefmt: str | None = None):
+        super().__init__(fmt, datefmt)
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Check if this logger should be dimmed
+        is_dimmed = record.name in self.DIMMED_LOGGERS
+
+        if is_dimmed:
+            # Dim the entire log line for httpx and similar
+            timestamp = self.formatTime(record, self.datefmt)
+            message = record.getMessage()
+            return f"{Colors.DIM}{timestamp} - {record.name} - {record.levelname:8} - {message}{Colors.RESET}"
+
+        # Get color for this level
+        color = self.LEVEL_COLORS.get(record.levelno, Colors.RESET)
+
+        # Color the level name
+        levelname = record.levelname
+        colored_levelname = f"{color}{levelname:8}{Colors.RESET}"
+
+        # Color the timestamp
+        colored_time = f"{Colors.DIM}{self.formatTime(record, self.datefmt)}{Colors.RESET}"
+
+        # Color the logger name
+        colored_name = f"{Colors.BLUE}{record.name}{Colors.RESET}"
+
+        # Get message
+        message = record.getMessage()
+
+        return f"{colored_time} - {colored_name} - {colored_levelname} - {message}"
+
+
+_warn_once_logged: set[str] = set()
+
+
+def init_test_logger() -> logging.Logger:
+    """Initialize a test-specific logger with colored stderr handler and INFO level for tests.
+
+    Uses a named logger instead of root logger to avoid conflicts with pytest-xdist parallel execution.
+    Uses stderr instead of stdout to avoid deadlocks with pytest-xdist output capture.
+    """
+    logger = logging.getLogger("transformers.training_test")
+    logger.setLevel(logging.INFO)
+
+    # Only add handler if not already present (avoid duplicate handlers on repeated calls)
+    if not logger.handlers:
+        # Use stderr instead of stdout - pytest-xdist captures stdout which can cause deadlocks
+        ch = logging.StreamHandler(sys.stderr)
+        ch.setLevel(logging.INFO)
+
+        # Use colored formatter if terminal supports it, plain otherwise
+        if sys.stderr.isatty():
+            formatter = ColoredFormatter(datefmt="%Y-%m-%d %H:%M:%S")
+        else:
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+            )
+
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)
+
+    logger.propagate = False  # Don't propagate to root logger to avoid duplicate output
+    return logger
+
+
+def warn_once(logger_instance: logging.Logger, msg: str) -> None:
+    """Log a warning message only once per unique message.
+
+    Uses a global set to track messages that have already been logged
+    to prevent duplicate warning messages from cluttering the output.
+
+    Args:
+        logger_instance: The logger instance to use for warning.
+        msg: The warning message to log.
+    """
+    if msg not in _warn_once_logged:
+        logger_instance.warning(msg)
+        _warn_once_logged.add(msg)
+
+
+# Named tuple for passing memory stats for logging
+MemoryStats = collections.namedtuple(
+    "MemoryStats",
+    [
+        "rss_gib",  # Resident Set Size in GiB
+        "rss_pct",  # RSS as percentage of total memory
+        "vms_gib",  # Virtual Memory Size in GiB
+        "peak_rss_gib",  # Peak RSS in GiB
+        "peak_rss_pct",  # Peak RSS as percentage of total memory
+        "available_gib",  # Available system memory in GiB
+        "total_gib",  # Total system memory in GiB
+    ],
+)
+
+
+class CPUMemoryMonitor:
+    """Monitor CPU memory usage for the current process."""
+
+    def __init__(self):
+        self.device_name = "CPU"
+        self._peak_rss = 0
+        self._process = None
+        self.total_memory = 0
+        self.total_memory_gib = 0
+
+        if is_psutil_available():
+            import psutil
+
+            self._process = psutil.Process(os.getpid())
+            mem_info = psutil.virtual_memory()
+            self.total_memory = mem_info.total
+            self.total_memory_gib = self._to_gib(self.total_memory)
+
+    def _to_gib(self, memory_in_bytes: int) -> float:
+        """Convert bytes to GiB."""
+        return memory_in_bytes / (1024 * 1024 * 1024)
+
+    def _to_pct(self, memory_in_bytes: int) -> float:
+        """Convert bytes to percentage of total memory."""
+        if self.total_memory == 0:
+            return 0.0
+        return 100.0 * memory_in_bytes / self.total_memory
+
+    def _update_peak(self) -> None:
+        """Update peak memory tracking."""
+        if self._process is not None:
+            current_rss = self._process.memory_info().rss
+            self._peak_rss = max(self._peak_rss, current_rss)
+
+    def get_stats(self) -> MemoryStats:
+        """Get current memory statistics."""
+        if not is_psutil_available():
+            return MemoryStats(0, 0, 0, 0, 0, 0, 0)
+
+        import psutil
+
+        self._update_peak()
+
+        mem_info = self._process.memory_info()
+        sys_mem = psutil.virtual_memory()
+
+        return MemoryStats(
+            rss_gib=self._to_gib(mem_info.rss),
+            rss_pct=self._to_pct(mem_info.rss),
+            vms_gib=self._to_gib(mem_info.vms),
+            peak_rss_gib=self._to_gib(self._peak_rss),
+            peak_rss_pct=self._to_pct(self._peak_rss),
+            available_gib=self._to_gib(sys_mem.available),
+            total_gib=self._to_gib(sys_mem.total),
+        )
+
+    def reset_peak_stats(self) -> None:
+        """Reset peak memory tracking."""
+        if self._process is not None:
+            self._peak_rss = self._process.memory_info().rss
+
+
+def build_cpu_memory_monitor(logger_instance: logging.Logger | None = None) -> CPUMemoryMonitor:
+    """Build and initialize a CPU memory monitor.
+
+    Args:
+        logger_instance: Optional logger to log initialization info. If None, no logging is done.
+
+    Returns:
+        CPUMemoryMonitor instance.
+    """
+    monitor = CPUMemoryMonitor()
+    if logger_instance is not None:
+        if is_psutil_available():
+            logger_instance.info(f"CPU memory monitor initialized: {monitor.total_memory_gib:.2f} GiB total")
+        else:
+            logger_instance.warning("psutil not available, memory monitoring disabled")
+    return monitor
+
+
+def convert_all_safetensors_to_bins(folder: str):
+    """Convert all safetensors files into torch bin files, to mimic saving with torch (since we still support loading
+    bin files, but not saving them anymore)"""
+    for file in os.listdir(folder):
+        path = os.path.join(folder, file)
+        if file.endswith(".safetensors"):
+            new_path = path.replace(".safetensors", ".bin").replace("model", "pytorch_model")
+            state_dict = load_file(path)
+            os.remove(path)
+            torch.save(state_dict, new_path)
+        # Adapt the index as well
+        elif file == SAFE_WEIGHTS_INDEX_NAME:
+            new_path = os.path.join(folder, WEIGHTS_INDEX_NAME)
+            with open(path) as f:
+                index = json.loads(f.read())
+            os.remove(path)
+            if "weight_map" in index.keys():
+                weight_map = index["weight_map"]
+                new_weight_map = {}
+                for k, v in weight_map.items():
+                    new_weight_map[k] = v.replace(".safetensors", ".bin").replace("model", "pytorch_model")
+            index["weight_map"] = new_weight_map
+            with open(new_path, "w") as f:
+                f.write(json.dumps(index, indent=4))
+
+
+@contextmanager
+def force_serialization_as_bin_files():
+    """Since we don't support saving with torch `.bin` files anymore, but still support loading them, we use this context
+    to easily create the bin files and try to load them back"""
+    try:
+        # Monkey patch the method to save as bin files
+        original_save = PreTrainedModel.save_pretrained
+
+        def new_save(self, save_directory, *args, **kwargs):
+            original_save(self, save_directory, *args, **kwargs)
+            convert_all_safetensors_to_bins(save_directory)
+
+        PreTrainedModel.save_pretrained = new_save
+
+        yield
+    finally:
+        PreTrainedModel.save_pretrained = original_save

@@ -17,10 +17,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -39,8 +39,10 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
 from .image_processing_lightglue import LightGlueImageProcessorKwargs
-from .modeling_lightglue import LightGlueKeypointMatchingOutput
 
+
+if TYPE_CHECKING:
+    from .modeling_lightglue import LightGlueKeypointMatchingOutput
 
 if is_vision_available():
     from PIL import Image, ImageDraw
@@ -103,7 +105,7 @@ def convert_to_grayscale(
     """
     if is_grayscale(image):
         return image
-    return F.rgb_to_grayscale(image, num_output_channels=3)
+    return tvF.rgb_to_grayscale(image, num_output_channels=3)
 
 
 @auto_docstring
@@ -130,19 +132,20 @@ class LightGlueImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> ImageInput:
         # we need to handle image pairs validation and flattening
+        images = self.fetch_images(images)
         return flatten_pair_images(images)
 
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        size: Union[dict[str, int], SizeDict],
+        size: dict[str, int] | SizeDict,
         rescale_factor: float,
         do_rescale: bool,
         do_resize: bool,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_grayscale: bool,
         disable_grouping: bool,
-        return_tensors: Union[str, TensorType],
+        return_tensors: str | TensorType,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -172,39 +175,38 @@ class LightGlueImageProcessorFast(BaseImageProcessorFast):
         stacked_pairs = [torch.stack(pair, dim=0) for pair in image_pairs]
 
         # Return in same format as slow processor
-        image_pairs = torch.stack(stacked_pairs, dim=0) if return_tensors else stacked_pairs
 
-        return BatchFeature(data={"pixel_values": image_pairs})
+        return BatchFeature(data={"pixel_values": stacked_pairs}, tensor_type=return_tensors)
 
     def post_process_keypoint_matching(
         self,
-        outputs: LightGlueKeypointMatchingOutput,
-        target_sizes: Union[TensorType, list[tuple]],
+        outputs: "LightGlueKeypointMatchingOutput",
+        target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the raw output of [`KeypointMatchingOutput`] into lists of keypoints, scores and descriptors
+        Converts the raw output of [`LightGlueKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
         Args:
-            outputs ([`KeypointMatchingOutput`]):
+            outputs ([`LightGlueKeypointMatchingOutput`]):
                 Raw outputs of the model.
-            target_sizes (`torch.Tensor` or `List[Tuple[Tuple[int, int]]]`, *optional*):
-                Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`Tuple[int, int]`) containing the
+            target_sizes (`torch.Tensor` or `list[tuple[tuple[int, int]]]`, *optional*):
+                Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`tuple[int, int]`) containing the
                 target size `(height, width)` of each image in the batch. This must be the original image size (before
                 any processing).
             threshold (`float`, *optional*, defaults to 0.0):
                 Threshold to filter out the matches with low scores.
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
+            `list[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
             of the pair, the matching scores and the matching indices.
         """
-        if outputs.matches.shape[0] != len(target_sizes):
+        if outputs.mask.shape[0] != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
         if not all(len(target_size) == 2 for target_size in target_sizes):
             raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
         if isinstance(target_sizes, list):
-            image_pair_sizes = torch.tensor(target_sizes, device=outputs.matches.device)
+            image_pair_sizes = torch.tensor(target_sizes, device=outputs.mask.device)
         else:
             if target_sizes.shape[1] != 2 or target_sizes.shape[2] != 2:
                 raise ValueError(
@@ -217,13 +219,22 @@ class LightGlueImageProcessorFast(BaseImageProcessorFast):
         keypoints = keypoints.to(torch.int32)
 
         results = []
-        for keypoints_pair, matches, scores in zip(keypoints, outputs.matches, outputs.matching_scores):
-            # Filter out matches with low scores
-            valid_matches = torch.logical_and(scores > threshold, matches > -1)
+        for mask_pair, keypoints_pair, matches, scores in zip(
+            outputs.mask, keypoints, outputs.matches[:, 0], outputs.matching_scores[:, 0]
+        ):
+            mask0 = mask_pair[0] > 0
+            mask1 = mask_pair[1] > 0
+            keypoints0 = keypoints_pair[0][mask0]
+            keypoints1 = keypoints_pair[1][mask1]
+            matches0 = matches[mask0]
+            scores0 = scores[mask0]
 
-            matched_keypoints0 = keypoints_pair[0][valid_matches[0]]
-            matched_keypoints1 = keypoints_pair[1][valid_matches[1]]
-            matching_scores = scores[0][valid_matches[0]]
+            # Filter out matches with low scores, invalid matches, and out-of-bounds indices
+            valid_matches = (scores0 > threshold) & (matches0 > -1) & (matches0 < keypoints1.shape[0])
+
+            matched_keypoints0 = keypoints0[valid_matches]
+            matched_keypoints1 = keypoints1[matches0[valid_matches]]
+            matching_scores = scores0[valid_matches]
 
             results.append(
                 {

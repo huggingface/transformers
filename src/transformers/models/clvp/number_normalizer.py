@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -175,7 +174,7 @@ class EnglishNormalizer:
         ordinal_suffixes = {1: "st", 2: "nd", 3: "rd"}
 
         num = int(num.group(0)[:-2])
-        if 10 <= num % 100 and num % 100 <= 20:
+        if num % 100 >= 10 and num % 100 <= 20:
             suffix = "th"
         else:
             suffix = ordinal_suffixes.get(num % 10, "th")

@@ -189,6 +189,7 @@ processor = ColQwen2Processor.from_pretrained(model_name)
 ## ColQwen2Processor
 
 [[autodoc]] ColQwen2Processor
+    - __call__
 
 ## ColQwen2ForRetrieval
 

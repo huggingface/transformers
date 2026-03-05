@@ -39,7 +39,7 @@ Antes de aplicar o fine-tuning a um modelo pré-treinado, baixe um dataset e pre
 O tutorial anterior ensinará a processar os dados para o treinamento, e então poderá ter a oportunidade de testar
 esse novo conhecimento em algo prático.
 
-Comece carregando o dataset [Yelp Reviews](https://huggingface.co/datasets/yelp_review_full):
+Comece carregando o dataset [Yelp Reviews](https://huggingface.co/datasets/Yelp/yelp_review_full):
 
 ```py
 >>> from datasets import load_dataset
@@ -87,7 +87,7 @@ A API do [`Trainer`] suporta um grande conjunto de opções de treinamento e fun
 o gradient accumulation e o mixed precision.
 
 Comece carregando seu modelo e especifique o número de labels de previsão.
-A partir do [Card Dataset](https://huggingface.co/datasets/yelp_review_full#data-fields) do Yelp Reveiw, que ja
+A partir do [Card Dataset](https://huggingface.co/datasets/Yelp/yelp_review_full#data-fields) do Yelp Reveiw, que ja
 sabemos ter 5 labels usamos o seguinte código:
 
 ```py

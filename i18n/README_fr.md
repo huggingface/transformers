@@ -245,7 +245,7 @@ Le modèle lui-même est un module [`nn.Module` PyTorch](https://pytorch.org/doc
 
 ### Avec pip
 
-Ce référentiel est testé sur Python 3.9+, Flax 0.4.1+, PyTorch 2.1+ et TensorFlow 2.6+.
+Ce référentiel est testé sur Python 3.10+ et PyTorch 2.4+.
 
 Vous devriez installer 🤗 Transformers dans un [environnement virtuel](https://docs.python.org/3/library/venv.html). Si vous n'êtes pas familier avec les environnements virtuels Python, consultez le [guide utilisateur](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 

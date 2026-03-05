@@ -212,7 +212,6 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     )
 
     test_resize_embeddings = False
-
     has_attentions = False
 
     def setUp(self):

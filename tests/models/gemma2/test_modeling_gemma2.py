@@ -27,13 +27,13 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     is_flash_attn_2_available,
+    is_kernels_available,
+    is_torch_xpu_available,
     require_flash_attn,
     require_large_cpu_ram,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_large_accelerator,
-    require_torch_large_gpu,
     run_test_using_subprocess,
     slow,
     torch_device,
@@ -61,6 +61,10 @@ class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.6]
     model_tester_class = Gemma2ModelTester
 
+    @unittest.skip("Gemma2 tanh soft-capping amplifies TP numerical noise beyond 80% match threshold")
+    def test_tp_generation_quantized(self):
+        pass
+
 
 @slow
 @require_torch_accelerator
@@ -74,7 +78,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @require_torch_large_accelerator
-    @require_read_token
     def test_model_9b_bf16(self):
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
@@ -95,7 +98,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_torch_large_accelerator
-    @require_read_token
     def test_model_9b_fp16(self):
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
@@ -115,7 +117,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @require_read_token
     @require_torch_large_accelerator
     def test_model_9b_pipeline_bf16(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
@@ -140,7 +141,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
     # TODO: run_test_using_subprocess was added because of an issue in torch 2.9, which is already fixed in nightly
     # We can remove this once we upgrade to torch 2.10
     @run_test_using_subprocess
-    @require_read_token
     def test_model_2b_pipeline_bf16_flex_attention(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
         model_id = "google/gemma-2-2b"
@@ -170,18 +170,26 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output[0][0]["generated_text"], EXPECTED_BATCH_TEXT[0])
         self.assertEqual(output[1][0]["generated_text"], EXPECTED_BATCH_TEXT[1])
 
-    @require_read_token
     @require_flash_attn
-    @require_torch_large_gpu
+    @require_torch_large_accelerator
     @mark.flash_attn_test
     @slow
     def test_model_9b_flash_attn(self):
         # See https://github.com/huggingface/transformers/issues/31953 --- flash attn was generating garbage for gemma2, especially in long context
         model_id = "google/gemma-2-9b"
-        EXPECTED_TEXTS = [
-            '<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many people died in the United States. I have found a few sites that say 500,000 but I am not sure if that is correct. I have also found a site that says 675,000 but I am not sure if that is correct either. I am trying to find out how many people died in the United States. I have found a few',
-            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America is a country in North America. It is the third largest country in the world by total area and the third most populous country with over 320 million people. The United States is a federal republic composed of 50 states and a federal district. The 48 contiguous states and the district of Columbia are in central North America between Canada and Mexico. The state of Alaska is in the",
-        ]  # fmt: skip
+        # fmt: off
+        EXPECTED_TEXTS = Expectations(
+            {
+                (None, None): ['<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many people died in the United States. I have found a few sites that say 500,000 but I am not sure if that is correct. I have also found a site that says 675,000 but I am not sure if that is correct either. I am trying to find out how many people died in the United States. I have found a few',
+                               "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America is a country in North America. It is the third largest country in the world by total area and the third most populous country with over 320 million people. The United States is a federal republic composed of 50 states and a federal district. The 48 contiguous states and the district of Columbia are in central North America between Canada and Mexico. The state of Alaska is in the",
+                              ],
+                ("xpu", None): ['<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many people died in the United States. I have found a few sites that say 500,000 but I am not sure if that is correct. I have also found a site that says 675,000 but I am not sure if that is correct either. I am trying to find out how many people died in the United States. I have found a few',
+                                "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America is a country in North America. It is the third largest country in the world by total area and the third most populous country with over 320 million people. The United States is a federal republic consisting of 50 states and a federal district. The 48 contiguous states and the district of Columbia are in central North America between Canada and Mexico. The state of Alaska is in the",
+                               ],
+            }
+        )
+        # fmt: on
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, attn_implementation="flash_attention_2", dtype="float16"
@@ -192,11 +200,10 @@ class Gemma2IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=100, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
 
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
     @pytest.mark.torch_export_test
     @slow
-    @require_read_token
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.5.0"):
             self.skipTest(reason="This test requires torch >= 2.5 to run.")
@@ -269,7 +276,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
     @slow
-    @require_read_token
     @require_large_cpu_ram
     @pytest.mark.torch_export_test
     def test_export_hybrid_cache(self):
@@ -312,7 +318,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(export_generated_text, eager_generated_text)
 
     @require_torch_large_accelerator
-    @require_read_token
     def test_model_9b_bf16_flex_attention(self):
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
@@ -333,7 +338,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
-    @require_read_token
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
         we need to correctly slice the attention mask in all cases (because we use a hybrid cache).
@@ -345,11 +349,12 @@ class Gemma2IntegrationTest(unittest.TestCase):
                 reason="`flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
             )
 
-        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+        if (
+            attn_implementation == "flash_attention_2"
+            and not is_flash_attn_2_available()
+            and not (is_torch_xpu_available() and is_kernels_available())
+        ):
             self.skipTest("FlashAttention2 is required for this test.")
-
-        if torch_device == "xpu" and attn_implementation == "flash_attention_2":
-            self.skipTest(reason="Intel XPU doesn't support flash_attention_2 as of now.")
 
         model_id = "google/gemma-2-2b"
         EXPECTED_COMPLETIONS = [
@@ -379,7 +384,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
-    @require_read_token
     def test_generation_beyond_sliding_window_dynamic(self, attn_implementation: str):
         """
         Same as above, but explicitly setting the cache to Dynamic, as it's otherwise static by default for
@@ -391,11 +395,12 @@ class Gemma2IntegrationTest(unittest.TestCase):
                 reason="`flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
             )
 
-        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+        if (
+            attn_implementation == "flash_attention_2"
+            and not is_flash_attn_2_available()
+            and not (is_torch_xpu_available() and is_kernels_available())
+        ):
             self.skipTest("FlashAttention2 is required for this test.")
-
-        if torch_device == "xpu" and attn_implementation == "flash_attention_2":
-            self.skipTest(reason="Intel XPU doesn't support flash_attention_2 as of now.")
 
         model_id = "google/gemma-2-2b"
         EXPECTED_COMPLETIONS = [

@@ -26,8 +26,8 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -229,33 +229,12 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     pipeline_model_mapping = (
         {
             "feature-extraction": M2M100Model,
-            "summarization": M2M100ForConditionalGeneration,
-            "text2text-generation": M2M100ForConditionalGeneration,
-            "translation": M2M100ForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
     is_encoder_decoder = True
     test_missing_keys = False
-
-    # TODO: Fix the failed tests
-    def is_pipeline_test_to_skip(
-        self,
-        pipeline_test_case_name,
-        config_class,
-        model_architecture,
-        tokenizer_name,
-        image_processor_name,
-        feature_extractor_name,
-        processor_name,
-    ):
-        if pipeline_test_case_name == "TranslationPipelineTests":
-            # Get `ValueError: Translation requires a `src_lang` and a `tgt_lang` for this model`.
-            # `M2M100Config` was never used in pipeline tests: cannot create a simple tokenizer.
-            return True
-
-        return False
 
     def setUp(self):
         self.model_tester = M2M100ModelTester(self)
@@ -272,7 +251,7 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -418,7 +397,7 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         assert generated == expected_en
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_seq_to_seq_generation(self):

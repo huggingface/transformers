@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 NVIDIA CORPORATION and the HuggingFace Inc. team. All rights
 # reserved.
 #
@@ -14,27 +13,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
-
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...masking_utils import eager_mask, padding_mask_function
-from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...masking_utils import create_bidirectional_mask
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..qwen2_audio.modeling_qwen2_audio import (
     Qwen2AudioEncoder,
     Qwen2AudioPreTrainedModel,
 )
 from ..voxtral.modeling_voxtral import VoxtralForConditionalGeneration, VoxtralMultiModalProjector
-from ..whisper.modeling_whisper import WhisperEncoderLayer
+from ..whisper.modeling_whisper import WhisperAttention, WhisperEncoderLayer
 from .configuration_audioflamingo3 import AudioFlamingo3Config
 
 
 logger = logging.get_logger(__name__)
+
+
+class AudioFlamingo3Attention(WhisperAttention):
+    pass
 
 
 class AudioFlamingo3EncoderLayer(WhisperEncoderLayer):
@@ -55,12 +58,19 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
     AudioFlamingo3 encoder: Whisper encoder, average pool (time/2), then LayerNorm.
     """
 
-    @can_return_tuple
+    _can_record_outputs = {
+        "hidden_states": AudioFlamingo3EncoderLayer,
+        "attentions": AudioFlamingo3Attention,
+    }
+
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_features: torch.Tensor,
-        input_features_mask: Optional[torch.Tensor] = None,
-    ):
+        input_features_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Args:
             input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
@@ -73,20 +83,10 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
                 - 0 for tokens that are **masked**.
         """
 
-        # Prepare attention mask for transformer layers
-        batch_size = input_features.shape[0]
         seq_len = (input_features.shape[-1] - 1) // 2 + 1  # After conv2 downsampling
-
         input_features_lengths = input_features_mask.sum(-1)
         input_features_lengths = (input_features_lengths - 1) // 2 + 1  # conv2 downsampling
         input_features_mask = torch.arange(seq_len, device=input_features.device) < input_features_lengths[:, None]
-        attention_mask = eager_mask(
-            batch_size=batch_size,
-            cache_position=torch.arange(seq_len, device=input_features.device),
-            kv_length=seq_len,
-            mask_function=padding_mask_function(input_features_mask),
-            dtype=self.conv1.weight.dtype,
-        )
 
         # Conv front-end
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
@@ -96,6 +96,12 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         # Add positions, dropout
         hidden_states = inputs_embeds + self.embed_positions.weight
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=input_features_mask,
+        )
 
         # Transformer stack
         for layer in self.layers:
@@ -108,7 +114,7 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         hidden_states = self.avg_pooler(hidden_states).permute(0, 2, 1)
         hidden_states = self.layer_norm(hidden_states)
 
-        return BaseModelOutput(
+        return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
         )
 
@@ -136,65 +142,62 @@ class AudioFlamingo3MultiModalProjector(VoxtralMultiModalProjector):
     """
 )
 class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
-    _tied_weights_keys = None
     _tp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
 
     def __init__(self, config):
         super().__init__(config)
-        # Similar to Qwen2Audio
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector."
+    )
     def get_audio_features(
-        self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor
-    ) -> torch.FloatTensor:
-        """
-        This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
-        Args:
-            input_features (`torch.FloatTensor`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-            input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
-                Mask to avoid performing attention on padded feature indices.
-
-        Returns:
-            `torch.FloatTensor`:
-                The audio embeddings.
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        input_features (`torch.FloatTensor`):
+            Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
+            `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+            and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padded feature indices.
         """
 
         # Encode audio
-        encoder_output = self.audio_tower(input_features, input_features_mask=input_features_mask)
-        audio_embeds = self.multi_modal_projector(encoder_output.last_hidden_state)
+        audio_output = self.audio_tower(
+            input_features, input_features_mask=input_features_mask, return_dict=True, **kwargs
+        )
+        audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
 
         # Mask according to avg pooling (which is after attention blocks)
         post_lengths = (input_features_mask.sum(-1) - 2) // 2 + 1
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
-        return audio_embeds
+        audio_output.pooler_output = audio_embeds
 
-    def get_audio_embeds(self):
-        raise NotImplementedError("This method is not supported for AudioFlamingo3ForConditionalGeneration.")
+        return audio_output
 
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        input_features: Optional[torch.FloatTensor] = None,
-        input_features_mask: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
@@ -264,7 +267,7 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask)
+            audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
@@ -279,22 +282,20 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
             past_key_values=past_key_values,
             labels=labels,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
         return outputs
 
-    def prepare_inputs_for_generation(self, *args, **kwargs):
+    def prepare_inputs_for_generation(self, *args, is_first_iteration: bool = False, **kwargs):
         # Overwritten -- we should not pass input_features when we are in cached decoding stage
 
         input_features = kwargs.pop("input_features", None)
         input_features_mask = kwargs.pop("input_features_mask", None)
-        cache_position = kwargs.get("cache_position")
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if cache_position is not None and cache_position[0] == 0:
+        if is_first_iteration or not model_inputs.get("use_cache", False):
             # input_features should only be passed when we are not in cached decoding stage
             if input_features is not None:
                 model_inputs["input_features"] = input_features

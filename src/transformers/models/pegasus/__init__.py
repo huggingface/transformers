@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .configuration_pegasus import *
     from .modeling_pegasus import *
     from .tokenization_pegasus import *
-    from .tokenization_pegasus_fast import *
 else:
     import sys
 

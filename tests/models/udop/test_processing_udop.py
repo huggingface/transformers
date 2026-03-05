@@ -12,15 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
 from functools import cached_property
 
 from transformers import (
-    PreTrainedTokenizer,
-    PreTrainedTokenizerBase,
-    PreTrainedTokenizerFast,
     UdopProcessor,
     UdopTokenizer,
     UdopTokenizerFast,
@@ -55,100 +50,26 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     maxDiff = None
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        image_processor = LayoutLMv3ImageProcessor(
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class(
             do_resize=True,
             size=224,
             apply_ocr=True,
         )
-        tokenizer = UdopTokenizer.from_pretrained("microsoft/udop-large")
-        processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        processor.save_pretrained(cls.tmpdirname)
-
-        cls.tokenizer_pretrained_name = "microsoft/udop-large"
-
-        image_processor = cls.get_image_processor()
-        tokenizer = cls.get_tokenizers()[0]
-        processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        processor.save_pretrained(cls.tmpdirname)
 
     @classmethod
-    def get_tokenizer(cls, **kwargs) -> PreTrainedTokenizer:
-        return cls.tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        return tokenizer_class.from_pretrained("microsoft/udop-large")
 
-    @classmethod
-    def get_image_processor(cls, **kwargs):
-        return LayoutLMv3ImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
-
-    @classmethod
-    def get_rust_tokenizer(cls, **kwargs) -> PreTrainedTokenizerFast:
-        return cls.rust_tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
-
-    @classmethod
-    def get_tokenizers(cls, **kwargs) -> list[PreTrainedTokenizerBase]:
-        return [cls.get_tokenizer(**kwargs), cls.get_rust_tokenizer(**kwargs)]
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    def test_save_load_pretrained_default(self):
-        image_processor = self.get_image_processor()
-        tokenizers = self.get_tokenizers()
-        for tokenizer in tokenizers:
-            processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
-            with tempfile.TemporaryDirectory() as tmpdir:
-                processor.save_pretrained(tmpdir)
-                processor = UdopProcessor.from_pretrained(tmpdir)
-
-            self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-            self.assertIsInstance(processor.tokenizer, (UdopTokenizer, UdopTokenizerFast))
-
-            self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
-            self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
-
-    def test_save_load_pretrained_additional_features(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            processor = UdopProcessor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
-            processor.save_pretrained(tmpdir)
-
-            # slow tokenizer
-            tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-            image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
-
-            processor = UdopProcessor.from_pretrained(
-                tmpdir,
-                use_fast=False,
-                bos_token="(BOS)",
-                eos_token="(EOS)",
-                do_resize=False,
-                size=30,
-            )
-
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, UdopTokenizer)
-
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
-
-        # fast tokenizer
-        tokenizer_add_kwargs = self.get_rust_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
-
-        processor = UdopProcessor.from_pretrained(
-            self.tmpdirname, use_xlm=True, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
-        )
-
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, UdopTokenizerFast)
-
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
+    @unittest.skip("UdopProcessor doesn't return pixel_values tensors")
+    def test_image_processor_defaults(self):
+        pass
 
     def test_text_target(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
 
         processor = UdopProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
@@ -175,9 +96,9 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         def preprocess_data(examples):
             images = [image.convert("RGB") for image in examples["image"]]
-            words = examples["words"]
-            boxes = examples["bboxes"]
-            word_labels = examples["ner_tags"]
+            words = list(examples["words"])
+            boxes = list(examples["bboxes"])
+            word_labels = list(examples["ner_tags"])
             encoded_inputs = processor(
                 images,
                 words,

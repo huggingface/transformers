@@ -316,36 +316,6 @@ class MvpHeadTests(unittest.TestCase):
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(outputs["logits"].shape, expected_shape)
 
-    def test_generate_beam_search(self):
-        input_ids = torch.tensor([[71, 82, 2], [68, 34, 2]], device=torch_device, dtype=torch.long)
-        config = MvpConfig(
-            vocab_size=self.vocab_size,
-            d_model=24,
-            encoder_layers=2,
-            decoder_layers=2,
-            encoder_attention_heads=2,
-            decoder_attention_heads=2,
-            encoder_ffn_dim=32,
-            decoder_ffn_dim=32,
-            max_position_embeddings=48,
-            eos_token_id=2,
-            pad_token_id=1,
-            bos_token_id=0,
-        )
-        lm_model = MvpForConditionalGeneration(config).to(torch_device)
-        lm_model.eval()
-
-        max_length = 5
-        generated_ids = lm_model.generate(
-            input_ids.clone(),
-            do_sample=True,
-            num_return_sequences=1,
-            num_beams=2,
-            no_repeat_ngram_size=3,
-            max_length=max_length,
-        )
-        self.assertEqual(generated_ids.shape, (input_ids.shape[0], max_length))
-
     def test_shift_tokens_right(self):
         input_ids = torch.tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]], dtype=torch.long)
         shifted = shift_tokens_right(input_ids, 1, 2)
@@ -409,12 +379,8 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         {
             "feature-extraction": MvpModel,
             "fill-mask": MvpForConditionalGeneration,
-            "question-answering": MvpForQuestionAnswering,
-            "summarization": MvpForConditionalGeneration,
             "text-classification": MvpForSequenceClassification,
             "text-generation": MvpForCausalLM,
-            "text2text-generation": MvpForConditionalGeneration,
-            "translation": MvpForConditionalGeneration,
             "zero-shot": MvpForSequenceClassification,
         }
         if is_torch_available()
@@ -462,7 +428,7 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -556,7 +522,7 @@ class MvpModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[0.3461, 0.3624, 0.2689], [0.3461, 0.3624, 0.2689], [-0.1562, 1.1637, -0.3784]], device=torch_device
         )
-        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(output[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_summarization_inference(self):
@@ -564,14 +530,14 @@ class MvpModelIntegrationTests(unittest.TestCase):
         tok = self.default_tokenizer
         PGE_ARTICLE = """ Listen to local radio broadcasts for advertisements that reference casinos in your area.\nIf none are in your area, listen to national radio broadcasts for advertisements of casinos in other areas.\nNote the location that is mentioned in each advertisement that involves a casino.\nIf no locations are mentioned, note any additional contact information, such as a website or phone number. Use that information to find out where the casinos are.;\n,\n\nIf you learn about more than 1 casino on the radio, use the Internet to search the distance between your location and each casino. Sites such as maps.google.com or mapquest.com will help you in this search.'"""  # fmt: skip
         EXPECTED_SUMMARY = "Listen to the radio.\nUse the Internet."
-        dct = tok.batch_encode_plus(
+        dct = tok(
             [PGE_ARTICLE],
             return_tensors="pt",
         ).to(torch_device)
 
         hypotheses_batch = model.generate(**dct)
 
-        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True)
+        decoded = tok.decode(hypotheses_batch, skip_special_tokens=True)
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
 

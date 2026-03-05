@@ -200,6 +200,8 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         {"zero-shot-object-detection": OmDetTurboForObjectDetection} if is_torch_available() else {}
     )
 
+    test_torch_exportable = False  # uses and implements lru caching, not compatible with torch.export
+
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -374,7 +376,7 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 # init
                 # indexing the first element does not always work
                 # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
-                slice_ids = [slice(0, index) for index in single_row_object.shape]
+                slice_ids = tuple(slice(0, index) for index in single_row_object.shape)
                 batched_row = batched_object[slice_ids]
                 self.assertFalse(
                     torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"

@@ -432,30 +432,6 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         self.assertEqual(rle[0], 21)
         self.assertEqual(rle[1], 45)
 
-    def test_post_process_segmentation(self):
-        for image_processing_class in self.image_processor_list:
-            feature_extractor = image_processing_class(num_labels=self.image_processor_tester.num_classes)
-            outputs = self.image_processor_tester.get_fake_maskformer_outputs()
-            segmentation = feature_extractor.post_process_segmentation(outputs)
-
-            self.assertEqual(
-                segmentation.shape,
-                (
-                    self.image_processor_tester.batch_size,
-                    self.image_processor_tester.num_classes,
-                    self.image_processor_tester.height,
-                    self.image_processor_tester.width,
-                ),
-            )
-
-            target_size = (1, 4)
-            segmentation = feature_extractor.post_process_segmentation(outputs, target_size=target_size)
-
-            self.assertEqual(
-                segmentation.shape,
-                (self.image_processor_tester.batch_size, self.image_processor_tester.num_classes, *target_size),
-            )
-
     def test_post_process_semantic_segmentation(self):
         for image_processing_class in self.image_processor_list:
             feature_extractor = image_processing_class(num_labels=self.image_processor_tester.num_classes)

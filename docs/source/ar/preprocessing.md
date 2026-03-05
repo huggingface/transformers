@@ -302,7 +302,7 @@ pip install datasets
 
 </Tip>
 
-قم بتحميل مجموعة بيانات [food101](https://huggingface.co/datasets/food101) (راجع دليل 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub) لمزيد من التفاصيل حول كيفية تحميل مجموعة بيانات) لمعرفة كيف يمكنك استخدام معالج الصور مع مجموعات بيانات رؤية الحاسب:
+قم بتحميل مجموعة بيانات [food101](https://huggingface.co/datasets/ethz/food101) (راجع دليل 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub) لمزيد من التفاصيل حول كيفية تحميل مجموعة بيانات) لمعرفة كيف يمكنك استخدام معالج الصور مع مجموعات بيانات رؤية الحاسب:
 
 <Tip>
 
@@ -313,7 +313,7 @@ pip install datasets
 ```py
 >>> from datasets import load_dataset
 
->>> dataset = load_dataset("food101", split="train[:100]")
+>>> dataset = load_dataset("ethz/food101", split="train[:100]")
 ```
 
 بعد ذلك، الق نظرة على الصورة مع ميزة 🤗 Datasets [`Image`](https://huggingface.co/docs/datasets/package_reference/main_classes?highlight=image#datasets.Image):

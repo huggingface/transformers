@@ -35,8 +35,9 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils.generic import is_flash_attention_requested
 
-from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -248,6 +249,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         {
             "feature-extraction": KyutaiSpeechToTextModel,
             "automatic-speech-recognition": KyutaiSpeechToTextForConditionalGeneration,
+            "any-to-any": KyutaiSpeechToTextForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -422,8 +424,20 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
+            assert_similar_generate_outputs(outputs, outputs_cached)
             self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+
+    # skipping for anything FA related that is not FA2 (no attn interface implemented)
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ):
+        if (
+            is_flash_attention_requested(requested_attention_implementation=attn_implementation)
+            and attn_implementation != "flash_attention_2"
+        ):
+            self.skipTest(reason="Model fails for every other FA implementation than FA2 (no attention interface).")
+
+        super().flash_attn_inference_equivalence(attn_implementation, padding_side, atol, rtol)
 
     # needs to be overridden to avoid to avoid casting of input_values to float16
     # indeed, the codec model is kept in fp32, so we need to avoid casting input_values to float16
@@ -438,6 +452,12 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn",
         }
+
+        if (
+            is_flash_attention_requested(requested_attention_implementation=attn_implementation)
+            and attn_implementation != "flash_attention_2"
+        ):
+            self.skipTest(reason="Model fails for every other FA implementation than FA2 (no attention interface).")
 
         for model_class in self.all_generative_model_classes:
             if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
@@ -456,10 +476,10 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
                     inputs_dict[input_name] = input_data
             main_input = inputs_dict[model_class.main_input_name]
 
-            # FA2 doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
+            # FA doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
             # attention masks at test time and, with generate, the mask will be appended with 1s on the right,
-            # resulting in a mask with holes (not supported properly by FA2).
-            if attn_implementation == "flash_attention_2":
+            # resulting in a mask with holes (not supported properly by FA).
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
                 for input_name in ("attention_mask", "decoder_attention_mask", "encoder_attention_mask"):
                     if input_name in inputs_dict:
                         inputs_dict[input_name] = torch.ones_like(inputs_dict[input_name])
@@ -501,7 +521,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
                 del model_attn
                 gc.collect()
 
-                self.assertTrue(has_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3))
+                assert_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3)
 
 
 @require_torch

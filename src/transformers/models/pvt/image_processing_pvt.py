@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for Pvt."""
-
-from typing import Optional, Union
 
 import numpy as np
 
@@ -50,7 +47,7 @@ class PvtImageProcessor(BaseImageProcessor):
         size (`dict`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -75,13 +72,13 @@ class PvtImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -96,14 +93,13 @@ class PvtImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
-    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
         size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -114,8 +110,8 @@ class PvtImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
                 image is used. Can be one of:
@@ -132,6 +128,7 @@ class PvtImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
+
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
@@ -149,17 +146,17 @@ class PvtImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: str | ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Preprocess an image or batch of images.
@@ -174,7 +171,7 @@ class PvtImageProcessor(BaseImageProcessor):
                 Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
                 resizing.
             resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
-                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
+                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BICUBIC`. Only has
                 an effect if `do_resize` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].

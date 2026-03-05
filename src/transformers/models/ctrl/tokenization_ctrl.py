@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Salesforce and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +14,10 @@
 """Tokenization classes for Salesforce CTRL."""
 
 import json
-import os
-from typing import Optional
 
 import regex as re
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -136,7 +133,14 @@ class CTRLTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
-        super().__init__(unk_token=unk_token, **kwargs)
+        self.add_bpe_version_header = True
+        super().__init__(
+            unk_token=unk_token,
+            token_type_ids_pattern="all_zeros",
+            token_type_ids_include_special_tokens=True,
+            special_tokens_pattern="none",
+            **kwargs,
+        )
 
     @property
     def vocab_size(self):
@@ -211,35 +215,6 @@ class CTRLTokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (string) in a single string."""
         out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
-
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-        merge_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
-        )
-
-        with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
-
-        index = 0
-        with open(merge_file, "w", encoding="utf-8") as writer:
-            writer.write("#version: 0.2\n")
-            for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
-                if index != token_index:
-                    logger.warning(
-                        f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
-                        " Please check that the tokenizer is not corrupted!"
-                    )
-                    index = token_index
-                writer.write(" ".join(bpe_tokens) + "\n")
-                index += 1
-
-        return vocab_file, merge_file
 
     # def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
     #     filtered_tokens = ' '.join(self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens))

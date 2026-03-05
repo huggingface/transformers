@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022, UCLA NLP, The Facebook AI Research Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +14,12 @@
 """PyTorch PLBART model."""
 
 import math
-from typing import Optional, Union
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
@@ -56,6 +55,11 @@ class PLBartPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, PLBartForConditionalGeneration):
+            init.zeros_(module.final_logits_bias)
+
 
 class PLBartEncoder(BartEncoder):
     pass
@@ -67,7 +71,10 @@ class PLBartDecoder(BartDecoder):
 
 @auto_docstring
 class PLBartModel(PLBartPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: PLBartConfig):
         super().__init__(config)
@@ -76,10 +83,10 @@ class PLBartModel(PLBartPreTrainedModel):
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.shared = PLBartScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
 
-        self.encoder = PLBartEncoder(config, self.shared)
-        self.decoder = PLBartDecoder(config, self.shared)
+        self.encoder = PLBartEncoder(config)
+        self.decoder = PLBartDecoder(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.shared
@@ -89,31 +96,24 @@ class PLBartModel(PLBartPreTrainedModel):
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
 
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[tuple[torch.Tensor], Seq2SeqModelOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.Tensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -203,7 +203,9 @@ class PLBartModel(PLBartPreTrainedModel):
 class PLBartForConditionalGeneration(PLBartPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config: PLBartConfig):
         super().__init__(config)
@@ -211,16 +213,10 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel, GenerationMixin):
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
-        self.init_weights()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
+        self.post_init()
 
     def resize_token_embeddings(
-        self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
+        self, new_num_tokens: int, pad_to_multiple_of: int | None = None, mean_resizing: bool = True
     ) -> nn.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
         self._resize_final_logits_bias(new_embeddings.weight.shape[0])
@@ -238,21 +234,22 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[tuple[torch.Tensor], Seq2SeqLMOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.Tensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | Seq2SeqLMOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -398,7 +395,7 @@ class PLBartForCausalLM(BartForCausalLM):
         >>> from transformers import AutoTokenizer, PLBartForCausalLM
 
         >>> tokenizer = AutoTokenizer.from_pretrained("uclanlp/plbart-base")
-        >>> model = PLBartForCausalLM.from_pretrained("uclanlp/plbart-base", add_cross_attention=False)
+        >>> model = PLBartForCausalLM.from_pretrained("uclanlp/plbart-base")
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
