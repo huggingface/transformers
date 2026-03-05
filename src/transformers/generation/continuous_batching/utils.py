@@ -18,6 +18,8 @@ import torch
 
 from transformers.configuration_utils import PretrainedConfig
 
+from .requests import logger
+
 
 class CudaGraphBuffer:
     """A fixed-size dict for CUDA graphs with LRU eviction when full."""
@@ -36,8 +38,9 @@ class CudaGraphBuffer:
 
     def set_graph(self, q_len: int, kv_len: int, graph: torch.cuda.CUDAGraph) -> None:
         if len(self._storage) >= self.max_size:
-            _, graph = self._storage.popitem(last=False)
-            graph.reset()
+            evicted_key, evicted_graph = self._storage.popitem(last=False)
+            logger.info(f"Evicting graph for {evicted_key = }")
+            evicted_graph.reset()
         self._storage[(q_len, kv_len)] = graph
 
 

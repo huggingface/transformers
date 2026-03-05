@@ -167,7 +167,7 @@ class MambaMixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
-    def __init__(self, config: MambaConfig, layer_idx: int):
+    def __init__(self, config: MambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -201,11 +201,10 @@ class MambaMixer(nn.Module):
 
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
-        A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32)[None, :]
-        A = A.expand(self.intermediate_size, -1).contiguous()
-
-        self.A_log = nn.Parameter(torch.log(A))
-        self.D = nn.Parameter(torch.ones(self.intermediate_size))
+        self.A_log = nn.Parameter(torch.empty(self.intermediate_size, self.ssm_state_size))
+        self.D = nn.Parameter(torch.empty(self.intermediate_size))
+        if initialize_mixer_weights and self.dt_proj.weight.device.type != "meta":
+            self.init_mamba_weights()
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
 
@@ -223,6 +222,28 @@ class MambaMixer(nn.Module):
         mamba_inner_fn = getattr(mamba_ssm, "mamba_inner_fn", None)
 
         self.warn_slow_implementation()
+
+    @torch.no_grad()
+    def init_mamba_weights(self):
+        A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32, device=self.A_log.device)[None, :]
+        A = A.expand(self.intermediate_size, -1).contiguous()
+        init.copy_(self.A_log, torch.log(A))
+        init.ones_(self.D)
+
+        dt_init_std = self.config.time_step_rank**-0.5 * self.config.time_step_scale
+        if self.config.time_step_init_scheme == "constant":
+            init.constant_(self.dt_proj.weight, dt_init_std)
+        elif self.config.time_step_init_scheme == "random":
+            init.uniform_(self.dt_proj.weight, -dt_init_std, dt_init_std)
+
+        dt = torch.exp(
+            torch.rand(self.intermediate_size, device=self.dt_proj.bias.device, dtype=torch.float32)
+            * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
+            + math.log(self.config.time_step_min)
+        ).clamp(min=self.config.time_step_floor)
+        # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
+        inv_dt = dt + torch.log(-torch.expm1(-dt))
+        init.copy_(self.dt_proj.bias, inv_dt)
 
     def warn_slow_implementation(self):
         is_fast_path_available = all(
@@ -488,7 +509,7 @@ class MambaBlock(GradientCheckpointingLayer):
         self.layer_idx = layer_idx
         self.residual_in_fp32 = config.residual_in_fp32
         self.norm = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        self.mixer = MambaMixer(config, layer_idx=layer_idx)
+        self.mixer = MambaMixer(config, layer_idx=layer_idx, initialize_mixer_weights=False)
 
     def forward(
         self,
@@ -524,25 +545,7 @@ class MambaPreTrainedModel(PreTrainedModel):
         if isinstance(module, MambaMixer):
             # S4D real initialization. These are not discretized!
             # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
-            A = torch.arange(1, module.ssm_state_size + 1, dtype=torch.float32)[None, :]
-            A = A.expand(module.intermediate_size, -1).contiguous()
-            init.copy_(module.A_log, torch.log(A))
-            init.ones_(module.D)
-
-            dt_init_std = self.config.time_step_rank**-0.5 * self.config.time_step_scale
-            if self.config.time_step_init_scheme == "constant":
-                init.constant_(module.dt_proj.weight, dt_init_std)
-            elif self.config.time_step_init_scheme == "random":
-                init.uniform_(module.dt_proj.weight, -dt_init_std, dt_init_std)
-
-            dt = torch.exp(
-                torch.rand(self.config.intermediate_size)
-                * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
-                + math.log(self.config.time_step_min)
-            ).clamp(min=self.config.time_step_floor)
-            # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
-            inv_dt = dt + torch.log(-torch.expm1(-dt))
-            init.copy_(module.dt_proj.bias, inv_dt)
+            module.init_mamba_weights()
 
             init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
             if module.conv1d.bias is not None:
