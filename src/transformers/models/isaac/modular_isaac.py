@@ -425,15 +425,6 @@ class IsaacVisionTransformer(PreTrainedModel):
     Args:
         config (IsaacVisionConfig): Vision configuration with pixel-shuffle and patching parameters.
 
-    Inputs:
-        vision_tokens (Tuple[Tensor, Tensor, Optional[Tensor]]):
-            `(patches, token_grids, patch_attention_mask)` where:
-            - `patches`: `(num_images, max_patches, patch_dim)`
-            - `token_grids`: `(num_images, 2)` with per-image `(H_tokens, W_tokens)`
-            - `patch_attention_mask`: `(num_images, max_patches)` or `None`
-
-    Returns:
-        Tuple of `(pixel_shuffled_features, attention_mask, token_lengths)`.
     """
 
     _supports_sdpa = True
@@ -459,6 +450,17 @@ class IsaacVisionTransformer(PreTrainedModel):
         self,
         vision_tokens: tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor | None],
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Inputs:
+            vision_tokens (Tuple[Tensor, Tensor, Optional[Tensor]]):
+                `(patches, token_grids, patch_attention_mask)` where:
+                - `patches`: `(num_images, max_patches, patch_dim)`
+                - `token_grids`: `(num_images, 2)` with per-image `(H_tokens, W_tokens)`
+                - `patch_attention_mask`: `(num_images, max_patches)` or `None`
+
+        Returns:
+            Tuple of `(pixel_shuffled_features, attention_mask, token_lengths)`.
+        """
         if len(vision_tokens) == 2:
             seq_patches, token_grids = vision_tokens
             vision_patch_attention_mask = None
