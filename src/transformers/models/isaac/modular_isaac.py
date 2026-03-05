@@ -206,7 +206,6 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         image_std: float | Sequence[float] | None,
         disable_grouping: bool | None = None,
         return_tensors: str | TensorType | None = None,
-        *,
         patch_size: int | None = None,
         max_num_patches: int | None = None,
         min_num_patches: int | None = None,
