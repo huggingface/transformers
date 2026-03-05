@@ -94,21 +94,26 @@ class BitNetHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return (
-            self.quantization_config.linear_class == "autobitlinear" and self.quantization_config.quantization_mode == "online"
+            self.quantization_config.linear_class == "autobitlinear"
+            and self.quantization_config.quantization_mode == "online"
         )
 
     @property
     def is_qat_trainable(self) -> bool:
         """Flag indicating whether the quantized model can carry out quantization aware training"""
         return (
-            self.quantization_config.linear_class == "autobitlinear" and self.quantization_config.quantization_mode == "online"
+            self.quantization_config.linear_class == "autobitlinear"
+            and self.quantization_config.quantization_mode == "online"
         )
 
     def get_weight_conversions(self):
         from ..core_model_loading import WeightConverter
         from ..integrations.bitnet import BitNetDeserialize
 
-        if self.quantization_config.linear_class == "autobitlinear" and self.quantization_config.quantization_mode == "offline":
+        if (
+            self.quantization_config.linear_class == "autobitlinear"
+            and self.quantization_config.quantization_mode == "offline"
+        ):
             return [
                 WeightConverter(
                     source_patterns=["weight"],

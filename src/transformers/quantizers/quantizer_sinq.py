@@ -222,9 +222,7 @@ class SinqHfQuantizer(HfQuantizer):
         # Enable param-level quantization for SINQ method
         self._do_param_level_sinq = quantization_config.method == "sinq" and not self.pre_quantized
 
-        sinq_quant_dict = (
-            None if self.pre_quantized else self._build_sinq_quant_dict(self.quantization_config)
-        )
+        sinq_quant_dict = None if self.pre_quantized else self._build_sinq_quant_dict(self.quantization_config)
 
         # Extract device from device_map (guaranteed to be set by update_device_map)
         if isinstance(device_map, dict):

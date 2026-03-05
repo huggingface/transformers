@@ -471,6 +471,10 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
     if importlib.util.find_spec("torch_neuronx") is None:
         return False
 
+    neuron = getattr(torch, "neuron", None)
+    if neuron is None:
+        return False
+
     if check_device:
         try:
             import torch_neuronx  # noqa: F401
@@ -481,7 +485,7 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
         except (AttributeError, RuntimeError):
             return False
 
-    return hasattr(torch, "neuron") and torch.neuron.is_available()
+    return neuron.is_available()
 
 
 @lru_cache
