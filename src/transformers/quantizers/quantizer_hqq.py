@@ -252,8 +252,8 @@ class HqqHfQuantizer(HfQuantizer):
         model = prepare_for_hqq_linear(model, quantization_config=self.quantization_config)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model.is_hqq_quantized = True  # type: ignore[attr-defined]
-        model.is_hqq_serializable = self.is_serializable()  # type: ignore[attr-defined]
+        setattr(model, "is_hqq_quantized", True)
+        setattr(model, "is_hqq_serializable", self.is_serializable())
         return model
 
     def is_serializable(self):
