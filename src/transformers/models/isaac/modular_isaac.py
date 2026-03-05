@@ -698,7 +698,6 @@ class IsaacProcessor(ProcessorMixin):
         self,
         image_processor,
         tokenizer,
-        *,
         vision_token: str = "<image>",
         max_sequence_length: int = 16384,
         rescale_factor: float | None = None,
