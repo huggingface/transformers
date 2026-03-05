@@ -278,12 +278,16 @@
       title: MLX
     title: Local deployment
   - sections:
+    - local: community_integrations/nemo_automodel_pretraining
+      title: NeMo Automodel
     - local: community_integrations/nanotron
       title: Nanotron
     - local: community_integrations/torchtitan
       title: torchtitan
     title: Pretraining
   - sections:
+    - local: community_integrations/nemo_automodel_finetuning
+      title: NeMo Automodel
     - local: community_integrations/axolotl
       title: Axolotl
     - local: community_integrations/trl
@@ -540,6 +544,8 @@
         title: Ernie4_5_MoE
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/eurobert
+        title: EuroBERT
       - local: model_doc/exaone4
         title: EXAONE-4.0
       - local: model_doc/exaone_moe
@@ -702,6 +708,8 @@
         title: NanoChat
       - local: model_doc/nemotron
         title: Nemotron
+      - local: model_doc/nemotron_h
+        title: NemotronH
       - local: model_doc/nllb
         title: NLLB
       - local: model_doc/nllb-moe

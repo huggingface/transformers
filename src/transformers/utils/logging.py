@@ -33,7 +33,7 @@ from logging import captureWarnings as _captureWarnings
 import huggingface_hub.utils as hf_hub_utils
 from tqdm import auto as tqdm_lib
 
-from ._typing import TransformersLogger
+from .._typing import TransformersLogger
 
 
 _lock = threading.Lock()

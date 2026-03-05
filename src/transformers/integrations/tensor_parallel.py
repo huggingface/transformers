@@ -460,6 +460,7 @@ class _AllReduceBackward(torch.autograd.Function):
         device_mesh = ctx.device_mesh
         if device_mesh.size() == 1:
             return grad_output, None
+        grad_output = grad_output.contiguous()
         dist.all_reduce(grad_output, op=dist.ReduceOp.SUM, group=device_mesh.get_group())
         return grad_output, None
 
@@ -658,7 +659,7 @@ class TensorParallelLayer:
     ) -> torch.Tensor:
         raise NotImplementedError
 
-    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
+    def prepare_module_tp(self, module: nn.Module, device_mesh, **kwargs) -> nn.Module:
         distribute_module(
             module,
             device_mesh,
@@ -722,6 +723,86 @@ class ColwiseParallel(TensorParallelLayer):
         end = min(start + shard_size, shape[dim])
         shape[dim] = end - start
         return tuple(shape)
+
+
+class ReplicatedWithGradAllReduce(TensorParallelLayer):
+    """
+    Replicated parameter with gradient all-reduce.
+
+    For parameters like q_norm/k_norm that sit between colwise and rowwise
+    layers. The parameter is replicated (not sharded), but its gradient
+    accumulates from local heads only in TP mode. This class registers a
+    backward hook to all-reduce the parameter gradient.
+    """
+
+    @staticmethod
+    def _prepare_input_fn(mod, inputs, device_mesh):
+        return inputs
+
+    @staticmethod
+    def _prepare_output_fn(mod, outputs, device_mesh):
+        return outputs
+
+    def shard_tensor(self, param, tensor_idx=None, device=None, dtype=None):
+        return param[...].to(device=device, dtype=dtype)
+
+    def prepare_module_tp(self, module, device_mesh, **kwargs):
+        # Use a module-level backward hook (not param.register_hook) because parameters are replaced during weight loading after this method runs.
+        # Module hooks survive parameter replacement.
+        def _backward_hook(mod, grad_input, grad_output, mesh=device_mesh):
+            for param in mod.parameters():
+                if param.grad is not None:
+                    all_reduce_forward(param.grad, mesh)
+
+        module.register_full_backward_hook(_backward_hook)
+
+
+class MlaKvAProjParallel(TensorParallelLayer):
+    """
+    For MLA attention used in DeepSeek-V2 style models (deepseek_v2, longcat_flash, glm_moe_dsa, glm4_moe_lite):
+    kv_a_proj_with_mqa output is [kv_lora_rank + qk_rope_head_dim] (can have different naming but important thing
+    to understand is that it is split)
+    Example below (from modeling_longcat_flash.py):
+
+    kv_a_proj_with_mqa
+            |
+            split
+            /    \
+        k_pass    k_rot  <-- "bypasses kv_b_proj"
+        |          |        (goes straight to attention,
+    kv_a_layernorm |         never touches kv_b_proj)
+        |          |
+    kv_b_proj      |
+    (colwise)      |
+        |          |
+        k_pass     k_rot
+            \\      /
+               cat
+                |
+            key_states
+
+    k_pass is passed to kv_b_proj (colwise) which has built-in all_reduce_backward so we don't have a partial gradient for it.
+    However, k_rot goes straight to attention, never touches kv_b_proj. So we need to average gradient across all ranks otherwise we only get gradient for one rank (partial gradient).
+    """
+
+    def _prepare_output_fn(self, mod, output, device_mesh):
+        if not hasattr(mod.config, "qk_rope_head_dim"):
+            raise AttributeError(
+                f"Config for {type(mod).__name__} does not have `qk_rope_head_dim`. "
+                "MlaKvAProjParallel requires `qk_rope_head_dim` to be defined in the model config. "
+                "Please add it to the model's config or update the TP plan mapping."
+            )
+        rope_dim = mod.config.qk_rope_head_dim
+        pass_output, rope_output = output.split([output.shape[-1] - rope_dim, rope_dim], dim=-1)
+        rope_output = all_reduce_backward(rope_output, device_mesh)
+        return torch.cat([pass_output, rope_output], dim=-1)
+
+    def shard_tensor(self, param, tensor_idx=None, device=None, dtype=None):
+        return param[...].to(device=device, dtype=dtype)
+
+    def prepare_module_tp(self, module, device_mesh, config=None, **kwargs):
+        module.config = config
+        distribute_module(module, device_mesh, output_fn=self._prepare_output_fn)
 
 
 class RowwiseParallel(TensorParallelLayer):
@@ -1087,6 +1168,29 @@ class MoeTensorParalellExperts(TensorParallelLayer):
         return param[...].to(device=device, dtype=dtype)
 
 
+class MoeIdentityExpertParallel(TensorParallelLayer):
+    """
+    TP class for zero/identity experts in MoE layers.
+
+    Under TP, the parent MoeTensorParalellExperts does all_reduce_forward (sum)
+    on the expert module output. Identity experts produce the same output on
+    every rank, so the sum gives world_size * output. This class divides the
+    input by world_size to compensate.
+    """
+
+    @staticmethod
+    def _prepare_input_fn(mod, inputs, device_mesh):
+        input_tensor = inputs[0] if inputs else inputs
+        # TODO(fmom): when 2D-device mesh, need to select a //-ism axis to divide the input tensor by.
+        return input_tensor / device_mesh.size()
+
+    def shard_tensor(self, param, tensor_idx=None, device=None, dtype=None):
+        return param[...].to(device=device, dtype=dtype)
+
+    def prepare_module_tp(self, module, device_mesh, **kwargs):
+        distribute_module(module, device_mesh, input_fn=self._prepare_input_fn)
+
+
 class ParallelInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
     # a new instance is created (in order to locally override a given entry)
@@ -1103,6 +1207,9 @@ class ParallelInterface(GeneralInterface):
             "grouped_gemm": GroupedGemmParallel(),
             "ep_router": RouterParallel(),
             "moe_tp_experts": MoeTensorParalellExperts(),
+            "moe_identity_expert": MoeIdentityExpertParallel(),
+            "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
+            "mla_kv_a_proj": MlaKvAProjParallel(),
         }
         if is_torch_available() and _torch_distributed_available
         else {}
@@ -1120,6 +1227,8 @@ class ParallelInterface(GeneralInterface):
         "packed_rowwise": -1,
         "embedding_rowwise": 0,
         "sequence_parallel": None,
+        "replicated_with_grad_allreduce": None,
+        "mla_kv_a_proj": None,
     }
 
     # Bias sharding: colwise shards bias, rowwise doesn't (bias is replicated and all-reduced)
@@ -1132,6 +1241,8 @@ class ParallelInterface(GeneralInterface):
         "packed_rowwise": None,
         "embedding_rowwise": None,
         "sequence_parallel": None,
+        "replicated_with_grad_allreduce": None,
+        "mla_kv_a_proj": None,
     }
 
 
@@ -1258,13 +1369,14 @@ def add_tensor_parallel_hooks_to_module(
     if current_module_plan is not None:
         tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
         try:
-            tp_layer.prepare_module_tp(module, device_mesh)
+            tp_layer.prepare_module_tp(module, device_mesh, config=model.config)
         except NotImplementedError as e:
             print(
                 f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP plan: {e}"
             )
 
         module._hf_tp_plan = current_module_plan
+        module._hf_device_mesh = device_mesh
         module.__repr__ = lambda: f"{module.__repr__()}\nTP Plan: {current_module_plan}"
 
 

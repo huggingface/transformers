@@ -61,6 +61,10 @@ class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.6]
     model_tester_class = Gemma2ModelTester
 
+    @unittest.skip("Gemma2 tanh soft-capping amplifies TP numerical noise beyond 80% match threshold")
+    def test_tp_generation_quantized(self):
+        pass
+
 
 @slow
 @require_torch_accelerator

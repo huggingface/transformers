@@ -275,6 +275,7 @@ if TYPE_CHECKING:
     from .myt5 import *
     from .nanochat import *
     from .nemotron import *
+    from .nemotron_h import *
     from .nllb import *
     from .nllb_moe import *
     from .nougat import *
