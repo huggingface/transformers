@@ -14,22 +14,20 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from transformers.cache_utils import Cache, DynamicCache
-from transformers.generation import GenerationMixin
-from transformers.masking_utils import create_causal_mask
-from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
-from transformers.modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from transformers.processing_utils import Unpack
-from transformers.utils import auto_docstring, can_return_tuple
-from transformers.utils.deprecation import deprecate_kwarg
-
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...masking_utils import create_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, MoeCausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested, maybe_autocast
 from .configuration_qwen3_asr import (
     Qwen3ASRAudioEncoderConfig,

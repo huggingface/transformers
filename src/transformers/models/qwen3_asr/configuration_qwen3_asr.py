@@ -4,9 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_qwen3_asr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from transformers.configuration_utils import PretrainedConfig
-
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, PretrainedConfig
 
 
 class Qwen3ASRAudioEncoderConfig(PreTrainedConfig):
