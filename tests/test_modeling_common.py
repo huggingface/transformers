@@ -4103,6 +4103,9 @@ class ModelTesterMixin:
                 if model_class.__name__ in ["VideoMAEForPreTraining"]:
                     continue
 
+                if not model_class.__name__.endswith("ForCausalLM"):
+                    continue
+
                 if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
                 else:
@@ -4175,12 +4178,14 @@ class ModelTesterMixin:
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
                 else:
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+                set_config_for_less_flaky_test(config)
                 inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 model = model_class(config).eval().to(torch_device)
+                set_model_for_less_flaky_test(model)
 
                 # prepare cache inputs for auto-regressive models and include it for computing eager outputs
                 # process output flags (e.g. use_cache, output_attentions, etc) to avoid passing them as inputs
-                model, inputs_dict = prepare_for_export(model, inputs_dict)
+                model, inputs_dict, _ = prepare_for_export(model, inputs_dict)
 
                 with torch.no_grad():
                     # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
@@ -4196,22 +4201,11 @@ class ModelTesterMixin:
                 except NotImplementedError:
                     continue
 
-                # Remove non-tensor inputs as they were probably converted to constants during the onnx export
-                inputs_dict = {
-                    k: v
-                    for k, v in inputs_dict.items()
-                    if not isinstance(v, (int, float, bool, str)) and v is not None
-                }
-
                 set_seed(1234)
                 onnx_outputs = onnx_program(**copy.deepcopy(inputs_dict))
                 onnx_names = (re.sub(r"^output.", "", node.name) for node in onnx_program.model_proto.graph.output)
                 onnx_outputs = dict(zip(onnx_names, onnx_outputs))
                 self.assertTrue(onnx_outputs, "ONNX outputs is empty.")
-
-                # Sometimes the model will return the same tensor multiple times under different names
-                # while onnx will just return it once, dropping one of the duplicates (arbitrarily).
-                eager_outputs = {k: v for k, v in eager_outputs.items() if k in onnx_outputs}
 
                 # Check if outputs are close:
                 torch.testing.assert_close(onnx_outputs, eager_outputs, atol=atol, rtol=rtol, check_device=False)

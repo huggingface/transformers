@@ -13,9 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
-import importlib
 import inspect
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from ..cache_utils import Cache, DynamicCache
 from ..utils.import_utils import is_torch_available
@@ -28,8 +27,19 @@ logger = get_logger(__name__)
 if is_torch_available():
     import torch
 
+
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+
+
+class _SerializedObject(NamedTuple):
+    class_type: type
+    state: Any
+
+
+class _FlattenedContext(NamedTuple):
+    template: Any
+    tensor_paths: list[Any]
 
 
 def _iter_subclasses(cls: type):
@@ -42,158 +52,96 @@ def _class_to_path(cls: type) -> str:
     return f"{cls.__module__}:{cls.__qualname__}"
 
 
-def _path_to_class(path: str) -> type:
-    module_name, class_qualname = path.split(":", maxsplit=1)
-    module = importlib.import_module(module_name)
-    class_obj = module
-    for item in class_qualname.split("."):
-        class_obj = getattr(class_obj, item)
-    return class_obj
-
-
-class DynamoSerializer:
-    _SPECIAL_KEY = "__special_key__"
-    _SPECIAL_VALUE = "__special_value__"
+class PytreeRegistry:
+    _registered_classes: set[type] = set()
 
     @classmethod
-    def _is_leaf_type(cls, obj: Any) -> bool:
+    def is_leaf_type(cls, obj: Any) -> bool:
         return (
-            (isinstance(obj, (int, float, bool, str, torch.Tensor, torch.Size)))
-            or obj.__class__.__module__ == "torch.export.dynamic_shapes"
+            isinstance(
+                obj,
+                (int, float, bool, str, type, torch.Tensor, torch.Size, torch.dtype, torch.device, torch.layout),
+            )
             or obj is None
         )
 
     @classmethod
-    def _is_special_type(cls, obj: Any) -> bool:
-        return isinstance(obj, (torch.dtype, torch.device, torch.layout, type, frozenset))
-
-    @classmethod
-    def _get_special_key(cls, obj: Any) -> str:
-        if isinstance(obj, torch.dtype):
-            return "dtype"
-        if isinstance(obj, torch.device):
-            return "device"
-        if isinstance(obj, torch.layout):
-            return "layout"
-        if isinstance(obj, type):
-            return "class_ref"
-        if isinstance(obj, frozenset):
-            return "frozenset"
-        raise TypeError(f"Object of type '{type(obj)}' is not a recognized special type.")
-
-    @classmethod
-    def _encode_special_value(cls, obj: Any) -> Any:
-        if isinstance(obj, torch.dtype):
-            return str(obj).removeprefix("torch.")
-        if isinstance(obj, torch.layout):
-            return str(obj).removeprefix("torch.")
-        if isinstance(obj, torch.device):
-            return f"{obj.type}:{obj.index}" if obj.index is not None else obj.type
-        if isinstance(obj, type):
-            return _class_to_path(obj)
-        if isinstance(obj, frozenset):
-            return [cls.serialize(item) for item in obj]
-        raise TypeError(f"Object of type '{type(obj)}' is not a recognized special type.")
-
-    @classmethod
-    def _decode_special_value(cls, kind: str, value: Any) -> Any:
-        if kind == "dtype":
-            return getattr(torch, value)
-        if kind == "layout":
-            return getattr(torch, value)
-        if kind == "device":
-            return torch.device(value)
-        if kind == "class_ref":
-            return _path_to_class(value)
-        if kind == "frozenset":
-            return frozenset(cls.deserialize(item) for item in value)
-        raise TypeError(f"Unknown special kind encountered during decoding: {kind}")
-
-    @classmethod
-    def _serialize_special(cls, obj: Any) -> dict[str, str]:
-        return {cls._SPECIAL_KEY: cls._get_special_key(obj), cls._SPECIAL_VALUE: cls._encode_special_value(obj)}
-
-    @classmethod
-    def _deserialize_special(cls, obj: dict[str, Any]) -> Any:
-        return cls._decode_special_value(obj[cls._SPECIAL_KEY], obj[cls._SPECIAL_VALUE])
-
-    @classmethod
     def serialize(cls, obj: Any) -> Any:
-        if cls._is_leaf_type(obj):
+        if cls.is_leaf_type(obj):
             return obj
-        elif cls._is_special_type(obj):
-            return cls._serialize_special(obj)
         elif isinstance(obj, (list, tuple, set)):
-            return [cls.serialize(item) for item in obj]
+            return type(obj)(cls.serialize(item) for item in obj)
         elif isinstance(obj, dict):
             return {key: cls.serialize(value) for key, value in obj.items()}
-
-        state = getattr(obj, "__dict__", None)
-        if state is None:
-            logger.warning(
-                f"Object of type '{type(obj)}' does not have a __dict__ attribute and is not a recognized leaf or special type. "
-                "Serializing it as an empty object. This may lead to issues during deserialization."
-            )
-            state = {}
-
-        return {
-            "__class__": _class_to_path(type(obj)),
-            "__state__": cls.serialize(dict(state)),
-        }
+        elif hasattr(obj, "__dict__"):
+            state = getattr(obj, "__dict__", None)
+            return _SerializedObject(class_type=type(obj), state=cls.serialize(dict(state)))
+        else:
+            raise TypeError(f"Object of type '{type(obj)}' is not serializable.")
 
     @classmethod
     def deserialize(cls, obj: Any) -> Any:
-        if cls._is_leaf_type(obj):
+        if cls.is_leaf_type(obj):
             return obj
-        elif isinstance(obj, list):
-            return [cls.deserialize(item) for item in obj]
-        elif isinstance(obj, dict):
-            special_key = obj.get(cls._SPECIAL_KEY)
-            if special_key is not None:
-                return cls._deserialize_special(obj)
-
-            class_path = obj.get("__class__")
-            if class_path is None:
-                return {key: cls.deserialize(value) for key, value in obj.items()}
-
-            class_obj = _path_to_class(class_path)
-            state = cls.deserialize(obj["__state__"])
-            instance = class_obj.__new__(class_obj)
+        elif isinstance(obj, _SerializedObject):
+            state = cls.deserialize(obj.state)
+            instance = obj.class_type.__new__(obj.class_type)
             instance.__dict__.update(state)
             return instance
+        elif isinstance(obj, (list, tuple, set)):
+            return type(obj)(cls.deserialize(item) for item in obj)
+        elif isinstance(obj, dict):
+            return {key: cls.deserialize(value) for key, value in obj.items()}
 
         raise TypeError(f"Malformed serialized object encountered: {type(obj)}")
 
+    @classmethod
+    def flatten(cls, obj: Any):
+        serialized = cls.serialize(obj)
+        keypath_leaves, _ = torch.utils._pytree.tree_flatten_with_path(serialized)
+        tensor_paths = [path for path, leaf in keypath_leaves if isinstance(leaf, torch.Tensor)]
+        values = [leaf for _, leaf in keypath_leaves if isinstance(leaf, torch.Tensor)]
+        template = torch.utils._pytree.tree_map_only(torch.Tensor, lambda _: None, serialized)
+        return values, _FlattenedContext(template=template, tensor_paths=tensor_paths)
 
-def _flatten_for_export(cache: Cache):
-    return torch.utils._pytree._dict_flatten(DynamoSerializer.serialize(cache))
+    @classmethod
+    def flatten_with_keys(cls, obj: Any):
+        values, context = cls.flatten(obj)
+        key_entries = [(torch.utils._pytree.SequenceKey(index), value) for index, value in enumerate(values)]
+        return key_entries, context
 
-
-def _flatten_for_export_with_keys(cache: Cache):
-    return torch.utils._pytree._dict_flatten_with_keys(DynamoSerializer.serialize(cache))
-
-
-def _unflatten_for_export(values, context: torch.utils._pytree.Context):
-    return DynamoSerializer.deserialize(torch.utils._pytree._dict_unflatten(values, context))
-
-
-def _register_class_for_export(cls: type):
-    try:
-        torch.utils._pytree.register_pytree_node(
-            cls,
-            _flatten_for_export,
-            _unflatten_for_export,
-            serialized_type_name=f"{cls.__module__}.{cls.__name__}",
-            flatten_with_keys_fn=_flatten_for_export_with_keys,
+    @classmethod
+    def unflatten(cls, values, context):
+        tensor_values_by_path = dict(zip(context.tensor_paths, values, strict=True))
+        deserialized = torch.utils._pytree.tree_map_with_path(
+            lambda path, leaf: tensor_values_by_path.get(path, leaf), context.template
         )
-    except ValueError as e:
-        if "already registered as pytree node" not in str(e):
-            raise
+        return cls.deserialize(deserialized)
+
+    @classmethod
+    def register_class(cls, object_cls: type):
+        if object_cls in cls._registered_classes:
+            return
+
+        try:
+            torch.utils._pytree.register_pytree_node(
+                object_cls,
+                cls.flatten,
+                cls.unflatten,
+                serialized_type_name=_class_to_path(object_cls),
+                flatten_with_keys_fn=cls.flatten_with_keys,
+            )
+            cls._registered_classes.add(object_cls)
+        except ValueError as e:
+            if "already registered as pytree node" in str(e):
+                cls._registered_classes.add(object_cls)
+            else:
+                raise
 
 
 def register_cache_subclasses_as_pytree_nodes():
     for cache_type in _iter_subclasses(Cache):
-        _register_class_for_export(cache_type)
+        PytreeRegistry.register_class(cache_type)
 
 
 def register_custom_model_cache_as_pytree_nodes(model: "PreTrainedModel"):
@@ -204,20 +152,22 @@ def register_custom_model_cache_as_pytree_nodes(model: "PreTrainedModel"):
             and obj.__name__.endswith("Cache")
             and not issubclass(obj, Cache)
         ):
-            _register_class_for_export(obj)
+            PytreeRegistry.register_class(obj)
 
 
-def _is_tensor_free(obj: Any) -> bool:
+def _iter_leaf_tensors(obj: Any, prefix: str = ""):
     if isinstance(obj, torch.Tensor):
-        return False
+        yield prefix, obj
     elif isinstance(obj, (list, tuple, set)):
-        return all(_is_tensor_free(item) for item in obj)
+        for index, item in enumerate(obj):
+            path = f"{prefix}.{index}" if prefix else str(index)
+            yield from _iter_leaf_tensors(item, path)
     elif isinstance(obj, dict):
-        return all(_is_tensor_free(value) for value in obj.values())
-    elif isinstance(obj, Cache) or obj.__class__.__name__.endswith("Cache"):
-        return _is_tensor_free(DynamoSerializer.serialize(obj))
-    else:
-        return True
+        for key, value in obj.items():
+            path = f"{prefix}.{key}" if prefix else key
+            yield from _iter_leaf_tensors(value, path)
+    elif hasattr(obj, "__dict__"):
+        yield from _iter_leaf_tensors(vars(obj), prefix)
 
 
 def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
@@ -229,23 +179,7 @@ def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
     Returns:
         `dict[str, torch.Tensor]`: A dictionary mapping names to leaf tensors.
     """
-    if _is_tensor_free(obj):
-        return {}
-    elif isinstance(obj, torch.Tensor):
-        return {"": obj}
-    elif isinstance(obj, (list, tuple, set)):
-        return get_leaf_tensors(dict(enumerate(obj)))
-    elif isinstance(obj, dict):
-        leaf_tensors = {}
-        for key, value in obj.items():
-            for sub_key, tensor in get_leaf_tensors(value).items():
-                full_key = f"{key}.{sub_key}" if sub_key else key
-                leaf_tensors[full_key] = tensor
-        return leaf_tensors
-    elif isinstance(obj, Cache) or obj.__class__.__name__.endswith("Cache"):
-        return get_leaf_tensors(DynamoSerializer.serialize(obj))
-    else:
-        raise ValueError(f"Unexpected object type: {type(obj)}")
+    return dict(_iter_leaf_tensors(obj))
 
 
 def get_inputs_outputs_names(inputs: dict[str, Any], outputs: dict[str, Any]) -> tuple[list[str], list[str]]:
@@ -270,8 +204,7 @@ def get_inputs_outputs_names(inputs: dict[str, Any], outputs: dict[str, Any]) ->
 def prepare_for_export(
     model: "PreTrainedModel",
     inputs: dict[str, torch.Tensor | Cache],
-    outputs: dict[str, torch.Tensor | Cache] | None = None,
-) -> tuple["PreTrainedModel", dict[str, torch.Tensor | Cache]]:
+) -> tuple["PreTrainedModel", dict[str, torch.Tensor | Cache], dict[str, Any] | None]:
     # filter out None inputs
     inputs = {k: v for k, v in inputs.items() if v is not None}
 
@@ -316,24 +249,23 @@ def prepare_for_export(
         if hasattr(module, "_update_linear_attn_mask"):
             module._update_linear_attn_mask = lambda attention_mask, *args, **kwargs: attention_mask
 
+    with torch.no_grad():
+        outputs = model(**copy.deepcopy(inputs))
+
     if (
         getattr(model.config, "use_cache", False)
         and not getattr(model.config, "is_encoder_decoder", False)
+        and isinstance(outputs.get("past_key_values"), DynamicCache)
         and "past_key_values" in inspect.signature(model.forward).parameters
         and "past_key_values" not in inputs
     ):
-        if outputs is None:
-            with torch.no_grad():
-                outputs = model(**copy.deepcopy(inputs))
-
-        if hasattr(outputs, "past_key_values") and isinstance(outputs.past_key_values, DynamicCache):
-            inputs["past_key_values"] = outputs.past_key_values
-            if model.config.model_type not in {"qwen2_vl", "qwen2_5_vl"}:
-                dtype = inputs["input_ids"].dtype
-                device = inputs["input_ids"].device
-                batch_size, seq_len = inputs["input_ids"].shape[:2]
-                pkv_len = inputs["past_key_values"].get_seq_length()
-                inputs["attention_mask"] = torch.ones((batch_size, seq_len + pkv_len), device=device, dtype=dtype)
+        inputs["past_key_values"] = outputs["past_key_values"]
+        if model.config.model_type not in {"qwen2_vl", "qwen2_5_vl"}:
+            dtype = inputs["input_ids"].dtype
+            device = inputs["input_ids"].device
+            batch_size, seq_len = inputs["input_ids"].shape[:2]
+            pkv_len = inputs["past_key_values"].get_seq_length()
+            inputs["attention_mask"] = torch.ones((batch_size, seq_len + pkv_len), device=device, dtype=dtype)
 
     return model, inputs, outputs
 
@@ -348,9 +280,8 @@ def _auto_dynamic_shape(tensor: torch.Tensor) -> dict[int, torch.export.Dim]:
     Returns:
         `dict[int, torch.export.Dim]`: A dictionary mapping dimension indices to Dim.AUTO.
     """
-    from torch.export import Dim
 
-    return dict.fromkeys(range(len(tensor.shape)), Dim.AUTO)
+    return dict.fromkeys(range(len(tensor.shape)), torch.export.Dim.AUTO)
 
 
 def get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str, dict[int, torch.export.Dim]]:

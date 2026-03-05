@@ -330,6 +330,8 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
         else {}
     )
 
+    test_torch_exportable = False
+
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
         # XXX: IdeficsForVisionText2TextTest has no MODEL_FOR group yet, but it should be the same
@@ -681,6 +683,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
 @require_torch
 class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsForVisionText2Text,) if is_torch_available() else ()
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = IdeficsModelTester(

@@ -385,11 +385,14 @@ class GlmMoeDsaAttention(nn.Module):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # ===== Indexer (DSA sparse mask) =====
-        # attention_mask is [B, 1, S, T] (4D) for eager and (2D) otherwise but indexer works with [B, S, T] (3D)
+        # attention_mask is [B, 1, S, T_full] (4D) for eager and (2D) otherwise, but the indexer works with
+        # [B, S, T_indexer] (3D). The indexer resets its key cache on prefill (seq_length > 1), so it only
+        # has seq_length keys — not the full T_full = pkv_len + seq_length of the main KV cache.
+        indexer_T = seq_length if seq_length > 1 else key_states.shape[2]
         indexer_mask = (
-            attention_mask[:, 0, :, :]
+            attention_mask[:, 0, :, -indexer_T:]
             if attention_mask is not None and attention_mask.dim() == 4
-            else attention_mask.unsqueeze(1)
+            else attention_mask[..., -indexer_T:].unsqueeze(1)
             if attention_mask is not None
             else None
         )
