@@ -16,8 +16,8 @@
 import math
 import unittest
 
+from transformers import PI0Config, PI0ForConditionalGeneration, PI0Processor, is_torch_available
 from transformers.image_utils import load_image
-from transformers import PI0Processor, AutoProcessor, PI0Config, PI0ForConditionalGeneration, is_torch_available
 from transformers.testing_utils import require_torch, slow
 
 from ...test_configuration_common import ConfigTester
@@ -193,9 +193,6 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         )
         input_ids = inputs["input_ids"]
         attention_mask = inputs["attention_mask"]
-        print(input_ids)
-        # input_ids = torch.cat([torch.tensor([[256000] * 256]), input_ids], dim=-1)
-        # attention_mask = torch.cat([torch.tensor([[1] * 256]), attention_mask], dim=-1)
 
         torch.manual_seed(42)
         pixel_values = torch.randn(1, 3, 224, 224)
@@ -226,7 +223,6 @@ class PI0ModelIntegrationTest(unittest.TestCase):
             # FIXME: remove after https://github.com/huggingface/transformers/pull/44432 is merged!
             prefix_embs = token_emb * math.sqrt(2048)
 
-        print(model.get_input_embeddings().weight.data[0])
         self.assertEqual(prefix_embs.shape, (1, 304, 2048))
         self.assertAlmostEqual(prefix_embs.mean().item(), 0.0212, places=3)
         print(prefix_embs.shape, prefix_embs[0, 0, :4], prefix_embs[0, -1, :4])
