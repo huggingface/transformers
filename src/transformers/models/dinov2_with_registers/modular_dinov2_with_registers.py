@@ -31,7 +31,6 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.generic import can_return_tuple
 
 
 logger = logging.get_logger(__name__)
