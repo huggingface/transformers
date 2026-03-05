@@ -683,7 +683,7 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
     (e.g., when some ranks receive only padding or prompt tokens that are masked with -100).
 
     Args:
-        accelerator (`Accelerator`): The accelerator instance with `torch_device_mesh` support.
+        accelerator (`Accelerator`): The accelerator instance.
         model (`torch.nn.Module`): The model to compute the loss for.
         inputs (`dict[str, torch.Tensor | Any]`): The input data for the model. Must include `"shift_labels"` key.
         return_outputs (`bool`): Whether to return the model outputs along with the loss.
@@ -692,6 +692,8 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
     Returns:
         The loss, or a tuple of `(loss, outputs)` if `return_outputs` is `True`.
     """
+    import deepspeed
+
     # DeepSpeed SP automatically injects shift_labels into inputs (pre-shifted labels for SP).
     # The model's forward pass receives shift_labels via **kwargs and passes it to the loss function.
     # Both standard transformer models and Liger-patched models handle shift_labels correctly,
@@ -703,7 +705,7 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
     outputs = model(**inputs)
     loss = outputs.loss
 
-    sp_group = accelerator.torch_device_mesh["sp"].get_group()
+    sp_group = deepspeed.utils.groups._get_sequence_parallel_group()
     sp_world_size = pc.sp_size
     # differentiable weighted per-shard-loss aggregation across ranks
     losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
