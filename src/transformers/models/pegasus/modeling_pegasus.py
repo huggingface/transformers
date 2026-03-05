@@ -437,10 +437,15 @@ class PegasusPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
         if isinstance(module, PegasusSinusoidalPositionalEmbedding):
-            init.copy_(module.weight, module.create_weight())
-        elif isinstance(module, PegasusForConditionalGeneration):
+            # Sinusoidal embeddings are deterministic and should not go through generic
+            # nn.Embedding init (which would call init.normal_). We skip super() entirely
+            # and directly copy the sinusoidal weights.
+            weight = module.create_weight()
+            init.copy_(module.weight, weight.to(dtype=module.weight.dtype, device=module.weight.device))
+            return
+        super()._init_weights(module)
+        if isinstance(module, PegasusForConditionalGeneration):
             init.zeros_(module.final_logits_bias)
 
 
