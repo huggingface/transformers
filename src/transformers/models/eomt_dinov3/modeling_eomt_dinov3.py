@@ -286,7 +286,6 @@ class EomtDinov3Layer(GradientCheckpointingLayer):
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = EomtDinov3Attention(config)
-        self.layer_scale1 = EomtDinov3LayerScale(config)
         self.drop_path = EomtDinov3DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -295,6 +294,7 @@ class EomtDinov3Layer(GradientCheckpointingLayer):
             self.mlp = EomtDinov3GatedMLP(config)
         else:
             self.mlp = EomtDinov3MLP(config)
+        self.layer_scale1 = EomtDinov3LayerScale(config)
         self.layer_scale2 = EomtDinov3LayerScale(config)
 
     def forward(
@@ -302,6 +302,7 @@ class EomtDinov3Layer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         # Attention with residual connection
         residual = hidden_states
@@ -310,6 +311,7 @@ class EomtDinov3Layer(GradientCheckpointingLayer):
             hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
+            **kwargs,
         )
         hidden_states = self.layer_scale1(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual

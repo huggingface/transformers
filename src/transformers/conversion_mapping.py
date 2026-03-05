@@ -69,10 +69,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
 def _build_checkpoint_conversion_mapping():
     mapping = {
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
-        "dinov3_vit": [
-            WeightRenaming(r"layer_scale", r"scale"),
-            WeightRenaming(r"(?<!model\.)layer", r"model.layer")
-        ],
+        "dinov3_vit": [WeightRenaming(r"layer_scale", r"scale"), WeightRenaming(r"(?<!model\.)layer", r"model.layer")],
         "zamba": [
             WeightRenaming(r"layers.(\d+).mamba(?!_decoder)", r"layers.\1.mamba_decoder.mamba"),
             WeightRenaming(r"layers.(\d+).input_layernorm", r"layers.\1.mamba_decoder.input_layernorm"),

@@ -594,7 +594,9 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
 
                 feature_maps.append(fmap)
 
-        output = BackboneOutput(feature_maps=tuple(feature_maps), hidden_states=output.hidden_states, attentions=output.attentions)
+        output = BackboneOutput(
+            feature_maps=tuple(feature_maps), hidden_states=output.hidden_states, attentions=output.attentions
+        )
         output.last_hidden_state = sequence_output
 
         return output

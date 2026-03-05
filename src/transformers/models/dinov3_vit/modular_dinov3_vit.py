@@ -451,7 +451,6 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
@@ -492,7 +491,9 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
 
                 feature_maps.append(fmap)
 
-        output = BackboneOutput(feature_maps=tuple(feature_maps), hidden_states=output.hidden_states, attentions=output.attentions)
+        output = BackboneOutput(
+            feature_maps=tuple(feature_maps), hidden_states=output.hidden_states, attentions=output.attentions
+        )
         output.last_hidden_state = sequence_output
 
         return output

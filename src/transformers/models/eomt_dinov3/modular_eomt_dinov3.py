@@ -233,7 +233,42 @@ class EomtDinov3Embeddings(DINOv3ViTEmbeddings):
 
 
 class EomtDinov3Layer(DINOv3ViTLayer):
-    pass
+    def __init__(self, config: EomtDinov3Config):
+        super().__init__(config)
+
+        # Changed in original model due to bad model structure
+        del self.scale1
+        del self.scale2
+        self.layer_scale1 = EomtDinov3LayerScale(config)
+        self.layer_scale2 = EomtDinov3LayerScale(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        # Attention with residual connection
+        residual = hidden_states
+        hidden_states = self.norm1(hidden_states)
+        hidden_states, _ = self.attention(
+            hidden_states,
+            attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = self.layer_scale1(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
+
+        # MLP with residual connection
+        residual = hidden_states
+        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.layer_scale2(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
+
+        return hidden_states
 
 
 class EomtDinov3LayerScale(DINOv3ViTLayerScale):

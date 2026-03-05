@@ -281,9 +281,7 @@ class DINOv3ConvNextBackbone(BackboneMixin, DINOv3ConvNextPreTrainedModel):
             if stage in self.out_features:
                 feature_maps.append(hidden_states)
 
-        return BackboneOutput(
-            feature_maps=tuple(feature_maps), hidden_states=output.hidden_states
-        )
+        return BackboneOutput(feature_maps=tuple(feature_maps), hidden_states=output.hidden_states)
 
 
 __all__ = ["DINOv3ConvNextModel", "DINOv3ConvNextPreTrainedModel", "DINOv3ConvNextBackbone"]
