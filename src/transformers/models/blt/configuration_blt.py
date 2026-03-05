@@ -304,7 +304,7 @@ class BltConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```
 
-    Checkpoint: [facebook/blt](https://huggingface.co/facebook/blt)
+    Checkpoint: [itazap/blt-1b-hf](https://huggingface.co/itazap/blt-1b-hf)
     """
 
     model_type = "blt"
