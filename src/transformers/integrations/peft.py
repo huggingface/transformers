@@ -64,12 +64,21 @@ if TYPE_CHECKING:
     from ..modeling_utils import LoadStateDictConfig
 
 
-def _block_diag_3d(*tensors):
+def _block_diag_3d(tensors: list["torch.Tensor"]) -> "torch.Tensor":
+    if len(tensors) < 2:
+        raise ValueError(f"_block_diag_3d expects at least 2 tensors, got {len(tensors)}")
+
+    if any(t.dim() != 3 for t in tensors):
+        raise ValueError("_block_diag_3d expects all tensors to be 3d.")
+
+    num_experts = tensors[0].shape[0]
+    if any(t.shape[0] != num_experts for t in tensors):
+        raise ValueError("All tensors passed to _block_diag_3d must have the same number of experts.")
+
     lora_b_block_diag = []
-    for i in range(len(tensors[0])):
-        lora_b_block_diag.append(torch.block_diag(tensors[0][i], tensors[1][i]))
-    out = torch.stack(lora_b_block_diag, dim=0)
-    return out
+    for i in range(num_experts):
+        lora_b_block_diag.append(torch.block_diag(*[tensor[i] for tensor in tensors]))
+    return torch.stack(lora_b_block_diag, dim=0)
 
 
 class PeftConcatenate(Concatenate):
@@ -119,12 +128,24 @@ class PeftConcatenate(Concatenate):
                 f"To convert this LoRA adapter, the LoRA weights all need to have either 2 or 3 dims, got {set(dims)}"
             )
 
+        # Keep source order stable (e.g. w1 before w3 for Mixtral) to preserve gate/up semantics.
+        ordered_tensors = [
+            input_dict[source_pattern] for source_pattern in source_patterns if source_pattern in input_dict
+        ]
+        if len(ordered_tensors) != len(input_dict):
+            missing = set(input_dict) - set(source_patterns)
+            raise ValueError(
+                "Collected tensors contain keys not present in source_patterns. "
+                f"Unexpected keys: {sorted(missing)}; source_patterns={source_patterns}"
+            )
+
         if set(dims) == {2}:
-            output_dict = {full_layer_name: torch.block_diag(*input_dict.values())}
+            output_dict = {full_layer_name: torch.block_diag(*ordered_tensors)}
         else:
-            out = _block_diag_3d(*input_dict.values())  # shape = experts, 2*out_feat, 2*r
-            out = torch.permute(out, (2, 0, 1))  # shape = 2*r, experts, 2*out_feat
-            out = out.flatten(0, 1)  # shape = 2*r * experts, 2*out_feat
+            # with r being the LoRA rank and n being the number of fused weights:
+            out = _block_diag_3d(ordered_tensors)  # shape = experts, n*out_feat, 2*r
+            out = torch.permute(out, (2, 0, 1))  # shape = 2*r, experts, n*out_feat
+            out = out.flatten(0, 1)  # shape = 2*r * experts, n*out_feat
             out = out.T
             output_dict = {full_layer_name: out}
         return output_dict
@@ -327,8 +348,9 @@ _MOE_TARGET_MODULE_MAPPING: dict[str, dict[str, str]] = {
 }
 
 _MOE_FUSED_TARGETS: dict[str, dict[str, set[str]]] = {
-    "mixtral": {"gate_up_proj": {"w1", "w3"}},
-    "qwen2_moe": {"gate_up_proj": {"gate_proj", "up_proj"}},
+    # use lists for dict values to ensure stable order
+    "mixtral": {"gate_up_proj": ["w1", "w3"]},
+    "qwen2_moe": {"gate_up_proj": ["gate_proj", "up_proj"]},
 }
 
 
@@ -342,6 +364,10 @@ def patch_moe_parameter_targeting(model, peft_config):
     from functools import wraps
 
     import peft
+
+    if hasattr(peft, "convert_peft_config_for_transformers"):
+        # this means that PEFT handles this
+        return
 
     model_type = getattr(model.config, "model_type", None)
     if get_checkpoint_conversion_mapping(model_type) is not None:
@@ -487,6 +513,7 @@ class PeftAdapterMixin:
         adapter_name = adapter_name if adapter_name is not None else "default"
         adapter_kwargs = adapter_kwargs or {}
 
+        import peft
         from peft import PeftConfig, inject_adapter_in_model
 
         if self._hf_peft_config_loaded and (not hotswap) and (adapter_name in self.peft_config):
@@ -520,7 +547,14 @@ class PeftAdapterMixin:
             )
 
         weight_conversions = get_model_conversion_mapping(self)
-        peft_config = convert_peft_config_for_transformers(peft_config, model=self, conversions=weight_conversions)
+
+        if hasattr(peft, "convert_peft_config_for_transformers"):
+            peft_config = peft.convert_peft_config_for_transformers(
+                peft_config, model=self, conversions=weight_conversions
+            )
+        else:
+            # TODO: remove once PEFT < 0.19 is dropped
+            peft_config = convert_peft_config_for_transformers(peft_config, model=self, conversions=weight_conversions)
 
         if hasattr(peft_config, "inference_mode"):
             peft_config.inference_mode = not is_trainable
@@ -990,6 +1024,8 @@ def _convert_peft_config_moe(peft_config, model_type: str):
     peft_config.target_modules = set(peft_config.target_modules or [])
     if not hasattr(peft_config, "rank_pattern") or peft_config.rank_pattern is None:
         peft_config.rank_pattern = {}
+    if not hasattr(peft_config, "alpha_pattern") or peft_config.alpha_pattern is None:
+        peft_config.alpha_pattern = {}
 
     new_target_parameters = peft_config.target_parameters.copy()
     remaining_target_modules = set()
@@ -1023,6 +1059,11 @@ def _convert_peft_config_moe(peft_config, model_type: str):
 
         if len(present_targets) == len(required_old_targets) and len(required_old_targets) > 1:
             peft_config.rank_pattern[rf".*\.{re.escape(new_name)}"] = peft_config.r * len(required_old_targets)
+            # Preserve per-branch LoRA scaling after fusion.
+            # Example: w1 + w3 => r doubles, so alpha must also double to keep alpha/r unchanged.
+            peft_config.alpha_pattern[rf".*\.{re.escape(new_name)}"] = peft_config.lora_alpha * len(
+                required_old_targets
+            )
 
     peft_config.target_parameters = new_target_parameters
     peft_config.target_modules = remaining_target_modules

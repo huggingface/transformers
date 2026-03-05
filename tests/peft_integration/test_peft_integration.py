@@ -935,6 +935,39 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # should be different
                 assert not torch.allclose(output_base, output_peft, atol=atol, rtol=rtol)
 
+    def test_mixtral_lora_conversion(self):
+        inputs = torch.arange(10).view(1, -1).to(0)
+        model_name = "hf-internal-testing/Mixtral-tiny"
+        adapter_name = "peft-internal-testing/mixtral-pre-v5-lora"
+
+        # original logits were:
+        # tensor([[[ 0.2676,  0.3870,  0.2956,  ...,  0.4624,  0.1966,  0.2539],
+        #          [-0.6706, -0.0969, -0.6240,  ..., -0.0201,  0.7099, -0.3099],
+        #          [ 0.0663,  0.1653,  0.7189,  ...,  0.5905,  0.0649,  0.5839],
+        #          ...,
+        #          [-0.2712, -0.6451, -0.0219,  ..., -0.4344,  0.5471, -0.9355],
+        #          [-0.3607,  0.4526,  0.2750,  ...,  0.1082,  0.7179,  0.8487],
+        #          [ 0.5826, -0.1407, -0.3131,  ...,  0.1026,  0.6878, -0.3382]]],
+        #        device='cuda:0')
+        expected_logits_0_to_3 = torch.Tensor(
+            [
+                [0.2676, 0.3870, 0.2956],
+                [-0.6706, -0.0969, -0.6240],
+                [0.0663, 0.1653, 0.7189],
+            ]
+        ).to(device=torch_device, dtype=torch.float16)
+
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        model.load_adapter(adapter_name)
+        model.to(torch_device)
+        model.eval()
+        with torch.inference_mode():
+            output = model(inputs).logits
+
+        # a little bit of deviation but that's fine
+        atol, rtol = 1e-3, 1e-4
+        assert torch.allclose(output[0, :3, :3], expected_logits_0_to_3, atol=atol, rtol=rtol)
+
 
 @require_peft
 @require_torch
