@@ -295,9 +295,12 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
             self.get_torchrun_cmd(
                 script,
                 script_args=[
-                    "--output_dir", torchrun_dir,
-                    "--fsdp", "full_shard",
-                    "--fsdp_config", '{"fsdp_version": 1}',
+                    "--output_dir",
+                    torchrun_dir,
+                    "--fsdp",
+                    "full_shard",
+                    "--fsdp_config",
+                    '{"fsdp_version": 1}',
                 ],
                 num_processes=num_processes,
             ),
@@ -327,9 +330,12 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
             self.get_torchrun_cmd(
                 script,
                 script_args=[
-                    "--output_dir", torchrun_dir,
-                    "--fsdp", "full_shard",
-                    "--fsdp_config", '{"fsdp_version": 2}',
+                    "--output_dir",
+                    torchrun_dir,
+                    "--fsdp",
+                    "full_shard",
+                    "--fsdp_config",
+                    '{"fsdp_version": 2}',
                 ],
                 num_processes=num_processes,
             ),
@@ -385,7 +391,9 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
 @run_first
 @require_accelerate
 @require_torch_multi_accelerator
-class TestTrainerDistributedFSDPCommon(FSDPCommandsMixin, TrainerDistributedCommon, TestCasePlus, TrainerIntegrationCommon):
+class TestTrainerDistributedFSDPCommon(
+    FSDPCommandsMixin, TrainerDistributedCommon, TestCasePlus, TrainerIntegrationCommon
+):
     # -------------------------------------------------------------------
     # FSDP training — accelerate (parameterized over fsdp version)
     # -------------------------------------------------------------------
