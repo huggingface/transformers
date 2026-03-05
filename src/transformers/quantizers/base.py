@@ -203,7 +203,7 @@ class HfQuantizer(ABC):
             del model.config.quantization_config
         if hasattr(model, "quantization_method"):
             del model.quantization_method
-        model.is_quantized = False  # type: ignore[attr-defined]
+        model.is_quantized = False
 
     def dequantize(self, model, dtype=None):
         """
