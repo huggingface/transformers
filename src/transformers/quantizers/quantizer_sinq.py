@@ -82,7 +82,6 @@ class SinqHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs) -> None:
         from ..utils import is_sinq_available
 
-        quantization_config = self.quantization_config
         if not is_sinq_available():
             raise ImportError("The 'sinq' package is not installed. Please install it with: pip install sinq")
 
@@ -101,7 +100,7 @@ class SinqHfQuantizer(HfQuantizer):
                     f"device. Got {sorted(device_map_values)}. Please use device_map=None."
                 )
 
-        if quantization_config.method == "asinq" and not self.pre_quantized:
+        if self.quantization_config.method == "asinq" and not self.pre_quantized:
             raise ValueError(
                 "You are using `method='asinq'` in the quantization config. Right now the calibrated version of SINQ"
                 " is not supported in Hugging Face, please refer and use the official SINQ repository "
@@ -142,8 +141,7 @@ class SinqHfQuantizer(HfQuantizer):
         if self.pre_quantized:
             return False
 
-        quantization_config = self.quantization_config
-        if quantization_config.method == "asinq":
+        if self.quantization_config.method == "asinq":
             return False
 
         # SINQ param-level only if deemed safe
@@ -214,13 +212,12 @@ class SinqHfQuantizer(HfQuantizer):
         """
         from ..integrations.sinq import replace_with_sinq_linear
 
-        quantization_config = self.quantization_config
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, (quantization_config.modules_to_not_convert or []), keep_in_fp32_modules
+            model, (self.quantization_config.modules_to_not_convert or []), keep_in_fp32_modules
         )
 
         # Enable param-level quantization for SINQ method
-        self._do_param_level_sinq = quantization_config.method == "sinq" and not self.pre_quantized
+        self._do_param_level_sinq = self.quantization_config.method == "sinq" and not self.pre_quantized
 
         sinq_quant_dict = None if self.pre_quantized else self._build_sinq_quant_dict(self.quantization_config)
 
