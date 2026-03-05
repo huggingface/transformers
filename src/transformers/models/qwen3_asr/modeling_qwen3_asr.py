@@ -23,7 +23,6 @@ from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
 from transformers.utils import auto_docstring, can_return_tuple
 from transformers.utils.deprecation import deprecate_kwarg
-from transformers.utils.generic import TransformersKwargs, check_model_inputs
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -31,7 +30,7 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...utils.generic import is_flash_attention_requested, maybe_autocast
+from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested, maybe_autocast
 from .configuration_qwen3_asr import (
     Qwen3ASRAudioEncoderConfig,
     Qwen3ASRConfig,
@@ -589,6 +588,9 @@ class Qwen3ASRAudioEncoderLayer(GradientCheckpointingLayer):
 class SinusoidsPositionEmbedding(nn.Module):
     def __init__(self, length, channels, max_timescale=10000):
         super().__init__()
+        self.length = length
+        self.channels = channels
+        self.max_timescale = max_timescale
         if channels % 2 != 0:
             raise ValueError("SinusoidsPositionEmbedding needs even channels input")
         log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
@@ -1519,7 +1521,6 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
 
         return thinker_result
 
-    ### added the following in order to pass tests
     @property
     def base_model(self):
         return getattr(self, self.base_model_prefix)
@@ -1561,8 +1562,6 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
             cache_position=cache_position,
             **kwargs,
         )
-
-    ###
 
 
 __all__ = [

@@ -23,7 +23,7 @@ from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpa
 from transformers.tokenization_utils_base import TextInput
 from transformers.utils import auto_docstring, can_return_tuple
 from transformers.utils.deprecation import deprecate_kwarg
-from transformers.utils.generic import TransformersKwargs, check_model_inputs
+from ...utils.generic import TransformersKwargs, check_model_inputs
 from ... import initialization as init
 
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
@@ -42,6 +42,7 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerTextModel,
     Qwen3OmniMoeThinkerTextRMSNorm,
     Qwen3OmniMoeThinkerTextRotaryEmbedding,
+    SinusoidsPositionEmbedding,
     _get_feat_extract_output_lengths,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -743,23 +744,6 @@ class Qwen3ASRAudioAttention(Qwen3OmniMoeAudioAttention):
 class Qwen3ASRAudioEncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
     pass
 
-class SinusoidsPositionEmbedding(nn.Module):
-    def __init__(self, length, channels, max_timescale=10000):
-        super().__init__()
-        if channels % 2 != 0:
-            raise ValueError("SinusoidsPositionEmbedding needs even channels input")
-        log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
-        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2).float())
-        scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-        self.register_buffer(
-            "positional_embedding",
-            torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1),
-            persistent=False,
-        )
-
-    def forward(self, seqlen: int):
-        return self.positional_embedding[:seqlen, :]
-
 class Qwen3ASRAudioEncoder(Qwen3OmniMoeAudioEncoder):
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         raise ValueError("Not needed.")
@@ -1223,7 +1207,6 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
 
         return thinker_result
 
-    ### added the following in order to pass tests
     @property
     def base_model(self):
         return getattr(self, self.base_model_prefix)
@@ -1265,8 +1248,6 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
             cache_position=cache_position,
             **kwargs,
         )
-
-    ###
 
 
 __all__ = [
