@@ -45,27 +45,13 @@ class HybridMambaAttentionDynamicCache(HybridMambaAttentionDynamicCache):
 
 class GraniteDoclingHybridPreTrainedModel(Idefics3PreTrainedModel):
     config_class = GraniteDoclingHybridConfig
-    _no_split_modules = ["Idefics3VisionTransformer", "GraniteMoeHybridDecoderLayer"]
 
 
 class GraniteDoclingHybridModel(Idefics3Model):
     config_class = GraniteDoclingHybridConfig
 
-    def __init__(self, config: GraniteDoclingHybridConfig):
-        super().__init__(config)
-
     @can_return_tuple
-    @auto_docstring(
-        custom_intro="""
-        Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
-        the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
-        max_num_images is the maximum number of images among the batch_size samples in the batch.
-        Padding images are not needed beyond padding the pixel_values at the entrance of the model.
-        For efficiency, we only pass through the vision_model's forward the real images by
-        discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
-        image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
-        """
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -84,6 +70,14 @@ class GraniteDoclingHybridModel(Idefics3Model):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | GraniteDoclingHybridBaseModelOutputWithPast:
         r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
+            the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
+            max_num_images is the maximum number of images among the batch_size samples in the batch.
+            Padding images are not needed beyond padding the pixel_values at the entrance of the model.
+            For efficiency, we only pass through the vision_model's forward the real images by
+            discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
+            image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
@@ -101,9 +95,9 @@ class GraniteDoclingHybridModel(Idefics3Model):
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None:
-            batch_size, seq_length = input_ids.shape
+            batch_size, _ = input_ids.shape
         elif inputs_embeds is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
+            batch_size, _, _ = inputs_embeds.shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -168,18 +162,6 @@ class GraniteDoclingHybridModel(Idefics3Model):
 )
 class GraniteDoclingHybridForConditionalGeneration(Idefics3ForConditionalGeneration):
     config_class = GraniteDoclingHybridConfig
-
-    # def __init__(self, config: GraniteDoclingHybridConfig):
-    #     # Call the grandparent __init__ to avoid Idefics3ForConditionalGeneration's __init__
-    #     Idefics3PreTrainedModel.__init__(self, config)
-    #     self.model = GraniteDoclingHybridModel(config)
-    #     self.image_token_id = self.config.image_token_id
-
-    #     self.lm_head = torch.nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-    #     self.vocab_size = config.text_config.vocab_size
-
-    #     # Initialize weights and apply final processing
-    #     self.post_init()
 
     @can_return_tuple
     @auto_docstring

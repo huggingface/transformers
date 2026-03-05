@@ -42,9 +42,6 @@ class GraniteDoclingHybridConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should cache the key/value pairs of the attention mechanism. Only
-            relevant if `config.is_decoder=True`.
         image_token_id (`int`, *optional*, defaults to 128257):
             The id of the "image" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
@@ -55,8 +52,6 @@ class GraniteDoclingHybridConfig(PretrainedConfig):
             Custom text config or dict for the text model
         scale_factor (`int`, *optional*, defaults to 2):
             The scale factor for the image encoder.
-        pad_token_id (`int`, *optional*, defaults to 128002):
-            The id of the padding token.
 
     Example:
     ```python
@@ -74,17 +69,14 @@ class GraniteDoclingHybridConfig(PretrainedConfig):
 
     def __init__(
         self,
-        use_cache=True,
         image_token_id=128257,
         tie_word_embeddings=False,
         vision_config=None,
         text_config=None,
         scale_factor=2,
-        pad_token_id=128_002,
         **kwargs,
     ):
         self.image_token_id = image_token_id
-        self.use_cache = use_cache
         self.tie_word_embeddings = tie_word_embeddings
 
         if vision_config is None:
@@ -105,7 +97,7 @@ class GraniteDoclingHybridConfig(PretrainedConfig):
         self.text_config = text_config
         self.scale_factor = scale_factor
 
-        super().__init__(**kwargs, pad_token_id=pad_token_id, tie_word_embeddings=tie_word_embeddings)
+        super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
 
 
 __all__ = ["GraniteDoclingHybridConfig"]
