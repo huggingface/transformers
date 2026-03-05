@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from importlib import metadata
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from packaging import version
 
-from .._typing import AqlmConfigLike
 from .base import HfQuantizer
 
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import AqlmConfig
 
 from ..integrations import replace_with_aqlm_linear
 from ..utils import is_accelerate_available, is_aqlm_available, logging
@@ -37,6 +37,7 @@ class AqlmHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
+    quantization_config: "AqlmConfig"
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -53,8 +54,7 @@ class AqlmHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        quantization_config = cast(AqlmConfigLike, self.quantization_config)
-        modules_to_not_convert = quantization_config.linear_weights_not_to_quantize
+        modules_to_not_convert = self.quantization_config.linear_weights_not_to_quantize
         replace_with_aqlm_linear(
             model,
             modules_to_not_convert=modules_to_not_convert,

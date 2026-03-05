@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib.metadata
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from packaging import version
 
-from .._typing import AwqConfigLike
 from .base import HfQuantizer
 
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import AwqConfig
 
 from ..utils import is_accelerate_available, is_gptqmodel_available, is_torch_available, logging
 from ..utils.quantization_config import AwqBackend
@@ -40,6 +40,7 @@ class AwqQuantizer(HfQuantizer):
 
     # AWQ requires data calibration - we support only inference
     requires_calibration = True
+    quantization_config: "AwqConfig"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -66,9 +67,8 @@ class AwqQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import replace_quantization_scales, replace_with_awq_linear
 
-        quantization_config = cast(AwqConfigLike, self.quantization_config)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules, add_default_skips=True
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules, add_default_skips=True
         )
 
         model = replace_with_awq_linear(
@@ -83,12 +83,10 @@ class AwqQuantizer(HfQuantizer):
     def _process_model_after_weight_loading(self, model, **kwargs):
         from gptqmodel.utils.model import hf_gptqmodel_post_init
 
-        quantization_config = cast(AwqConfigLike, self.quantization_config)
-        hf_gptqmodel_post_init(model, use_act_order=quantization_config.desc_act)
+        hf_gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
 
     def is_serializable(self):
-        quantization_config = cast(AwqConfigLike, self.quantization_config)
-        if quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:
+        if self.quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:
             logger.warning("You cannot save an AWQ model that uses Exllama backend!")
             return False
 

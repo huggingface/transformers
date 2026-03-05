@@ -11,14 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-from .._typing import ModulesToNotConvertConfigLike
 from .base import HfQuantizer
 
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import SpQRConfig
 
 from ..integrations import replace_with_spqr_linear
 from ..utils import is_accelerate_available, is_spqr_available, is_torch_available, logging
@@ -37,6 +37,7 @@ class SpQRHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
+    quantization_config: "SpQRConfig"
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -63,9 +64,8 @@ class SpQRHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        quantization_config = cast(ModulesToNotConvertConfigLike, self.quantization_config)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
         replace_with_spqr_linear(
             model,

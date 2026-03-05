@@ -11,14 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-from .._typing import DequantizeWithModulesConfigLike
 from .base import HfQuantizer
 
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import Mxfp4Config
 
 from ..utils import (
     is_accelerate_available,
@@ -45,6 +45,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: "Mxfp4Config"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -68,7 +69,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 "Please install the latest version of torch ( pip install --upgrade torch )"
             )
 
-        quantization_config = cast(DequantizeWithModulesConfigLike, self.quantization_config)
+        quantization_config = self.quantization_config
         if quantization_config.dequantize:
             return
 
@@ -174,16 +175,16 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 "You are using full precision kernels, we will dequantize the model to bf16. "
                 "To use the quantized model with quantization kernels, please set use_kernels=False"
             )
-            cast(DequantizeWithModulesConfigLike, self.quantization_config).dequantize = True
+            self.quantization_config.dequantize = True
 
         if not use_kernels and device.type in ["cpu"]:
             logger.warning_once(
                 "MXFP4 inference on CPU requires use_kernels=True, but use_kernels is disabled. "
                 "We will dequantize the model to bf16. To run MXFP4 natively on CPU, please set use_kernels=True."
             )
-            cast(DequantizeWithModulesConfigLike, self.quantization_config).dequantize = True
+            self.quantization_config.dequantize = True
 
-        quantization_config = cast(DequantizeWithModulesConfigLike, self.quantization_config)
+        quantization_config = self.quantization_config
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
@@ -271,7 +272,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
     def get_weight_conversions(self):
         from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
 
-        quantization_config = cast(DequantizeWithModulesConfigLike, self.quantization_config)
+        quantization_config = self.quantization_config
         if self.pre_quantized and quantization_config.dequantize:
             return [
                 WeightConverter(

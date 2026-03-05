@@ -13,9 +13,8 @@
 # limitations under the License.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-from .._typing import SinqConfigLike
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import SinqConfig
 from .base import HfQuantizer
@@ -46,6 +45,7 @@ class SinqHfQuantizer(HfQuantizer):
     """
 
     requires_parameters_quantization: bool = True
+    quantization_config: SinqConfig
 
     def __init__(self, quantization_config: SinqConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -82,7 +82,7 @@ class SinqHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs) -> None:
         from ..utils import is_sinq_available
 
-        quantization_config = cast(SinqConfigLike, self.quantization_config)
+        quantization_config = self.quantization_config
         if not is_sinq_available():
             raise ImportError("The 'sinq' package is not installed. Please install it with: pip install sinq")
 
@@ -142,7 +142,7 @@ class SinqHfQuantizer(HfQuantizer):
         if self.pre_quantized:
             return False
 
-        quantization_config = cast(SinqConfigLike, self.quantization_config)
+        quantization_config = self.quantization_config
         if quantization_config.method == "asinq":
             return False
 
@@ -214,7 +214,7 @@ class SinqHfQuantizer(HfQuantizer):
         """
         from ..integrations.sinq import replace_with_sinq_linear
 
-        quantization_config = cast(SinqConfigLike, self.quantization_config)
+        quantization_config = self.quantization_config
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, (quantization_config.modules_to_not_convert or []), keep_in_fp32_modules
         )
@@ -223,7 +223,7 @@ class SinqHfQuantizer(HfQuantizer):
         self._do_param_level_sinq = quantization_config.method == "sinq" and not self.pre_quantized
 
         sinq_quant_dict = (
-            None if self.pre_quantized else self._build_sinq_quant_dict(cast(SinqConfig, quantization_config))
+            None if self.pre_quantized else self._build_sinq_quant_dict(self.quantization_config)
         )
 
         # Extract device from device_map (guaranteed to be set by update_device_map)

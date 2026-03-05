@@ -13,9 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from typing import cast
-
-from .._typing import BnbLoadIn8BitConfigLike, LoadingAttributesConfigLike
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
 from ..utils.quantization_config import (
@@ -183,7 +180,7 @@ class AutoHfQuantizer:
         # Again, we need a special care for bnb as we have a single quantization config
         # class for both 4-bit and 8-bit quantization
         if quant_method == QuantizationMethod.BITS_AND_BYTES:
-            if cast(BnbLoadIn8BitConfigLike, quantization_config).load_in_8bit:
+            if quantization_config.load_in_8bit:  # type: ignore[union-attr]
                 quant_method += "_8bit"
             else:
                 quant_method += "_4bit"
@@ -251,9 +248,7 @@ class AutoHfQuantizer:
             )
             and quantization_config_from_args is not None
         ):
-            loading_attr_dict = cast(
-                LoadingAttributesConfigLike, quantization_config_from_args
-            ).get_loading_attributes()
+            loading_attr_dict = quantization_config_from_args.get_loading_attributes()  # type: ignore[union-attr]
             for attr, val in loading_attr_dict.items():
                 setattr(quantization_config, attr, val)
 

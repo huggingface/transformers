@@ -11,9 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-from .._typing import QuantoConfigLike
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -42,6 +41,7 @@ class QuantoHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: QuantoConfig
 
     def __init__(self, quantization_config: QuantoConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -51,11 +51,11 @@ class QuantoHfQuantizer(HfQuantizer):
             "int4": 0.5,
             "int2": 0.25,
         }
-        quantization_config = cast(QuantoConfigLike, self.quantization_config)
+        quantization_config = self.quantization_config
         self.quantized_param_size = map_to_param_size.get(quantization_config.weights, None)
 
     def validate_environment(self, *args, **kwargs):
-        quantization_config = cast(QuantoConfigLike, self.quantization_config)
+        quantization_config = self.quantization_config
         if not is_optimum_quanto_available():
             raise ImportError(
                 "Loading an optimum-quanto quantized model requires optimum-quanto library (`pip install optimum-quanto`)"
@@ -103,7 +103,7 @@ class QuantoHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import replace_with_quanto_layers
 
-        quantization_config = cast(QuantoConfigLike, self.quantization_config)
+        quantization_config = self.quantization_config
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )

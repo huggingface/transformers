@@ -11,14 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-from .._typing import FbgemmFp8ConfigLike
 from .base import HfQuantizer
 
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import FbgemmFp8Config
 
 from ..utils import (
     is_accelerate_available,
@@ -44,6 +44,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: "FbgemmFp8Config"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -123,9 +124,8 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     ):
         from ..integrations import replace_with_fbgemm_fp8_linear
 
-        quantization_config = cast(FbgemmFp8ConfigLike, self.quantization_config)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_fbgemm_fp8_linear(
@@ -147,8 +147,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             if isinstance(m, (FbgemmFp8Linear, FbgemmFp8Llama4TextExperts)):
                 if hasattr(m, "input_scale_ub"):
                     # The model is now on the target device, so we can use fill_ directly.
-                    quantization_config = cast(FbgemmFp8ConfigLike, self.quantization_config)
-                    m.input_scale_ub.fill_(quantization_config.activation_scale_ub)
+                    m.input_scale_ub.fill_(self.quantization_config.activation_scale_ub)
         return model
 
     def update_tp_plan(self, config):

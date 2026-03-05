@@ -11,14 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-from .._typing import BitNetConfigLike
 from .base import HfQuantizer
 
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import BitNetQuantConfig
 
 from ..utils import is_accelerate_available, is_torch_available, logging
 
@@ -39,6 +39,7 @@ class BitNetHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
+    quantization_config: "BitNetQuantConfig"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -73,9 +74,8 @@ class BitNetHfQuantizer(HfQuantizer):
     ):
         from ..integrations import replace_with_bitnet_linear
 
-        quantization_config = cast(BitNetConfigLike, self.quantization_config)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_bitnet_linear(
@@ -93,25 +93,22 @@ class BitNetHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
-        quantization_config = cast(BitNetConfigLike, self.quantization_config)
         return (
-            quantization_config.linear_class == "autobitlinear" and quantization_config.quantization_mode == "online"
+            self.quantization_config.linear_class == "autobitlinear" and self.quantization_config.quantization_mode == "online"
         )
 
     @property
     def is_qat_trainable(self) -> bool:
         """Flag indicating whether the quantized model can carry out quantization aware training"""
-        quantization_config = cast(BitNetConfigLike, self.quantization_config)
         return (
-            quantization_config.linear_class == "autobitlinear" and quantization_config.quantization_mode == "online"
+            self.quantization_config.linear_class == "autobitlinear" and self.quantization_config.quantization_mode == "online"
         )
 
     def get_weight_conversions(self):
         from ..core_model_loading import WeightConverter
         from ..integrations.bitnet import BitNetDeserialize
 
-        quantization_config = cast(BitNetConfigLike, self.quantization_config)
-        if quantization_config.linear_class == "autobitlinear" and quantization_config.quantization_mode == "offline":
+        if self.quantization_config.linear_class == "autobitlinear" and self.quantization_config.quantization_mode == "offline":
             return [
                 WeightConverter(
                     source_patterns=["weight"],

@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
-from .._typing import QuantizedModelLike
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
 from .quantizers_utils import get_module_from_name
@@ -168,9 +167,8 @@ class HfQuantizer(ABC):
             kwargs (`dict`, *optional*):
                 The keyword arguments that are passed along `_process_model_before_weight_loading`.
         """
-        quantized_model = cast(QuantizedModelLike, model)
-        quantized_model.is_quantized = True
-        quantized_model.quantization_method = self.quantization_config.quant_method
+        model.is_quantized = True  # type: ignore[attr-defined]
+        model.quantization_method = self.quantization_config.quant_method  # type: ignore[attr-defined]
         if self.pre_quantized:
             self._convert_model_for_quantization(model)
         self._process_model_before_weight_loading(model, **kwargs)
@@ -208,7 +206,7 @@ class HfQuantizer(ABC):
             del model.config.quantization_config
         if hasattr(model, "quantization_method"):
             del model.quantization_method
-        cast(QuantizedModelLike, model).is_quantized = False
+        model.is_quantized = False  # type: ignore[attr-defined]
 
     def dequantize(self, model, dtype=None):
         """

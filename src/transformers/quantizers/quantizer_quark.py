@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-from .._typing import QuarkConfigLike
 from .base import HfQuantizer
 
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import QuarkConfig
 
 from ..utils import is_quark_available, logging
 
@@ -45,6 +45,7 @@ class QuarkHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True  # On-the-fly quantization with quark is not supported for now.
+    quantization_config: "QuarkConfig"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -60,12 +61,11 @@ class QuarkHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from quark.torch.export.api import _map_to_quark
 
-        quantization_config = cast(QuarkConfigLike, self.quantization_config)
         _map_to_quark(
             model,
-            quantization_config.quant_config,
+            self.quantization_config.quant_config,
             pack_method=self.json_export_config.pack_method,
-            custom_mode=quantization_config.custom_mode,
+            custom_mode=self.quantization_config.custom_mode,
         )
 
         return model
