@@ -24,6 +24,7 @@ from transformers.tokenization_utils_base import TextInput
 from transformers.utils import auto_docstring, can_return_tuple
 from transformers.utils.deprecation import deprecate_kwarg
 from transformers.utils.generic import TransformersKwargs, check_model_inputs
+from ... import initialization as init
 
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig
@@ -596,6 +597,21 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
         "attentions": Qwen3ASRTextAttention,
     }
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        if isinstance(module, SinusoidsPositionEmbedding):
+            log_timescale_increment = np.log(module.max_timescale) / (module.channels // 2 - 1)
+            inv_timescales = torch.exp(
+                -log_timescale_increment * torch.arange(module.channels // 2).float()
+            )
+            scaled_time = torch.arange(module.length)[:, None] * inv_timescales[None, :]
+
+            init.copy_(
+                module.positional_embedding,
+                torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1),
+            )
 
 @dataclass
 class Qwen3ASRThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
@@ -727,36 +743,32 @@ class Qwen3ASRAudioAttention(Qwen3OmniMoeAudioAttention):
 class Qwen3ASRAudioEncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
     pass
 
+class SinusoidsPositionEmbedding(nn.Module):
+    def __init__(self, length, channels, max_timescale=10000):
+        super().__init__()
+        if channels % 2 != 0:
+            raise ValueError("SinusoidsPositionEmbedding needs even channels input")
+        log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
+        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2).float())
+        scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+        self.register_buffer(
+            "positional_embedding",
+            torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1),
+            persistent=False,
+        )
 
-
-
-
-
-
-
-
+    def forward(self, seqlen: int):
+        return self.positional_embedding[:seqlen, :]
 
 class Qwen3ASRAudioEncoder(Qwen3OmniMoeAudioEncoder):
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         raise ValueError("Not needed.")
-
-
-
-
-
 
 class Qwen3ASRThinkerTextRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding):
     def __init__(self, config: Qwen3ASRConfig, device=None):
         super().__init__()
         self.rope_type = config.rope_scaling.get("rope_type", "linear")
         self.mrope_section = config.rope_scaling.get("mrope_section", [24, 20, 20])
-
-    #def compute_default_rope_parameters(
-    #    config: Qwen3ASRTextConfig | None = None,
-    #    device: Optional["torch.device"] = None,
-    #    seq_len: int | None = None,
-    #) -> tuple["torch.Tensor", float]:
-    #    raise ValueError("Not needed.")
 
 class Qwen3ASRThinkerTextMLP(Qwen3OmniMoeThinkerTextMLP):
     pass
