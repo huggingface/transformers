@@ -58,7 +58,7 @@ from ...utils.import_utils import (
     is_vision_available,
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLRotaryEmbedding
+from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLTextRotaryEmbedding
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
     Siglip2Attention,
@@ -978,11 +978,11 @@ class IsaacProcessor(ProcessorMixin):
         return BatchFeature(data=self._build_batch(text=text, images=images), tensor_type=return_tensors)
 
 
-class IsaacRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
+class IsaacRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
     def __init__(self, config: IsaacConfig, device=None):
         rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
-        rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
         config_for_rope = copy.copy(rope_source_cfg)
+        rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
         config_for_rope.rope_scaling = rope_scaling
 
         super().__init__(
@@ -990,8 +990,7 @@ class IsaacRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
             device=device if device is not None and getattr(device, "type", None) != "meta" else None,
         )
 
-        rotary_half_dim = self.inv_freq.shape[0]
-        self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), rotary_half_dim)
+        self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), self.inv_freq.shape[0])
         self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
 
     @staticmethod
@@ -1005,9 +1004,8 @@ class IsaacRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
         section = [int(v) for v in section]
         return section
 
-    def _combine_axes(self, tensor: torch.Tensor) -> torch.Tensor:
-        split_sections = tuple(self.mrope_section * 2)
-        chunks = tensor.split(split_sections, dim=-1)
+    def apply_interleaved_mrope(self, freqs: torch.Tensor, mrope_section: list[int]) -> torch.Tensor:
+        chunks = freqs.split(tuple(mrope_section), dim=-1)
         return torch.cat([chunk[i % 3] for i, chunk in enumerate(chunks)], dim=-1)
 
     def forward(
@@ -1033,24 +1031,7 @@ class IsaacRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
             pos[not_spatial] = data_1d.expand(-1, pos.shape[-1])
             pos_axes = pos.permute(2, 0, 1).contiguous()
 
-        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, pos_axes.shape[1], -1, 1)
-        pos_axes_expanded = pos_axes[:, :, None, :].float()  # shape (3, bs, 1, positions)
-
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ pos_axes_expanded.float()).transpose(2, 3)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        cos_axes, sin_axes = cos.to(hidden_states.dtype), sin.to(hidden_states.dtype)
-        cos_combined, sin_combined = self._combine_axes(cos_axes), self._combine_axes(sin_axes)
-
-        return cos_combined, sin_combined
+        return super().forward(hidden_states, pos_axes)
 
 
 @auto_docstring
