@@ -726,7 +726,6 @@ class IsaacProcessor(ProcessorMixin):
         self.pad_token_id = self.text_pad_token_id
 
         self.current_processor = self.image_processor
-        self.config = config
         self.chat_template = getattr(self.tokenizer, "chat_template", None)
         self.vision_token = vision_token
         self.max_sequence_length = max_sequence_length
