@@ -4288,7 +4288,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
             # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialized` flag)
-            model._initialize_missing_keys(load_config.is_quantized)
+            model._initialize_missing_keys(loading_info.missing_and_mismatched(), load_config.is_quantized)
 
             # Tie the weights
             model.tie_weights(missing_keys=loading_info.missing_keys, recompute_mapping=False)
@@ -4539,14 +4539,41 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             value = torch.empty_like(buffer, device=buffer_device)
             _load_parameter_into_model(self, key, value)
 
-    def _initialize_missing_keys(self, is_quantized: bool) -> None:
+    def _initialize_missing_keys(self, missing_keys: set[str], is_quantized: bool) -> None:
         """
         Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to
         `_initialize_weights`. Indeed, since the corresponding weights are missing from the state dict, they will not be replaced and need to
         be initialized correctly (i.e. weight initialization distribution).
 
-        Params that are not missing have the `is_hf_initialized` flag.
+        Also marks non-missing params/buffers with `_is_hf_initialized` and propagates this flag to modules,
+        so that `_initialize_weights` can skip fully-initialized modules entirely.
         """
+        # Mark non-missing params/buffers as already initialized so they are not re-initialized
+        for key in self.state_dict():
+            if key not in missing_keys:
+                param_or_buffer = self.get_parameter_or_buffer(key)
+                param_or_buffer._is_hf_initialized = True
+
+        # Propagate the flag to modules: a module is fully initialized if all its children,
+        # direct parameters and persistent buffers are initialized. This prevents _init_weights
+        # from being called on fully-initialized modules (which matters because _init_weights may
+        # contain unguarded tensor operations like .data.normal_() that the init guards don't catch).
+        def set_is_initialized_for_modules(module):
+            if (
+                all(getattr(child, "_is_hf_initialized", False) for child in module.children())
+                and all(
+                    getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False)
+                )
+                and all(
+                    getattr(buffer, "_is_hf_initialized", False)
+                    for buffer in module.buffers(recurse=False)
+                    if buffer not in module._non_persistent_buffers_set
+                )
+            ):
+                module._is_hf_initialized = True
+
+        self.apply(set_is_initialized_for_modules)
+
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
