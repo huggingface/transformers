@@ -887,14 +887,14 @@ def build_model(model_arch, tiny_config, output_dir):
     model = model_arch(config=tiny_config)
     # breakpoint()
 
-    # with tempfile.TemporaryDirectory(dir=checkpoint_dir) as tmpdir:
-    checkpoint_dir_tmp = checkpoint_dir
-    model.save_pretrained(checkpoint_dir_tmp)
+    with tempfile.TemporaryDirectory(dir=checkpoint_dir) as tmpdir:
+        checkpoint_dir_tmp = checkpoint_dir
+        model.save_pretrained(checkpoint_dir_tmp)
 
-    # can't call from_pretrained from saved one
-    if not tiny_config.__class__.__name__.endswith(("TimmBackboneConfig",)):
-        # breakpoint()
-        model.from_pretrained(checkpoint_dir_tmp)
+        # can't call from_pretrained from saved one
+        if not tiny_config.__class__.__name__.endswith(("TimmBackboneConfig",)):
+            # breakpoint()
+            model.from_pretrained(checkpoint_dir_tmp)
 
     return model
 
@@ -1656,7 +1656,7 @@ if __name__ == "__main__":
     if not args.all and not args.model_types:
         raise ValueError("Please provide at least one model type or pass `--all` to export all architectures.")
 
-    os.environ["HF_TOKEN"] = args.token
+    # os.environ["HF_TOKEN"] = args.token
 
     create_tiny_models(
         args.output_path,
