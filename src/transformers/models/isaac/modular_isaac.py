@@ -1492,10 +1492,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
 
         return model_inputs
 
-    @classmethod
-    def can_generate(cls) -> bool:
-        return True
-
     def set_input_embeddings(self, value: nn.Module) -> None:
         self.model.set_input_embeddings(value)
         vocab_size = getattr(value, "num_embeddings", None)
