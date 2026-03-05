@@ -94,6 +94,7 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flute_available,
+    is_fouroversix_available,
     is_fp_quant_available,
     is_fsdp_available,
     is_g2p_en_available,
@@ -271,6 +272,7 @@ _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_training_tests = parse_flag_from_env("RUN_TRAINING_TESTS", default=True)
+_run_tensor_parallel_tests = parse_flag_from_env("RUN_TENSOR_PARALLEL_TESTS", default=True)
 
 
 def is_staging_test(test_case):
@@ -335,6 +337,22 @@ def is_training_test(test_case):
             return test_case
         else:
             return pytest.mark.is_training_test()(test_case)
+
+
+def is_tensor_parallel_test(test_case):
+    """
+    Decorator marking a test as a tensor parallel test. If RUN_TENSOR_PARALLEL_TESTS is set to a falsy value, those
+    tests will be skipped.
+    """
+    if not _run_tensor_parallel_tests:
+        return unittest.skip(reason="test is tensor parallel test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_tensor_parallel_test()(test_case)
 
 
 def slow(test_case):
@@ -1297,6 +1315,13 @@ def require_flute_hadamard(test_case):
     )(test_case)
 
 
+def require_fouroversix(test_case):
+    """
+    Decorator marking a test that requires fouroversix
+    """
+    return unittest.skipUnless(is_fouroversix_available(), "test requires fouroversix")(test_case)
+
+
 def require_fp_quant(test_case):
     """
     Decorator marking a test that requires fp_quant and qutlass
@@ -1468,12 +1493,8 @@ def get_steps_per_epoch(trainer: Trainer) -> int:
     training_args = trainer.args
     train_dataloader = trainer.get_train_dataloader()
 
-    initial_training_values = trainer.set_initial_training_values(
-        args=training_args,
-        dataloader=train_dataloader,
-        total_train_batch_size=training_args.per_device_train_batch_size,
-    )
-    steps_per_epoch = initial_training_values[1]
+    initial_training_values = trainer.set_initial_training_values(args=training_args, dataloader=train_dataloader)
+    steps_per_epoch = initial_training_values[5]
 
     return steps_per_epoch
 

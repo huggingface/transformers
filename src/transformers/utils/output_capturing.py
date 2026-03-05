@@ -89,7 +89,7 @@ class CompileableContextVar:
             return self.context_var.set(value)
 
     def reset(self, token):
-        if self.compiling:
+        if self.compiling or token is None:
             self.global_var = None
             self.compiling = False
         else:

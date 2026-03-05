@@ -288,7 +288,7 @@ class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
 
 class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_checkpoint = "bezzam/VibeVoice-AcousticTokenizer"
+        self.model_checkpoint = "microsoft/VibeVoice-AcousticTokenizer"
         self.sampling_rate = 24000
 
     def tearDown(self):

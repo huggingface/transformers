@@ -52,8 +52,10 @@ if __name__ == "__main__":
     results.append(run_and_parse_cb_example("--samples 100 --attn flash_attention_2"))
     results.append(run_and_parse_cb_example("--samples 100 --attn sdpa"))
 
-    # Benchmark with high number of samples
-    results.append(run_and_parse_cb_example("--samples 500"))
+    # Benchmark with high number of samples and synchronous batching
+    results.append(run_and_parse_cb_example("--samples 500 --no-use-async"))
+    # Benchmark with high number of samples and asynchronous batching
+    results.append(run_and_parse_cb_example("--samples 500 --use-async"))
 
     # Benchmark with prefix sharing and compile (best performance, but not reproducible due to compilation)
     results.append(run_and_parse_cb_example("--samples 500 --add-prefix --compile"))
@@ -62,5 +64,6 @@ if __name__ == "__main__":
     results.append(run_and_parse_cb_example("--samples 50 --num-return-sequences 8 --do-sample"))
     results.append(run_and_parse_cb_example("--samples 100 --num-return-sequences 4 --do-sample"))
 
+    # Print results
     print()
     print(tabulate(results, tablefmt="github"))
