@@ -171,7 +171,8 @@ def filter_output_hidden_states(forward_function):
         output_hidden_states = kwargs.get("output_hidden_states", getattr(self.config, "output_hidden_states", False))
         output = forward_function(self, *args, **kwargs)
         if not output_hidden_states:
-            output.hidden_states = None
+            filtered_output_data = {k: v for k, v in output.items() if k not in ("hidden_states")}
+            output = type(output)(**filtered_output_data)
         return output
 
     return wrapper
