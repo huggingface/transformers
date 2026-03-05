@@ -1092,12 +1092,6 @@ class IsaacModel(Qwen3PreTrainedModel):
 
     def set_input_embeddings(self, value: nn.Module) -> None:
         self.text_model.set_input_embeddings(value)
-        vocab_size = getattr(value, "num_embeddings", None)
-        if vocab_size is not None:
-            self.config.vocab_size = vocab_size
-            if hasattr(self.config, "text_config"):
-                self.config.text_config.vocab_size = vocab_size
-            self.text_model.config.vocab_size = vocab_size
 
     @property
     def final_norm(self) -> nn.Module:
