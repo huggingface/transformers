@@ -104,9 +104,11 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             if torch.cuda.is_available():
                 device_map = {"": torch.cuda.current_device()}
             elif is_torch_npu_available():
-                device_map = {"": f"npu:{torch.npu.current_device()}"}  # type: ignore[attr-defined]
+                npu = getattr(torch, "npu")
+                device_map = {"": f"npu:{npu.current_device()}"}
             elif is_torch_hpu_available():
-                device_map = {"": f"hpu:{torch.hpu.current_device()}"}  # type: ignore[attr-defined]
+                hpu = getattr(torch, "hpu")
+                device_map = {"": f"hpu:{hpu.current_device()}"}
             elif is_torch_xpu_available():
                 device_map = {"": torch.xpu.current_device()}
             else:
@@ -143,8 +145,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model.is_loaded_in_4bit = True  # type: ignore[attr-defined]
-        model.is_4bit_serializable = self.is_serializable()  # type: ignore[attr-defined]
+        setattr(model, "is_loaded_in_4bit", True)
+        setattr(model, "is_4bit_serializable", self.is_serializable())
         return model
 
     def is_serializable(self):
