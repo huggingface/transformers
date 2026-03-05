@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch Qwen3-VL model."""
 
+import itertools
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
