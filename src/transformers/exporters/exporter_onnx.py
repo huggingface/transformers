@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
 from ..utils.export_config import OnnxConfig
-from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
+from ..utils.import_utils import is_torch_available
 from .exporter_dynamo import DYNAMO_UNSUPPORTED_MODEL_TYPES, DynamoExporter
 from .patch_utils import patch_torch_for_onnx_export
 from .utils import get_inputs_outputs_names, prepare_for_export
@@ -11,10 +11,8 @@ from .utils import get_inputs_outputs_names, prepare_for_export
 
 if is_torch_available():
     import torch
-
-    if is_torch_greater_or_equal("2.6.0"):
-        from torch.export import ExportedProgram
-        from torch.onnx import ONNXProgram
+    from torch.export import ExportedProgram
+    from torch.onnx import ONNXProgram
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
