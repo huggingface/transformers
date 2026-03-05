@@ -294,9 +294,7 @@ class ParakeetForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     )
 
     test_attention_outputs = False
-
     test_resize_embeddings = False
-
     _is_composite = True
 
     def setUp(self):
@@ -381,11 +379,10 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(1)
-        model = ParakeetForCTC.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map=torch_device)
-        model.to(torch_device)
+        model = ParakeetForCTC.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         inputs = self.processor(samples)
-        inputs.to(torch_device, dtype=self.dtype)
+        inputs.to(model.device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
         predicted_transcripts = self.processor.decode(predicted_ids, skip_special_tokens=True)
@@ -403,11 +400,10 @@ class ParakeetForCTCIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(5)
-        model = ParakeetForCTC.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map=torch_device)
-        model.to(torch_device)
+        model = ParakeetForCTC.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         inputs = self.processor(samples)
-        inputs.to(torch_device, dtype=self.dtype)
+        inputs.to(model.device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
         predicted_transcripts = self.processor.decode(predicted_ids, skip_special_tokens=True)
@@ -501,9 +497,7 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
     )
 
     test_attention_outputs = False
-
     test_resize_embeddings = False
-
     _is_composite = True
 
     def setUp(self):
@@ -530,7 +524,7 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -601,11 +595,10 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map=torch_device)
-        model.to(torch_device)
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
-        inputs.to(torch_device, dtype=self.dtype)
+        inputs.to(model.device, dtype=self.dtype)
         output = model.generate(**inputs, return_dict_in_generate=True)
         torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
         predicted_transcripts = self.processor.decode(output.sequences, skip_special_tokens=True)
@@ -623,11 +616,10 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map=torch_device)
-        model.to(torch_device)
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
-        inputs.to(torch_device, dtype=self.dtype)
+        inputs.to(model.device, dtype=self.dtype)
         output = model.generate(**inputs, return_dict_in_generate=True)
         torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
         predicted_transcripts = self.processor.decode(output.sequences, skip_special_tokens=True)
@@ -651,11 +643,10 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
 
         # Use larger precision for testing token durations and timestamps
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=torch.float32, device_map=torch_device)
-        model.to(torch_device)
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=torch.float32, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
-        inputs.to(torch_device, dtype=model.dtype)
+        inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, return_dict_in_generate=True, return_timestamps=True)
         torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
         predicted_transcripts, predicted_timestamps = self.processor.decode(

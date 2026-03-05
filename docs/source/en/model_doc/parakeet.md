@@ -66,10 +66,10 @@ print(out)
 ```py
 from transformers import AutoModelForCTC, AutoProcessor
 from datasets import load_dataset, Audio
-import torch
 
-processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
-model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", dtype="auto", device_map="auto")
+model_id = "nvidia/parakeet-ctc-1.1b"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForCTC.from_pretrained(model_id, dtype="auto", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -78,7 +78,7 @@ speech_samples = [el['array'] for el in ds["audio"][:5]]
 inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
 outputs = model.generate(**inputs)
-print(processor.batch_decode(outputs))
+print(processor.decode(outputs))
 ```
 
 </hfoption>
@@ -88,6 +88,8 @@ print(processor.batch_decode(outputs))
 
 <hfoptions id="tdt-usage">
 <hfoption id="Pipeline">
+
+Parakeet TDT transcripts include casing, and the model can also performk token timestamping.
 
 ```py
 from transformers import pipeline
@@ -103,10 +105,10 @@ print(out)
 ```py
 from transformers import AutoModelForTDT, AutoProcessor
 from datasets import load_dataset, Audio
-import torch
 
-processor = AutoProcessor.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
-model = AutoModelForTDT.from_pretrained("nvidia/parakeet-tdt-0.6b-v3", dtype="auto", device_map="auto")
+model_id = "nvidia/parakeet-tdt-0.6b-v3"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForTDT.from_pretrained(model_id, dtype="auto", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -115,7 +117,44 @@ speech_samples = [el['array'] for el in ds["audio"][:5]]
 inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
 output = model.generate(**inputs, return_dict_in_generate=True)
-print(processor.batch_decode(output.sequences, skip_special_tokens=True))
+print(processor.decode(output.sequences, skip_special_tokens=True))
+```
+
+</hfoption>
+</hfoptions>
+
+</hfoption>
+<hfoption id="Timestamping">
+
+```py
+from datasets import Audio, load_dataset
+from transformers import AutoModelForTDT, AutoProcessor
+
+model_id = "nvidia/parakeet-tdt-0.6b-v3"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForTDT.from_pretrained(model_id, dtype="auto", device_map="auto")
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+speech_samples = [el['array'] for el in ds["audio"][:1]]
+
+inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs.to(model.device, dtype=model.dtype)
+output = model.generate(**inputs, return_dict_in_generate=True, return_timestamps=True)
+decoded_output, decoded_timestamps = processor.decode(
+    output.sequences,
+    token_timestamps=output.token_timestamps,
+    token_durations=output.token_durations,
+    skip_special_tokens=True
+)
+print("Transcription:", decoded_output)
+print("\nTimestamped tokens:", decoded_timestamps)
+
+"""
+Transcription: ['mister Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.']
+
+Timestamped tokens: [[{'token': 'm', 'start': 0.24, 'end': 0.48}, {'token': 'ister', 'start': 0.48, 'end': 0.64}, {'token': 'Qu', 'start': 0.64, 'end': 0.88}, {'token': 'il', 'start': 0.88, 'end': 1.12}, {'token': 'ter', 'start': 1.12, 'end': 1.36}, {'token': 'is', 'start': 1.36, 'end': 1.44}, {'token': 'the', 'start': 1.44, 'end': 1.6}, {'token': 'ap', 'start': 1.6, 'end': 1.76}, {'token': 'ost', 'start': 1.76, 'end': 1.92}, {'token': 'le', 'start': 2.0, 'end': 2.16}, {'token': 'of', 'start': 2.16, 'end': 2.24}, {'token': 'the', 'start': 2.24, 'end': 2.4}, {'token': 'mid', 'start': 2.4, 'end': 2.48}, {'token': 'd', 'start': 2.48, 'end': 2.56}, {'token': 'le', 'start': 2.56, 'end': 2.64}, {'token': 'clas', 'start': 2.72, 'end': 2.88}, {'token': 's', 'start': 2.88, 'end': 3.04}, {'token': 'es', 'start': 3.04, 'end': 3.12}, {'token': ',', 'start': 3.12, 'end': 3.12}, {'token': 'and', 'start': 3.2800000000000002, 'end': 3.44}, {'token': 'we', 'start': 3.44, 'end': 3.6}, {'token': 'are', 'start': 3.6, 'end': 3.7600000000000002}, {'token': 'gl', 'start': 3.7600000000000002, 'end': 3.92}, {'token': 'ad', 'start': 3.92, 'end': 4.08}, {'token': 'to', 'start': 4.08, 'end': 4.24}, {'token': 'wel', 'start': 4.24, 'end': 4.4}, {'token': 'c', 'start': 4.4, 'end': 4.48}, {'token': 'ome', 'start': 4.48, 'end': 4.72}, {'token': 'his', 'start': 4.72, 'end': 4.96}, {'token': 'gos', 'start': 4.96, 'end': 5.12}, {'token': 'pel', 'start': 5.36, 'end': 5.6000000000000005}, {'token': '.', 'start': 5.6000000000000005, 'end': 5.6000000000000005}]]
+"""
 ```
 
 </hfoption>
@@ -176,7 +215,7 @@ print("First generation - compiling...")
 # Generate with the compiled model
 with TimerContext("First generation"):
     outputs = model.generate(**inputs)
-print(processor.batch_decode(outputs))
+print(processor.decode(outputs))
 
 inputs = processor(speech_samples[1], **processor_kwargs)
 inputs.to(device, dtype=model.dtype)
@@ -184,7 +223,7 @@ print("\n" + "="*50)
 print("Second generation - recording CUDA graphs...")
 with TimerContext("Second generation"):
     outputs = model.generate(**inputs)
-print(processor.batch_decode(outputs))
+print(processor.decode(outputs))
 
 inputs = processor(speech_samples[2], **processor_kwargs)
 inputs.to(device, dtype=model.dtype)
@@ -192,7 +231,7 @@ print("\n" + "="*50)
 print("Third generation - fast !!!")
 with TimerContext("Third generation"):
     outputs = model.generate(**inputs)
-print(processor.batch_decode(outputs))
+print(processor.decode(outputs))
 
 inputs = processor(speech_samples[3], **processor_kwargs)
 inputs.to(device, dtype=model.dtype)
@@ -200,7 +239,7 @@ print("\n" + "="*50)
 print("Fourth generation - still fast !!!")
 with TimerContext("Fourth generation"):
     outputs = model.generate(**inputs)
-print(processor.batch_decode(outputs))
+print(processor.decode(outputs))
 ```
 
 ### CTC Training
@@ -238,7 +277,7 @@ from datasets import Audio, load_dataset
 import torch
 from transformers import AutoModelForTDT, AutoProcessor
 
-model_id = "bezzam/parakeet-tdt-0.6b-v3-hf"
+model_id = "nvidia/parakeet-tdt-0.6b-v3-hf"
 NUM_SAMPLES = 3
 
 processor = AutoProcessor.from_pretrained(model_id)
@@ -272,7 +311,6 @@ outputs.loss.backward()
 
 [[autodoc]] ParakeetProcessor
     - __call__
-    - batch_decode
     - decode
 
 ## ParakeetEncoderConfig
