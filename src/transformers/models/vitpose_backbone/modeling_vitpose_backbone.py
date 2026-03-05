@@ -392,7 +392,6 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,

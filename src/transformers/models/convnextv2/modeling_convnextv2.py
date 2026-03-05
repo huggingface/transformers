@@ -388,7 +388,6 @@ class ConvNextV2Backbone(BackboneMixin, ConvNextV2PreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,

@@ -431,7 +431,6 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
-    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.Tensor,

@@ -562,7 +562,6 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
     def get_input_embeddings(self) -> Dinov2PatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,

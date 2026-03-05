@@ -21,6 +21,7 @@ import inspect
 from huggingface_hub import repo_exists
 
 from .utils import logging
+from .utils.generic import can_return_tuple
 
 
 logger = logging.get_logger(__name__)
@@ -160,6 +161,9 @@ def filter_output_hidden_states(forward_function):
     """
     Wrapper to filer out `hidden_states` as backbones tend to always use them to get their feature maps, i.e.
     they also always output `hidden_states`. This controls for user-defined behavior again.
+
+    NOTE: We assume a `can_return_tuple` decorator to be applied before so that we always expect a dict like
+          object to remove the hidden states.
     """
 
     @functools.wraps(forward_function)
@@ -203,7 +207,7 @@ class BackboneMixin:
         super().__init_subclass__(**kwargs)
 
         if "forward" in cls.__dict__:
-            cls.forward = filter_output_hidden_states(cls.forward)
+            cls.forward = can_return_tuple(filter_output_hidden_states(cls.forward))
 
     def _init_timm_backbone(self, backbone) -> None:
         """
