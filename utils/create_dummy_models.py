@@ -1270,6 +1270,14 @@ def build(config_class, models_to_create, output_dir):
         trace = traceback.format_exc()
         result["warnings"].append((error, trace))
 
+
+    # # TODO: if we don't call `convert_processors`, we will need to save here.
+    # #   (some conversion might be very slow)
+    # processors = [p for p in processors if p is not None]
+    # for p in processors:
+    #     p.save_pretrained(processor_output_folder)
+
+
     if len(processors) == 0:
         # breakpoint()
         # TODO: Some models use NO processor (and no processor files exist on their hub repos.)
@@ -1317,6 +1325,7 @@ def build(config_class, models_to_create, output_dir):
     # update `result["processor"]`
     result["processor"] = {type(p).__name__: p.__class__.__name__ for p in processors}
 
+    # breakpoint()
     for pytorch_arch in models_to_create["pytorch"]:
         result["pytorch"][pytorch_arch.__name__] = {}
         error = None
@@ -1363,6 +1372,7 @@ def build_tiny_model_summary(results, organization=None, token=None):
       ..
     }
     """
+    # breakpoint()
     tiny_model_summary = {}
     for config_name in results:
         try:
@@ -1372,7 +1382,7 @@ def build_tiny_model_summary(results, organization=None, token=None):
             #   But sometimes, in `def build`, we can't reach `result["processor"] = {type(p).__name__: p.__class__.__name__ for p in processors}`
             #   (i.e. some other errors occur, like `Sam2VideoConfig`), and we need convert `results[config_name]["processor"]` to avid failure!
             #   (for sam2_video, the error is `"Failed to get tiny config for Sam2VideoConfig: Tiny config not created for sam2_video - no model tester is found in the testing module.`)
-            processors = [p.__name__ for p in processors if not isinstance(p, str)]
+            processors = [p.__name__ if not isinstance(p, str) else p for p in processors]
             results[config_name]["processor"] = {x: x for x in processors}
         except:
             # This happens for `VisionEncoderDecoderConfig` and `SpeechEncoderDecoderConfig`.
@@ -1381,7 +1391,7 @@ def build_tiny_model_summary(results, organization=None, token=None):
             print(results[config_name])
             print("******************************")
         # breakpoint()
-        tokenizer_classes = sorted([x for x in processors if x.endswith("TokenizerFast") or x.endswith("Tokenizer")])
+        tokenizer_classes = sorted([x for x in processors if x.endswith(("TokenizerFast", "Tokenizer", "TokenizersBackend'"))])
         processor_classes = sorted([x for x in processors if x not in tokenizer_classes])
 
         if "pytorch" not in results[config_name]:
