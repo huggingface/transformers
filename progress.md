@@ -400,3 +400,23 @@ Implement RF-DETR in Transformers based on `/Users/nielsrogge/Documents/python_p
   - Updated PEFT compatibility shim in `src/transformers/models/rf_detr/convert_rf_detr_to_hf.py` to set:
     - `peft.__spec__ = importlib.machinery.ModuleSpec("peft", loader=None)`
   - Re-ran `base-o365`; it then passed.
+
+## 2026-03-05 RF-DETR fp16 Fine-Tuning Loss Dtype Fix
+- [x] Reproduced mixed-precision loss failure in the RF-DETR training path (`RfDetrForObjectDetection` -> `LwDetrForObjectDetectionLoss`) with a minimal train-step script under `torch.autocast(..., dtype=torch.float16)`:
+  - Error:
+    - `RuntimeError: Index put requires the source and destination dtypes match, got Half for the destination and Float for the source.`
+  - Failing line before fix:
+    - `pos_weights[pos_ind] = t` in `src/transformers/loss/loss_lw_detr.py`.
+- [x] Root cause:
+  - Under mixed precision, `t = prob[pos_ind].pow(alpha) * pos_ious.pow(1 - alpha)` may be upcast to `float32` while `pos_weights`/`neg_weights` stay in lower precision, causing indexed assignment dtype mismatch.
+- [x] Fix implemented in `src/transformers/loss/loss_lw_detr.py`:
+  - Replaced list-based advanced index with tuple index (`pos_ind = (*idx, target_classes_o)`).
+  - Added explicit dtype alignment before indexed assignment:
+    - `t = torch.clamp(t, 0.01).to(pos_weights.dtype).detach()`
+    - `neg_weights[pos_ind] = (1 - t).to(neg_weights.dtype)`
+- [x] Verification:
+  - Mixed precision forward-loss path now succeeds where it previously crashed.
+  - End-to-end single train step (`forward + loss + backward + optimizer.step`) succeeds on MPS with fallback enabled for unrelated backend coverage:
+    - `PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python <minimal_rfdetr_autocast_train_step_script>`
+  - Note:
+    - Without fallback, backward currently fails on MPS due unrelated missing op (`aten::grid_sampler_2d_backward`), not due RF-DETR loss dtype handling.
