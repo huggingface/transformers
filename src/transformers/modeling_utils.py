@@ -2368,6 +2368,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # otherwise
         if (
             is_remote_code
+            and module is not self  # some remote code models do special things in _init_weights for top-most module
             and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
             and all(
                 getattr(buffer, "_is_hf_initialized", False)
