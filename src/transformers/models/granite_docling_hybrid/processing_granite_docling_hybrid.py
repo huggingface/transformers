@@ -209,10 +209,6 @@ class GraniteDoclingHybridProcessor(ProcessorMixin):
             this pattern is derived from the configured `global_image_tag`.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "GotOcr2ImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: str | None = None, **kwargs
     ):
