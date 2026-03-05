@@ -286,6 +286,12 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     def test_tied_weights_keys(self):
         pass
 
+    @pytest.mark.skip(
+        reason="This test does not apply to HiggsAudioV2 since audio_input_ids must be provided along input_ids"
+    )
+    def test_flash_attention_2_continue_generate_with_position_ids(self):
+        pass
+
     def _check_scores(self, batch_size, scores, generated_length, config):
         expected_shape = (batch_size, config.num_codebooks, config.codebook_size)
         self.assertIsInstance(scores, tuple)
