@@ -61,6 +61,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
     feature_normalization_config = None
     do_pad_features = None
     do_resample = False
+    add_channel_dim = False
+    pad_to_multiple_of = None
+    transpose_features = False
 
     def __init__(
         self,
@@ -104,6 +107,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
                     sampling_rate=self.sample_rate,
                     norm=sc.mel_scale_config.norm,
                     mel_scale=sc.mel_scale_config.mel_scale,
+                    triangularize_in_mel_space=sc.mel_scale_config.triangularize_in_mel_space,
                 )
 
     def __call__(self, audio: AudioInput, *args, **kwargs: Unpack[AudioProcessingKwargs]) -> BatchFeature:
