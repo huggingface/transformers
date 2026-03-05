@@ -164,7 +164,6 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         (
             ConvNextModel,
             ConvNextForImageClassification,
-            ConvNextBackbone,
         )
         if is_torch_available()
         else ()
@@ -294,6 +293,7 @@ class ConvNextBackboneTest(unittest.TestCase, BackboneTesterMixin):
     config_class = ConvNextConfig
 
     has_attentions = False
+    forces_hidden_states = True
 
     def setUp(self):
         self.model_tester = ConvNextModelTester(self)

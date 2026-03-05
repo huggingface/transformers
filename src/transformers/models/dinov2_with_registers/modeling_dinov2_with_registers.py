@@ -616,12 +616,7 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        # Internally the model always needs to output hidden states, we control the output
-        # per user request on the final output
-        user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
-            self.config, "output_hidden_states", False
-        )
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
 
         embedding_output = self.embeddings(pixel_values)
         output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
@@ -644,7 +639,7 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
 
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
-            hidden_states=hidden_states if user_requested_hidden_states else None,
+            hidden_states=hidden_states,
             attentions=output.attentions,
         )
 

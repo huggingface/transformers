@@ -217,7 +217,6 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         (
             Dinov2Model,
             Dinov2ForImageClassification,
-            Dinov2Backbone,
         )
         if is_torch_available()
         else ()
@@ -331,6 +330,7 @@ class Dinov2BackboneTest(unittest.TestCase, BackboneTesterMixin):
     config_class = Dinov2Config
 
     has_attentions = False
+    forces_hidden_states = True
 
     def setUp(self):
         self.model_tester = Dinov2ModelTester(self)

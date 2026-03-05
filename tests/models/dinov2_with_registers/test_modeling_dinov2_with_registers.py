@@ -221,7 +221,6 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
         (
             Dinov2WithRegistersModel,
             Dinov2WithRegistersForImageClassification,
-            Dinov2WithRegistersBackbone,
         )
         if is_torch_available()
         else ()
@@ -347,6 +346,7 @@ class Dinov2WithRegistersBackboneTest(unittest.TestCase, BackboneTesterMixin):
     config_class = Dinov2WithRegistersConfig
 
     has_attentions = False
+    forces_hidden_states = True
 
     def setUp(self):
         self.model_tester = Dinov2WithRegistersModelTester(self)
