@@ -309,17 +309,6 @@ class IsaacVisionEmbeddings(Siglip2VisionEmbeddings):
 
     def __init__(self, config: IsaacVisionConfig):
         super().__init__(config)
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.patch_size = config.patch_size
-
-        self.patch_embedding = nn.Linear(
-            in_features=config.num_channels * self.patch_size * self.patch_size,
-            out_features=self.embed_dim,
-        )
-
-        self.num_patches = config.num_patches
-        self.position_embedding_size = int(self.num_patches**0.5)
         self.position_embedding = nn.Parameter(
             torch.empty(
                 self.position_embedding_size,
@@ -327,7 +316,6 @@ class IsaacVisionEmbeddings(Siglip2VisionEmbeddings):
                 self.embed_dim,
             )
         )
-        nn.init.normal_(self.position_embedding)
 
     def forward(
         self,
