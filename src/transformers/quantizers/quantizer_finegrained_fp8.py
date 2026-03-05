@@ -62,8 +62,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 "pass device_map = 'cuda' or 'xpu'. "
             )
         elif isinstance(device_map, dict):
-            if not self.pre_quantized and len(device_map) > 1 and (
-                "cpu" in device_map.values() or "disk" in device_map.values()
+            if (
+                not self.pre_quantized
+                and len(device_map) > 1
+                and ("cpu" in device_map.values() or "disk" in device_map.values())
             ):
                 raise ValueError(
                     "You are attempting to load an FP8 model with a device_map that contains a cpu/disk device."
@@ -75,7 +77,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         from ..integrations.finegrained_fp8 import FP8Expert, FP8Linear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, (FP8Linear, FP8Expert)):
+        if isinstance(module, FP8Linear | FP8Expert):
             if self.pre_quantized or tensor_name == "bias":
                 return False
             else:

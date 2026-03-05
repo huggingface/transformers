@@ -20,8 +20,8 @@ import copy
 import inspect
 import os
 import re
-from collections.abc import Mapping
 from collections import OrderedDict, defaultdict
+from collections.abc import Mapping
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
@@ -44,7 +44,8 @@ if is_torch_available():
     import torch.nn as nn
 
 if is_accelerate_available():
-    from accelerate import big_modeling, dispatch_model, hooks as accelerate_hooks
+    from accelerate import big_modeling, dispatch_model
+    from accelerate import hooks as accelerate_hooks
     from accelerate.utils import get_max_memory
     from accelerate.utils.modeling import clean_device_map, get_max_layer_size
 
@@ -399,7 +400,7 @@ def get_balanced_memory(
     # - the mean of the layer sizes
     if no_split_module_classes is None:
         no_split_module_classes = []
-    elif not isinstance(no_split_module_classes, (list, tuple, set)):
+    elif not isinstance(no_split_module_classes, list | tuple | set):
         no_split_module_classes = [no_split_module_classes]
 
     # Identify the size of the no_split_block modules
@@ -687,7 +688,7 @@ def _init_infer_auto_device_map(
     max_memory = get_max_memory(max_memory)
     if no_split_module_classes is None:
         no_split_module_classes = []
-    elif not isinstance(no_split_module_classes, (list, tuple, set)):
+    elif not isinstance(no_split_module_classes, list | tuple | set):
         no_split_module_classes = [no_split_module_classes]
 
     devices = list(max_memory.keys())
