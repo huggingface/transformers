@@ -19,7 +19,6 @@ import contextlib
 import math
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ... import initialization as init
@@ -262,10 +261,9 @@ class NemotronHAttention(JambaAttention):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         past_key_values: NemotronHHybridDynamicCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        return super().forward(hidden_states, attention_mask, past_key_values, cache_position, **kwargs)
+        return super().forward(hidden_states, attention_mask, past_key_values, **kwargs)
 
 
 MIXER_TYPES = {
@@ -304,7 +302,6 @@ class NemotronHBlock(GradientCheckpointingLayer):
         self,
         hidden_states,
         past_key_values: NemotronHHybridDynamicCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
@@ -331,7 +328,6 @@ class NemotronHBlock(GradientCheckpointingLayer):
                     attention_mask=attention_mask,
                     position_ids=position_ids,
                     user_cache=use_cache,
-                    cache_position=cache_position,
                     **kwargs,
                 )
             else:
@@ -442,7 +438,6 @@ class NemotronHModel(NemotronHPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: NemotronHHybridDynamicCache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
@@ -462,23 +457,19 @@ class NemotronHModel(NemotronHPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + hidden_states.shape[1], device=hidden_states.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        mamba_mask = self._update_mamba_mask(attention_mask, cache_position)
+        mamba_mask = self._update_mamba_mask(attention_mask, past_key_values)
 
         # Map block types to their corresponding masks
         block_type_to_mask = {
@@ -496,7 +487,6 @@ class NemotronHModel(NemotronHPreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -510,14 +500,14 @@ class NemotronHModel(NemotronHPreTrainedModel):
             past_key_values=past_key_values if use_cache else None,
         )
 
-    def _update_mamba_mask(self, attention_mask, cache_position):
+    def _update_mamba_mask(self, attention_mask, past_key_values):
         """
         No need for zeroing states when
             1. Cached forward
             2. Attending to all inputs
         """
         mamba_mask = attention_mask
-        if (cache_position is not None and cache_position[0] > 0) or (
+        if (past_key_values is not None and past_key_values.get_seq_length() > 0) or (
             attention_mask is not None and torch.all(attention_mask == 1)
         ):
             mamba_mask = None
@@ -542,7 +532,6 @@ class NemotronHForCausalLM(ZambaForCausalLM):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
@@ -553,7 +542,6 @@ class NemotronHForCausalLM(ZambaForCausalLM):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
