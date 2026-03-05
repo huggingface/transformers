@@ -69,8 +69,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 "Please install the latest version of torch ( pip install --upgrade torch )"
             )
 
-        quantization_config = self.quantization_config
-        if quantization_config.dequantize:
+        if self.quantization_config.dequantize:
             return
 
         if not is_accelerate_available():
@@ -82,7 +81,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 logger.warning_once(
                     f"Using MXFP4 quantized models requires model on cuda/xpu/cpu, but found {device}, we will default to dequantizing the model to bf16. To use mxfp4, please disable the current accelerator."
                 )
-                quantization_config.dequantize = True
+                self.quantization_config.dequantize = True
                 return
             else:
                 raise RuntimeError(
@@ -110,14 +109,14 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     "MXFP4 quantization is only supported on GPUs with compute capability >= 7.5 (e.g T4, A100, L4, H100, or B200) or XPUs (e.g Intel® Data Center GPU Max Series) "
                     "We will default to dequantizing the model to bf16."
                 )
-                quantization_config.dequantize = True
+                self.quantization_config.dequantize = True
                 return
 
             if not kernels_available:
                 logger.warning_once(
                     "MXFP4 quantization requires Triton and kernels installed: CUDA requires Triton >= 3.4.0, XPU requires Triton >= 3.5.0, we will default to dequantizing the model to bf16"
                 )
-                quantization_config.dequantize = True
+                self.quantization_config.dequantize = True
                 return
         elif not is_device_supported_mxfp4:
             # we can't quantize the model in this case so we raise an error
@@ -184,9 +183,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
             )
             self.quantization_config.dequantize = True
 
-        quantization_config = self.quantization_config
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_mxfp4_linear(
@@ -272,8 +270,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
     def get_weight_conversions(self):
         from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
 
-        quantization_config = self.quantization_config
-        if self.pre_quantized and quantization_config.dequantize:
+        if self.pre_quantized and self.quantization_config.dequantize:
             return [
                 WeightConverter(
                     source_patterns=["down_proj_blocks", "down_proj_scales"],
