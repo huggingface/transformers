@@ -1479,7 +1479,7 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
                 hidden_states,
                 position_embeddings=position_embeddings,
                 attention_mask=layer_mask,
-                position_ids=position_ids,
+                position_ids=text_position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 **kwargs,
