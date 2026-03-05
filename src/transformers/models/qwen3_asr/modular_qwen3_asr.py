@@ -6,23 +6,22 @@ import torch
 from torch import nn
 from typing import Callable, Optional
 
-from transformers.audio_utils import AudioInput
-from transformers.cache_utils import Cache, DynamicCache
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.generation import GenerationMixin
-from transformers.masking_utils import create_causal_mask
-from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
-from transformers.modeling_outputs import (
-    BaseModelOutput,
+from ...audio_utils import AudioInput
+from ...cache_utils import Cache, DynamicCache
+from ...feature_extraction_utils import BatchFeature
+from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import (
     BaseModelOutputWithPast,
     MoeCausalLMOutputWithPast,
 )
-from transformers.configuration_utils import PretrainedConfig
-from transformers.modeling_utils import PreTrainedModel, ALL_ATTENTION_FUNCTIONS
-from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from transformers.tokenization_utils_base import TextInput
-from transformers.utils import auto_docstring, can_return_tuple
-from transformers.utils.deprecation import deprecate_kwarg
+from ...configuration_utils import PretrainedConfig
+from ...modeling_utils import PreTrainedModel, ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import TextInput
+from ...utils import auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import TransformersKwargs, check_model_inputs
 from ... import initialization as init
 
