@@ -13,10 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import importlib
 import inspect
 from typing import TYPE_CHECKING, Any
 
-from ..cache_utils import Cache, DynamicCache, DynamicLayer, EncoderDecoderCache
+from ..cache_utils import Cache, DynamicCache
 from ..utils.import_utils import is_torch_available
 from ..utils.logging import get_logger
 
@@ -31,19 +32,192 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 
-def _is_pure_python_object(obj: Any) -> bool:
-    if isinstance(obj, (int, float, bool, str)) or obj is None:
-        return True
-    elif isinstance(obj, DynamicCache):
-        return _is_pure_python_object(_dict_from_dynamic_cache(obj))
-    elif isinstance(obj, EncoderDecoderCache):
-        return _is_pure_python_object(_dict_from_encoder_decoder_cache(obj))
-    elif isinstance(obj, (list, tuple, set)):
-        return all(_is_pure_python_object(o) for o in obj)
-    elif isinstance(obj, dict):
-        return all(_is_pure_python_object(v) for v in obj.values())
-    else:
+def _iter_subclasses(cls: type):
+    for subclass in cls.__subclasses__():
+        yield subclass
+        yield from _iter_subclasses(subclass)
+
+
+def _class_to_path(cls: type) -> str:
+    return f"{cls.__module__}:{cls.__qualname__}"
+
+
+def _path_to_class(path: str) -> type:
+    module_name, class_qualname = path.split(":", maxsplit=1)
+    module = importlib.import_module(module_name)
+    class_obj = module
+    for item in class_qualname.split("."):
+        class_obj = getattr(class_obj, item)
+    return class_obj
+
+
+class DynamoSerializer:
+    _SPECIAL_KEY = "__special_key__"
+    _SPECIAL_VALUE = "__special_value__"
+
+    @classmethod
+    def _is_leaf_type(cls, obj: Any) -> bool:
+        return (
+            (isinstance(obj, (int, float, bool, str, torch.Tensor, torch.Size)))
+            or obj.__class__.__module__ == "torch.export.dynamic_shapes"
+            or obj is None
+        )
+
+    @classmethod
+    def _is_special_type(cls, obj: Any) -> bool:
+        return isinstance(obj, (torch.dtype, torch.device, torch.layout, type, frozenset))
+
+    @classmethod
+    def _get_special_key(cls, obj: Any) -> str:
+        if isinstance(obj, torch.dtype):
+            return "dtype"
+        if isinstance(obj, torch.device):
+            return "device"
+        if isinstance(obj, torch.layout):
+            return "layout"
+        if isinstance(obj, type):
+            return "class_ref"
+        if isinstance(obj, frozenset):
+            return "frozenset"
+        raise TypeError(f"Object of type '{type(obj)}' is not a recognized special type.")
+
+    @classmethod
+    def _encode_special_value(cls, obj: Any) -> Any:
+        if isinstance(obj, torch.dtype):
+            return str(obj).removeprefix("torch.")
+        if isinstance(obj, torch.layout):
+            return str(obj).removeprefix("torch.")
+        if isinstance(obj, torch.device):
+            return f"{obj.type}:{obj.index}" if obj.index is not None else obj.type
+        if isinstance(obj, type):
+            return _class_to_path(obj)
+        if isinstance(obj, frozenset):
+            return [cls.serialize(item) for item in obj]
+        raise TypeError(f"Object of type '{type(obj)}' is not a recognized special type.")
+
+    @classmethod
+    def _decode_special_value(cls, kind: str, value: Any) -> Any:
+        if kind == "dtype":
+            return getattr(torch, value)
+        if kind == "layout":
+            return getattr(torch, value)
+        if kind == "device":
+            return torch.device(value)
+        if kind == "class_ref":
+            return _path_to_class(value)
+        if kind == "frozenset":
+            return frozenset(cls.deserialize(item) for item in value)
+        raise TypeError(f"Unknown special kind encountered during decoding: {kind}")
+
+    @classmethod
+    def _serialize_special(cls, obj: Any) -> dict[str, str]:
+        return {cls._SPECIAL_KEY: cls._get_special_key(obj), cls._SPECIAL_VALUE: cls._encode_special_value(obj)}
+
+    @classmethod
+    def _deserialize_special(cls, obj: dict[str, Any]) -> Any:
+        return cls._decode_special_value(obj[cls._SPECIAL_KEY], obj[cls._SPECIAL_VALUE])
+
+    @classmethod
+    def serialize(cls, obj: Any) -> Any:
+        if cls._is_leaf_type(obj):
+            return obj
+        elif cls._is_special_type(obj):
+            return cls._serialize_special(obj)
+        elif isinstance(obj, (list, tuple, set)):
+            return [cls.serialize(item) for item in obj]
+        elif isinstance(obj, dict):
+            return {key: cls.serialize(value) for key, value in obj.items()}
+
+        state = getattr(obj, "__dict__", None)
+        if state is None:
+            logger.warning(
+                f"Object of type '{type(obj)}' does not have a __dict__ attribute and is not a recognized leaf or special type. "
+                "Serializing it as an empty object. This may lead to issues during deserialization."
+            )
+            state = {}
+
+        return {
+            "__class__": _class_to_path(type(obj)),
+            "__state__": cls.serialize(dict(state)),
+        }
+
+    @classmethod
+    def deserialize(cls, obj: Any) -> Any:
+        if cls._is_leaf_type(obj):
+            return obj
+        elif isinstance(obj, list):
+            return [cls.deserialize(item) for item in obj]
+        elif isinstance(obj, dict):
+            special_key = obj.get(cls._SPECIAL_KEY)
+            if special_key is not None:
+                return cls._deserialize_special(obj)
+
+            class_path = obj.get("__class__")
+            if class_path is None:
+                return {key: cls.deserialize(value) for key, value in obj.items()}
+
+            class_obj = _path_to_class(class_path)
+            state = cls.deserialize(obj["__state__"])
+            instance = class_obj.__new__(class_obj)
+            instance.__dict__.update(state)
+            return instance
+
+        raise TypeError(f"Malformed serialized object encountered: {type(obj)}")
+
+
+def _flatten_for_export(cache: Cache):
+    return torch.utils._pytree._dict_flatten(DynamoSerializer.serialize(cache))
+
+
+def _flatten_for_export_with_keys(cache: Cache):
+    return torch.utils._pytree._dict_flatten_with_keys(DynamoSerializer.serialize(cache))
+
+
+def _unflatten_for_export(values, context: torch.utils._pytree.Context):
+    return DynamoSerializer.deserialize(torch.utils._pytree._dict_unflatten(values, context))
+
+
+def _register_class_for_export(cls: type):
+    try:
+        torch.utils._pytree.register_pytree_node(
+            cls,
+            _flatten_for_export,
+            _unflatten_for_export,
+            serialized_type_name=f"{cls.__module__}.{cls.__name__}",
+            flatten_with_keys_fn=_flatten_for_export_with_keys,
+        )
+    except ValueError as e:
+        if "already registered as pytree node" not in str(e):
+            raise
+
+
+def register_cache_subclasses_as_pytree_nodes():
+    for cache_type in _iter_subclasses(Cache):
+        _register_class_for_export(cache_type)
+
+
+def register_custom_model_cache_as_pytree_nodes(model: "PreTrainedModel"):
+    for _, obj in inspect.getmembers(inspect.getmodule(model)):
+        if (
+            inspect.isclass(obj)
+            and obj.__module__ == model.__class__.__module__
+            and obj.__name__.endswith("Cache")
+            and not issubclass(obj, Cache)
+        ):
+            _register_class_for_export(obj)
+
+
+def _is_tensor_free(obj: Any) -> bool:
+    if isinstance(obj, torch.Tensor):
         return False
+    elif isinstance(obj, (list, tuple, set)):
+        return all(_is_tensor_free(item) for item in obj)
+    elif isinstance(obj, dict):
+        return all(_is_tensor_free(value) for value in obj.values())
+    elif isinstance(obj, Cache) or obj.__class__.__name__.endswith("Cache"):
+        return _is_tensor_free(DynamoSerializer.serialize(obj))
+    else:
+        return True
 
 
 def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
@@ -55,16 +229,12 @@ def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
     Returns:
         `dict[str, torch.Tensor]`: A dictionary mapping names to leaf tensors.
     """
-    if _is_pure_python_object(obj):
+    if _is_tensor_free(obj):
         return {}
     elif isinstance(obj, torch.Tensor):
         return {"": obj}
     elif isinstance(obj, (list, tuple, set)):
         return get_leaf_tensors(dict(enumerate(obj)))
-    elif isinstance(obj, DynamicCache):
-        return get_leaf_tensors(_dict_from_dynamic_cache(obj))
-    elif isinstance(obj, EncoderDecoderCache):
-        return get_leaf_tensors(_dict_from_encoder_decoder_cache(obj))
     elif isinstance(obj, dict):
         leaf_tensors = {}
         for key, value in obj.items():
@@ -72,6 +242,8 @@ def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
                 full_key = f"{key}.{sub_key}" if sub_key else key
                 leaf_tensors[full_key] = tensor
         return leaf_tensors
+    elif isinstance(obj, Cache) or obj.__class__.__name__.endswith("Cache"):
+        return get_leaf_tensors(DynamoSerializer.serialize(obj))
     else:
         raise ValueError(f"Unexpected object type: {type(obj)}")
 
@@ -95,100 +267,6 @@ def get_inputs_outputs_names(inputs: dict[str, Any], outputs: dict[str, Any]) ->
     return inputs_names, outputs_names
 
 
-# Pytree registration utilities
-def _dict_from_dynamic_cache(cache: DynamicCache):
-    return {
-        "keys": [layer.keys for layer in cache.layers if layer.keys is not None],
-        "values": [layer.values for layer in cache.layers if layer.values is not None],
-    }
-
-
-def _dict_from_encoder_decoder_cache(cache: EncoderDecoderCache):
-    return {
-        "self_attention_cache": _dict_from_dynamic_cache(cache.self_attention_cache),
-        "cross_attention_cache": _dict_from_dynamic_cache(cache.cross_attention_cache),
-    }
-
-
-def _dynamic_cache_from_dict(dictionary):
-    cache = DynamicCache()
-    key_list = dictionary["keys"]
-    value_list = dictionary["values"]
-    assert len(key_list) == len(value_list), "Mismatched keys and values lengths in DynamicCache."
-    for idx in range(len(key_list)):
-        cache_layer = DynamicLayer()
-        cache_layer.keys = key_list[idx]
-        cache_layer.values = value_list[idx]
-        cache_layer.is_initialized = True
-        cache.layers.append(cache_layer)
-    return cache
-
-
-def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):
-    dictionary = torch.utils._pytree._dict_unflatten(values, context)
-    cache = _dynamic_cache_from_dict(dictionary)
-    return cache
-
-
-def _unflatten_encoder_decoder_cache(values, context: torch.utils._pytree.Context):
-    dictionary = torch.utils._pytree._dict_unflatten(values, context)
-    self_attention_cache = _dynamic_cache_from_dict(dictionary["self_attention_cache"])
-    cross_attention_cache = _dynamic_cache_from_dict(dictionary["cross_attention_cache"])
-    enocder_decoder_cache = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
-    return enocder_decoder_cache
-
-
-def register_dynamic_cache_for_export():
-    try:
-        torch.utils._pytree.register_pytree_node(
-            DynamicCache,
-            lambda dynamic_cache: torch.utils._pytree._dict_flatten(_dict_from_dynamic_cache(dynamic_cache)),
-            _unflatten_dynamic_cache,
-            serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
-            flatten_with_keys_fn=lambda dynamic_cache: torch.utils._pytree._dict_flatten_with_keys(
-                _dict_from_dynamic_cache(dynamic_cache)
-            ),
-        )
-    # Catching this in case there are multiple runs for some test runs
-    except ValueError as e:
-        if "already registered as pytree node" not in str(e):
-            raise
-
-
-def register_encoder_decoder_cache_for_export():
-    try:
-        torch.utils._pytree.register_pytree_node(
-            EncoderDecoderCache,
-            lambda cache: torch.utils._pytree._dict_flatten(_dict_from_encoder_decoder_cache(cache)),
-            _unflatten_encoder_decoder_cache,
-            serialized_type_name=f"{EncoderDecoderCache.__module__}.{EncoderDecoderCache.__name__}",
-            flatten_with_keys_fn=lambda cache: torch.utils._pytree._dict_flatten_with_keys(
-                _dict_from_encoder_decoder_cache(cache)
-            ),
-        )
-    # Catching this in case there are multiple runs for some test runs
-    except ValueError as e:
-        if "already registered as pytree node" not in str(e):
-            raise
-
-
-# Inputs utilities
-MODEL_TYPES_WITH_UNSUPPORTED_CACHE_CLASS: set[str] = {
-    "falcon_mamba",
-    "jamba",
-    "lfm2",
-    "lfm2_moe",
-    "lfm2_vl",
-    "mamba",
-    "mamba2",
-    "minimax",
-    "qwen3_next",
-    "reformer",
-    "xlstm",
-    "zamba2",
-}
-
-
 def prepare_for_export(
     model: "PreTrainedModel",
     inputs: dict[str, torch.Tensor | Cache],
@@ -197,17 +275,16 @@ def prepare_for_export(
     # filter out None inputs
     inputs = {k: v for k, v in inputs.items() if v is not None}
 
+    for input_name in ("labels", "future_values"):
+        if input_name in inputs:
+            logger.info(f"Found an input '{input_name}' which is not supported for export. Popping it from inputs.")
+            inputs.pop(input_name)
+
     # handle output flags passed in inputs
     for output_flag in ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss"):
         if output_flag in inputs:
             logger.info(f"Found an output flag '{output_flag}' in inputs. Setting model.config.{output_flag} instead.")
             setattr(model.config, output_flag, inputs.pop(output_flag))
-
-    # handle models with unsupported cache classes
-    if model.config.model_type in MODEL_TYPES_WITH_UNSUPPORTED_CACHE_CLASS:
-        for submodule in model.modules():
-            if hasattr(submodule, "config") and getattr(submodule.config, "use_cache", False):
-                setattr(submodule.config, "use_cache", False)
 
     # set experts implementation to batched_mm for export
     if model._can_set_experts_implementation():
@@ -258,7 +335,7 @@ def prepare_for_export(
                 pkv_len = inputs["past_key_values"].get_seq_length()
                 inputs["attention_mask"] = torch.ones((batch_size, seq_len + pkv_len), device=device, dtype=dtype)
 
-    return model, inputs
+    return model, inputs, outputs
 
 
 # Dynamic shapes utilities

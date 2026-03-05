@@ -23,8 +23,8 @@ from .base import HfExporter
 from .utils import (
     get_auto_dynamic_shapes,
     prepare_for_export,
-    register_dynamic_cache_for_export,
-    register_encoder_decoder_cache_for_export,
+    register_cache_subclasses_as_pytree_nodes,
+    register_custom_model_cache_as_pytree_nodes,
 )
 
 
@@ -101,21 +101,17 @@ class DynamoExporter(HfExporter):
         Returns:
             `ExportedProgram`: The exported model.
         """
-        if model.config.model_type in DYNAMO_UNSUPPORTED_MODEL_TYPES:
-            raise NotImplementedError(
-                f"{self.__class__.__name__} is not supported for model type '{model.config.model_type}'."
-            )
 
         # we use a copy to avoid side effects
         inputs = copy.deepcopy(sample_inputs)
-        model, inputs = prepare_for_export(model, inputs)
+        model, inputs, _ = prepare_for_export(model, inputs)
 
         dynamic_shapes = self.export_config.dynamic_shapes
         if self.export_config.dynamic and dynamic_shapes is None:
             dynamic_shapes = get_auto_dynamic_shapes(inputs)
 
-        register_dynamic_cache_for_export()
-        register_encoder_decoder_cache_for_export()
+        register_cache_subclasses_as_pytree_nodes()
+        register_custom_model_cache_as_pytree_nodes(model)
 
         exported_program: ExportedProgram = torch.export.export(
             model,

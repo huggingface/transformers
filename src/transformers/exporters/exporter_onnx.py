@@ -28,7 +28,6 @@ ONNX_UNSUPPORTED_MODEL_TYPES: set[str] = {
     "kosmos-2",  # export fails due to advanced tensor slicing / indexing
     "kosmos-2.5",  # export fails due to advanced tensor slicing / indexing
     "vits",  # export fails due to advanced tensor slicing / indexing
-    # TODO: check if these models can be fixed, patched or add a comment explaining why not
     "aria",
     "autoformer",
     "bamba",
@@ -150,11 +149,7 @@ class OnnxExporter(DynamoExporter):
 
         # we use a copy to avoid side effects
         inputs = copy.deepcopy(sample_inputs)
-
-        # we need to compute the outputs and prepare them to get the true list of inputs/outputs names
-        with torch.no_grad():
-            outputs = model(**copy.deepcopy(inputs))
-        model, inputs = prepare_for_export(model, inputs, outputs)
+        model, inputs, outputs = prepare_for_export(model, inputs)
         inputs_names, outputs_names = get_inputs_outputs_names(inputs, outputs)
 
         with patch_torch_for_onnx_export():

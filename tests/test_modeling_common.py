@@ -46,6 +46,7 @@ from transformers import (
 from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.core_model_loading import WeightRenaming, process_target_pattern
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
+from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.utils import get_leaf_tensors, prepare_for_export
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
@@ -93,6 +94,8 @@ from transformers.testing_utils import (
     require_flash_attn_3,
     require_kernels,
     require_non_hpu,
+    require_onnxruntime,
+    require_onnxscript,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -4097,6 +4100,77 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
+                if model_class.__name__ in ["VideoMAEForPreTraining"]:
+                    continue
+
+                if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
+                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+                else:
+                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+                set_config_for_less_flaky_test(config)
+                inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                model = model_class(config).eval().to(torch_device)
+                set_model_for_less_flaky_test(model)
+
+                # prepare cache inputs for auto-regressive models and include it for computing eager outputs
+                # process output flags (e.g. use_cache, output_attentions, etc) to avoid passing them as inputs
+                model, inputs_dict, _ = prepare_for_export(model, inputs_dict)
+
+                with torch.no_grad():
+                    # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
+                    # the export, the model used for export will return FakeTensors instead of real ones (torch cuda/inductor issue)
+                    # This happens on cuda with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
+                    set_seed(1234)
+                    eager_outputs = model(**copy.deepcopy(inputs_dict))
+                    eager_outputs = get_leaf_tensors(eager_outputs)
+                    self.assertTrue(eager_outputs, "Eager model's outputs are empty.")
+
+                try:
+                    exported_program = exporter.export(model, inputs_dict)
+                except NotImplementedError:
+                    continue
+
+                with torch.no_grad():
+                    set_seed(1234)
+                    exported_outputs = exported_program.module()(**copy.deepcopy(inputs_dict))
+                    exported_outputs = get_leaf_tensors(exported_outputs)
+                    self.assertTrue(exported_outputs, "Exported model's outputs are empty.")
+
+                # Check if outputs are close
+                torch.testing.assert_close(exported_outputs, eager_outputs, atol=atol, rtol=rtol)
+
+    @slow
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_onnx_export(self, atol=1e-2, rtol=1e-2):
+        """
+        Test if model can be exported with torch.onnx.export()
+
+        Args:
+            atol (`float`, *optional*, defaults to 1e-2): absolute tolerance for output comparison
+            rtol (`float`, *optional*, defaults to 1e-2): relative tolerance for output comparison
+        """
+
+        if not self.test_torch_exportable:
+            self.skipTest(reason="Model architecture is not TorchDynamo exportable/traceable")
+
+        with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
+            source_code = f.read()
+            # Skip model if it uses a chunked attention implementation which is not torch exportable
+            if "for q, k, v in zip(*splits)" in source_code:
+                self.skipTest(reason="Model architecture uses chunked attention which is not torch exportable")
+            # Skip MoEs that don't support batched_mm experts implementation
+            if "for expert" in source_code and "use_experts_implementation" not in source_code:
+                self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
+            # Skip models that use get_rope_index which is not torch exportable
+            if "get_rope_index" in source_code:
+                self.skipTest(reason="Model architecture uses get_rope_index which is not torch exportable")
+
+        exporter = OnnxExporter(export_config=OnnxConfig())
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
                 if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
                 else:
@@ -4118,18 +4192,29 @@ class ModelTesterMixin:
                     self.assertTrue(eager_outputs, "Eager outputs is empty.")
 
                 try:
-                    exported_program = exporter.export(model, inputs_dict)
+                    onnx_program = exporter.export(model, inputs_dict)
                 except NotImplementedError:
                     continue
 
-                with torch.no_grad():
-                    set_seed(1234)
-                    exported_outputs = exported_program.module()(**copy.deepcopy(inputs_dict))
-                    exported_outputs = get_leaf_tensors(exported_outputs)
-                    self.assertTrue(exported_outputs, "Exported outputs is empty.")
+                # Remove non-tensor inputs as they were probably converted to constants during the onnx export
+                inputs_dict = {
+                    k: v
+                    for k, v in inputs_dict.items()
+                    if not isinstance(v, (int, float, bool, str)) and v is not None
+                }
 
-                # Check outputs closeness:
-                torch.testing.assert_close(exported_outputs, eager_outputs, atol=atol, rtol=rtol)
+                set_seed(1234)
+                onnx_outputs = onnx_program(**copy.deepcopy(inputs_dict))
+                onnx_names = (re.sub(r"^output.", "", node.name) for node in onnx_program.model_proto.graph.output)
+                onnx_outputs = dict(zip(onnx_names, onnx_outputs))
+                self.assertTrue(onnx_outputs, "ONNX outputs is empty.")
+
+                # Sometimes the model will return the same tensor multiple times under different names
+                # while onnx will just return it once, dropping one of the duplicates (arbitrarily).
+                eager_outputs = {k: v for k, v in eager_outputs.items() if k in onnx_outputs}
+
+                # Check if outputs are close:
+                torch.testing.assert_close(onnx_outputs, eager_outputs, atol=atol, rtol=rtol, check_device=False)
 
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
