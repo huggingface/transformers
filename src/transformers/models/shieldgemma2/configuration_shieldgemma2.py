@@ -87,6 +87,7 @@ class ShieldGemma2Config(PreTrainedConfig):
         eoi_token_index: int = 256_000,
         image_token_index: int = 262_144,
         initializer_range: float = 0.02,
+        tie_word_embeddings=None,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -110,7 +111,9 @@ class ShieldGemma2Config(PreTrainedConfig):
         self.eoi_token_index = eoi_token_index
         self.image_token_index = image_token_index
         self.initializer_range = initializer_range
-
+        if tie_word_embeddings is None:
+            tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", True)
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 
