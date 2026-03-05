@@ -12,7 +12,7 @@ git clone https://huggingface.co/Qwen/Qwen3-ASR-0.6B
 2) Convert to the Hugging Face Transformers format (locally):
 
 ```
-python src/transformers/models/qwen3_asr/convert_qwen3_asr_to_hf.py --src_dir qwen3-asr --dst_dir qwen3-asr-hf
+python src/transformers/models/qwen3_asr/convert_qwen3_asr_to_hf.py --src_dir qwen3-asr-0.6b --dst_dir qwen3-asr-hf
 ```
 
 3) Convert and push directly to the Hub (requires `huggingface-cli login` or `HF_TOKEN`):
@@ -28,12 +28,9 @@ This command uploads both the processor (tokenizer + feature extractor) and the 
 model (sharded safetensors + configs) to the specified Hub repository.
 """
 import argparse
-import json
 import logging
-from collections import defaultdict
 from pathlib import Path
 
-import torch
 from safetensors.torch import safe_open
 
 from transformers import (
@@ -85,7 +82,7 @@ def write_processor(src_root: Path, dst_root: Path):
     # fmt: on
 
     processor = Qwen3ASRProcessor(   
-        feature_extractor=WhisperFeatureExtractor(),
+        feature_extractor=WhisperFeatureExtractor.from_pretrained(src_root),
         tokenizer=AutoTokenizer.from_pretrained(src_root),  # check this
         chat_template=chat_template,
     )
@@ -135,8 +132,7 @@ def main() -> None:
         raise FileNotFoundError(f"Source directory not found: {src_root}")
 
     dst_root = Path(args.dst_dir).resolve()
-    if dst_root.exists():
-        raise FileExistsError(f"Destination already exists: {dst_root}")
+    dst_root.mkdir(parents=True, exist_ok=True)
 
     processor = write_processor(src_root, dst_root)
     model = write_model(src_root, dst_root)

@@ -116,7 +116,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cleanup(torch_device, gc_collect=True)
-        cls.checkpoint = "Qwen/Qwen3-ASR-0.6B"
+        cls.checkpoint = "qwen3-asr-hf"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
 
     def tearDown(self):

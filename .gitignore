@@ -176,3 +176,6 @@ tags
 # Cursor IDE files
 .cursor/
 test-results/
+
+qwen3-asr-0.6b/
+qwen3-asr-hf/
