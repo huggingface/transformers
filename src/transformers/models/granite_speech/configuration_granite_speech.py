@@ -106,7 +106,9 @@ class GraniteSpeechEncoderConfig(PreTrainedConfig):
 class GraniteSpeechConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteSpeechForConditionalGeneration`]. It is used to instantiate an
-    Granite Speech model according to the specified arguments, defining the model architecture.
+    Granite Speech model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the Granite Speech model.
+    e.g. [ibm-granite/granite-speech-3.3-2b](https://huggingface.co/ibm-granite/granite-speech-3.3-2b)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
