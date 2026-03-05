@@ -134,7 +134,7 @@ class ContinuousBatchingIOs:
         num_groups = self.cache.num_groups
         max_batch_tokens = self.cache.max_batch_tokens
         num_pages = self.cache.num_blocks * self.cache.block_size
-        pin_memory = self.device.type == "cpu"
+        pin_memory = self.device.type == "cpu" and torch.accelerator.is_available()
 
         # Small inputs are allocated as slices in a larget tensor aligned to 128 bytes (32 * 4b). This reduces the
         # reduces fragmentation, so it lowers the number of D2H transfers and speeds up transfers.
