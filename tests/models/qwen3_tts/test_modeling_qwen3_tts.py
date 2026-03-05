@@ -6411,9 +6411,9 @@ class Qwen3TTSIntegrationTest(unittest.TestCase):
         )
         speech_tokenizer.eval()
 
-        # Create a synthetic 24kHz audio signal (1 second sine wave)
+        # Create a synthetic 24kHz audio signal (5 seconds to ensure enough codes for decoder)
         sample_rate = speech_tokenizer.input_sample_rate
-        duration = 1.0
+        duration = 5.0
         t = torch.linspace(0, duration, int(sample_rate * duration), device=torch_device)
         audio = 0.5 * torch.sin(2 * 3.14159 * 440 * t)  # 440 Hz tone
 
@@ -6426,6 +6426,8 @@ class Qwen3TTSIntegrationTest(unittest.TestCase):
         codes = encoded.audio_codes[0]  # (codes_len, num_quantizers)
         self.assertEqual(codes.dim(), 2)
         self.assertEqual(codes.shape[-1], speech_tokenizer.encoder_valid_num_quantizers)
+        # Ensure we have enough codes for decoder (kernel_size=7 needs >= 7 codes)
+        self.assertGreater(codes.shape[0], 6)
 
         # Decode: codes → audio
         with torch.no_grad():
