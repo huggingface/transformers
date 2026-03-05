@@ -522,6 +522,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             if key.endswith("_config"):
                 o = getattr(config_from_class, key)
                 if isinstance(config, o.__class__):
+                    raise ValueError(f"Failed for {config_class.__name__}!!!!! Large config!*!*!")
                     setattr(config_from_class, key, config)
                     config = config_from_class
                     break
