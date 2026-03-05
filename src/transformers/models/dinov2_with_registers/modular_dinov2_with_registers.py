@@ -351,7 +351,6 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
     def get_input_embeddings(self) -> Dinov2WithRegistersPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
