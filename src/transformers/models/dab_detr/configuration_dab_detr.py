@@ -27,7 +27,7 @@ class DabDetrConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`DabDetrModel`]. It is used to instantiate
     a DAB-DETR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the DAB-DETR
-    [IDEA-Research/dab_detr-base](https://huggingface.co/IDEA-Research/dab_detr-base) architecture.
+    [IDEA-Research/dab-detr-resnet-50](https://huggingface.co/IDEA-Research/dab-detr-resnet-50) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
