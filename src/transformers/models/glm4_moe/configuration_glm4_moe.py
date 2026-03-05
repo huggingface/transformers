@@ -26,7 +26,7 @@ class Glm4MoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4MoeModel`]. It is used to instantiate a
     Glm4Moe model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of [THUDM/GLM-4-100B-A10B](https://huggingface.co/THUDM/GLM-4-100B-A10B).
+    with the defaults will yield a similar configuration to that of [zai-org/GLM-4.5](https://huggingface.co/zai-org/GLM-4.5).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
