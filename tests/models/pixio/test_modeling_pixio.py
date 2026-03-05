@@ -196,13 +196,7 @@ class PixioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_torch_exportable = True
 
-    all_model_classes = (
-        (
-            PixioModel,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (PixioModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": PixioModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
