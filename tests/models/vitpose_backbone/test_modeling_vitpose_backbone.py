@@ -17,7 +17,7 @@ import inspect
 import unittest
 
 from transformers import VitPoseBackboneConfig
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
@@ -26,8 +26,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
-    import torch
-
     from transformers import VitPoseBackbone
 
 
