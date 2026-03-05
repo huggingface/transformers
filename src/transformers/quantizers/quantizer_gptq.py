@@ -88,7 +88,7 @@ class GptqHfQuantizer(HfQuantizer):
 
         if self.pre_quantized:
             # compat: latest optimum has gptqmodel refactor
-            if version.parse(metadata.version("optimum")) <= version.parse("1.23.99"):
+            if version.parse(metadata.version("optimum")) < version.parse(MIN_OPTIMUM_VERSION):
                 model = self.optimum_quantizer.convert_model(model)
             else:
                 model = self.optimum_quantizer.convert_model(model, **kwargs)
