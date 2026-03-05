@@ -450,7 +450,7 @@ class ProcessingKwargs(TypedDict, total=False):
         images_kwargs: CustomImagesKwargs
 
     CustomProcessorKwargs.__annotations__["images_kwargs"] = CustomImagesKwargs  # python 3.8 compatibility
-    ```python
+    ```
 
     """
 
