@@ -496,7 +496,7 @@ class IsaacMultiModalProjector(nn.Module):
         backbone_hidden_size = config.hidden_size
         self.linear_1 = nn.Linear(vision_hidden_size, 4 * vision_hidden_size, bias=False)
         self.silu = nn.SiLU()
-        self.linear_2 = nn.Linear(4 * self.vision_hidden_size, backbone_hidden_size, bias=False)
+        self.linear_2 = nn.Linear(4 * vision_hidden_size, backbone_hidden_size, bias=False)
 
     def forward(self, image_features):
         hidden_states = self.linear_1(image_features)
@@ -623,7 +623,6 @@ class IsaacConfig(PretrainedConfig):
 
     model_type = "isaac"
     sub_configs = {"vision_config": IsaacVisionConfig, "text_config": Qwen3Config}
-    image_processor_type = "IsaacImageProcessor"
 
     def __init__(
         self,
