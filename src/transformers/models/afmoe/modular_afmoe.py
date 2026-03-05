@@ -308,10 +308,6 @@ class AfmoePreTrainedModel(PreTrainedModel):
             init.zeros_(module.expert_bias)
 
 
-# Backward compatibility alias for earlier internal naming.
-AfmoeMoE = AfmoeSparseMoeBlock
-
-
 @auto_docstring
 class AfmoeModel(AfmoePreTrainedModel):
     """
