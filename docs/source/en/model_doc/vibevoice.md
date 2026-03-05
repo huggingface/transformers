@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-08-26 and added to Hugging Face Transformers on 2026-02-16.*
+*This model was released on 2025-08-26 and added to Hugging Face Transformers on 2026-03-05.*
 
 # VibeVoice
 
@@ -58,7 +58,7 @@ The original VibeVoice-1.5B checkpoint is available under the [Microsoft](https:
 
 ### Setup 
 
-The `diffusers` library is needed as a diffusion process is used to generate chunks of audio.
+A noise scheduler is needed as audio generation relies on a diffusion process. The easiest approach (and as done by the model developers) is to use a noise scheduler from the `diffusers` library as shown in the examples below.
 ```
 pip install diffusers
 pip install soundfile   # for saving audio
@@ -569,14 +569,10 @@ print(f"Total loss: {total_loss.item():.4f}")
 total_loss.backward()
 ```
 
-### Torch compile
+### Torch compile (2x speed up on A100)
 
 The model can be compiled for faster inference/training.
 ```python
-"""
-Torch Compile Inference Benchmark for VibeVoice 1.5Bv2
-"""
-
 import time
 import torch
 import diffusers

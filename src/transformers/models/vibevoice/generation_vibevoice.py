@@ -136,7 +136,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # keep track of which sequences are already finished
-        batch_size, cur_len = input_ids.shape[:2]
+        batch_size = input_ids.shape[0]
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
 
@@ -168,6 +168,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         # State tracking
         acoustic_cache, semantic_cache, inputs_embeds = None, None, None
         audio_chunks = [[] for _ in range(batch_size)]
+        cur_len = input_ids.shape[1]
 
         # Token constraints for VibeVoice - only allow audio tokens
         valid_tokens = [
@@ -196,8 +197,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         _, _, negative_model_kwargs = self._prepare_model_inputs(None, model_kwargs=negative_model_kwargs)
         self._prepare_special_tokens(negative_generation_config, True, device=input_ids.device)
         negative_input_ids = negative_kwargs["input_ids"]
-
-        negative_input_ids_length = negative_input_ids.shape[1]
         negative_has_default_max_length = (
             negative_kwargs.get("max_length") is None and negative_generation_config.max_length is not None
         )
@@ -210,14 +209,14 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             has_default_min_length=negative_has_default_min_length,
             model_input_name="input_ids",
             inputs_tensor=negative_kwargs["input_ids"],
-            input_ids_length=negative_input_ids_length,
+            input_ids_length=negative_input_ids.shape[1],
         )
-        negative_max_cache_length = negative_generation_config.max_length - 1
         self._prepare_cache_for_generation(
-            negative_generation_config, negative_model_kwargs, None, batch_size, negative_max_cache_length
-        )
-        negative_model_kwargs["cache_position"] = torch.arange(
-            negative_input_ids_length, device=input_ids.device, dtype=torch.long
+            negative_generation_config,
+            negative_model_kwargs,
+            None,
+            batch_size,
+            negative_generation_config.max_length - 1,
         )
 
         # Generation limits for progress tracking
@@ -250,7 +249,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 model_inputs = self.prepare_inputs_for_generation(
                     input_ids, next_sequence_length=next_sequence_length, **model_kwargs
                 )
-
                 # *************** VibeVoice specific ***************
                 # Subsequent steps use embeddings from previous step
                 model_inputs.pop("input_values", None)
@@ -398,11 +396,11 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 next_inputs_embeds[diffusion_idx] = diffusion_embeds.to(next_inputs_embeds.device)
 
             inputs_embeds = next_inputs_embeds
+            cur_len += 1
             # ============================================
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
-            cur_len += 1
 
             # This is needed to properly delete outputs.logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration

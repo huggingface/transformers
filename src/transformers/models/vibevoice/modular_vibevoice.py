@@ -66,7 +66,7 @@ class VibeVoiceConfig(PretrainedConfig):
         frequency_embedding_size (`int`, *optional*, defaults to 256):
             The size of the frequency embedding.
         num_diffusion_steps (`int`, *optional*, defaults to 10):
-            The number of diffusion steps to use during inference.
+            The number of diffusion steps for inference (and the default for training).
 
     ```python
     >>> from transformers import VibeVoiceForConditionalGeneration, VibeVoiceConfig
@@ -167,14 +167,6 @@ class VibeVoiceConfig(PretrainedConfig):
             tie_word_embeddings=getattr(text_config, "tie_word_embeddings", False),
             **kwargs,
         )
-
-    @property
-    def initializer_range(self) -> float:
-        return self.acoustic_tokenizer_config.initializer_range
-
-    @property
-    def layer_scale_init_value(self) -> float:
-        return self.acoustic_tokenizer_config.layer_scale_init_value
 
     # NOTE (ebezzam) for modular usage of `LlamaMLP`
     @property
@@ -290,15 +282,7 @@ class VibeVoiceDiffusionHead(nn.Module):
 
     def forward(self, noisy_images, timesteps, condition):
         """
-        Forward pass of the prediction head.
-
-        Args:
-            noisy_images (`torch.Tensor`): Noisy images/latents to denoise
-            timesteps (`torch.Tensor`): Timesteps for diffusion
-            condition (`torch.Tensor`): Conditioning information
-
-        Returns:
-            `torch.Tensor`: The predicted noise/velocity
+        Forward pass of the prediction head. Returns the predicted noise/velocity.
         """
         hidden_states = self.noisy_images_proj(noisy_images)
         embedded_timesteps = self.timestep_embedder(timesteps)
@@ -336,6 +320,7 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_attention_backend = True
     _supports_cache_class = True
+    _no_split_modules = ["VibeVoiceDiffusionHead"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -463,6 +448,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         acoustic_loss_mask: torch.BoolTensor | None = None,
         noise_scheduler: object | None = None,
         ddpm_batch_multiplier: int = 4,
+        num_diffusion_steps: int | None = None,
         **kwargs,
     ) -> tuple | VibeVoiceCausalLMOutputWithPast:
         r"""
@@ -473,10 +459,13 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         acoustic_loss_mask (`torch.BoolTensor`, *optional*):
             Mask to compute diffusion loss only on specific acoustic tokens.
         noise_scheduler (*optional*):
-            Noise scheduler which is needed use for computing noise targets for the diffusion loss.
+            Needed for training to compute noise targets for the diffusion loss,
+            e.g. `diffusers.DPMSolverMultistepScheduler(beta_schedule='squaredcos_cap_v2', prediction_type='v_prediction')`.
         ddpm_batch_multiplier (`int`, *optional*, defaults to 4):
-            Number of noise samples to generate per audio token for diffusion loss computation, which can help
-            stabilize training.
+            For training, number of noise samples to generate per audio token for diffusion loss computation, which can
+            help stabilize training.
+        num_diffusion_steps (`int`, *optional*, defaults to config.num_diffusion_steps):
+            For training, the number of diffusion steps to use.
         """
 
         outputs = self.model(
@@ -517,8 +506,10 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
                 device=audio_features.device,
                 dtype=audio_features.dtype,
             )
+            if num_diffusion_steps is None:
+                num_diffusion_steps = self.config.num_diffusion_steps
             timesteps = torch.multinomial(
-                torch.ones(self.config.num_diffusion_steps),
+                torch.ones(num_diffusion_steps),
                 audio_len * ddpm_batch_multiplier,
                 replacement=True,
             ).to(audio_features.device)

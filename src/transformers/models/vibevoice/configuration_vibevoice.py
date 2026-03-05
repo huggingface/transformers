@@ -59,7 +59,7 @@ class VibeVoiceConfig(PretrainedConfig):
         frequency_embedding_size (`int`, *optional*, defaults to 256):
             The size of the frequency embedding.
         num_diffusion_steps (`int`, *optional*, defaults to 10):
-            The number of diffusion steps to use during inference.
+            The number of diffusion steps for inference (and the default for training).
 
     ```python
     >>> from transformers import VibeVoiceForConditionalGeneration, VibeVoiceConfig
@@ -160,14 +160,6 @@ class VibeVoiceConfig(PretrainedConfig):
             tie_word_embeddings=getattr(text_config, "tie_word_embeddings", False),
             **kwargs,
         )
-
-    @property
-    def initializer_range(self) -> float:
-        return self.acoustic_tokenizer_config.initializer_range
-
-    @property
-    def layer_scale_init_value(self) -> float:
-        return self.acoustic_tokenizer_config.layer_scale_init_value
 
     # NOTE (ebezzam) for modular usage of `LlamaMLP`
     @property

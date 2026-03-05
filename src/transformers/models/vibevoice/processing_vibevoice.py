@@ -63,29 +63,22 @@ class VibeVoiceProcessor(ProcessorMixin):
     feature_extractor_class = "VibeVoiceAcousticTokenizerFeatureExtractor"
     tokenizer_class = "Qwen2TokenizerFast"
 
-    def __init__(self, feature_extractor, tokenizer, chat_template=None):
+    def __init__(
+        self,
+        feature_extractor,
+        tokenizer,
+        chat_template=None,
+        audio_bos_token="<|vision_start|>",
+        audio_eos_token="<|vision_end|>",
+        audio_diffusion_token="<|vision_pad|>",
+    ):
+        self.audio_bos_token = audio_bos_token
+        self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
+        self.audio_eos_token = audio_eos_token
+        self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
+        self.audio_diffusion_token = audio_diffusion_token
+        self.audio_diffusion_token_id = tokenizer.convert_tokens_to_ids(audio_diffusion_token)
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
-
-        if not hasattr(tokenizer, "audio_bos_token"):
-            self.audio_bos_token = "<|vision_start|>"
-            self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(self.audio_bos_token)
-        else:
-            self.audio_bos_token = tokenizer.audio_bos_token
-            self.audio_bos_token_id = tokenizer.audio_bos_token_id
-
-        if not hasattr(tokenizer, "audio_eos_token"):
-            self.audio_eos_token = "<|vision_end|>"
-            self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(self.audio_eos_token)
-        else:
-            self.audio_eos_token = tokenizer.audio_eos_token
-            self.audio_eos_token_id = tokenizer.audio_eos_token_id
-
-        if not hasattr(tokenizer, "audio_diffusion_token"):
-            self.audio_diffusion_token = "<|vision_pad|>"
-            self.audio_diffusion_token_id = tokenizer.convert_tokens_to_ids(self.audio_diffusion_token)
-        else:
-            self.audio_diffusion_token = tokenizer.audio_diffusion_token
-            self.audio_diffusion_token_id = tokenizer.audio_diffusion_token_id
 
     def __call__(
         self,
@@ -165,10 +158,10 @@ class VibeVoiceProcessor(ProcessorMixin):
             num_audio_tokens = (
                 torch.ceil(data["padding_mask"].sum(dim=-1) / audio_kwargs["pad_to_multiple_of"]).int().tolist()
             )
+            audio_token_pattern = re.compile(re.escape(self.audio_diffusion_token))
             audio_token_iter = iter(num_audio_tokens)
             for i, sample in enumerate(text):
-                text[i] = re.sub(
-                    re.escape(self.audio_diffusion_token),
+                text[i] = audio_token_pattern.sub(
                     lambda m: self.audio_diffusion_token * next(audio_token_iter),
                     sample,
                 )
