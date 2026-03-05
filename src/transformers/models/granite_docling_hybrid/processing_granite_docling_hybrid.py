@@ -179,36 +179,6 @@ def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) 
 
 @auto_docstring
 class GraniteDoclingHybridProcessor(ProcessorMixin):
-    r"""
-    Constructs a GraniteDoclingHybrid processor which wraps a tokenizer and GotOcr2 image processor into a single processor.
-
-    [`GraniteDoclingHybridProcessor`] offers all the functionalities of [`GotOcr2ImageProcessor`]. See
-    the docstring of [`~GraniteDoclingHybridProcessor.__call__`] and [`~GraniteDoclingHybridProcessor.decode`] for more information.
-
-    Args:
-        image_processor (`GotOcr2ImageProcessor`):
-            An instance of [`GotOcr2ImageProcessor`]. The image processor is a required input.
-        tokenizer (`PreTrainedTokenizerBase`, *optional*):
-            An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
-        image_seq_len (`int`, *optional*, defaults to 169):
-            The length of the image sequence i.e. the number of <image> tokens per image in the input.
-            This parameter is used to build the string from the input prompt and image tokens and should match the
-            value the model used. It is computed as: image_seq_len = int(((image_size // patch_size) ** 2) / (scale_factor**2))
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        fake_image_token (`str` or `AddedToken`, *optional*, defaults to "<fake_token_around_image>"):
-            Token used to wrap expanded image sequences. Override to use a custom token.
-        image_token (`str` or `AddedToken`, *optional*, defaults to "<image>"):
-            Token in the text prompt indicating where image patches should be inserted.
-        end_of_utterance_token (`str` or `AddedToken`, *optional*, defaults to "<end_of_utterance>"):
-            Token inserted between user and assistant turns. Override to match a custom tokenizer vocabulary.
-        global_image_tag (`str` or `AddedToken`, *optional*, defaults to "<global-img>"):
-            Token corresponding to the global image representation.
-        extra_special_tokens_pattern (`str`, *optional*):
-            Regular expression pattern used to strip redundant special tokens when preparing chat prompts. By default
-            this pattern is derived from the configured `global_image_tag`.
-    """
-
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: str | None = None, **kwargs
     ):
