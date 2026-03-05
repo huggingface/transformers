@@ -18,9 +18,11 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 import torch
+from huggingface_hub import snapshot_download
 from safetensors.torch import load_file
 
 from transformers import (
@@ -113,8 +115,6 @@ def convert_state_dict(original_state_dict: dict[str, Any]) -> dict[str, Any]:
 def process_tokenizer_config(config_dict: dict[str, Any], keys_to_remove: list[str]) -> dict[str, Any]:
     if "encoder_depths" in config_dict and isinstance(config_dict["encoder_depths"], str):
         config_dict["encoder_depths"] = list(map(int, config_dict["encoder_depths"].split("-")))
-
-    # Rename keys
     if "layernorm_eps" in config_dict:
         config_dict["rms_norm_eps"] = config_dict.pop("layernorm_eps")
     if "encoder_ratios" in config_dict:
@@ -126,27 +126,81 @@ def process_tokenizer_config(config_dict: dict[str, Any], keys_to_remove: list[s
     if "vae_dim" in config_dict:
         config_dict["hidden_size"] = config_dict.pop("vae_dim")
 
-    # Remove unwanted keys
     for key in keys_to_remove:
         config_dict.pop(key, None)
 
     return config_dict
 
 
-def convert_checkpoint(
-    checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None, max_shard_size="2GB"
-):
+def load_original_checkpoint(checkpoint_path: str | Path) -> dict[str, Any]:
+    checkpoint_path = Path(checkpoint_path)
+
+    if not checkpoint_path.is_dir():
+        raise ValueError(
+            f"checkpoint_path must be a directory containing sharded safetensors files, got: {checkpoint_path}"
+        )
+
+    # Load sharded safetensors checkpoint
+    index_path = checkpoint_path / "model.safetensors.index.json"
+
+    if not index_path.exists():
+        raise FileNotFoundError(
+            f"Could not find 'model.safetensors.index.json' in {checkpoint_path}. "
+            "Expected sharded safetensors checkpoint format."
+        )
+
+    logger.info(f"Loading sharded checkpoint from {checkpoint_path}")
+    with open(index_path, "r") as f:
+        index = json.load(f)
+
+    state_dict = {}
+    # Get unique shard files
+    shard_files = sorted(set(index["weight_map"].values()))
+
+    for shard_file in shard_files:
+        shard_path = checkpoint_path / shard_file
+        logger.info(f"Loading shard: {shard_file}")
+        shard_dict = load_file(str(shard_path))
+        state_dict.update(shard_dict)
+
+    return state_dict
+
+
+def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_size="2GB"):
     if bfloat16:
         dtype = torch.bfloat16
     else:
         dtype = torch.float32
 
-    # 1) Load state dict from safetensors checkpoint
-    logger.info(f"Loading checkpoint from {checkpoint}")
-    original_state_dict = load_file(checkpoint)
+    # 1) Download checkpoint from Hub
+    logger.info(f"Downloading checkpoint from Hub: {checkpoint}")
+    checkpoint_path = Path(
+        snapshot_download(
+            repo_id=checkpoint,
+            allow_patterns=["*.safetensors", "*.json"],
+            ignore_patterns=["*.bin", "*.msgpack", "*.h5"],
+        )
+    )
+    logger.info(f"Downloaded checkpoint to: {checkpoint_path}")
+
+    # Auto-detect config paths
+    config_path = checkpoint_path / "config.json"
+    if not config_path.exists():
+        raise FileNotFoundError(f"config.json not found in {checkpoint_path}")
+    config_path = str(config_path)
+    logger.info(f"Using config: {config_path}")
+
+    processor_config_file = checkpoint_path / "preprocessor_config.json"
+    processor_config = str(processor_config_file) if processor_config_file.exists() else None
+    if processor_config:
+        logger.info(f"Using preprocessor config: {processor_config}")
+
+    # 2) Load state dict from safetensors checkpoint
+    logger.info(f"Loading checkpoint from {checkpoint_path}")
+    original_state_dict = load_original_checkpoint(checkpoint_path)
     logger.info(f"Number of parameters in original checkpoint: {len(original_state_dict)}")
 
-    # 2) Prepare feature extractor (same for all models)
+    # 3) Prepare feature extractor
     logger.info("Creating feature extractor")
     audio_config = {}
     if processor_config is not None:
@@ -169,7 +223,7 @@ def convert_checkpoint(
             language_model_pretrained_name = "Qwen/Qwen2.5-7B"
     feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor(**audio_config)
 
-    # 3) Prepare model configuration
+    # 4) Prepare model configuration
     logger.info(f"Loading model config from {config_path}")
     with open(config_path, "r") as f:
         model_config = json.load(f)
@@ -214,19 +268,19 @@ def convert_checkpoint(
     for key in ["acoustic_vae_dim", "semantic_vae_dim", "tie_word_embeddings"]:
         model_config.pop(key, None)
 
-    # 4) Update state dict to match HF model structure
+    # 5) Update state dict to match HF model structure
     logger.info("Converting state dict")
     updated_state_dict = convert_state_dict(original_state_dict)
 
-    # 5) Create semantic tokenizer config
+    # 6) Create semantic tokenizer config
     logger.info("Creating semantic tokenizer config")
     semantic_encoder_config = VibeVoiceAcousticTokenizerEncoderConfig(**semantic_config_dict)
 
-    # 6) Create acoustic tokenizer config
+    # 7) Create acoustic tokenizer config
     logger.info("Creating acoustic tokenizer config")
     acoustic_config = VibeVoiceAcousticTokenizerConfig(**acoustic_config_dict)
 
-    # 7) Create VibeVoice processor
+    # 8) Create VibeVoice processor
     logger.info("Creating VibeVoice processor")
 
     # Define a chat template adapted for VibeVoice's speech use case
@@ -288,7 +342,7 @@ def convert_checkpoint(
         logger.info(f"Pushing processor to Hub: {push_to_hub}")
         processor.push_to_hub(push_to_hub)
 
-    # 8) Create and save full VibeVoice model
+    # 9) Create and save full VibeVoice model
     logger.info("Creating full model")
     model_config["acoustic_tokenizer_config"] = acoustic_config.to_dict()
     model_config["semantic_tokenizer_encoder_config"] = semantic_encoder_config.to_dict()
@@ -344,7 +398,7 @@ def convert_checkpoint(
         vibevoice_model.push_to_hub(push_to_hub, max_shard_size=max_shard_size)
         processor.push_to_hub(push_to_hub)
 
-    # 9) Check model
+    # 10) Check model
     logger.info("Verifying conversion by reloading model")
     gc.collect()
     VibeVoiceProcessor.from_pretrained(output_dir)
@@ -356,54 +410,30 @@ def convert_checkpoint(
 """
 Conversion script to convert original VibeVoice model into a checkpoint for `VibeVoiceForConditionalGeneration`
 
-
-# 1.5B Model: https://huggingface.co/microsoft/VibeVoice-1.5B
-
 ```bash
-# -- download checkpoint and configs
-# -- download script here: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-download_vibevoice_checkpoint-py
-python src/transformers/models/vibevoice/download_vibevoice_checkpoint.py
-wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/config.json -P /raid/eric/vibevoice
-wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/preprocessor_config.json -P /raid/eric/vibevoice
-
-# -- run conversion
+# 1.5B
 python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
-    --checkpoint /raid/eric/vibevoice/VibeVoice-1.5B-combined.safetensors \
-    --output_dir /raid/eric/vibevoice/hf_vibevoice \
-    --config_path /raid/eric/vibevoice/config.json \
-    --processor_config /raid/eric/vibevoice/preprocessor_config.json \
-    --push_to_hub bezzam/VibeVoice-1.5B
-```
+    --checkpoint microsoft/VibeVoice-1.5B \
+    --output_dir ./hf_vibevoice \
+    --push_to_hub your-username/VibeVoice-1.5B
 
-# 7B Model: https://huggingface.co/aoi-ot/VibeVoice-Large
-
-```bash
-# -- download checkpoint and configs
-# -- download script here: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-download_vibevoice_7b_checkpoint-py
-python src/transformers/models/vibevoice/download_vibevoice_7b_checkpoint.py
-wget https://huggingface.co/aoi-ot/VibeVoice-Large/resolve/main/config.json -P /raid/eric/vibevoice_7b
-wget https://huggingface.co/aoi-ot/VibeVoice-Large/resolve/main/preprocessor_config.json -P /raid/eric/vibevoice_7b
-
-# -- run conversion
+# 7B
 python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
-    --checkpoint /raid/eric/vibevoice_7b/VibeVoice-7B-combined.safetensors \
-    --output_dir /raid/eric/vibevoice/hf_vibevoice_7b \
-    --config_path /raid/eric/vibevoice_7b/config.json \
-    --processor_config /raid/eric/vibevoice_7b/preprocessor_config.json \
-    --push_to_hub bezzam/VibeVoice-7B
+    --checkpoint aoi-ot/VibeVoice-Large \
+    --output_dir  /raid/eric/vibevoice/hf_vibevoice \
+    --push_to_hub bezzam/VibeVoice-7B-hf
 ```
 
 """
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--checkpoint", required=True, default=None, type=str, help="Original VibeVoice model checkpoint."
+        "--checkpoint",
+        required=True,
+        type=str,
+        help="Hugging Face Hub model ID (e.g., 'microsoft/VibeVoice-1.5B' or 'aoi-ot/VibeVoice-Large').",
     )
     parser.add_argument("--output_dir", required=True, help="Output directory for HuggingFace model")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to config.json of model to convert")
-    parser.add_argument(
-        "--processor_config", default=None, type=str, help="Path to preprocessor_config.json of model to convert"
-    )
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
@@ -421,9 +451,7 @@ if __name__ == "__main__":
     convert_checkpoint(
         args.checkpoint,
         args.output_dir,
-        args.config_path,
         args.push_to_hub,
         bfloat16=not args.float32,
-        processor_config=args.processor_config,
         max_shard_size=args.max_shard_size,
     )

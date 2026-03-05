@@ -26,8 +26,8 @@ rendered properly in your Markdown viewer.
 [VibeVoice](https://huggingface.co/papers/2508.19205) is a novel framework for synthesizing high-fidelity, long-form speech with multiple speakers by employing a next-token diffusion approach within a Large Language Model (LLM) structure. It's designed to capture the authentic conversational "vibe" and is particularly suited for generating audio content like podcasts and multi-participant audiobooks.
 
 Two model checkpoint are available at:
-- [bezzam/VibeVoice-1.5B](https://huggingface.co/bezzam/VibeVoice-1.5B)
-- [bezzam/VibeVoice-7B](https://huggingface.co/bezzam/VibeVoice-7B)
+- [bezzam/VibeVoice-1.5B-hf](https://huggingface.co/bezzam/VibeVoice-1.5B-hf)
+- [bezzam/VibeVoice-7B-hf](https://huggingface.co/bezzam/VibeVoice-7B-hf)
 
 This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam).
 
@@ -69,22 +69,21 @@ pip install soundfile   # for saving audio
 ```python
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration
 
-model_id = "bezzam/VibeVoice-1.5B"
-# model_id = "bezzam/VibeVoice-7B"
+model_id = "bezzam/VibeVoice-1.5B-hf"
+# model_id = "bezzam/VibeVoice-7B-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = VibeVoiceForConditionalGeneration.from_pretrained(model_id)
 ```
 
-### Text-to-speech (TTS) example
+### Text-to-speech (TTS)
 
 ```python
 import os
 import diffusers
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
-
-model_id = "bezzam/VibeVoice-1.5B"
-# model_id = "bezzam/VibeVoice-7B"
+model_id = "bezzam/VibeVoice-1.5B-hf"
+# model_id = "bezzam/VibeVoice-7B-hf"
 text = "Hello, nice to meet you. How are you?"
 set_seed(42)  # for deterministic results
 
@@ -114,7 +113,7 @@ processor.save_audio(audio, fn)
 print(f"Saved output to {fn}")
 ```
 
-### TTS voice cloning example
+### TTS voice cloning
 
 A voice can be cloned by providing a reference audio alongside the text within the chat template dictionary.
 
@@ -125,9 +124,8 @@ import os
 import diffusers
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
-
-model_id = "bezzam/VibeVoice-1.5B"
-# model_id = "bezzam/VibeVoice-7B"
+model_id = "bezzam/VibeVoice-1.5B-hf"
+# model_id = "bezzam/VibeVoice-7B-hf"
 text = "Hello, nice to meet you. How are you?"
 set_seed(42)  # for deterministic results
 
@@ -167,6 +165,7 @@ audio = model.generate(**inputs, noise_scheduler=noise_scheduler)
 fn = f"{os.path.basename(model_id)}_tts_clone.wav"
 processor.save_audio(audio, fn)
 print(f"Saved output to {fn}")
+
 ```
 
 ### Generating a podcast from a script
@@ -181,12 +180,10 @@ import time
 import diffusers
 import torch
 from tqdm import tqdm
-
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
-
-model_id = "bezzam/VibeVoice-1.5B"
-# model_id = "bezzam/VibeVoice-7B"
+model_id = "bezzam/VibeVoice-1.5B-hf"
+# model_id = "bezzam/VibeVoice-7B-hf"
 max_new_tokens = 400  # `None` to ensure full generation
 set_seed(42)  # for deterministic results
 
@@ -296,12 +293,10 @@ import time
 import diffusers
 import torch
 from tqdm import tqdm
-
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
-
-model_id = "bezzam/VibeVoice-1.5B"
-# model_id = "bezzam/VibeVoice-7B"
+model_id = "bezzam/VibeVoice-1.5B-hf"
+# model_id = "bezzam/VibeVoice-7B-hf"
 max_new_tokens = 400  # `None` to ensure full generation
 set_seed(42)  # for deterministic results
 
@@ -460,9 +455,8 @@ import diffusers
 import soundfile as sf
 from transformers import pipeline, set_seed
 
-
-model_id = "bezzam/VibeVoice-1.5B"
-# model_id = "bezzam/VibeVoice-7B"
+model_id = "bezzam/VibeVoice-1.5B-hf"
+# model_id = "bezzam/VibeVoice-7B-hf"
 text = "Hello, nice to meet you. How are you?"
 set_seed(42)  # for deterministic results
 
@@ -486,7 +480,8 @@ chat_template = [
         ],
     }
 ]
-generate_kwargs = {"guidance_scale": 1.5}
+# optional kwargs for generation
+generate_kwargs = {"guidance_scale": 1.3, "num_diffusion_steps": 10}
 output = pipe(chat_template, generate_kwargs=generate_kwargs)
 
 # Save to file
@@ -504,8 +499,8 @@ import diffusers
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration
 
 
-model_id = "bezzam/VibeVoice-1.5B"
-# model_id = "bezzam/VibeVoice-7B"
+model_id = "bezzam/VibeVoice-1.5B-hf"
+# model_id = "bezzam/VibeVoice-7B-hf"
 
 # Load model and processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -518,7 +513,10 @@ chat_template = [
         {
             "role": "0",
             "content": [
-                {"type": "text", "text": "VibeVoice is this novel framework designed for generating expressive, long-form, multi-speaker, conversational audio."},
+                {
+                    "type": "text",
+                    "text": "VibeVoice is this novel framework designed for generating expressive, long-form, multi-speaker, conversational audio.",
+                },
                 {
                     "type": "audio",
                     "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
@@ -531,7 +529,10 @@ chat_template = [
         {
             "role": "0",
             "content": [
-                {"type": "text", "text": "Hello everyone and welcome to the VibeVoice podcast. I'm your host, Alex, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Sam here to talk about it with me. Thanks so much for having me, Alex. And you're absolutely right. This question always brings out some seriously strong feelings. Okay, so let's get right into it. For me, it has to be Michael Jordan. Six trips to the finals, six championships. That kind of perfection is just incredible. Oh man, the first thing that always pops into my head is that shot against the Cleveland Cavaliers back in '89. Jordan just rises, hangs in the air forever, and just sinks it."},
+                {
+                    "type": "text",
+                    "text": "Hello everyone and welcome to the VibeVoice podcast. I'm your host, Alex, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Sam here to talk about it with me. Thanks so much for having me, Alex. And you're absolutely right. This question always brings out some seriously strong feelings. Okay, so let's get right into it. For me, it has to be Michael Jordan. Six trips to the finals, six championships. That kind of perfection is just incredible. Oh man, the first thing that always pops into my head is that shot against the Cleveland Cavaliers back in '89. Jordan just rises, hangs in the air forever, and just sinks it.",
+                },
                 {
                     "type": "audio",
                     "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/example_output/VibeVoice-1.5B_output.wav",
@@ -541,7 +542,7 @@ chat_template = [
     ],
 ]
 
-# Set `output_labels=True` for training
+# Process with apply_chat_template and output_labels=True for training
 inputs = processor.apply_chat_template(
     chat_template,
     tokenize=True,
@@ -552,9 +553,10 @@ inputs = processor.apply_chat_template(
 
 # Forward pass
 noise_scheduler = diffusers.DPMSolverMultistepScheduler(
-    beta_schedule="squaredcos_cap_v2", prediction_type="v_prediction",
+    beta_schedule="squaredcos_cap_v2",
+    prediction_type="v_prediction",
 )
-outputs = model(**inputs, noise_scheduler=noise_scheduler)
+outputs = model(**inputs, noise_scheduler=noise_scheduler, ddpm_batch_multiplier=2, num_diffusion_steps=2)
 
 # Compute losses
 lm_loss = outputs.loss
@@ -569,19 +571,19 @@ print(f"Total loss: {total_loss.item():.4f}")
 total_loss.backward()
 ```
 
-### Torch compile (2x speed up on A100)
+### Torch compile (2x speed-up on A100)
 
 The model can be compiled for faster inference/training.
+
 ```python
 import time
-import torch
 import diffusers
+import torch
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration
-from transformers.audio_utils import load_audio
 
-model_id = "bezzam/VibeVoice-1.5B"
-# model_id = "bezzam/VibeVoice-7B"
 
+model_id = "bezzam/VibeVoice-1.5B-hf"
+# model_id = "bezzam/VibeVoice-7B-hf"
 num_warmup = 5
 num_runs = 10
 
@@ -590,7 +592,8 @@ torch.set_float32_matmul_precision("high")
 # Load processor + model
 processor = AutoProcessor.from_pretrained(model_id)
 model = VibeVoiceForConditionalGeneration.from_pretrained(
-    model_id, torch_dtype=torch.bfloat16,
+    model_id,
+    torch_dtype=torch.bfloat16,
 ).to("cuda")
 
 # Prepare static inputs
@@ -600,7 +603,10 @@ chat_template = [
             "role": "0",
             "content": [
                 {"type": "text", "text": "VibeVoice is a novel framework for generating expressive audio."},
-                {"type": "audio", "path": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav"},
+                {
+                    "type": "audio",
+                    "path": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
+                },
             ],
         }
     ],

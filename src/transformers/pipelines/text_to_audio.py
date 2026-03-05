@@ -104,6 +104,11 @@ class TextToAudioPipeline(Pipeline):
     _default_generation_config = GenerationConfig()
 
     def __init__(self, *args, vocoder=None, sampling_rate=None, noise_scheduler=None, **kwargs):
+        # Some models (e.g., VibeVoice) require noise_scheduler during initialization because `_prepare_generation_config` is called in super().__init__
+        if noise_scheduler is not None:
+            kwargs["noise_scheduler"] = noise_scheduler
+        self.noise_scheduler = noise_scheduler
+
         super().__init__(*args, **kwargs)
 
         self.vocoder = None
@@ -113,11 +118,6 @@ class TextToAudioPipeline(Pipeline):
                 if vocoder is None
                 else vocoder
             )
-
-        # Some models (e.g., VibeVoice) require it during initialization because `_prepare_generation_config` is called
-        if noise_scheduler is not None:
-            kwargs["noise_scheduler"] = noise_scheduler
-        self.noise_scheduler = noise_scheduler
 
         if self.model.config.model_type in ["musicgen", "speecht5"]:
             # MusicGen and SpeechT5 expect to use their tokenizer instead
