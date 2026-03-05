@@ -237,7 +237,7 @@ class Gemma3Config(PreTrainedConfig):
     Gemma3ForConditionalGeneration according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the PaliGemma-2B.
 
-    e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
+    e.g. [google/gemma-3-4b-it](https://huggingface.co/google/gemma-3-4b-it)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.

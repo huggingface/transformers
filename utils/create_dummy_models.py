@@ -277,7 +277,7 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
         if config_class.__name__ == 'NanoChatConfig':
             revision = "refs/pr/1"
 
-        sub_folder = None
+        sub_folder = ""
         if config_class.__name__ in ['GlmImageTextConfig', 'GlmImageVisionConfig', 'GlmImageVQVAEConfig']:
             sub_folder = "processor"
 
@@ -1219,6 +1219,7 @@ def build(config_class, models_to_create, output_dir):
     # breakpoint()
     for processor_class in processor_classes:
         try:
+            # breakpoint()
             processor = build_processor(config_class, processor_class, allow_no_checkpoint=True)
             if processor is not None:
                 if type(processor) not in result["processor"]:
@@ -1235,6 +1236,7 @@ def build(config_class, models_to_create, output_dir):
             # TODO: add trace and error anyway?
             # Let's return all what we could build
             # return result
+
 
     # TODO: We might get some errors while still having some processors!
     if len(errors) > 0:
@@ -1671,7 +1673,7 @@ if __name__ == "__main__":
     if not args.all and not args.model_types:
         raise ValueError("Please provide at least one model type or pass `--all` to export all architectures.")
 
-    # os.environ["HF_TOKEN"] = args.token
+    os.environ["HF_TOKEN"] = args.token
 
     create_tiny_models(
         args.output_path,
