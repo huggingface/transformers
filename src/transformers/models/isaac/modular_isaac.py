@@ -219,10 +219,6 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
         for shape, stacked_images in grouped_images.items():
             batch_size, channels, original_height, original_width = stacked_images.shape
-
-            if bool(self.do_convert_rgb) and channels == 1:
-                stacked_images = stacked_images.repeat(1, 3, 1, 1)
-
             target_height, target_width = get_image_size_for_max_num_patches(
                 original_height,
                 original_width,
