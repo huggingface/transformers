@@ -73,6 +73,7 @@ class PI0Config(PreTrainedConfig):
         self,
         vlm_config=None,
         dit_config=None,
+        image_token_id=257152,
         chunk_size=50,
         max_state_dim=32,
         max_action_dim=32,
@@ -111,6 +112,7 @@ class PI0Config(PreTrainedConfig):
                     "vision_use_head": False,
                 },
                 projection_dim=2048,
+                image_token_id=image_token_id,
             )
 
         if isinstance(dit_config, dict):

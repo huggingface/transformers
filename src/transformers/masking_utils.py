@@ -923,6 +923,7 @@ def create_causal_mask(
             config,
             inputs_embeds,
             attention_mask,
+            past_key_values=past_key_values,
             or_mask_function=or_mask_function,
             and_mask_function=and_mask_function,
         )

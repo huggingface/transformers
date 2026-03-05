@@ -22,14 +22,15 @@ from torch import nn
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
+from ...image_utils import ImageInput, make_nested_list_of_images
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..paligemma.processing_paligemma import PaligemmaProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -48,16 +49,16 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @auto_docstring
-class PI0Processor(ProcessorMixin):
+class PI0Processor(PaligemmaProcessor):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
-        if not hasattr(image_processor, "image_seq_length"):
-            raise ValueError("Image processor is missing an `image_seq_length` attribute.")
-        self.image_seq_length = image_processor.image_seq_length
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        self.height, self.width = image_processor.size["height"], image_processor.size["width"]
+        super().__init__(image_processor, tokenizer)
+        # Enable it back, PI0 needs the tokenizer to handle special tokens
+        self.tokenizer.add_bos_token = True
 
     def __call__(
         self,
-        images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None = None,
+        images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[PI0ProcessorKwargs],
     ) -> BatchFeature:
@@ -70,36 +71,14 @@ class PI0Processor(ProcessorMixin):
             PI0ProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
         )
 
-        if images is None:
-            raise ValueError("`images` are expected as arguments to a `PI0Processor` instance.")
         if text is None:
             logger.warning_once("You are using PI0 without a text prefix. The processor will use an empty prompt.")
             text = ""
 
         if isinstance(text, str):
             text = [text]
-        elif not isinstance(text, (list, tuple)):
-            raise ValueError("`text` must be a string or a list of strings.")
-        elif any(not isinstance(sample, str) for sample in text):
-            raise ValueError("`text` must be a string or a list of strings.")
 
-        text = [sample if sample.endswith("\n") else f"{sample}\n" for sample in text]
-
-        if is_valid_image(images):
-            batched_images = [[images]]
-        elif isinstance(images, (list, tuple)) and len(images) > 0 and is_valid_image(images[0]):
-            batched_images = [[image] for image in images]
-        elif (
-            isinstance(images, (list, tuple))
-            and len(images) > 0
-            and isinstance(images[0], (list, tuple))
-            and len(images[0]) > 0
-            and is_valid_image(images[0][0])
-        ):
-            batched_images = [list(sample_images) for sample_images in images]
-        else:
-            raise ValueError("`images` must be an image, a list of images, or a list of list of images.")
-
+        batched_images = make_nested_list_of_images(images)
         if len(batched_images) != len(text):
             raise ValueError(
                 f"Received {len(batched_images)} image samples for {len(text)} prompts. "
@@ -107,56 +86,40 @@ class PI0Processor(ProcessorMixin):
             )
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        tokenized = self.tokenizer(text, return_token_type_ids=True, **output_kwargs["text_kwargs"])
+        output_kwargs["images_kwargs"].pop("return_tensors", None)
+
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+        # Image tokens should come before everything, including PAD or BOS tokens
+        image_text = f"{self.image_token * self.image_seq_length * len(batched_images)}"
+        output_kwargs["text_kwargs"]["add_special_tokens"] = False
+        output_kwargs["text_kwargs"]["padding"] = False
+        output_kwargs["text_kwargs"]["truncation"] = False
+        image_text_encoding = self.tokenizer(image_text, **output_kwargs["text_kwargs"])
+        for k in text_inputs:
+            text_inputs[k] = [image_text_encoding[k] + sample for sample in text_inputs[k]]
 
         max_num_cameras = max(len(sample_images) for sample_images in batched_images)
-        image_masks = []
-        padded_pixel_values = []
+        pixel_attention_mask = torch.zeros((len(batched_images), max_num_cameras), dtype=torch.bool)
+        padded_pixel_values = torch.zeros(len(batched_images), max_num_cameras, 3, self.height, self.width)
 
-        for sample_images in batched_images:
-            image_kwargs = dict(output_kwargs["images_kwargs"])
-            image_kwargs.pop("return_tensors", None)
-            processed = self.image_processor(sample_images, return_tensors="pt", **image_kwargs)["pixel_values"]
-            num_cameras = processed.shape[0]
+        for batch, sample_images in enumerate(batched_images):
+            processed = self.image_processor(sample_images, return_tensors="pt", **output_kwargs["images_kwargs"])
 
-            sample_mask = torch.zeros(max_num_cameras, dtype=torch.bool)
-            sample_mask[:num_cameras] = True
-            image_masks.append(sample_mask)
+            num_cameras = len(sample_images)
+            pixel_attention_mask[batch, :num_cameras] = True
+            padded_pixel_values[batch, :num_cameras] = processed["pixel_values"]
 
-            if num_cameras < max_num_cameras:
-                pad = torch.zeros(
-                    max_num_cameras - num_cameras,
-                    *processed.shape[1:],
-                    dtype=processed.dtype,
-                )
-                processed = torch.cat([processed, pad], dim=0)
-
-            padded_pixel_values.append(processed)
-
-        pixel_values = torch.stack(padded_pixel_values, dim=0)
-        image_masks = torch.stack(image_masks, dim=0)
-
-        return_data = {**tokenized, "pixel_values": pixel_values, "image_masks": image_masks}
+        return_data = {
+            **text_inputs,
+            "pixel_values": padded_pixel_values,
+            "pixel_attention_mask": pixel_attention_mask,
+        }
         return BatchFeature(data=return_data, tensor_type=return_tensors)
-
-    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
-        vision_data = {}
-        if image_sizes is not None:
-            num_image_tokens = [self.image_seq_length] * len(image_sizes)
-            num_image_patches = [1] * len(image_sizes)
-            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
-        return MultiModalData(**vision_data)
 
     @property
     def model_input_names(self):
-        tokenizer_input_names = list(self.tokenizer.model_input_names)
-        if "token_type_ids" not in tokenizer_input_names:
-            tokenizer_input_names.append("token_type_ids")
-        image_input_names = list(self.image_processor.model_input_names)
-        names = tokenizer_input_names + image_input_names
-        if "image_masks" not in names:
-            names.append("image_masks")
-        return names
+        return super().model_input_names + ["image_masks"]
 
 
 class PI0Config(PreTrainedConfig):
@@ -211,6 +174,7 @@ class PI0Config(PreTrainedConfig):
         self,
         vlm_config=None,
         dit_config=None,
+        image_token_id=257152,
         chunk_size=50,
         max_state_dim=32,
         max_action_dim=32,
@@ -249,6 +213,7 @@ class PI0Config(PreTrainedConfig):
                     "vision_use_head": False,
                 },
                 projection_dim=2048,
+                image_token_id=image_token_id,
             )
 
         if isinstance(dit_config, dict):
@@ -372,7 +337,7 @@ class PI0Model(PI0PreTrainedModel):
         action_embeds (`torch.Tensor`, *optional*): args description placeholder
         pixel_attention_mask (`torch.Tensor`, *optional*): args description placeholder
         """
-        if pixel_values is not None:
+        if pixel_values is not None and past_key_values is None:
             # Pi0 never passes positions, so we need to infer manually
             if attention_mask is not None and position_ids is None:
                 position_ids = attention_mask.cumsum(-1) - 1
@@ -403,16 +368,20 @@ class PI0Model(PI0PreTrainedModel):
                 device=attention_mask.device,
             )
             dit_attention_mask = torch.cat([attention_mask, noise_mask], dim=1)
-            dit_position_ids = (torch.cumsum(dit_attention_mask, dim=1) - 1)[:, -action_embeds.shape[1]:]
+            dit_position_ids = (torch.cumsum(dit_attention_mask, dim=1) - 1)[:, -action_embeds.shape[1] :]
 
         bidirectional_mask = create_bidirectional_mask(
-            config=self.config,
+            config=self.config.dit_config,
             inputs_embeds=action_embeds,
             attention_mask=dit_attention_mask,
             past_key_values=past_key_values,
+            # and_mask_function=packed_sequence_mask_function(cum_block_lengths),  # always 2 state tokens
         )
+        bidirectional_mask[0, 0, 0, -50:] = torch.finfo(action_embeds.dtype).min
 
-        action_embeds = action_embeds / torch.tensor(self.config.dit_config.hidden_size**0.5, dtype=action_embeds.dtype)
+        action_embeds = action_embeds / torch.tensor(
+            self.config.dit_config.hidden_size**0.5, dtype=action_embeds.dtype
+        )
         dit_output = self.dit(
             inputs_embeds=action_embeds,
             attention_mask=bidirectional_mask,
@@ -475,7 +444,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
                 self.config.chunk_size,
                 self.config.max_action_dim,
                 device=device,
-                dtype=pixel_values.dtype,
+                dtype=state.dtype,
             )
 
         # 3. If training: merge noise with the ground truth actions (aka labels)
@@ -502,6 +471,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             **kwargs,
         )
         last_hidden_states = outputs.last_hidden_state[:, -self.config.chunk_size :]
+        last_hidden_states = last_hidden_states.to(dtype=torch.float32)
         predicted_velocity = self.action_out_proj(last_hidden_states)
 
         loss = None
@@ -536,19 +506,26 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
 
         # 1. Sample random noise
         if noise is None:
-            noise = torch.randn(
-                batch_size,
-                self.config.chunk_size,
-                self.config.max_action_dim,
-                device=device,
+            noise = torch.normal(
+                mean=0.0,
+                std=1.0,
+                size=(
+                    batch_size,
+                    self.config.chunk_size,
+                    self.config.max_action_dim,
+                ),
                 dtype=pixel_values.dtype,
+                device=device,
             )
 
-        # 2. Run VLM once and obtain prefix cache
+        # 2. Run VLM once and obtain prefix cache. Must infer positions here!
+        if attention_mask is not None:
+            position_ids = attention_mask.cumsum(-1) - 1
         output = self.model.vlm(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             use_cache=True,
             return_dict=True,
         )
@@ -561,18 +538,16 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             time = 1.0 + step * dt
             time_tensor = torch.tensor(time, dtype=torch.float32, device=device).expand(batch_size)
             output = self(
-                pixel_attention_mask=pixel_attention_mask,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
                 state=state,
                 noise=noise,
                 timestep=time_tensor,
+                pixel_attention_mask=pixel_attention_mask,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
             )
 
             # We need to keep only the "vlm-prefix", no attention to past denoising steps!
-            if past_key_values is not None:
-                past_key_values.crop(prefix_length)
-
+            past_key_values.crop(prefix_length)
             noise = noise + dt * output.logits
         return noise
 

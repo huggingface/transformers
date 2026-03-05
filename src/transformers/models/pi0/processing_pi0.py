@@ -21,9 +21,9 @@
 import torch
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
+from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 
 
@@ -42,17 +42,41 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+IMAGE_TOKEN = "<image>"
+EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
+
+
 @auto_docstring
 class PI0Processor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+        self.height, self.width = image_processor.size["height"], image_processor.size["width"]
         if not hasattr(image_processor, "image_seq_length"):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
-        self.image_seq_length = image_processor.image_seq_length
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+        self.image_seq_length = image_processor.image_seq_length
+
+        if not hasattr(tokenizer, "image_token"):
+            image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
+            tokens_to_add = {"additional_special_tokens": [image_token]}
+            tokenizer.add_special_tokens(tokens_to_add)
+            self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+            self.image_token = IMAGE_TOKEN
+        else:
+            self.image_token_id = tokenizer.image_token_id
+            self.image_token = tokenizer.image_token
+
+        tokenizer.add_tokens(EXTRA_TOKENS)
+        tokenizer.add_bos_token = False
+        tokenizer.add_eos_token = False
+
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        # Enable it back, PI0 needs the tokenizer to handle special tokens
+        self.tokenizer.add_bos_token = True
+
+    @auto_docstring
     def __call__(
         self,
-        images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None = None,
+        images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[PI0ProcessorKwargs],
     ) -> BatchFeature:
@@ -65,36 +89,14 @@ class PI0Processor(ProcessorMixin):
             PI0ProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
         )
 
-        if images is None:
-            raise ValueError("`images` are expected as arguments to a `PI0Processor` instance.")
         if text is None:
             logger.warning_once("You are using PI0 without a text prefix. The processor will use an empty prompt.")
             text = ""
 
         if isinstance(text, str):
             text = [text]
-        elif not isinstance(text, (list, tuple)):
-            raise ValueError("`text` must be a string or a list of strings.")
-        elif any(not isinstance(sample, str) for sample in text):
-            raise ValueError("`text` must be a string or a list of strings.")
 
-        text = [sample if sample.endswith("\n") else f"{sample}\n" for sample in text]
-
-        if is_valid_image(images):
-            batched_images = [[images]]
-        elif isinstance(images, (list, tuple)) and len(images) > 0 and is_valid_image(images[0]):
-            batched_images = [[image] for image in images]
-        elif (
-            isinstance(images, (list, tuple))
-            and len(images) > 0
-            and isinstance(images[0], (list, tuple))
-            and len(images[0]) > 0
-            and is_valid_image(images[0][0])
-        ):
-            batched_images = [list(sample_images) for sample_images in images]
-        else:
-            raise ValueError("`images` must be an image, a list of images, or a list of list of images.")
-
+        batched_images = make_nested_list_of_images(images)
         if len(batched_images) != len(text):
             raise ValueError(
                 f"Received {len(batched_images)} image samples for {len(text)} prompts. "
@@ -102,39 +104,48 @@ class PI0Processor(ProcessorMixin):
             )
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        tokenized = self.tokenizer(text, return_token_type_ids=True, **output_kwargs["text_kwargs"])
+        output_kwargs["images_kwargs"].pop("return_tensors", None)
+
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+        # Image tokens should come before everything, including PAD or BOS tokens
+        image_text = f"{self.image_token * self.image_seq_length * len(batched_images)}"
+        output_kwargs["text_kwargs"]["add_special_tokens"] = False
+        output_kwargs["text_kwargs"]["padding"] = False
+        output_kwargs["text_kwargs"]["truncation"] = False
+        image_text_encoding = self.tokenizer(image_text, **output_kwargs["text_kwargs"])
+        for k in text_inputs:
+            text_inputs[k] = [image_text_encoding[k] + sample for sample in text_inputs[k]]
 
         max_num_cameras = max(len(sample_images) for sample_images in batched_images)
-        image_masks = []
-        padded_pixel_values = []
+        pixel_attention_mask = torch.zeros((len(batched_images), max_num_cameras), dtype=torch.bool)
+        padded_pixel_values = torch.zeros(len(batched_images), max_num_cameras, 3, self.height, self.width)
 
-        for sample_images in batched_images:
-            image_kwargs = dict(output_kwargs["images_kwargs"])
-            image_kwargs.pop("return_tensors", None)
-            processed = self.image_processor(sample_images, return_tensors="pt", **image_kwargs)["pixel_values"]
-            num_cameras = processed.shape[0]
+        for batch, sample_images in enumerate(batched_images):
+            processed = self.image_processor(sample_images, return_tensors="pt", **output_kwargs["images_kwargs"])
 
-            sample_mask = torch.zeros(max_num_cameras, dtype=torch.bool)
-            sample_mask[:num_cameras] = True
-            image_masks.append(sample_mask)
+            num_cameras = len(sample_images)
+            pixel_attention_mask[batch, :num_cameras] = True
+            padded_pixel_values[batch, :num_cameras] = processed["pixel_values"]
 
-            if num_cameras < max_num_cameras:
-                pad = torch.zeros(
-                    max_num_cameras - num_cameras,
-                    *processed.shape[1:],
-                    dtype=processed.dtype,
-                )
-                processed = torch.cat([processed, pad], dim=0)
-
-            padded_pixel_values.append(processed)
-
-        pixel_values = torch.stack(padded_pixel_values, dim=0)
-        image_masks = torch.stack(image_masks, dim=0)
-
-        return_data = {**tokenized, "pixel_values": pixel_values, "image_masks": image_masks}
+        return_data = {
+            **text_inputs,
+            "pixel_values": padded_pixel_values,
+            "pixel_attention_mask": pixel_attention_mask,
+        }
         return BatchFeature(data=return_data, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (list[list[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
         vision_data = {}
         if image_sizes is not None:
             num_image_tokens = [self.image_seq_length] * len(image_sizes)
@@ -144,14 +155,7 @@ class PI0Processor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        tokenizer_input_names = list(self.tokenizer.model_input_names)
-        if "token_type_ids" not in tokenizer_input_names:
-            tokenizer_input_names.append("token_type_ids")
-        image_input_names = list(self.image_processor.model_input_names)
-        names = tokenizer_input_names + image_input_names
-        if "image_masks" not in names:
-            names.append("image_masks")
-        return names
+        return super().model_input_names + ["image_masks"]
 
 
 __all__ = ["PI0Processor"]

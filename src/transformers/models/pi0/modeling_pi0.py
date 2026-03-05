@@ -119,7 +119,7 @@ class PI0Model(PI0PreTrainedModel):
         action_embeds (`torch.Tensor`, *optional*): args description placeholder
         pixel_attention_mask (`torch.Tensor`, *optional*): args description placeholder
         """
-        if pixel_values is not None:
+        if pixel_values is not None and past_key_values is None:
             # Pi0 never passes positions, so we need to infer manually
             if attention_mask is not None and position_ids is None:
                 position_ids = attention_mask.cumsum(-1) - 1
@@ -150,16 +150,20 @@ class PI0Model(PI0PreTrainedModel):
                 device=attention_mask.device,
             )
             dit_attention_mask = torch.cat([attention_mask, noise_mask], dim=1)
-            dit_position_ids = (torch.cumsum(dit_attention_mask, dim=1) - 1)[:, -action_embeds.shape[1]:]
+            dit_position_ids = (torch.cumsum(dit_attention_mask, dim=1) - 1)[:, -action_embeds.shape[1] :]
 
         bidirectional_mask = create_bidirectional_mask(
-            config=self.config,
+            config=self.config.dit_config,
             inputs_embeds=action_embeds,
             attention_mask=dit_attention_mask,
             past_key_values=past_key_values,
+            # and_mask_function=packed_sequence_mask_function(cum_block_lengths),  # always 2 state tokens
         )
+        bidirectional_mask[0, 0, 0, -50:] = torch.finfo(action_embeds.dtype).min
 
-        action_embeds = action_embeds / torch.tensor(self.config.dit_config.hidden_size**0.5, dtype=action_embeds.dtype)
+        action_embeds = action_embeds / torch.tensor(
+            self.config.dit_config.hidden_size**0.5, dtype=action_embeds.dtype
+        )
         dit_output = self.dit(
             inputs_embeds=action_embeds,
             attention_mask=bidirectional_mask,
@@ -222,7 +226,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
                 self.config.chunk_size,
                 self.config.max_action_dim,
                 device=device,
-                dtype=pixel_values.dtype,
+                dtype=state.dtype,
             )
 
         # 3. If training: merge noise with the ground truth actions (aka labels)
@@ -249,6 +253,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             **kwargs,
         )
         last_hidden_states = outputs.last_hidden_state[:, -self.config.chunk_size :]
+        last_hidden_states = last_hidden_states.to(dtype=torch.float32)
         predicted_velocity = self.action_out_proj(last_hidden_states)
 
         loss = None
@@ -283,19 +288,26 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
 
         # 1. Sample random noise
         if noise is None:
-            noise = torch.randn(
-                batch_size,
-                self.config.chunk_size,
-                self.config.max_action_dim,
-                device=device,
+            noise = torch.normal(
+                mean=0.0,
+                std=1.0,
+                size=(
+                    batch_size,
+                    self.config.chunk_size,
+                    self.config.max_action_dim,
+                ),
                 dtype=pixel_values.dtype,
+                device=device,
             )
 
-        # 2. Run VLM once and obtain prefix cache
+        # 2. Run VLM once and obtain prefix cache. Must infer positions here!
+        if attention_mask is not None:
+            position_ids = attention_mask.cumsum(-1) - 1
         output = self.model.vlm(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             use_cache=True,
             return_dict=True,
         )
@@ -308,18 +320,16 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             time = 1.0 + step * dt
             time_tensor = torch.tensor(time, dtype=torch.float32, device=device).expand(batch_size)
             output = self(
-                pixel_attention_mask=pixel_attention_mask,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
                 state=state,
                 noise=noise,
                 timestep=time_tensor,
+                pixel_attention_mask=pixel_attention_mask,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
             )
 
             # We need to keep only the "vlm-prefix", no attention to past denoising steps!
-            if past_key_values is not None:
-                past_key_values.crop(prefix_length)
-
+            past_key_values.crop(prefix_length)
             noise = noise + dt * output.logits
         return noise
 

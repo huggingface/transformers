@@ -13,12 +13,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch PI0 model."""
 
-import unittest
 import math
+import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, PI0Config, PI0ForConditionalGeneration, is_torch_available
-from transformers.testing_utils import require_torch, slow
 from transformers.image_utils import load_image
+from transformers import PI0Processor, AutoProcessor, PI0Config, PI0ForConditionalGeneration, is_torch_available
+from transformers.testing_utils import require_torch, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -181,10 +181,11 @@ class PI0ModelSmokeTest(unittest.TestCase):
 class PI0ModelIntegrationTest(unittest.TestCase):
     def test_pi0_base_reference_values(self):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.float32).eval()
-        processor = AutoProcessor.from_pretrained("google/paligemma-3b-pt-224")
+        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
 
-        inputs = processor.tokenizer(
+        inputs = processor(
             text=["Pick up the object\n"],
+            images=load_image("/raid/raushan/image.png"),
             padding="max_length",
             truncation=True,
             max_length=48,
@@ -192,8 +193,9 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         )
         input_ids = inputs["input_ids"]
         attention_mask = inputs["attention_mask"]
-        input_ids = torch.cat([torch.tensor([[256000] * 256]), input_ids], dim=-1)
-        attention_mask = torch.cat([torch.tensor([[1] * 256]), attention_mask], dim=-1)
+        print(input_ids)
+        # input_ids = torch.cat([torch.tensor([[256000] * 256]), input_ids], dim=-1)
+        # attention_mask = torch.cat([torch.tensor([[1] * 256]), attention_mask], dim=-1)
 
         torch.manual_seed(42)
         pixel_values = torch.randn(1, 3, 224, 224)
@@ -212,30 +214,33 @@ class PI0ModelIntegrationTest(unittest.TestCase):
             suffix_embs[0, 0, :4], torch.tensor([-0.7092, -0.5197, -0.7360, -2.2933]), atol=1e-3, rtol=1e-3
         )
         torch.testing.assert_close(
-            suffix_embs[0, -1, :4], torch.tensor([-4.3729, -3.0147, -0.4809,  0.4930]), atol=1e-3, rtol=1e-3
+            suffix_embs[0, -1, :4], torch.tensor([-4.3729, -3.0147, -0.4809, 0.4930]), atol=1e-3, rtol=1e-3
         )
-    
+
         with torch.no_grad():
             image_emb = model.model.vlm.get_image_features(pixel_values)
-            token_emb = model.get_input_embeddings()(input_ids)
-            token_emb[input_ids == 256000] = image_emb.pooler_output
+            llm_input_ids = input_ids.clone()
+            llm_input_ids[input_ids == 257152] = 0
+            token_emb = model.get_input_embeddings()(llm_input_ids)
+            token_emb[input_ids == 257152] = image_emb.pooler_output
             # FIXME: remove after https://github.com/huggingface/transformers/pull/44432 is merged!
             prefix_embs = token_emb * math.sqrt(2048)
 
+        print(model.get_input_embeddings().weight.data[0])
         self.assertEqual(prefix_embs.shape, (1, 304, 2048))
-        self.assertAlmostEqual(prefix_embs.mean().item(), 0.0222, places=3)
+        self.assertAlmostEqual(prefix_embs.mean().item(), 0.0212, places=3)
         print(prefix_embs.shape, prefix_embs[0, 0, :4], prefix_embs[0, -1, :4])
         torch.testing.assert_close(
             prefix_embs[0, 0, :4], torch.tensor([2.6215, -0.2010, -0.0071, -0.0147]), atol=1e-3, rtol=1e-3
         )
         torch.testing.assert_close(
-            prefix_embs[0, -1, :4], torch.tensor([12.5511, -1.4584, -8.4411,  2.1213]), atol=1e-3, rtol=1e-3
+            prefix_embs[0, -1, :4], torch.tensor([12.5511, -1.4584, -8.4411, 2.1213]), atol=1e-3, rtol=1e-3
         )
 
         with torch.no_grad():
             outputs = model(
                 pixel_values=pixel_values,
-                pxiel_attention_mask=image_masks,
+                pixel_attention_mask=image_masks,
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 state=state,
@@ -247,21 +252,22 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         self.assertAlmostEqual(outputs.loss.mean().item(), 3.8777, places=3)
 
         torch.manual_seed(99)
+        model.model.dit.config._attn_implementation = "eager"  # as per LeRobot impl
         with torch.no_grad():
             sampled = model.sample_actions(
                 pixel_values=pixel_values,
-                pxiel_attention_mask=image_masks,
+                pixel_attention_mask=image_masks,
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 state=state,
                 num_steps=3,
             )
         self.assertEqual(sampled.shape, (1, 50, 32))
+        print(sampled.mean(), sampled.std(), sampled[0, 0, :4], sampled[0, -1, :4])
         self.assertAlmostEqual(sampled.mean().item(), -0.0617, places=3)
         self.assertAlmostEqual(sampled.std().item(), 0.2745, places=3)
         # expectations if norm scale is applied in lerobot branch gemma model
         # tensor(0.0221) tensor(0.1538) tensor([ 0.1157,  0.3089, -0.1434,  0.2252]) tensor([0.0727, 0.0602, 0.0654, 0.2240])
-        print(sampled.mean(), sampled.std(), sampled[0, 0, :4], sampled[0, -1, :4])
         torch.testing.assert_close(
             sampled[0, 0, :4], torch.tensor([-0.1905, -0.5732, -0.5487, 0.6403]), atol=1e-3, rtol=1e-3
         )
