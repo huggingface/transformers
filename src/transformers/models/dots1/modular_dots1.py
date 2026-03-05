@@ -91,6 +91,7 @@ class Dots1DecoderLayer(DeepseekV3DecoderLayer):
 
 
 class Dots1PreTrainedModel(DeepseekV3PreTrainedModel):
+    _preload_module_classes = ["Dots1MoE"]
     _keys_to_ignore_on_load_unexpected = None
 
 

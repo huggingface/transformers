@@ -13,12 +13,13 @@
 # limitations under the License.
 """Testing suite for the PyTorch DeepseekV32 model."""
 
+import tempfile
 import unittest
 
 from parameterized import parameterized
 
 from transformers import AutoModel, AutoModelForCausalLM, Cache, DeepseekV32Config, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator
+from transformers.testing_utils import require_accelerate, require_torch, require_torch_accelerator
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_configuration_common import ConfigTester
@@ -26,6 +27,8 @@ from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERI
 
 
 if is_torch_available():
+    import torch
+
     from transformers import DeepseekV32ForCausalLM, DeepseekV32Model
 
 
@@ -116,6 +119,55 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(config.rope_parameters["factor"], 40.0)
         self.assertEqual(config.rope_parameters["beta_fast"], 32.0)
         self.assertEqual(config.rope_parameters["beta_slow"], 1.0)
+
+    @require_accelerate
+    def test_disk_offloaded_moe_preloads_gate_and_experts(self):
+        config = DeepseekV32Config(
+            vocab_size=128,
+            hidden_size=64,
+            intermediate_size=128,
+            moe_intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            qk_nope_head_dim=16,
+            qk_rope_head_dim=8,
+            v_head_dim=16,
+            q_lora_rank=32,
+            kv_lora_rank=32,
+            n_routed_experts=8,
+            num_local_experts=8,
+            num_experts_per_tok=2,
+            n_shared_experts=1,
+            first_k_dense_replace=0,
+            n_group=2,
+            topk_group=1,
+        )
+        model = DeepseekV32ForCausalLM(config).eval()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+
+            offloaded_model = DeepseekV32ForCausalLM.from_pretrained(
+                tmp_dir,
+                device_map={
+                    "model.embed_tokens": "cpu",
+                    "model.layers.0.input_layernorm": "cpu",
+                    "model.layers.0.self_attn": "cpu",
+                    "model.layers.0.post_attention_layernorm": "cpu",
+                    "model.layers.0.mlp": "disk",
+                    "model.norm": "cpu",
+                    "lm_head": "cpu",
+                },
+                offload_folder=f"{tmp_dir}/offload",
+                offload_buffers=True,
+                low_cpu_mem_usage=True,
+            ).eval()
+
+            input_ids = torch.tensor([[1, 2, 3, 4]])
+            outputs = offloaded_model(input_ids=input_ids)
+
+        self.assertEqual(outputs.logits.shape, (1, 4, config.vocab_size))
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         self.assertIsInstance(past_key_values, Cache)

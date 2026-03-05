@@ -550,6 +550,7 @@ class DeepseekV32DecoderLayer(LlamaDecoderLayer):
 class DeepseekV32PreTrainedModel(LlamaPreTrainedModel):
     _keep_in_fp32_modules = ["indexer.weights_proj"]
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _preload_module_classes = ["DeepseekV32MoE"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
     _supports_flash_attn = False
     _supports_sdpa = True

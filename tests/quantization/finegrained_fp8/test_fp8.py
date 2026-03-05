@@ -202,6 +202,13 @@ class FP8QuantizerTest(unittest.TestCase):
             quantizer.validate_environment()
             self.assertTrue(quantizer.quantization_config.dequantize)
 
+    def test_prequantized_model_allows_disk_offload(self):
+        config = FineGrainedFP8Config()
+        quantizer = FineGrainedFP8HfQuantizer(config)
+        quantizer.pre_quantized = True
+
+        quantizer.validate_environment(device_map={"model.embed_tokens": 0, "model.layers.0": "disk"})
+
     def test_quantized_model(self):
         """
         Simple test that checks if the quantized model is working properly

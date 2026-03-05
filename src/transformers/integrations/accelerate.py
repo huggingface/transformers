@@ -20,7 +20,9 @@ import copy
 import inspect
 import os
 import re
+from collections.abc import Mapping
 from collections import OrderedDict, defaultdict
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 from safetensors import safe_open
@@ -42,7 +44,7 @@ if is_torch_available():
     import torch.nn as nn
 
 if is_accelerate_available():
-    from accelerate import dispatch_model
+    from accelerate import big_modeling, dispatch_model, hooks as accelerate_hooks
     from accelerate.utils import get_max_memory
     from accelerate.utils.modeling import clean_device_map, get_max_layer_size
 
@@ -52,6 +54,140 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
+
+
+def _attach_align_device_hook_on_blocks_for_preload(
+    module: "nn.Module",
+    execution_device=None,
+    offload=False,
+    weights_map=None,
+    offload_buffers: bool = False,
+    module_name: str = "",
+    skip_keys=None,
+    preload_module_classes: list[str] | None = None,
+    tied_params_map: dict[int, dict["torch.device", "torch.Tensor"]] | None = None,
+):
+    """
+    Compatibility shim for `accelerate` releases that keep recursing into children after attaching a preloaded
+    parent block hook. When `preload_module_classes` is active, the parent hook already manages its submodules.
+    """
+    if not isinstance(execution_device, Mapping) and not isinstance(offload, dict):
+        if not offload:
+            hook = accelerate_hooks.AlignDevicesHook(
+                execution_device=execution_device,
+                io_same_device=True,
+                skip_keys=skip_keys,
+                place_submodules=True,
+                tied_params_map=tied_params_map,
+            )
+            accelerate_hooks.add_hook_to_module(module, hook)
+        else:
+            accelerate_hooks.attach_align_device_hook(
+                module,
+                execution_device=execution_device,
+                offload=True,
+                weights_map=weights_map,
+                offload_buffers=offload_buffers,
+                module_name=module_name,
+                skip_keys=skip_keys,
+                tied_params_map=tied_params_map,
+            )
+        return
+
+    if not isinstance(execution_device, Mapping):
+        execution_device = {key: execution_device for key in offload.keys()}
+    if not isinstance(offload, Mapping):
+        offload = {key: offload for key in execution_device.keys()}
+
+    should_stop_recursion = (
+        preload_module_classes is not None
+        and module.__class__.__name__ in preload_module_classes
+        and module_name in execution_device
+        and module_name in offload
+    )
+
+    if module_name in execution_device and module_name in offload and not offload[module_name]:
+        hook = accelerate_hooks.AlignDevicesHook(
+            execution_device=execution_device[module_name],
+            offload_buffers=offload_buffers,
+            io_same_device=(module_name == ""),
+            place_submodules=True,
+            skip_keys=skip_keys,
+            tied_params_map=tied_params_map,
+        )
+        accelerate_hooks.add_hook_to_module(module, hook)
+        accelerate_hooks.attach_execution_device_hook(
+            module, execution_device[module_name], skip_keys=skip_keys, tied_params_map=tied_params_map
+        )
+    elif module_name in execution_device and module_name in offload:
+        accelerate_hooks.attach_align_device_hook(
+            module,
+            execution_device=execution_device[module_name],
+            offload=True,
+            weights_map=weights_map,
+            offload_buffers=offload_buffers,
+            module_name=module_name,
+            skip_keys=skip_keys,
+            preload_module_classes=preload_module_classes,
+            tied_params_map=tied_params_map,
+        )
+        if not hasattr(module, "_hf_hook"):
+            hook = accelerate_hooks.AlignDevicesHook(
+                execution_device=execution_device[module_name],
+                io_same_device=(module_name == ""),
+                skip_keys=skip_keys,
+                tied_params_map=tied_params_map,
+            )
+            accelerate_hooks.add_hook_to_module(module, hook)
+        accelerate_hooks.attach_execution_device_hook(
+            module,
+            execution_device[module_name],
+            preload_module_classes=preload_module_classes,
+            skip_keys=skip_keys,
+            tied_params_map=tied_params_map,
+        )
+    elif module_name == "":
+        hook = accelerate_hooks.AlignDevicesHook(
+            execution_device=execution_device.get(""),
+            io_same_device=True,
+            skip_keys=skip_keys,
+            tied_params_map=tied_params_map,
+        )
+        accelerate_hooks.add_hook_to_module(module, hook)
+
+    if should_stop_recursion:
+        return
+
+    for child_name, child in module.named_children():
+        child_name = f"{module_name}.{child_name}" if len(module_name) > 0 else child_name
+        _attach_align_device_hook_on_blocks_for_preload(
+            child,
+            execution_device=execution_device,
+            offload=offload,
+            weights_map=weights_map,
+            offload_buffers=offload_buffers,
+            module_name=child_name,
+            preload_module_classes=preload_module_classes,
+            skip_keys=skip_keys,
+            tied_params_map=tied_params_map,
+        )
+
+
+@contextmanager
+def _patched_preload_module_dispatch(preload_module_classes: list[str] | None):
+    if preload_module_classes is None:
+        yield
+        return
+
+    original_big_modeling = big_modeling.attach_align_device_hook_on_blocks
+    original_hooks = accelerate_hooks.attach_align_device_hook_on_blocks
+    big_modeling.attach_align_device_hook_on_blocks = _attach_align_device_hook_on_blocks_for_preload
+    accelerate_hooks.attach_align_device_hook_on_blocks = _attach_align_device_hook_on_blocks_for_preload
+    try:
+        yield
+    finally:
+        big_modeling.attach_align_device_hook_on_blocks = original_big_modeling
+        accelerate_hooks.attach_align_device_hook_on_blocks = original_hooks
 
 
 def get_module_size_with_ties(
@@ -362,6 +498,7 @@ def _get_device_map(
 
 
 def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload_index, offload_buffers):
+    preload_module_classes = None
     device_map_kwargs = {
         "device_map": device_map,
         "offload_dir": offload_folder,
@@ -370,6 +507,10 @@ def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload
     }
     if "skip_keys" in inspect.signature(dispatch_model).parameters:
         device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
+    if "preload_module_classes" in inspect.signature(dispatch_model).parameters:
+        preload_module_classes = getattr(model, "_preload_module_classes", None)
+        if preload_module_classes is not None:
+            device_map_kwargs["preload_module_classes"] = preload_module_classes
     # For HQQ method we force-set the hooks for single GPU envs
     if (
         "force_hooks" in inspect.signature(dispatch_model).parameters
@@ -386,7 +527,8 @@ def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload
         device_map_kwargs["offload_buffers"] = True
 
     if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
-        dispatch_model(model, **device_map_kwargs)
+        with _patched_preload_module_dispatch(preload_module_classes):
+            dispatch_model(model, **device_map_kwargs)
 
 
 def expand_device_map(device_map: dict | None, param_names: list[str]):
