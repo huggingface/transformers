@@ -359,3 +359,44 @@ Implement RF-DETR in Transformers based on `/Users/nielsrogge/Documents/python_p
 - [x] Conclusion:
   - We should **not** remap `rf_detr` to DETR image processors in `src/transformers/models/auto/image_processing_auto.py`.
   - No mapping change made.
+
+## 2026-03-05 Base Conversion Verification Fix (rf-detr-base)
+- [x] Reproduced user-reported failure when running:
+  - `.venv/bin/python src/transformers/models/rf_detr/convert_rf_detr_to_hf.py --model_name base --original_repo_path /Users/nielsrogge/Documents/python_projecten/rf-detr --pytorch_dump_folder_path . --verify_with_original`
+  - Original failure: assertion in upstream backbone requiring input shape divisible by `56`, while converter verification used `518x518`.
+- [x] Root cause analysis:
+  - `_prepare_checkpoint_args` was always overriding `resolution` with the image size inferred from position embeddings.
+  - For `rf-detr-base`, checkpoint args contain `resolution=560` (valid for windowed block size `56`), but position embeddings are `37x37` (`518` image size), so verification input became `518` and failed upstream assert.
+  - After stopping this override, conversion load then exposed a second issue: HF config `image_size=560` mismatched checkpoint positional embeddings shape (`1370` vs expected `1601`).
+- [x] Implemented fix in `src/transformers/models/rf_detr/convert_rf_detr_to_hf.py`:
+  - `_prepare_checkpoint_args`: only infer/assign `resolution` from position embeddings when `resolution` is missing.
+  - Added a split between:
+    - preprocessing/verification resolution (kept from checkpoint args, e.g. `560` for base),
+    - backbone config image size (inferred from position embeddings when available, e.g. `518` for base) so checkpoint tensors load without shape mismatch.
+  - `build_rf_detr_config_from_checkpoint` now accepts `backbone_image_size`.
+  - `_build_model_and_processors` now accepts `processor_image_size` so saved image processors use checkpoint resolution.
+  - `build_original_rfdetr_model` now accepts `state_dict` and infers `positional_encoding_size` from checkpoint position embeddings for verification model reconstruction.
+- [x] Verified fix end-to-end (existing `.venv`):
+  - Command:
+    `.venv/bin/python src/transformers/models/rf_detr/convert_rf_detr_to_hf.py --model_name base --original_repo_path /Users/nielsrogge/Documents/python_projecten/rf-detr --pytorch_dump_folder_path . --verify_with_original`
+  - Result: conversion succeeded (`Missing keys: 0`, `Unexpected keys: 0`) and verification completed successfully against original implementation.
+  - Key parity metrics:
+    - `max_abs_preprocess_diff=0.0`
+    - `max_abs_logits_diff=8.86917e-05`
+    - `max_abs_boxes_diff=1.153946e-04`
+    - postprocess diffs (`scores`/`boxes`) `=0.0`, labels match `True`.
+- [x] Regression check:
+  - Re-ran `small` conversion/verification with existing `.venv` and parity still passes (`Missing keys: 0`, `Unexpected keys: 0`; preprocessing and postprocess checks pass).
+
+## 2026-03-05 Full Model-Name Conversion Sweep
+- [x] Verified conversion for **all supported `--model_name` values** using existing `.venv` with `--verify_with_original`, outputting converted artifacts under `/tmp/rf-detr-convert-all` and per-model logs under `/tmp/rf-detr-convert-all/logs`.
+- [x] Object detection models:
+  - `nano`, `small`, `medium`, `large`, `base`, `base-2`, `base-o365` -> all pass.
+- [x] Instance segmentation models:
+  - `seg-preview`, `seg-nano`, `seg-small`, `seg-medium`, `seg-large`, `seg-xlarge`, `seg-2xlarge` -> all pass.
+- [x] Fix applied during sweep:
+  - Initial `base-o365` verification failed in original-model reconstruction with:
+    - `ValueError: peft.__spec__ is None`
+  - Updated PEFT compatibility shim in `src/transformers/models/rf_detr/convert_rf_detr_to_hf.py` to set:
+    - `peft.__spec__ = importlib.machinery.ModuleSpec("peft", loader=None)`
+  - Re-ran `base-o365`; it then passed.

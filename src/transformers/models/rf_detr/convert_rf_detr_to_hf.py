@@ -34,6 +34,7 @@ python src/transformers/models/rf_detr/convert_rf_detr_to_hf.py --model_name sma
 
 import argparse
 import importlib
+import importlib.machinery
 import json
 import math
 import os
@@ -658,7 +659,7 @@ def _prepare_checkpoint_args(
         normalized_args["dinov2_num_windows"] = default_num_windows
 
     patch_size = normalized_args.get("patch_size", normalized_args.get("dinov2_patch_size"))
-    if patch_size is not None:
+    if normalized_args.get("resolution") is None and patch_size is not None:
         inferred_image_size = _infer_image_size_from_position_embeddings(state_dict, patch_size)
         if inferred_image_size is not None:
             normalized_args["resolution"] = inferred_image_size
@@ -800,6 +801,7 @@ def _ensure_original_rfdetr_importable(original_repo_path: str):
     # RF-DETR imports peft even when not used.
     if "peft" not in sys.modules:
         peft = types.ModuleType("peft")
+        peft.__spec__ = importlib.machinery.ModuleSpec("peft", loader=None)
 
         class PeftModel(torch.nn.Module):
             pass
@@ -811,6 +813,7 @@ def _ensure_original_rfdetr_importable(original_repo_path: str):
 def build_original_rfdetr_model(
     original_repo_path: str,
     checkpoint_args,
+    state_dict: dict[str, torch.Tensor] | None = None,
 ):
     _ensure_original_rfdetr_importable(original_repo_path)
     original_modeling = importlib.import_module("rfdetr.models.lwdetr")
@@ -844,7 +847,20 @@ def build_original_rfdetr_model(
     _with_default(args, "backbone_only", False)
     _with_default(args, "patch_size", getattr(args, "dinov2_patch_size", 14))
     _with_default(args, "num_windows", getattr(args, "dinov2_num_windows", 1))
-    _with_default(args, "positional_encoding_size", args.resolution // args.patch_size)
+
+    inferred_positional_encoding_size = None
+    if state_dict is not None:
+        inferred_image_size = _infer_image_size_from_position_embeddings(state_dict, args.patch_size)
+        if inferred_image_size is not None:
+            inferred_positional_encoding_size = inferred_image_size // args.patch_size
+
+    _with_default(
+        args,
+        "positional_encoding_size",
+        inferred_positional_encoding_size
+        if inferred_positional_encoding_size is not None
+        else args.resolution // args.patch_size,
+    )
 
     model = original_modeling.build_model(args).eval()
     return model
@@ -856,7 +872,11 @@ def build_original_rfdetr_postprocessor(original_repo_path: str, num_select: int
     return original_modeling.PostProcess(num_select=num_select).eval()
 
 
-def build_rf_detr_config_from_checkpoint(checkpoint_args: dict, num_labels: int | None = None) -> RfDetrConfig:
+def build_rf_detr_config_from_checkpoint(
+    checkpoint_args: dict,
+    num_labels: int | None = None,
+    backbone_image_size: int | None = None,
+) -> RfDetrConfig:
     encoder_name = _get_checkpoint_arg(checkpoint_args, "encoder")
     if "small" in encoder_name:
         hidden_size = 384
@@ -882,7 +902,9 @@ def build_rf_detr_config_from_checkpoint(checkpoint_args: dict, num_labels: int 
 
     backbone_config = {
         "model_type": "rf_detr_windowed_dinov2",
-        "image_size": _get_checkpoint_arg(checkpoint_args, "resolution"),
+        "image_size": backbone_image_size
+        if backbone_image_size is not None
+        else _get_checkpoint_arg(checkpoint_args, "resolution"),
         "patch_size": patch_size,
         "hidden_size": hidden_size,
         "num_hidden_layers": num_hidden_layers,
@@ -925,11 +947,14 @@ def _extract_num_labels_from_state_dict(state_dict: dict[str, torch.Tensor]) -> 
 
 
 def _build_model_and_processors(
-    config: RfDetrConfig, is_instance_segmentation: bool, num_top_queries: int
+    config: RfDetrConfig,
+    is_instance_segmentation: bool,
+    num_top_queries: int,
+    processor_image_size: int | None = None,
 ) -> tuple[torch.nn.Module, RfDetrImageProcessor, RfDetrImageProcessorFast]:
     model_class = RfDetrForInstanceSegmentation if is_instance_segmentation else RfDetrForObjectDetection
     model = model_class(config).eval()
-    image_size = config.backbone_config.image_size
+    image_size = processor_image_size if processor_image_size is not None else config.backbone_config.image_size
     processor_kwargs = {"size": {"height": image_size, "width": image_size}, "num_top_queries": num_top_queries}
     image_processor = RfDetrImageProcessor(**processor_kwargs)
     image_processor_fast = RfDetrImageProcessorFast(**processor_kwargs)
@@ -1106,7 +1131,9 @@ def _verify_conversion_with_original(
     if checkpoint_num_labels is not None:
         original_checkpoint_args["num_classes"] = checkpoint_num_labels - 1
 
-    original_model = build_original_rfdetr_model(original_repo_path, original_checkpoint_args)
+    original_model = build_original_rfdetr_model(
+        original_repo_path, original_checkpoint_args, state_dict=original_state_dict
+    )
     original_model.load_state_dict(original_state_dict, strict=True)
     original_model.eval()
 
@@ -1213,7 +1240,16 @@ def convert_rf_detr_checkpoint(
         model_spec_suffix = f" ({resolved_model_task})" if resolved_model_task is not None else ""
         print(f"Resolved RF-DETR model variant: {resolved_model_name}{model_spec_suffix}")
 
-    config = build_rf_detr_config_from_checkpoint(checkpoint_args, num_labels=checkpoint_num_labels)
+    patch_size = int(_get_checkpoint_arg(checkpoint_args, "patch_size", "dinov2_patch_size"))
+    inferred_backbone_image_size = _infer_image_size_from_position_embeddings(state_dict, patch_size)
+    if inferred_backbone_image_size is None:
+        inferred_backbone_image_size = int(_get_checkpoint_arg(checkpoint_args, "resolution"))
+
+    config = build_rf_detr_config_from_checkpoint(
+        checkpoint_args,
+        num_labels=checkpoint_num_labels,
+        backbone_image_size=inferred_backbone_image_size,
+    )
     label_dataset_name = _resolve_label_dataset_name(
         checkpoint_args=checkpoint_args,
         resolved_model_name=resolved_model_name,
@@ -1233,12 +1269,13 @@ def convert_rf_detr_checkpoint(
         "segmentation_head", False
     )
     num_top_queries = int(checkpoint_args.get("num_select", config.num_queries))
-    image_size = int(config.backbone_config.image_size)
+    image_size = int(_get_checkpoint_arg(checkpoint_args, "resolution"))
 
     model, image_processor, image_processor_fast = _build_model_and_processors(
         config=config,
         is_instance_segmentation=is_instance_segmentation,
         num_top_queries=num_top_queries,
+        processor_image_size=image_size,
     )
     original_state_dict = dict(state_dict)
     converted_state_dict = _convert_state_dict(state_dict, config, is_instance_segmentation)
