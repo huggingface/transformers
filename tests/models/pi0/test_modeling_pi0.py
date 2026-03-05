@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch PI0 model."""
 
-import math
 import unittest
 
 from transformers import PI0Config, PI0ForConditionalGeneration, PI0Processor, is_torch_available
@@ -195,7 +194,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         attention_mask = inputs["attention_mask"]
 
         torch.manual_seed(42)
-        pixel_values = torch.randn(1, 3, 224, 224)
+        pixel_values = torch.randn(1, 1, 3, 224, 224)
         image_masks = torch.tensor([[True]])
         state = torch.randn(1, 32)
         actions = torch.randn(1, 50, 32)
@@ -215,13 +214,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         )
 
         with torch.no_grad():
-            image_emb = model.model.vlm.get_image_features(pixel_values)
-            llm_input_ids = input_ids.clone()
-            llm_input_ids[input_ids == 257152] = 0
-            token_emb = model.get_input_embeddings()(llm_input_ids)
-            token_emb[input_ids == 257152] = image_emb.pooler_output
-            # FIXME: remove after https://github.com/huggingface/transformers/pull/44432 is merged!
-            prefix_embs = token_emb * math.sqrt(2048)
+            prefix_embs = model.model.embed_prefix(input_ids, pixel_values, pixel_attention_mask=image_masks)
 
         self.assertEqual(prefix_embs.shape, (1, 304, 2048))
         self.assertAlmostEqual(prefix_embs.mean().item(), 0.0212, places=3)

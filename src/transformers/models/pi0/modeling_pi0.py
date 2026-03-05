@@ -101,6 +101,29 @@ class PI0Model(PI0PreTrainedModel):
     def set_input_embeddings(self, value):
         self.vlm.set_input_embeddings(value)
 
+    def embed_prefix(self, input_ids, pixel_values, pixel_attention_mask):
+        # Maybe just unpad images instead of using the mask?
+        max_num_cameras = pixel_attention_mask.shape[1]
+        pixel_values = pixel_values.flatten(0, 1)
+        image_features = self.vlm.get_image_features(pixel_values).pooler_output
+        image_features = image_features.reshape(-1, max_num_cameras, image_features.shape[1], image_features.shape[2])
+
+        total_image_features = []
+        for batch_idx, mask in enumerate(pixel_attention_mask):
+            unpadded_image_features = image_features[batch_idx][mask]
+            total_image_features.append(unpadded_image_features)
+        total_image_features = torch.cat(total_image_features, dim=0)
+
+        llm_input_ids = input_ids.clone()
+        llm_input_ids[input_ids == self.config.vlm_config.image_token_id] = 0
+        inputs_embeds = self.vlm.get_input_embeddings()(llm_input_ids)
+        inputs_embeds[input_ids == self.config.vlm_config.image_token_id] = total_image_features
+
+        # FIXME: remove after https://github.com/huggingface/transformers/pull/44432 is merged!
+        inputs_embeds = inputs_embeds * math.sqrt(2048)
+
+        return inputs_embeds
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -123,16 +146,18 @@ class PI0Model(PI0PreTrainedModel):
             # Pi0 never passes positions, so we need to infer manually
             if attention_mask is not None and position_ids is None:
                 position_ids = attention_mask.cumsum(-1) - 1
-            vlm_output = self.vlm(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
+
+            if inputs_embeds is None:
+                inputs_embeds = self.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
+                inputs_embeds = inputs_embeds / math.sqrt(2048)
+
+            past_key_values = self.vlm(
+                inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                inputs_embeds=inputs_embeds,
                 past_key_values=None,  # `None` on purpose
                 use_cache=True,
-            )
-            past_key_values = vlm_output.past_key_values
+            ).past_key_values
 
         # Mask for images, text and noise is bidirectional but we still need to know
         # if there are any pad tokens in the text
@@ -140,9 +165,8 @@ class PI0Model(PI0PreTrainedModel):
             raise ValueError("Only two-dimensional attention masks are accepted for now!")
 
         # Merge masks if needed, same for position ids
-        # TODO: why we need `pixel_attention_mask` and can it be zero, in which cases?
         dit_position_ids = dit_attention_mask = None
-        if pixel_attention_mask is not None and attention_mask is not None:
+        if attention_mask is not None:
             noise_mask = torch.ones(
                 action_embeds.shape[0],
                 action_embeds.shape[1],
@@ -303,9 +327,10 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         # 2. Run VLM once and obtain prefix cache. Must infer positions here!
         if attention_mask is not None:
             position_ids = attention_mask.cumsum(-1) - 1
+        inputs_embeds = self.model.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
+        inputs_embeds = inputs_embeds / math.sqrt(2048)
         output = self.model.vlm(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             use_cache=True,
