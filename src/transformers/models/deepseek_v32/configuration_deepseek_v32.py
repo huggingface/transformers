@@ -30,6 +30,74 @@ class DeepseekV32Config(PreTrainedConfig):
     [`DeepseekV3Config`] with the Dynamic Sparse Attention (DSA) indexer parameters introduced in DeepSeek-V3.2.
 
     Args:
+        vocab_size (`int`, *optional*, defaults to 129280):
+            Vocabulary size of the model.
+        hidden_size (`int`, *optional*, defaults to 7168):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 18432):
+            Dimension of the dense MLP representations.
+        moe_intermediate_size (`int`, *optional*, defaults to 2048):
+            Dimension of the MoE expert representations.
+        num_hidden_layers (`int`, *optional*, defaults to 61):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 128):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*, defaults to 128):
+            Number of key-value heads used for grouped-query attention.
+        n_shared_experts (`int`, *optional*, defaults to 1):
+            Number of shared experts in MoE layers.
+        n_routed_experts (`int`, *optional*, defaults to 256):
+            Number of routed experts in MoE layers.
+        routed_scaling_factor (`float`, *optional*, defaults to 2.5):
+            Scaling factor applied to routed experts.
+        kv_lora_rank (`int`, *optional*, defaults to 512):
+            Rank of the LoRA matrices for key and value projections.
+        q_lora_rank (`int`, *optional*, defaults to 1536):
+            Rank of the LoRA matrices for query projections.
+        qk_rope_head_dim (`int`, *optional*, defaults to 64):
+            Dimension of the query/key heads that use rotary position embeddings.
+        v_head_dim (`int`, *optional*, defaults to 128):
+            Dimension of the value heads.
+        qk_nope_head_dim (`int`, *optional*, defaults to 128):
+            Dimension of the query/key heads that do not use rotary position embeddings.
+        n_group (`int`, *optional*, defaults to 8):
+            Number of groups for routed experts.
+        topk_group (`int`, *optional*, defaults to 4):
+            Number of selected groups for each token.
+        num_experts_per_tok (`int`, *optional*, defaults to 8):
+            Number of experts selected per token.
+        first_k_dense_replace (`int`, *optional*, defaults to 3):
+            Number of dense layers before switching to MoE layers.
+        norm_topk_prob (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the weights of the routed experts.
+        hidden_act (`str`, *optional*, defaults to `"silu"`):
+            The non-linear activation function in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 163840):
+            The maximum sequence length the model supports.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            Standard deviation used for weight initialization.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            Epsilon used by RMS normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether to return the last key/value attentions.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 0):
+            Beginning-of-sequence token id.
+        eos_token_id (`int`, *optional*, defaults to 1):
+            End-of-sequence token id.
+        pretraining_tp (`int`, *optional*, defaults to 1):
+            Tensor parallel rank used during pretraining.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie input and output word embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Configuration parameters for the RoPE embeddings.
+        rope_interleave (`bool`, *optional*, defaults to `True`):
+            Whether to interleave the rotary position embeddings.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the attention projections.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout ratio for the attention probabilities.
         index_topk (`int`, *optional*, defaults to 2048):
             Number of top tokens selected by the DSA indexer.
         index_head_dim (`int`, *optional*, defaults to 128):
