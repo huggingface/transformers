@@ -168,7 +168,7 @@ class TrainerDistributedCommon(ABC):
         """Verify that evaluation produces a finite eval loss."""
         output_dir = self.get_auto_remove_tmp_dir()
         eval_output = os.path.join(output_dir, "eval_metrics.json")
-        args = self._get_default_script_args(output_dir) + ["--eval_output_file", eval_output]
+        args = self._get_default_script_args(output_dir) + ["--do_eval", "--eval_output_file", eval_output]
         execute_subprocess_async(
             self.get_accelerate_cmd(TRAIN_SCRIPT, script_args=args, **cmd_kwargs),
             env=self.get_env(),

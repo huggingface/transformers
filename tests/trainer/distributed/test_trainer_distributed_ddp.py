@@ -180,30 +180,64 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
         execute_subprocess_async(cmd, env=self.get_env())
 
     # -----------------------------------------------------------------------
-    # torchrun vs accelerate parity
+    # torchrun vs accelerate env parity
     # -----------------------------------------------------------------------
     @run_first
     @require_torch_multi_accelerator
-    def test_torchrun_accelerate_training_parity(self):
-        """Verify that torchrun and accelerate launch produce identical training losses."""
-        script = os.path.join(SCRIPTS_DIR, "training_parity.py")
+    def test_torchrun_accelerate_env_parity(self):
+        """Verify torchrun and accelerate launch produce the same distributed environment for DDP."""
+        script = os.path.join(SCRIPTS_DIR, "torchrun_env_check.py")
+        num_processes = backend_device_count(torch_device)
 
         torchrun_dir = self.get_auto_remove_tmp_dir()
-        cmd = self.get_torchrun_cmd(script, script_args=["--output_dir", torchrun_dir])
+        cmd = self.get_torchrun_cmd(script, script_args=["--output_dir", torchrun_dir], num_processes=num_processes)
         execute_subprocess_async(cmd, env=self.get_env())
 
         accelerate_dir = self.get_auto_remove_tmp_dir()
-        cmd = self.get_accelerate_cmd(script, DDP_CONFIG_FILE, script_args=["--output_dir", accelerate_dir])
+        cmd = self.get_accelerate_cmd(
+            script, DDP_CONFIG_FILE, script_args=["--output_dir", accelerate_dir], num_processes=num_processes
+        )
         execute_subprocess_async(cmd, env=self.get_env())
 
-        with open(os.path.join(torchrun_dir, "losses.json")) as f:
-            torchrun_losses = json.load(f)
-        with open(os.path.join(accelerate_dir, "losses.json")) as f:
-            accelerate_losses = json.load(f)
+        for rank in range(num_processes):
+            with open(os.path.join(torchrun_dir, f"env_rank{rank}.json")) as f:
+                tr = json.load(f)
+            with open(os.path.join(accelerate_dir, f"env_rank{rank}.json")) as f:
+                ac = json.load(f)
 
-        self.assertEqual(len(torchrun_losses), len(accelerate_losses))
-        for step, (t_loss, a_loss) in enumerate(zip(torchrun_losses, accelerate_losses)):
-            self.assertAlmostEqual(t_loss, a_loss, places=4, msg=f"Loss mismatch at step {step}")
+            for info in (tr, ac):
+                # Rank consistency: env vars, TrainingArguments, and accelerator all agree
+                self.assertEqual(info["env_world_size"], str(num_processes))
+                self.assertEqual(info["env_rank"], str(rank))
+                self.assertEqual(info["env_local_rank"], str(rank))
+                self.assertEqual(info["args_process_index"], rank)
+                self.assertEqual(info["args_local_process_index"], rank)
+                self.assertIn(info["args_local_rank"], (rank, -1))  # may be -1 before framework consumes it
+                self.assertEqual(info["accelerator_process_index"], rank)
+                self.assertEqual(info["accelerator_local_process_index"], rank)
+                self.assertIsNotNone(info["env_master_addr"])
+                self.assertIsNotNone(info["env_master_port"])
+
+                # World size and parallel mode
+                self.assertEqual(info["args_world_size"], num_processes)
+                self.assertEqual(info["args_n_gpu"], 1)
+                self.assertEqual(info["args_parallel_mode"], "ParallelMode.DISTRIBUTED")
+                self.assertEqual(info["accelerator_num_processes"], num_processes)
+                self.assertTrue(info["accelerator_use_distributed"])
+                self.assertEqual(info["accelerator_is_main_process"], rank == 0)
+                self.assertEqual(info["accelerator_is_local_main_process"], rank == 0)
+
+                # DDP: distributed type is MULTI_GPU
+                self.assertEqual(info["accelerator_distributed_type"], "DistributedType.MULTI_GPU")
+
+                # Each rank on its own device
+                self.assertIn(f"cuda:{rank}", info["accelerator_device"])
+
+                # DDP should not activate FSDP or DeepSpeed
+                self.assertFalse(info["trainer_is_fsdp_enabled"])
+                self.assertFalse(info["trainer_is_deepspeed_enabled"])
+                self.assertNotIn("fsdp_version", info)
+                self.assertNotIn("deepspeed_zero_stage", info)
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +248,7 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
 @slow
 @run_first
 @require_torch_multi_accelerator
-class TestTrainerDistributedDDPTraining(TrainerDistributedCommon, DDPCommandsMixin, TestCasePlus):
+class TestTrainerDistributedDDPCommon(DDPCommandsMixin, TrainerDistributedCommon, TestCasePlus):
     """
     Distributed DDP training tests using ``accelerate launch`` with the shared
     train.py script. Mirrors the test structure used in FSDP and DeepSpeed.
