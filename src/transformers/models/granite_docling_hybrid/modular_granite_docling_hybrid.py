@@ -66,7 +66,6 @@ class GraniteDoclingHybridModel(Idefics3Model):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         cache_position: torch.LongTensor | None = None,
-        return_dict: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | GraniteDoclingHybridBaseModelOutputWithPast:
         r"""
@@ -88,7 +87,6 @@ class GraniteDoclingHybridModel(Idefics3Model):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.training and self.text_model.gradient_checkpointing and use_cache:
             use_cache = False
@@ -108,9 +106,7 @@ class GraniteDoclingHybridModel(Idefics3Model):
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
-            image_hidden_states = self.get_image_features(
-                pixel_values, pixel_attention_mask, return_dict=True
-            ).pooler_output
+            image_hidden_states = self.get_image_features(pixel_values, pixel_attention_mask).pooler_output
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
 
@@ -141,7 +137,6 @@ class GraniteDoclingHybridModel(Idefics3Model):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            return_dict=True,
             **kwargs,
         )
 
@@ -180,7 +175,6 @@ class GraniteDoclingHybridForConditionalGeneration(Idefics3ForConditionalGenerat
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         cache_position: torch.LongTensor | None = None,
-        return_dict: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GraniteDoclingHybridCausalLMOutputWithPast:
@@ -199,7 +193,6 @@ class GraniteDoclingHybridForConditionalGeneration(Idefics3ForConditionalGenerat
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -215,7 +208,6 @@ class GraniteDoclingHybridForConditionalGeneration(Idefics3ForConditionalGenerat
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            return_dict=True,
             **kwargs,
         )
 
