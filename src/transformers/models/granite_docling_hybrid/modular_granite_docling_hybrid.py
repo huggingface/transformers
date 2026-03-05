@@ -437,14 +437,6 @@ class GraniteDoclingHybridModel(Idefics3Model):
         if self.training and self.text_model.gradient_checkpointing and use_cache:
             use_cache = False
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None:
-            batch_size, _ = input_ids.shape
-        elif inputs_embeds is not None:
-            batch_size, _, _ = inputs_embeds.shape
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(self.device)
 
@@ -463,15 +455,6 @@ class GraniteDoclingHybridModel(Idefics3Model):
                 input_ids=input_ids,
                 inputs_embeds=inputs_embeds,
                 image_hidden_states=image_hidden_states,
-            )
-
-        # Initialize HybridMambaAttentionDynamicCache for GraniteMoeHybrid text model
-        if use_cache and not isinstance(past_key_values, HybridMambaAttentionDynamicCache):
-            past_key_values = HybridMambaAttentionDynamicCache(
-                self.text_model.config,
-                batch_size=batch_size,
-                dtype=inputs_embeds.dtype,
-                device=inputs_embeds.device,
             )
 
         outputs = self.text_model(
