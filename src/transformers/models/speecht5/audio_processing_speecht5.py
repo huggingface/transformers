@@ -13,28 +13,11 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class WhisperAudioProcessor(TorchAudioBackend):
+class SpeechT5AudioProcessor(TorchAudioBackend):
     sample_rate = 16000
     force_mono = True
-    truncation = True
-    max_length = 480000  # 30 seconds at 16000 Hz
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=400,
-            hop_length=160,
-            power=2.0,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            mel_scale="slaney",
-            norm="slaney",
-        ),
-        log_mode="log10",
-        chunk_length=30,
-    )
 
 
-__all__ = ["WhisperAudioProcessor"]
+__all__ = ["SpeechT5AudioProcessor"]

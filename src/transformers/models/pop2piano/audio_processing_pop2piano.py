@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,29 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
+# NOTE: Full Pop2Piano feature extraction requires the Essentia library for
+# beat detection (RhythmExtractor2013) and scipy for beat interpolation.
+# This audio processor provides the basic mel spectrogram configuration but
+# does not implement the complete beat-aligned segmentation pipeline.
+
+from ...audio_processing_backends import NumpyAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-class WhisperAudioProcessor(TorchAudioBackend):
-    sample_rate = 16000
+class Pop2PianoAudioProcessor(NumpyAudioBackend):
+    sample_rate = 22050
     force_mono = True
-    truncation = True
-    max_length = 480000  # 30 seconds at 16000 Hz
     spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=400,
-            hop_length=160,
-            power=2.0,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            mel_scale="slaney",
-            norm="slaney",
-        ),
+        stft_config=StftConfig(n_fft=4096, hop_length=1024, power=2.0),
+        mel_scale_config=MelScaleConfig(n_mels=512, f_min=10.0, mel_scale="htk"),
         log_mode="log10",
-        chunk_length=30,
     )
 
 
-__all__ = ["WhisperAudioProcessor"]
+__all__ = ["Pop2PianoAudioProcessor"]

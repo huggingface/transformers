@@ -12,15 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import NormalizationConfig
+from ...audio_processing_backends import NumpyAudioBackend
 
 
-class Wav2Vec2AudioProcessor(TorchAudioBackend):
-    sample_rate = 16000
+class EncodecAudioProcessor(NumpyAudioBackend):
+    sample_rate = 24000
     force_mono = True
-    do_values_normalize = True
-    normalization_config = NormalizationConfig(method="zero_mean_unit_var")
+    add_channel_dim = True
 
 
-__all__ = ["Wav2Vec2AudioProcessor"]
+__all__ = ["EncodecAudioProcessor"]
