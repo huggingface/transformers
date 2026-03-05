@@ -37,6 +37,7 @@ from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     compute_flattened_tensor_shard_slices,
+    compute_tensor_shard_slices,
     get_shard_dim_for_tp_style,
 )
 from .utils import is_env_variable_true, logging
@@ -876,6 +877,24 @@ def _compute_tp_elem_ranges(
     full_param = torch.empty(full_shape, device="meta")
     return compute_flattened_tensor_shard_slices(full_param, device_mesh, rank, dim, tensor_idx=None)
 
+
+def _compute_tp_shard_shape(
+    full_shape: tuple[int, ...],
+    device_mesh: Any,
+    rank: int,
+    tp_style: str,
+) -> tuple[int, ...]:
+    """Compute the actual shard shape for this rank given a TP style and full tensor shape."""
+    ndim = len(full_shape)
+    dim = get_shard_dim_for_tp_style(tp_style, ndim)
+    full_param = torch.empty(full_shape, device="meta")
+    start, end = compute_tensor_shard_slices(full_param, device_mesh, rank, dim)
+    shard_shape = list(full_shape)
+    normalized_dim = dim if dim >= 0 else ndim + dim
+    shard_shape[normalized_dim] = end - start
+    return tuple(shard_shape)
+
+
 def _materialize_copy(fetch: torch.Tensor | Tuple[torch.Tensor, Callable[int]], device=None, dtype=None) -> torch.Tensor:
     if isinstance(fetch, torch.Tensor):
         return fetch.to(device=device, dtype=dtype)
@@ -1290,6 +1309,11 @@ def convert_and_load_state_dict_in_model(
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
 
                     if isinstance(tensor, HmllLoadSpec):
+                        if isinstance(tensor, HmllScatteredLoadSpec) and getattr(mapping, "distributed_operation", None) is None:
+                            tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
+                            mapping.distributed_operation = tp_layer(
+                                device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
+                            )
                         future_or_tensor = spawn_materialize(
                             thread_pool, tensor, device_map[""], _dtype
                         )

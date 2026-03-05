@@ -50,13 +50,15 @@ from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import (
     HmllLoadSpec,
+    HmllScatteredLoadSpec,
     NativeLoadSpec,
     WeightConverter,
     WeightRenaming,
     _compute_tp_elem_ranges,
+    _compute_tp_shard_shape,
     convert_and_load_state_dict_in_model,
     rename_source_key,
-    revert_weight_conversion, HmllScatteredLoadSpec,
+    revert_weight_conversion,
 )
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
@@ -4275,12 +4277,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                     elem_ranges = _compute_tp_elem_ranges(
                                         full_shape, device_mesh, rank, tp_style
                                     )
-
-                                    empty_param = meta_model_state_dict[renamed_key]
-                                    shard_shape = tuple(empty_param.shape)
+                                    shard_shape = _compute_tp_shard_shape(full_shape, device_mesh, rank, tp_style)
+                                    allocated_dst = torch.empty(shard_shape, dtype=dtype_torch, device=device)
 
                                     merged_state_dict[original_key] = HmllScatteredLoadSpec(
-                                        dst=empty_param,
+                                        dst=allocated_dst,
                                         registry=registry,
                                         name=original_key,
                                         ranges=elem_ranges,
@@ -4294,8 +4295,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                                     continue
                             else:
                                 # Replicated parameter (not in TP plan): load full tensor on every rank
+                                allocated_dst = torch.empty(full_shape, dtype=dtype_torch, device=device)
                                 merged_state_dict[original_key] = HmllLoadSpec(
-                                    dst=meta_model_state_dict[renamed_key],
+                                    dst=allocated_dst,
                                     registry=registry,
                                     name=original_key,
                                     shape=full_shape,
@@ -4305,8 +4307,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         else:
                             # todo(mfuntowicz): potentially refactor this to unify
                             if renamed_key in meta_model_state_dict:
+                                allocated_dst = torch.empty(full_shape, dtype=dtype_torch, device=device)
                                 merged_state_dict[original_key] = HmllLoadSpec(
-                                    dst=meta_model_state_dict[renamed_key],
+                                    dst=allocated_dst,
                                     registry=registry,
                                     name=original_key,
                                     shape=full_shape,
