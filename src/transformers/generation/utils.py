@@ -335,19 +335,7 @@ GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderO
 GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
-if TYPE_CHECKING:
-    # `GenerationMixin` accesses many attributes/methods provided by `PreTrainedModel`.
-    # We use a type-checking-only host that combines the mixin and protocol so `ty` can
-    # resolve `self.<attr>` across the whole file without changing runtime inheritance.
-
-    class _GenerationMixinHost(ContinuousMixin, GenerativePreTrainedModel):
-        pass
-
-else:
-    _GenerationMixinHost = ContinuousMixin
-
-
-class GenerationMixin(_GenerationMixinHost):
+class GenerationMixin(ContinuousMixin):
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in model classes.
     Inheriting from this class causes the model to have special generation-related behavior, such as loading a
@@ -2119,7 +2107,7 @@ class GenerationMixin(_GenerationMixinHost):
         return repo
 
     def _extract_generation_mode_kwargs(
-        self: "GenerativePreTrainedModel",
+        self,
         custom_generate,
         kwargs,
         synced_gpus,
@@ -2576,9 +2564,7 @@ class GenerationMixin(_GenerationMixinHost):
 
         return result
 
-    def _has_unfinished_sequences(
-        self: "GenerativePreTrainedModel", this_peer_finished: bool, synced_gpus: bool, device: torch.device
-    ) -> bool:
+    def _has_unfinished_sequences(self, this_peer_finished: bool, synced_gpus: bool, device: torch.device) -> bool:
         """
         Returns whether there are still unfinished sequences in the device. The existence of unfinished sequences is
         fed through `this_peer_finished`. ZeRO stage 3-friendly.
