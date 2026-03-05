@@ -514,16 +514,17 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
 
     # TODO: For `pe_audio_video`: the tester only gives `PeAudioVideoEncoderConfig` and can't create model for `PeAudioVideoModel`
     #   we try to find if `config` is a subconfig for `config_class`. If so, return `config_class()` after setting that attr. to `config`
-    if not isinstance(config, config_class):
-        config_from_class = config_class()
-        keys = config_from_class.to_dict().keys()
-        for key in keys:
-            if key.endswith("_config"):
-                o = getattr(config_from_class, key)
-                if isinstance(config, o.__class__):
-                    setattr(config_from_class, key, config)
-                    config = config_from_class
-                    break
+    # TODO: But this might get very large model?
+    # if not isinstance(config, config_class):
+    #     config_from_class = config_class()
+    #     keys = config_from_class.to_dict().keys()
+    #     for key in keys:
+    #         if key.endswith("_config"):
+    #             o = getattr(config_from_class, key)
+    #             if isinstance(config, o.__class__):
+    #                 setattr(config_from_class, key, config)
+    #                 config = config_from_class
+    #                 break
 
     # breakpoint()
     # make sure this is long enough (some model tester has `20` for this attr.) to pass `text-generation`
@@ -885,14 +886,14 @@ def build_model(model_arch, tiny_config, output_dir):
     model = model_arch(config=tiny_config)
     # breakpoint()
 
-    with tempfile.TemporaryDirectory(dir=checkpoint_dir) as tmpdir:
-        checkpoint_dir_tmp = tmpdir
-        model.save_pretrained(checkpoint_dir_tmp)
+    # with tempfile.TemporaryDirectory(dir=checkpoint_dir) as tmpdir:
+    checkpoint_dir_tmp = checkpoint_dir
+    model.save_pretrained(checkpoint_dir_tmp)
 
-        # can't call from_pretrained from saved one
-        if not tiny_config.__class__.__name__.endswith(("TimmBackboneConfig",)):
-            # breakpoint()
-            model.from_pretrained(checkpoint_dir_tmp)
+    # can't call from_pretrained from saved one
+    if not tiny_config.__class__.__name__.endswith(("TimmBackboneConfig",)):
+        # breakpoint()
+        model.from_pretrained(checkpoint_dir_tmp)
 
     return model
 
