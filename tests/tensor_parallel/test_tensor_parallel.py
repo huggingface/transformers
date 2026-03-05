@@ -28,9 +28,10 @@ from transformers.integrations.tensor_parallel import (
     get_packed_weights,
     repack_weights,
 )
-from transformers.testing_utils import TestCasePlus
+from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
 
+@is_tensor_parallel_test
 class TestTensorParallelUtils(TestCasePlus):
     def test_packed_unpacked_conversion(self):
         WORLD_SIZE = 2
@@ -60,6 +61,7 @@ class TestTensorParallelUtils(TestCasePlus):
         assert torch.allclose(unpacked_weights, original_packed_weights)
 
 
+@is_tensor_parallel_test
 class TestTensorParallelProperties(TestCasePlus):
     def test_tp_plan_property_setter_getter(self):
         """Test that tp_plan property can be set and retrieved correctly."""
@@ -165,6 +167,7 @@ class TestTensorParallelProperties(TestCasePlus):
         self.assertEqual(model.tp_plan, {"model.layers.*.self_attn.q_proj": "colwise"})
 
 
+@is_tensor_parallel_test
 class TestTensorParallelLayer(TestCasePlus):
     class MockDeviceMesh:
         def __init__(self, world_size, rank):
