@@ -21,15 +21,10 @@ This script supports:
 It can be run as follows:
 
 ```bash
-python src/transformers/models/rf_detr/convert_rf_detr_to_hf.py --checkpoint_path /Users/nielsrogge/Documents/python_projecten/rf-detr/rf-detr-small.pth --original_repo_path /Users/nielsrogge/Documents/python_projecten/rf-detr --pytorch_dump_folder_path . --verify_with_original
+python src/transformers/models/rf_detr/convert_rf_detr_to_hf.py --model_name base --pytorch_dump_folder_path ./rf-detr-small-hf --original_repo_path /Users/nielsrogge/Documents/python_projecten/rf-detr --pytorch_dump_folder_path . --verify_with_original
 ```
 
-Or by model name, downloading the original checkpoint from
-`nielsr/rf-detr-checkpoints`:
-
-```bash
-python src/transformers/models/rf_detr/convert_rf_detr_to_hf.py --model_name small --pytorch_dump_folder_path ./rf-detr-small-hf
-```
+The checkpoint will be automatically downloaded from `nielsr/rf-detr-checkpoints` based on the model name.
 """
 
 import argparse
