@@ -124,18 +124,6 @@ class IsaacVisionConfig(Siglip2VisionConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
-        self.num_patches = num_patches
-
         # Add our custom fields
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
 
