@@ -1341,7 +1341,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
             loss=loss,
             predicted_depth=metric_depth,
             domain_logits=domain_logits,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 

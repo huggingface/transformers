@@ -173,78 +173,6 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_attention_outputs(self):
-        """Overwritten for the backbone models always outputting the hidden states"""
-        if not self.has_attentions:
-            self.skipTest(reason="Model does not output attentions")
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-        # force eager attention to support output attentions
-        config._attn_implementation = "eager"
-
-        seq_len = getattr(self.model_tester, "seq_length", None)
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class._from_config(config, attn_implementation="eager")
-            config = model.config
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            self._set_subconfig_attributes(config, "output_attentions", True)
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-            )
-            out_len = len(outputs)
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
-                added_hidden_states = 2
-            else:
-                added_hidden_states = 1
-
-            # Key difference: Some model classes always output the hidden states, causing potential off by ones
-            self.assertTrue(out_len + added_hidden_states in (len(outputs), len(outputs) + 1))
-
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-            )
-
 
 @require_torch
 class VitPoseBackboneTest(unittest.TestCase, BackboneTesterMixin):
@@ -252,7 +180,6 @@ class VitPoseBackboneTest(unittest.TestCase, BackboneTesterMixin):
     config_class = VitPoseBackboneConfig
 
     has_attentions = False
-    forces_hidden_states = True
 
     def setUp(self):
         self.model_tester = VitPoseBackboneModelTester(self)

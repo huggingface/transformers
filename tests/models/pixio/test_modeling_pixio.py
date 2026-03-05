@@ -276,7 +276,6 @@ class PixioBackboneTest(unittest.TestCase, BackboneTesterMixin):
     config_class = PixioConfig
 
     has_attentions = False
-    forces_hidden_states = True
 
     def setUp(self):
         self.model_tester = PixioModelTester(self)

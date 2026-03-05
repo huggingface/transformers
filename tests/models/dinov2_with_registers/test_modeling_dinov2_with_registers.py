@@ -346,7 +346,6 @@ class Dinov2WithRegistersBackboneTest(unittest.TestCase, BackboneTesterMixin):
     config_class = Dinov2WithRegistersConfig
 
     has_attentions = False
-    forces_hidden_states = True
 
     def setUp(self):
         self.model_tester = Dinov2WithRegistersModelTester(self)

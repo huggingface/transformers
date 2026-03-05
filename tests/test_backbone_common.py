@@ -24,8 +24,6 @@ from transformers.testing_utils import require_torch, torch_device
 class BackboneTesterMixin:
     all_model_classes = ()
     has_attentions = True
-    # Most backbones always need hidden states
-    forces_hidden_states = False
 
     def test_config(self):
         config_class = self.config_class
@@ -180,9 +178,7 @@ class BackboneTesterMixin:
             self.assertTrue(len(outputs.feature_maps) == len(backbone.channels))
             for feature_map, n_channels in zip(outputs.feature_maps, backbone.channels):
                 self.assertTrue(feature_map.shape[:2], (batch_size, n_channels))
-            # Some backbones need hidden states in any case, we output them every time then
-            if not self.forces_hidden_states:
-                self.assertIsNone(outputs.hidden_states)
+            self.assertIsNone(outputs.hidden_states)
             self.assertIsNone(outputs.attentions)
 
             # Test output_hidden_states=True
