@@ -1588,7 +1588,6 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         # Model for Text-To-Waveform mapping
         ("bark", "BarkModel"),
         ("csm", "CsmForConditionalGeneration"),
-        ("fastspeech2_conformer", "FastSpeech2ConformerWithHifiGan"),
         ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGan"),
         ("higgs_audio_v2", "HiggsAudioV2ForConditionalGeneration"),
         ("musicgen", "MusicgenForConditionalGeneration"),

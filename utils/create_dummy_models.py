@@ -500,13 +500,18 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     # recursively get the correct config
     def _get_exact_config(_config, config_class):
 
+        # breakpoint()
         if isinstance(_config, config_class):
             return _config
 
         # TODO: T5Gemma2 has `encoder` and `decoder` instead `_config`
-        keys = [x for x in _config.to_dict().keys() if x.endswith("_config") or x in ["encoder", "decoder"]]
+
+        # We consider both cases: real config or dict (for `FastSpeech2ConformerConfig`'s encoder/decoder config, which are only module config)
+        config_dict = _config.to_dict() if not isinstance(_config, dict) else _config
+
+        keys = [x for x in config_dict.keys() if x.endswith("_config") or x in ["encoder", "decoder"]]
         for key in keys:
-            sub_config = getattr(_config, key)
+            sub_config = getattr(_config, key) if not isinstance(_config, dict) else _config[key]
             if sub_config is not None:
                 maybe_config = _get_exact_config(sub_config, config_class)
                 if isinstance(maybe_config, config_class):
@@ -1209,6 +1214,11 @@ def build(config_class, models_to_create, output_dir):
     # Build processors
     processor_classes = models_to_create["processor"]
 
+    # AutoTokenizer can't load from hub repo ...
+    if config_class.__name__ in ["FastSpeech2ConformerWithHifiGanConfig"]:
+        from transformers import FastSpeech2ConformerTokenizer
+        processor_classes = (FastSpeech2ConformerTokenizer,) + processor_classes
+
     if len(processor_classes) == 0:
         error = f"No processor class could be found in {config_class.__name__}."
         fill_result_with_error(result, error, None, models_to_create)
@@ -1689,6 +1699,7 @@ if __name__ == "__main__":
     )
 
 
-
+# FastSpeech2ConformerConfig --> needs `pip install g2p-en`
+# FastSpeech2ConformerTokenizer vs AutTokenizer --> the later can't load from `espnet/fastspeech2_conformer` ??
 # "Pop2PianoConfig" Require `pip install essentia==2.1b6.dev1034`
 # NemotronConfig ==> can't convert fast tokenizer because `Exception: Unk token `<unk>` not found in the vocabulary`
