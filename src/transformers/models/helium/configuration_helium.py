@@ -23,7 +23,7 @@ class HeliumConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`HeliumModel`]. It is used to instantiate an Helium
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Helium 2b model.
-    e.g. [kyutai/helium-2b](https://huggingface.co/kyutai/helium-2b)
+    e.g. [kyutai/helium-1-preview](https://huggingface.co/kyutai/helium-1-preview)
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
