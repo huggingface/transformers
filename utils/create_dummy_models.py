@@ -276,7 +276,12 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
         # TODO: a better handle for revisions
         if config_class.__name__ == 'NanoChatConfig':
             revision = "refs/pr/1"
-        processor = processor_class.from_pretrained(checkpoint, revision=revision)
+
+        sub_folder = None
+        if config_class.__name__ in ['GlmImageTextConfig', 'GlmImageVisionConfig', 'GlmImageVQVAEConfig']:
+            sub_folder = "processor"
+
+        processor = processor_class.from_pretrained(checkpoint, revision=revision, subfolder=sub_folder)
     except Exception as e:
         logger.error(f"{e.__class__.__name__}: {e}")
 
