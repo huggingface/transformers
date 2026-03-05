@@ -101,6 +101,9 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
     model_type = "csm_depth_decoder_model"
     base_config_key = "depth_decoder_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "codebook_size": "vocab_size",
+    }
     default_theta = 500000.0
 
     def __init__(
@@ -257,6 +260,9 @@ class CsmConfig(PreTrainedConfig):
     sub_configs = {
         "codec_config": AutoConfig,
         "depth_decoder_config": CsmDepthDecoderConfig,
+    }
+    attribute_map = {
+        "codebook_size": "vocab_size",
     }
 
     def __init__(

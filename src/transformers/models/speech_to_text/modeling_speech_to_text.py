@@ -487,6 +487,7 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
     config: Speech2TextConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
+    input_modalities = ("text", "audio")
     supports_gradient_checkpointing = True
     # TODO: tests would need a rewrite to check for correct implementation
     # Current tests always assume certain inputs to be passed
@@ -909,7 +910,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
         return_dict: bool | None = None,
         cache_position: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
+    ) -> tuple[torch.FloatTensor] | Seq2SeqModelOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.

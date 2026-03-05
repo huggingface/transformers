@@ -171,7 +171,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("lighton_ocr", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("lilt", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
-        ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("luke", "LukeTokenizer"),
         ("lxmert", "LxmertTokenizer" if is_tokenizers_available() else None),
         ("m2m_100", "M2M100Tokenizer" if is_sentencepiece_available() else None),
@@ -185,6 +184,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("megatron-bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("metaclip_2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("mgp-str", "MgpstrTokenizer"),
+        (
+            "ministral",
+            "MistralCommonBackend"
+            if is_mistral_common_available()
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
+        ),
         (
             "ministral3",
             "MistralCommonBackend"
@@ -227,7 +232,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("nystromformer", "AlbertTokenizer" if is_tokenizers_available() else None),
         ("olmo", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("olmo2", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
-        ("olmo3", "GPT2Tokenizer" if is_tokenizers_available() else None),
+        ("olmo3", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("olmo_hybrid", "TokenizersBackend" if is_tokenizers_available() else None),
         ("olmoe", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("omdet-turbo", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("oneformer", "CLIPTokenizer" if is_tokenizers_available() else None),
@@ -330,6 +336,30 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("yoso", "AlbertTokenizer" if is_tokenizers_available() else None),
     ]
 )
+
+# Models with incorrect tokenizer_class in their Hub tokenizer_config.json files.
+# These models will be forced to use TokenizersBackend.
+MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
+    "arctic",
+    "deepseek_vl",
+    "deepseek_vl_v2",
+    "deepseek_vl_hybrid",
+    "fuyu",
+    "hyperclovax_vlm",
+    "internlm2",
+    "janus",
+    "jamba",
+    "llava",
+    "llava_next",
+    "opencua",
+    "phi3",
+    "step3p5",
+    "vipllava",
+}
+
+for model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
+    if model_type not in TOKENIZER_MAPPING_NAMES:
+        TOKENIZER_MAPPING_NAMES[model_type] = "TokenizersBackend" if is_tokenizers_available() else None
 
 TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAMES)
 
@@ -678,6 +708,12 @@ class AutoTokenizer:
                 or tokenizer_class_from_name(tokenizer_config_class + "Fast") is not None
             )
         )
+
+        # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class
+        if has_remote_code and config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
+            has_remote_code = False
+            tokenizer_auto_map = None
+
         if has_remote_code:
             # V5: Always prefer fast tokenizer (index 1), fallback to slow (index 0)
             if tokenizer_auto_map[1] is not None:

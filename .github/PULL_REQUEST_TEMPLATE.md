@@ -61,8 +61,8 @@ Integrations:
 
 - ray/raytune: @richardliaw, @amogkam
 - Big Model Inference: @SunMarc
-- quantization: @SunMarc @MekkCyber
-- kernels: @MekkCyber @drbh
+- quantization: @SunMarc
+- kernels: @drbh
 - peft: @BenjaminBossan @githubnemo
 
 Devices/Backends:

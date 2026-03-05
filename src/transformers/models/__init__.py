@@ -68,6 +68,7 @@ if TYPE_CHECKING:
     from .cohere import *
     from .cohere2 import *
     from .cohere2_vision import *
+    from .colmodernvbert import *
     from .colpali import *
     from .colqwen2 import *
     from .conditional_detr import *
@@ -182,6 +183,8 @@ if TYPE_CHECKING:
     from .herbert import *
     from .hgnet_v2 import *
     from .hiera import *
+    from .higgs_audio_v2 import *
+    from .higgs_audio_v2_tokenizer import *
     from .hubert import *
     from .hunyuan_v1_dense import *
     from .hunyuan_v1_moe import *
@@ -258,6 +261,7 @@ if TYPE_CHECKING:
     from .mobilevitv2 import *
     from .modernbert import *
     from .modernbert_decoder import *
+    from .modernvbert import *
     from .moonshine import *
     from .moonshine_streaming import *
     from .moshi import *
@@ -271,6 +275,7 @@ if TYPE_CHECKING:
     from .myt5 import *
     from .nanochat import *
     from .nemotron import *
+    from .nemotron_h import *
     from .nllb import *
     from .nllb_moe import *
     from .nougat import *
@@ -278,6 +283,7 @@ if TYPE_CHECKING:
     from .olmo import *
     from .olmo2 import *
     from .olmo3 import *
+    from .olmo_hybrid import *
     from .olmoe import *
     from .omdet_turbo import *
     from .oneformer import *
@@ -312,6 +318,7 @@ if TYPE_CHECKING:
     from .plbart import *
     from .poolformer import *
     from .pop2piano import *
+    from .pp_doclayout_v2 import *
     from .pp_doclayout_v3 import *
     from .prompt_depth_anything import *
     from .prophetnet import *
@@ -387,6 +394,7 @@ if TYPE_CHECKING:
     from .textnet import *
     from .time_series_transformer import *
     from .timesfm import *
+    from .timesfm2_5 import *
     from .timesformer import *
     from .timm_backbone import *
     from .timm_wrapper import *
@@ -399,6 +407,7 @@ if TYPE_CHECKING:
     from .univnet import *
     from .upernet import *
     from .vaultgemma import *
+    from .vibevoice_asr import *
     from .video_llama_3 import *
     from .video_llava import *
     from .videomae import *
