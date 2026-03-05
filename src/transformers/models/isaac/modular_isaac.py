@@ -140,10 +140,10 @@ class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
         Pixel-shuffle reduction factor applied in the vision tower.
     """
 
-    patch_size: int | None
-    max_num_patches: int | None
-    min_num_patches: int | None
-    pixel_shuffle_scale: int | None
+    patch_size: int
+    max_num_patches: int
+    min_num_patches: int
+    pixel_shuffle_scale: int
 
 
 @auto_docstring
