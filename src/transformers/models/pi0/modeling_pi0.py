@@ -24,47 +24,54 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple
+from ...utils.generic import maybe_autocast
 from ..auto import AutoModel
 from .configuration_pi0 import PI0Config
+
+
+class TimestepEmbeddings(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        sinusoid_freq = self.compute_freqs(config)
+        self.register_buffer("sinusoid_freq", sinusoid_freq, persistent=False)
+
+    @staticmethod
+    def compute_freqs(config):
+        fraction = torch.linspace(0.0, 1.0, config.dit_config.hidden_size // 2, dtype=torch.float32)
+        period = config.min_period * (config.max_period / config.min_period) ** fraction
+        sinusoid_freq = 1.0 / period * 2 * math.pi
+        return sinusoid_freq
+
+    def forward(self, time):
+        device_type = time.device.type if isinstance(time.device.type, str) and time.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            sinusoid_freq = self.sinusoid_freq[None, :]
+            emb = sinusoid_freq * time[:, None]
+            time_embeds = torch.cat([emb.sin(), emb.cos()], dim=1)
+        return time_embeds
 
 
 class ActionTimeEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.expert_hidden_size = config.dit_config.hidden_size
-        if self.expert_hidden_size % 2 != 0:
-            raise ValueError(f"dimension ({self.expert_hidden_size}) must be divisible by 2")
-
-        self.action_in_proj = nn.Linear(config.max_action_dim, self.expert_hidden_size)
-        self.state_proj = nn.Linear(config.max_state_dim, self.expert_hidden_size)
-        self.action_time_mlp_in = nn.Linear(2 * self.expert_hidden_size, self.expert_hidden_size)
-        self.action_time_mlp_out = nn.Linear(self.expert_hidden_size, self.expert_hidden_size)
-
-    def create_sinusoidal_pos_embedding(self, time: torch.Tensor) -> torch.Tensor:
-        if time.ndim != 1:
-            raise ValueError("The time tensor is expected to be of shape `(batch_size, )`.")
-
-        min_period = self.config.min_period
-        max_period = self.config.max_period
-        device = time.device
-        dtype = torch.float64 if device.type not in ("mps", "cpu") else torch.float32
-
-        fraction = torch.linspace(0.0, 1.0, self.expert_hidden_size // 2, dtype=dtype, device=device)
-        period = min_period * (max_period / min_period) ** fraction
-        scaling_factor = 1.0 / period * 2 * math.pi
-        sin_input = scaling_factor[None, :] * time[:, None]
-        return torch.cat([torch.sin(sin_input), torch.cos(sin_input)], dim=1)
+        self.sinusoid_embeds = TimestepEmbeddings(config)
+        self.action_in_proj = nn.Linear(config.max_action_dim, config.dit_config.hidden_size)
+        self.state_proj = nn.Linear(config.max_state_dim, config.dit_config.hidden_size)
+        self.action_time_mlp_in = nn.Linear(2 * config.dit_config.hidden_size, config.dit_config.hidden_size)
+        self.action_time_mlp_out = nn.Linear(config.dit_config.hidden_size, config.dit_config.hidden_size)
 
     def forward(self, state, noise, timestep):
         state_embeds = self.state_proj(state)
         action_embeds = self.action_in_proj(noise)
-        time_embeds = self.create_sinusoidal_pos_embedding(timestep)
+
+        time_embeds = self.sinusoid_embeds(timestep)
         time_embeds = time_embeds[:, None, :].expand_as(action_embeds).to(dtype=action_embeds.dtype)
 
         action_time_embeds = torch.cat([action_embeds, time_embeds], dim=2)
@@ -86,6 +93,11 @@ class PI0PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     input_modalities = ("image", "text")
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, TimestepEmbeddings):
+            init.copy_(module.sinusoid_freq, module.compute_freqs(module.config))
+
 
 @auto_docstring
 class PI0Model(PI0PreTrainedModel):
@@ -102,7 +114,6 @@ class PI0Model(PI0PreTrainedModel):
         self.vlm.set_input_embeddings(value)
 
     def embed_prefix(self, input_ids, pixel_values, pixel_attention_mask):
-        # Maybe just unpad images instead of using the mask?
         max_num_cameras = pixel_attention_mask.shape[1]
         pixel_values = pixel_values.flatten(0, 1)
         image_features = self.vlm.get_image_features(pixel_values).pooler_output
@@ -143,7 +154,6 @@ class PI0Model(PI0PreTrainedModel):
         pixel_attention_mask (`torch.Tensor`, *optional*): args description placeholder
         """
         if pixel_values is not None and past_key_values is None:
-            # Pi0 never passes positions, so we need to infer manually
             if attention_mask is not None and position_ids is None:
                 position_ids = attention_mask.cumsum(-1) - 1
 
@@ -159,8 +169,6 @@ class PI0Model(PI0PreTrainedModel):
                 use_cache=True,
             ).past_key_values
 
-        # Mask for images, text and noise is bidirectional but we still need to know
-        # if there are any pad tokens in the text
         if attention_mask is not None and attention_mask.ndim != 2:
             raise ValueError("Only two-dimensional attention masks are accepted for now!")
 
@@ -212,7 +220,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        state: torch.FloatTensor | None = None,
+        state: torch.FloatTensor,
         noise: torch.FloatTensor | None = None,
         timestep: torch.FloatTensor | None = None,
         input_ids: torch.Tensor | None = None,
@@ -233,14 +241,13 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         timestep  (`torch.Tensor`, *optional*): args description placeholder
         """
         batch_size = state.shape[0]
-        device = state.device
 
         # 1.Sample the timestep
         if timestep is None:
             alpha_t = torch.tensor(self.config.time_sampling_beta_alpha, dtype=torch.float32)
             beta_t = torch.tensor(self.config.time_sampling_beta_beta, dtype=torch.float32)
             dist = torch.distributions.Beta(alpha_t, beta_t)
-            time_beta = dist.sample((batch_size,)).to(device)
+            time_beta = dist.sample((batch_size,)).to(state.device)
             timestep = (time_beta * self.config.time_sampling_scale + self.config.time_sampling_offset).float()
 
         # 2. Create random noise if not provided
@@ -249,7 +256,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
                 batch_size,
                 self.config.chunk_size,
                 self.config.max_action_dim,
-                device=device,
+                device=state.device,
                 dtype=state.dtype,
             )
 
@@ -296,12 +303,12 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     @torch.no_grad()
     def sample_actions(
         self,
+        state: torch.FloatTensor,
         input_ids: torch.LongTensor,
         pixel_values: torch.FloatTensor,
+        noise: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
-        state: torch.FloatTensor | None = None,
-        noise: torch.FloatTensor | None = None,
         num_steps: int | None = None,
     ) -> torch.FloatTensor:
         """Run flow matching inference to generate actions."""
@@ -329,14 +336,13 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             position_ids = attention_mask.cumsum(-1) - 1
         inputs_embeds = self.model.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
         inputs_embeds = inputs_embeds / math.sqrt(2048)
-        output = self.model.vlm(
+        past_key_values = self.model.vlm(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             use_cache=True,
             return_dict=True,
-        )
-        past_key_values = output.past_key_values
+        ).past_key_values
         prefix_length = past_key_values.get_seq_length()
 
         # 3. Denoise `num_steps` times

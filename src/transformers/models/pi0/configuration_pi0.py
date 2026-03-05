@@ -134,8 +134,11 @@ class PI0Config(PreTrainedConfig):
 
         # Force bidirectional attention
         self.dit_config.is_causal = False
-        self.dit_config.use_bidirectional_attention = False
+        self.dit_config.use_bidirectional_attention = True
         self.vlm_config.text_config.use_bidirectional_attention = True
+
+        if self.dit_config.hidden_size % 2 != 0:
+            raise ValueError(f"DiT hidden dim=({self.config.dit_config.hidden_size}) must be divisible by 2")
 
         self.chunk_size = chunk_size
         self.max_state_dim = max_state_dim
