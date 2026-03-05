@@ -674,16 +674,28 @@ class AutoTokenizer:
 
         # if there is a config, we can check that the tokenizer class != than model class and can thus assume we need to use TokenizersBackend
         # Skip this early exit if auto_map is present (custom tokenizer with trust_remote_code)
+        registered_tokenizer = TOKENIZER_MAPPING_NAMES.get(config_model_type) if config_model_type else None
         if (
             tokenizer_auto_map is None
             and tokenizer_config_class is not None
             and config_model_type is not None
             and config_model_type != ""
-            and TOKENIZER_MAPPING_NAMES.get(config_model_type) is not None
-            and TOKENIZER_MAPPING_NAMES.get(config_model_type).replace("Fast", "")
-            != tokenizer_config_class.replace("Fast", "")
+            and (
+                # Case 1: model_type is registered but hub tokenizer_class differs — the
+                # model ships a custom tokenizer.json that should be loaded directly.
+                (
+                    registered_tokenizer is not None
+                    and registered_tokenizer.replace("Fast", "") != tokenizer_config_class.replace("Fast", "")
+                )
+                # Case 2: model_type has no registered tokenizer mapping.  The hub
+                # tokenizer_class may point to another model's tokenizer (e.g.
+                # deepseek-coder with model_type "llama" and tokenizer_class
+                # "LlamaTokenizerFast").  That tokenizer's __init__ may override the
+                # normalizer/pre_tokenizer from tokenizer.json, so prefer loading via
+                # TokenizersBackend which faithfully preserves tokenizer.json.
+                or registered_tokenizer is None
+            )
         ):
-            # new model, but we ignore it unless the model type is the same
             if TokenizersBackend is not None:
                 try:
                     return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
