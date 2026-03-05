@@ -164,8 +164,8 @@ class HfQuantizer(ABC):
             kwargs (`dict`, *optional*):
                 The keyword arguments that are passed along `_process_model_before_weight_loading`.
         """
-        model.is_quantized = True  # type: ignore[attr-defined]
-        model.quantization_method = self.quantization_config.quant_method  # type: ignore[attr-defined]
+        setattr(model, "is_quantized", True)
+        setattr(model, "quantization_method", self.quantization_config.quant_method)
         if self.pre_quantized:
             self._convert_model_for_quantization(model)
         self._process_model_before_weight_loading(model, **kwargs)
