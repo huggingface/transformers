@@ -139,10 +139,6 @@ class IsaacVisionConfig(Siglip2VisionConfig):
         # Add our custom fields
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
 
-        # Ensure a sensible default attention backend
-        if getattr(self, "_attn_implementation", None) is None:
-            self._attn_implementation = "sdpa"
-
 
 class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
     """
@@ -695,8 +691,6 @@ class IsaacConfig(PretrainedConfig):
         self.layer_types = getattr(self.text_config, "layer_types", None)
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        if getattr(self, "_attn_implementation", None) is None:
-            self._attn_implementation = "sdpa"
         # Vision normalization parameters
         self.vision_rescale_factor = float(vision_rescale_factor)
 
