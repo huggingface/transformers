@@ -4,8 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_granite_docling_hybrid.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
-# Copyright 2024 the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -223,7 +221,7 @@ class GraniteDoclingHybridPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Idefics3VisionTransformer", "GraniteMoeHybridDecoderLayer"]
+    _no_split_modules = ["GraniteDoclingHybridVisionAttention", "GraniteDoclingHybridDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -701,17 +699,7 @@ class GraniteDoclingHybridModel(GraniteDoclingHybridPreTrainedModel):
         return image_outputs
 
     @can_return_tuple
-    @auto_docstring(
-        custom_intro="""
-        Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
-        the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
-        max_num_images is the maximum number of images among the batch_size samples in the batch.
-        Padding images are not needed beyond padding the pixel_values at the entrance of the model.
-        For efficiency, we only pass through the vision_model's forward the real images by
-        discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
-        image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
-        """
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -726,10 +714,17 @@ class GraniteDoclingHybridModel(GraniteDoclingHybridPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         cache_position: torch.LongTensor | None = None,
-        return_dict: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | GraniteDoclingHybridBaseModelOutputWithPast:
         r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
+            the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
+            max_num_images is the maximum number of images among the batch_size samples in the batch.
+            Padding images are not needed beyond padding the pixel_values at the entrance of the model.
+            For efficiency, we only pass through the vision_model's forward the real images by
+            discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
+            image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
@@ -740,16 +735,15 @@ class GraniteDoclingHybridModel(GraniteDoclingHybridPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.training and self.text_model.gradient_checkpointing and use_cache:
             use_cache = False
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None:
-            batch_size, seq_length = input_ids.shape
+            batch_size, _ = input_ids.shape
         elif inputs_embeds is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
+            batch_size, _, _ = inputs_embeds.shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -760,9 +754,7 @@ class GraniteDoclingHybridModel(GraniteDoclingHybridPreTrainedModel):
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
-            image_hidden_states = self.get_image_features(
-                pixel_values, pixel_attention_mask, return_dict=True
-            ).pooler_output
+            image_hidden_states = self.get_image_features(pixel_values, pixel_attention_mask).pooler_output
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
 
@@ -793,7 +785,6 @@ class GraniteDoclingHybridModel(GraniteDoclingHybridPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            return_dict=True,
             **kwargs,
         )
 
@@ -867,7 +858,6 @@ class GraniteDoclingHybridForConditionalGeneration(GraniteDoclingHybridPreTraine
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         cache_position: torch.LongTensor | None = None,
-        return_dict: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GraniteDoclingHybridCausalLMOutputWithPast:
@@ -886,7 +876,6 @@ class GraniteDoclingHybridForConditionalGeneration(GraniteDoclingHybridPreTraine
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -902,7 +891,6 @@ class GraniteDoclingHybridForConditionalGeneration(GraniteDoclingHybridPreTraine
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
-            return_dict=True,
             **kwargs,
         )
 
