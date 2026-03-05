@@ -520,16 +520,17 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     # TODO: For `pe_audio_video`: the tester only gives `PeAudioVideoEncoderConfig` and can't create model for `PeAudioVideoModel`
     #   we try to find if `config` is a subconfig for `config_class`. If so, return `config_class()` after setting that attr. to `config`
     # TODO: But this might get very large model?
-    # if not isinstance(config, config_class):
-    #     config_from_class = config_class()
-    #     keys = config_from_class.to_dict().keys()
-    #     for key in keys:
-    #         if key.endswith("_config"):
-    #             o = getattr(config_from_class, key)
-    #             if isinstance(config, o.__class__):
-    #                 setattr(config_from_class, key, config)
-    #                 config = config_from_class
-    #                 break
+    # TODO: This part is necessary for Gemma3Model!
+    if not isinstance(config, config_class):
+        config_from_class = config_class()
+        keys = config_from_class.to_dict().keys()
+        for key in keys:
+            if key.endswith("_config"):
+                o = getattr(config_from_class, key)
+                if isinstance(config, o.__class__):
+                    setattr(config_from_class, key, config)
+                    config = config_from_class
+                    break
 
     # breakpoint()
     # make sure this is long enough (some model tester has `20` for this attr.) to pass `text-generation`
