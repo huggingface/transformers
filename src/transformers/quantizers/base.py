@@ -29,11 +29,8 @@ if is_torch_available():
 
     if not TYPE_CHECKING:
         from torch.nn import ModuleList
-elif not TYPE_CHECKING:
-
-    class ModuleList:
-        pass
-
+else:
+    ModuleList = str
 
 logger = logging.get_logger(__file__)
 
