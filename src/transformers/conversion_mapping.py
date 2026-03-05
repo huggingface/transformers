@@ -43,6 +43,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen2_moe": "qwen2_moe",
     "deepseek_v2": "qwen2_moe",
     "deepseek_v3": "qwen2_moe",
+    "deepseek_v32": "qwen2_moe",
     "dots1": "qwen2_moe",
     "ernie4_5_moe": "qwen2_moe",
     "glm4_moe": "qwen2_moe",
