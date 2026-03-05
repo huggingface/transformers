@@ -144,6 +144,7 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         (
             ConvNextV2Model,
             ConvNextV2ForImageClassification,
+            ConvNextV2Backbone,
         )
         if is_torch_available()
         else ()

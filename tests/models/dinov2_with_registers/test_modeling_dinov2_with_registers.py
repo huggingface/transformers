@@ -221,6 +221,7 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
         (
             Dinov2WithRegistersModel,
             Dinov2WithRegistersForImageClassification,
+            Dinov2WithRegistersBackbone,
         )
         if is_torch_available()
         else ()

@@ -217,6 +217,7 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         (
             Dinov2Model,
             Dinov2ForImageClassification,
+            Dinov2Backbone,
         )
         if is_torch_available()
         else ()
