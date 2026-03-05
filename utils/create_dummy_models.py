@@ -548,6 +548,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     # TODO: We have this `self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size` in `InstructBlipConfig`,
     #   and we need to do it here otherwise shape issue!!!
     # TODO: But the actual problem is that we should try to get `InstructBlipConfig` in the first place instead of `InstructBlipVisionConfig`.
+    # (At this moment, we get tiny `InstructBlipVisionConfig`, and then full `InstructBlipConfig` with tiny `InstructBlipVisionConfig`: from the trick above)
     if config.__class__.__name__ in ["InstructBlipConfig", "InstructBlipVideoConfig"]:
         config.qformer_config.encoder_hidden_size = config.vision_config.hidden_size
 
