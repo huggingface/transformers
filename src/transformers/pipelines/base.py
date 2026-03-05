@@ -1338,6 +1338,20 @@ class PipelineRegistry:
             targeted_task = self.supported_tasks[task]
             return task, targeted_task, None
 
+        # Check for tasks removed in v5 and provide a helpful migration message
+        from transformers.pipelines import REMOVED_TASKS
+
+        # Also check prefix matches for tasks like "translation_en_to_fr"
+        removed_msg = REMOVED_TASKS.get(task)
+        if removed_msg is None:
+            for removed_task in REMOVED_TASKS:
+                if task.startswith(removed_task):
+                    removed_msg = REMOVED_TASKS[removed_task]
+                    break
+
+        if removed_msg is not None:
+            raise ValueError(removed_msg)
+
         raise KeyError(f"Unknown task {task}, available tasks are {self.get_supported_tasks()}")
 
     def register_pipeline(

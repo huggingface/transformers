@@ -134,6 +134,22 @@ TASK_ALIASES = {
     "ner": "token-classification",
     "text-to-speech": "text-to-audio",
 }
+
+# Tasks that were removed in v5 — map to a helpful migration message
+REMOVED_TASKS = {
+    "translation": (
+        "The 'translation' pipeline was removed in Transformers v5. "
+        "Use pipeline('text-generation') with a model that supports translation instead."
+    ),
+    "summarization": (
+        "The 'summarization' pipeline was removed in Transformers v5. "
+        "Use pipeline('text-generation') with a model that supports summarization instead."
+    ),
+    "text2text-generation": (
+        "The 'text2text-generation' pipeline was removed in Transformers v5. "
+        "Use pipeline('text-generation') or pipeline('image-text-to-text') instead."
+    ),
+}
 SUPPORTED_TASKS = {
     "audio-classification": {
         "impl": AudioClassificationPipeline,
