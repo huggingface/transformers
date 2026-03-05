@@ -692,8 +692,6 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
     Returns:
         The loss, or a tuple of `(loss, outputs)` if `return_outputs` is `True`.
     """
-    import deepspeed
-
     # DeepSpeed SP automatically injects shift_labels into inputs (pre-shifted labels for SP).
     # The model's forward pass receives shift_labels via **kwargs and passes it to the loss function.
     # Both standard transformer models and Liger-patched models handle shift_labels correctly,
@@ -705,7 +703,18 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
     outputs = model(**inputs)
     loss = outputs.loss
 
-    sp_group = deepspeed.utils.groups._get_sequence_parallel_group()
+    # Prefer DeepSpeed SP groups when using Ulysses; otherwise fall back to torch device mesh.
+    if pc.sp_backend == "deepspeed" and pc.sp_size > 1:
+        from deepspeed.utils import groups
+
+        sp_group = groups._get_sequence_parallel_group()
+    elif accelerator.torch_device_mesh is not None:
+        sp_group = accelerator.torch_device_mesh["sp"].get_group()
+    else:
+        raise ValueError(
+            "Sequence parallelism is enabled but no SP process group is available. "
+            "Ensure torch_device_mesh is initialized or sp_backend='deepspeed' with sp_size > 1."
+        )
     sp_world_size = pc.sp_size
     # differentiable weighted per-shard-loss aggregation across ranks
     losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
