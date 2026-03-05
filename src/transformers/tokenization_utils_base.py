@@ -1669,9 +1669,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if "tokenizer_file" in vocab_files and not re.search(vocab_files["tokenizer_file"], "".join(remote_files)):
             # mistral tokenizer names are different, but we can still convert them if
             # mistral common is not there
-            other_pattern = r"tekken\.json|tokenizer\.model\.*"
+            other_pattern = r"tekken\.json|tokenizer\.model\.*|tiktoken\.model" + "|".join(
+                getattr(cls, "VOCAB_FILES_NAMES", {}).keys()
+            )
             if match := re.search(other_pattern, "\n".join(remote_files)):
-                vocab_files["vocab_file"] = match.group()
+                if "spm_file" in vocab_files:
+                    vocab_files["spm_file"] = match.group()
+                else:
+                    vocab_files["vocab_file"] = match.group()
 
         resolved_vocab_files = {}
         for file_id, file_path in vocab_files.items():

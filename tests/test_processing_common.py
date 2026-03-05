@@ -104,7 +104,8 @@ class ProcessorTesterMixin:
     text_input_name = "input_ids"
     images_input_name = "pixel_values"
     videos_input_name = "pixel_values_videos"
-    audio_input_name = "input_features"
+    audio_input_name_values = "input_values"  # raw/normalized audio
+    audio_input_name = "input_features"  # computed features, e.g. Mel spectrogram, STFT
 
     # Max-length values used in image-text kwargs tests. Override in subclasses if needed.
     image_text_kwargs_max_length = 117
@@ -762,7 +763,13 @@ class ProcessorTesterMixin:
 
         # Verify output contains all expected keys
         for key in expected_output_keys:
-            self.assertIn(key, inputs)
+            if key == self.audio_input_name:
+                self.assertTrue(
+                    self.audio_input_name_values in inputs or self.audio_input_name in inputs,
+                    f"Expected either '{self.audio_input_name_values}' or '{self.audio_input_name}' in inputs",
+                )
+            else:
+                self.assertIn(key, inputs)
 
         # Test that it raises error when no input is passed
         with self.assertRaises((TypeError, ValueError)):
