@@ -36,7 +36,7 @@ from ...image_utils import (
     PILImageResampling,
 )
 from ...masking_utils import create_bidirectional_mask, create_masks_for_generate
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.qwen3.configuration_qwen3 import Qwen3Config
 from ...models.qwen3.modeling_qwen3 import (
@@ -421,6 +421,10 @@ class IsaacVisionTransformer(PreTrainedModel):
 
     _supports_sdpa = True
     _supports_flash_attn = True
+    _can_record_outputs = {
+        "hidden_states": IsaacVisionEncoderLayer,
+        "attentions": IsaacVisionAttention,
+    }
 
     def __init__(self, config: IsaacVisionConfig):
         super().__init__(config)
@@ -438,10 +442,13 @@ class IsaacVisionTransformer(PreTrainedModel):
         if isinstance(module, IsaacVisionEmbeddings):
             init.zeros_(module.position_embedding)
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self,
         vision_tokens: tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor | None],
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
         """
         Inputs:
             vision_tokens (Tuple[Tensor, Tensor, Optional[Tensor]]):
@@ -451,7 +458,7 @@ class IsaacVisionTransformer(PreTrainedModel):
                 - `patch_attention_mask`: `(num_images, max_patches)` or `None`
 
         Returns:
-            Tuple of `(pixel_shuffled_features, attention_mask, token_lengths)`.
+            `BaseModelOutputWithPooling` with pixel-shuffled embeddings in `last_hidden_state`.
         """
         if len(vision_tokens) == 2:
             seq_patches, token_grids = vision_tokens
@@ -469,14 +476,16 @@ class IsaacVisionTransformer(PreTrainedModel):
             inputs_embeds=hidden_states,
             attention_mask=vision_patch_attention_mask,
         )
-        encoder_outputs = self.encoder(inputs_embeds=hidden_states, attention_mask=encoder_attention_mask)
+        encoder_outputs = self.encoder(inputs_embeds=hidden_states, attention_mask=encoder_attention_mask, **kwargs)
         hidden_states = self.post_layernorm(encoder_outputs.last_hidden_state)
 
-        return pixel_shuffle_padded(
+        hidden_states = pixel_shuffle_padded(
             x=hidden_states,
             token_grids=token_grids,
             scale_factor=self.pixel_shuffle_scale_factor,
         )
+
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=None)
 
 
 class IsaacMultiModalProjector(nn.Module):
@@ -508,10 +517,12 @@ class IsaacVisionEmbedding(nn.Module):
     def forward(
         self,
         vision_tokens: tuple[torch.Tensor, torch.Tensor, torch.Tensor | None],
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         vision_patches, token_grids, vision_patch_attention_mask = vision_tokens
-        hidden_states = self.vision_tower((vision_patches, token_grids, vision_patch_attention_mask))
-        projected = self.multimodal_projector(hidden_states)
+        vision_outputs = self.vision_tower(
+            (vision_patches, token_grids, vision_patch_attention_mask), return_dict=True
+        )
+        projected = self.multimodal_projector(vision_outputs.last_hidden_state)
         return projected
 
 
