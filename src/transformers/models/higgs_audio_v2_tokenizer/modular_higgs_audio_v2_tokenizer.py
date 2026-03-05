@@ -17,6 +17,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio
 
+from ...utils import auto_docstring
+from ...utils.import_utils import requires
 from ..xcodec.configuration_xcodec import XcodecConfig
 from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecModel, XcodecPreTrainedModel
 
@@ -150,6 +152,8 @@ class HiggsAudioV2TokenizerVectorQuantization(nn.Module):
         return quantize
 
 
+@requires(backends=("torchaudio",))
+@auto_docstring(custom_intro="""The HiggsAudioV2Tokenizer neural audio codec model.""")
 class HiggsAudioV2TokenizerModel(XcodecModel):
     def _extract_semantic_features(self, input_values: torch.FloatTensor) -> torch.FloatTensor:
         if self.config.sample_rate != self.config.semantic_sample_rate:
