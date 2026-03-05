@@ -1058,6 +1058,9 @@ class IsaacModel(Qwen3PreTrainedModel):
         embeds = self.text_model.embed_tokens(input_ids)
         image_token_mask = modality == ModalityType.image.value
 
+        if not torch.any(image_token_mask):
+            return embeds, modality
+
         if vision_patches is None or vision_token_grids is None:
             if torch.any(image_token_mask):
                 raise ValueError("Image placeholders require `vision_patches` and `vision_token_grids`.")
@@ -1403,6 +1406,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         vision_image_attention_mask: torch.LongTensor | None = None,
         cache_position: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
+        is_first_iteration=False,
+        use_cache=True,
         **kwargs,
     ) -> dict[str, Any]:
         model_inputs = super().prepare_inputs_for_generation(
@@ -1412,6 +1417,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             inputs_embeds=inputs_embeds,
             cache_position=cache_position,
             position_ids=None,
+            is_first_iteration=is_first_iteration,
+            use_cache=use_cache,
             **kwargs,
         )
         multimodal_inputs = {
@@ -1426,8 +1433,7 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         if not any(value is not None for value in multimodal_inputs.values()):
             return model_inputs
 
-        past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
-        first_step = past_len == 0
+        first_step = is_first_iteration or not use_cache
         for key, value in multimodal_inputs.items():
             model_inputs[key] = value if first_step else None
         model_inputs["position_ids"] = position_ids if first_step else None
