@@ -26,7 +26,7 @@ class EdgeTamVisionConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`EdgeTamVisionModel`]. It is used to instantiate a SAM
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     defaults will yield a similar configuration to that of SAM 2.1 Hiera-tiny
-    [facebook/EdgeTAM](https://huggingface.co/facebook/EdgeTAM) architecture.
+    [yonigozlan/EdgeTAM-hf](https://huggingface.co/yonigozlan/EdgeTAM-hf) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -245,7 +245,7 @@ class EdgeTamConfig(PreTrainedConfig):
     [`EdgeTamConfig`] is the configuration class to store the configuration of a [`EdgeTamModel`]. It is used to instantiate a
     EDGETAM model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
     configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
-    [facebook/edgetam.1-hiera-tiny](https://huggingface.co/facebook/edgetam.1-hiera-tiny) architecture.
+    [yonigozlan/EdgeTAM-hf](https://huggingface.co/yonigozlan/EdgeTAM-hf) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.

@@ -257,6 +257,7 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
     `convert_processors`. For each model architecture`, a copy will be created and saved along the built model.
     """
     # Currently, this solely uses the docstring in the source file of `config_class` to find a checkpoint.
+    # breakpoint()
     checkpoint = get_checkpoint_from_config_class(config_class)
 
     # New method that is more robust to get checkpoints!
@@ -382,6 +383,7 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
             if config_class_from_processor_class != config_class:
                 processor = build_processor(config_class_from_processor_class, processor_class)
 
+    # breakpoint()
     # Try to create an image processor or a feature extractor without any checkpoint
     if (
         processor is None
@@ -1701,6 +1703,7 @@ if __name__ == "__main__":
     )
 
 
+# EdgeTamVideoConfig: no model tester!
 # FastSpeech2ConformerConfig --> needs `pip install g2p-en`
 # FastSpeech2ConformerTokenizer vs AutTokenizer --> the later can't load from `espnet/fastspeech2_conformer` ??
 # "Pop2PianoConfig" Require `pip install essentia==2.1b6.dev1034`
