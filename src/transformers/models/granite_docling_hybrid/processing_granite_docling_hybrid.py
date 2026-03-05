@@ -15,8 +15,12 @@
 Processor class for GraniteDoclingHybrid.
 """
 
+from itertools import accumulate
 from typing import TYPE_CHECKING, Union
 
+import numpy as np
+
+from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
@@ -24,6 +28,7 @@ from ..got_ocr2.image_processing_got_ocr2 import get_optimal_tiled_canvas
 from ..idefics3.processing_idefics3 import (
     Idefics3Processor,
     get_image_prompt_string,
+    is_image_or_image_url,
     is_url,
     load_image,
 )
@@ -135,10 +140,6 @@ class GraniteDoclingHybridProcessor(Idefics3Processor):
             n_images_in_text = [sample.count(self.image_token) for sample in text]
 
         if images is not None:
-            from itertools import accumulate
-
-            from ..idefics3.processing_idefics3 import is_image_or_image_url
-
             if is_image_or_image_url(images):
                 images = [[images]]
             elif isinstance(images, (list, tuple)) and is_image_or_image_url(images[0]):
@@ -255,8 +256,6 @@ class GraniteDoclingHybridProcessor(Idefics3Processor):
             inputs.update(text_inputs)
 
         if return_mm_token_type_ids:
-            import numpy as np
-
             array_ids = np.array(inputs["input_ids"])
             mm_token_type_ids = np.zeros_like(array_ids)
             for i, seq_lengths in enumerate(batch_image_seq_lengths):
@@ -271,8 +270,6 @@ class GraniteDoclingHybridProcessor(Idefics3Processor):
                     j = np.searchsorted(image_start_positions, end)
 
             inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
-        from ...feature_extraction_utils import BatchFeature
 
         return BatchFeature(data=inputs, tensor_type=return_tensors)
 
