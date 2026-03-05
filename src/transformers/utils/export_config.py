@@ -1,7 +1,4 @@
-#!/usr/bin/env python
-# coding=utf-8
-
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 # Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -68,8 +65,7 @@ class ExportConfigMixin:
         return copy.deepcopy(self.__dict__)
 
     def __iter__(self):
-        for attr, value in self.to_dict().items():
-            yield attr, value
+        yield from self.__dict__.items()
 
 
 @dataclass

@@ -14,8 +14,6 @@
 # limitations under the License.
 """Auto exporter factory for HuggingFace exporters."""
 
-from typing import Optional, Union
-
 from ..utils import logging
 from ..utils.export_config import ExportConfigMixin, ExportFormat
 from .base import HfExporter
@@ -75,7 +73,7 @@ class AutoHfExporter:
     """
 
     @classmethod
-    def from_config(cls, export_config: Union[ExportConfigMixin, dict], **kwargs) -> Optional[HfExporter]:
+    def from_config(cls, export_config: ExportConfigMixin | dict, **kwargs) -> HfExporter | None:
         # Convert it to a ExportConfigMixin if the q_config is a dict
         if isinstance(export_config, dict):
             export_config = AutoExportConfig.from_dict(export_config)
@@ -86,7 +84,7 @@ class AutoHfExporter:
         return target_cls(export_config, **kwargs)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> Optional[HfExporter]:
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> HfExporter | None:
         """
         Load an exporter instance from a pretrained model/config that contains an export config.
         This will look for common attributes on the model config (see `AutoExportConfig.from_pretrained`).
