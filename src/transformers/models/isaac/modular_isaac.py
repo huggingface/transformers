@@ -694,11 +694,6 @@ class IsaacProcessor(ProcessorMixin):
         BatchFeature: Top-level batched text and vision tensors.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("IsaacImageProcessorFast",)
-    tokenizer_class = ("Qwen2Tokenizer",)
-    pad_token_id = 151643
-
     def __init__(
         self,
         image_processor,
