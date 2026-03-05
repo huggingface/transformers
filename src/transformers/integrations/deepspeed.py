@@ -683,7 +683,7 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
     (e.g., when some ranks receive only padding or prompt tokens that are masked with -100).
 
     Args:
-        accelerator (`Accelerator`): The accelerator instance.
+        accelerator (`Accelerator`): The accelerator instance with `torch_device_mesh` support.
         model (`torch.nn.Module`): The model to compute the loss for.
         inputs (`dict[str, torch.Tensor | Any]`): The input data for the model. Must include `"shift_labels"` key.
         return_outputs (`bool`): Whether to return the model outputs along with the loss.
