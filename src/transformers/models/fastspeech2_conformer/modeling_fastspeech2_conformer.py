@@ -113,7 +113,7 @@ def length_regulator(encoded_embeddings, duration_labels, speaking_speed=1.0):
     elif speaking_speed != 1.0:
         duration_labels = torch.round(duration_labels.float() * speaking_speed).long()
 
-    if not torch.compiler.is_exporting() and duration_labels.sum() == 0:
+    if duration_labels.sum() == 0:
         duration_labels[duration_labels.sum(dim=1).eq(0)] = 1
 
     # Calculate the maximum length needed
@@ -129,8 +129,6 @@ def length_regulator(encoded_embeddings, duration_labels, speaking_speed=1.0):
     # Loop through the batch and fill in the data
     for i, (encoded_embedding, target_duration) in enumerate(zip(encoded_embeddings, duration_labels)):
         repeated = torch.repeat_interleave(encoded_embedding, target_duration, dim=0)
-        if torch.compiler.is_exporting():
-            torch._check(repeated.size(0) <= hidden_states.size(1))
         hidden_states[i, : repeated.size(0)] = repeated
 
     return hidden_states

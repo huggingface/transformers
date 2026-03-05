@@ -1468,8 +1468,6 @@ class LEDEncoder(LEDPreTrainedModel):
         # get masking tensors
         is_index_masked = attention_mask < 0
         is_index_global_attn = attention_mask > 0
-
-        # Default to false during export to avoid issues in global attention handling
         is_global_attn = is_index_global_attn.flatten().any().item()
 
         embed_pos = self.embed_positions(input_shape)

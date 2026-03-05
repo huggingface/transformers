@@ -1455,7 +1455,7 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
             ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, level, 0] * width)
             ref = torch.stack((ref_x, ref_y), -1)
             reference_points_list.append(ref)
-        reference_points = torch.cat(reference_points_list, dim=1)
+        reference_points = torch.cat(reference_points_list, 1)
         reference_points = reference_points[:, :, None] * valid_ratios[:, None]
         return reference_points
 

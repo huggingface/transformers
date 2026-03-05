@@ -491,7 +491,7 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
 
     @staticmethod
     def _disable_attention_mask(attn_mask, prob, num_query_tokens, encoder_start_tokens, device):
-        if torch.compiler.is_exporting() or prob < 1:
+        if prob < 1:
             # Generate random queries to disable based on the probs
             random_queries = torch.rand(attn_mask.shape[0], num_query_tokens, device=device) > prob
 
@@ -535,9 +535,7 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
                 hidden_states = torch.cat((query, hidden_states), dim=1)
 
             if idx >= self.num_hidden_layers - self.config.num_blocks and (
-                self.training
-                or torch.compiler.is_exporting()
-                or self.attn_mask_probs[idx - self.num_hidden_layers + self.config.num_blocks] > 0
+                self.training or self.attn_mask_probs[idx - self.num_hidden_layers + self.config.num_blocks] > 0
             ):
                 norm_hidden_states = self.layernorm(hidden_states)
                 masks_queries_logits, class_queries_logits = self.predict(norm_hidden_states)

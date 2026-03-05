@@ -1358,9 +1358,7 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
 
         image_embeds = None
         audio_embeds = None
-        if image_pixel_values is not None and (
-            torch.compiler.is_exporting() or (input_ids == self.image_token_id).any()
-        ):
+        if image_pixel_values is not None and (input_ids == self.image_token_id).any():
             image_embeds = self.image_embed(
                 input_ids,
                 inputs_embeds,
@@ -1368,9 +1366,7 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
                 image_sizes=image_sizes,
                 image_attention_mask=image_attention_mask,
             )
-        if audio_input_features is not None and (
-            torch.compiler.is_exporting() or (input_ids == self.audio_token_id).any()
-        ):
+        if audio_input_features is not None and (input_ids == self.audio_token_id).any():
             audio_projection_mode = "vision" if image_pixel_values is not None else "speech"
             audio_embeds = self.audio_embed(
                 input_ids,

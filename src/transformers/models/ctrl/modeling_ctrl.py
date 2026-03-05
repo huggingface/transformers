@@ -202,6 +202,7 @@ class CTRLModel(CTRLPreTrainedModel):
         self.num_layers = config.n_layer
 
         self.w = nn.Embedding(config.vocab_size, config.n_embd)
+
         self.dropout = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList(
             [

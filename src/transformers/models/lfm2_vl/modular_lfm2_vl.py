@@ -64,13 +64,6 @@ class Lfm2VlMultiModalProjector(nn.Module):
 
     def pixel_unshuffle(self, hidden_states: torch.Tensor):
         batch_size, width, height, channels = hidden_states.size()
-
-        if torch.compiler.is_exporting():
-            torch._check(width // self.factor > 1)
-            torch._check(height // self.factor > 1)
-            torch._check(channels * self.factor > 0)
-            torch._check(channels * self.factor**2 > 0)
-
         hidden_states = hidden_states.reshape(batch_size, width, height // self.factor, channels * self.factor)
         hidden_states = hidden_states.permute(0, 2, 1, 3)
         hidden_states = hidden_states.reshape(
@@ -133,18 +126,11 @@ class Lfm2VlModel(LlavaModel):
         for img_idx in range(last_hidden_state.size(0)):
             feature = last_hidden_state[img_idx]
             # unpad the image representation
-            feature = feature[:img_feature_length, :].unsqueeze(0)  # (1, img_feature_length, hidden_size)
+            feature = feature[: img_feature_lengths[img_idx], :].unsqueeze(0)
 
             # reshape to original height and width
             feature_org_h, feature_org_w = spatial_shapes[img_idx]
-
-            if torch.compiler.is_exporting():
-                feature_org_h, feature_org_w = feature_org_h.item(), feature_org_w.item()
-                torch._check(feature_org_h > 0)
-                torch._check(feature_org_w > 0)
-                torch._check(feature.shape[1] == feature_org_h * feature_org_w)
-
-            feature = feature.reshape(1, feature_org_h, feature_org_w, feature.size(-1))
+            feature = feature.reshape(1, feature_org_h, feature_org_w, -1)
 
             # project the image representation
             img_embedding = self.multi_modal_projector(feature)

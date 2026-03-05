@@ -411,7 +411,7 @@ class Zamba2MambaMixer(nn.Module):
             out = self.out_proj(hidden_states)[:, None, ...]
         # if no cache is found, calling the kernel
         else:
-            if attention_mask is not None and (torch.compiler.is_exporting() or not torch.all(attention_mask == 1)):
+            if attention_mask is not None and not torch.all(attention_mask == 1):
                 # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                 dtype = hidden_states.dtype
                 hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
