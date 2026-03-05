@@ -101,6 +101,7 @@ from test_module.custom_configuration import CustomConfig
 
 if is_torch_available():
     import torch
+    from safetensors import safe_open
     from safetensors.torch import load_file
     from safetensors.torch import save_file as safe_save_file
     from test_module.custom_modeling import CustomModel
@@ -130,6 +131,7 @@ if is_torch_available():
         _find_disjoint,
         _find_identical,
         get_total_byte_count,
+        remove_tied_weights_from_state_dict,
     )
 
     # Fake pretrained models for tests
@@ -1559,6 +1561,44 @@ class ModelUtilsTest(TestCasePlus):
         with init.no_tie_weights():
             model = LlamaForCausalLM._from_config(copy.deepcopy(config))
             self.assertTrue(model.lm_head.weight is not model.model.embed_tokens.weight)
+
+    def test_tied_weights_removed_even_without_shared_storage(self):
+        """Test that tied weight keys are removed from the state dict even when tensors
+        no longer share storage (e.g., after `.to(device)` which can break parameter identity).
+        Regression test for https://github.com/huggingface/transformers/issues/44466
+        """
+        model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
+        # Make sure weights are actually tied
+        self.assertIs(model.linear.weight, model.linear_2.weight)
+
+        # Simulate the scenario where storage sharing is broken (as can happen after .to(device)):
+        # create a state_dict where tied weights have separate storage
+        state_dict = model.state_dict()
+        # Both keys should be present
+        self.assertIn("linear.weight", state_dict)
+        self.assertIn("linear_2.weight", state_dict)
+        # Break storage sharing by cloning
+        state_dict["linear_2.weight"] = state_dict["linear_2.weight"].clone()
+
+        # The function should still remove the tied key via the model's all_tied_weights_keys mapping
+        state_dict = remove_tied_weights_from_state_dict(state_dict, model)
+        self.assertIn("linear.weight", state_dict)
+        self.assertNotIn("linear_2.weight", state_dict)
+
+    def test_save_pretrained_tied_weights_device_independent(self):
+        """Test that save_pretrained produces the same keys regardless of model device.
+        Regression test for https://github.com/huggingface/transformers/issues/44466
+        """
+        model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            with safe_open(os.path.join(tmp_dir, "model.safetensors"), framework="pt") as f:
+                cpu_keys = set(f.keys())
+
+        # The tied weight key should not be in the checkpoint
+        self.assertIn("linear.weight", cpu_keys)
+        self.assertNotIn("linear_2.weight", cpu_keys)
 
     def test_unexpected_keys_warnings(self):
         model = ModelWithHead(PreTrainedConfig(tie_word_embeddings=True))

@@ -469,6 +469,16 @@ def remove_tied_weights_from_state_dict(
             "This can also just mean that the module's tied weight keys are wrong vs the actual tied weights in the model.",
         )
 
+    # Fallback: also use the model's explicit tied weights mapping to remove tied target keys.
+    # This handles the case where storage sharing is not detected (e.g., after `.to(device)` which
+    # may create new Parameter objects that no longer share storage), but the model still
+    # logically considers these weights as tied.
+    tied_weights_mapping = getattr(model, "all_tied_weights_keys", None)
+    if tied_weights_mapping:
+        for target_key, source_key in tied_weights_mapping.items():
+            if target_key in state_dict and source_key in state_dict:
+                del state_dict[target_key]
+
     return state_dict
 
 
