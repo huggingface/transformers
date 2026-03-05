@@ -1,4 +1,4 @@
-# Copyright 2024 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -57,7 +57,7 @@ MODEL_CONFIGS = {
     "chmv2": {
         "backbone_model": "vitl16_sat493m",  # DINOv3 backbone variant
         "out_indices": [5, 11, 17, 23],  # 0-indexed layer indices for feature extraction
-        "neck_hidden_sizes": [128, 256, 512, 1024],
+        "post_process_channels": [128, 256, 512, 1024],
         "fusion_hidden_size": 256,
     },
 }
@@ -100,7 +100,7 @@ def get_chmv2_config(
         backbone_type="dinov3_vit",
         reassemble_hidden_size=backbone_config.hidden_size,
         patch_size=backbone_config.patch_size,
-        neck_hidden_sizes=model_cfg["neck_hidden_sizes"],
+        post_process_channels=model_cfg["post_process_channels"],
         fusion_hidden_size=model_cfg["fusion_hidden_size"],
         min_depth=min_depth,
         max_depth=max_depth,
@@ -156,7 +156,7 @@ def convert_backbone_keys(state_dict: dict) -> dict:
     return state_dict
 
 
-def create_rename_keys_head(config: CHMv2Config, head_only: bool = False) -> list[tuple[str, str]]:
+def create_rename_keys_head(head_only: bool = False) -> list[tuple[str, str]]:
     """
     Create rename keys for CHMv2 head weights.
 
@@ -165,7 +165,7 @@ def create_rename_keys_head(config: CHMv2Config, head_only: bool = False) -> lis
         head_only: If True, source keys have no prefix (decoder-only checkpoint).
                    If False, source keys have 'head.' prefix (full model checkpoint).
 
-    Original structure (dinov3-private decoder/head):
+    Original structure (DINOv3 OSS code):
         [prefix.]reassemble_blocks.projects.{i}.conv
         [prefix.]reassemble_blocks.resize_layers.{i}
         [prefix.]reassemble_blocks.batchnorm_layers.{i}
@@ -175,7 +175,7 @@ def create_rename_keys_head(config: CHMv2Config, head_only: bool = False) -> lis
         [prefix.]fusion_blocks.{i}.res_conv_unit2.conv1.conv / conv2.conv
         [prefix.]conv_depth.head.{0,2,4}
 
-    HF structure (transformers-private):
+    HF structure:
         head.reassemble_stage.layers.{i}.projection.conv
         head.reassemble_stage.layers.{i}.resize
         head.reassemble_stage.layers.{i}.batchnorm
@@ -184,8 +184,6 @@ def create_rename_keys_head(config: CHMv2Config, head_only: bool = False) -> lis
         head.fusion_layers.{j}.residual_layer1.convolution1 / convolution2
         head.fusion_layers.{j}.residual_layer2.convolution1 / convolution2
         head.conv_depth.head.{0,2,4}
-
-    Note: CHMv2 fusion blocks have NO projection layer (unlike DPT).
     """
     rename_keys = []
 
@@ -235,20 +233,10 @@ def create_rename_keys_head(config: CHMv2Config, head_only: bool = False) -> lis
         rename_keys.append(
             (f"{src_prefix}reassemble_blocks.readout_projects.{i}.0.bias", f"head.reassemble_stage.readout_projects.{i}.0.bias")
         )
-
-    # Convs (original has ConvModule with .conv, HF has plain Conv2d)
     for i in range(4):
         rename_keys.append((f"{src_prefix}convs.{i}.conv.weight", f"head.convs.{i}.weight"))
-        # Note: HF convs have bias=False, so no bias key
-
-    # Fusion blocks -> fusion_layers
-    # Original fusion_blocks order: [0, 1, 2, 3] where 0 has no res_conv_unit1
-    # HF fusion_layers order: [0, 1, 2, 3] where 0 (is_first_layer=True) has no residual_layer1
-    # So the mapping is direct: original i -> HF i
 
     for i in range(4):
-        # CHMv2 has NO projection layer in fusion blocks (only DPT has it)
-
         # res_conv_unit1 -> residual_layer1 (only for i > 0, since fusion_blocks[0].res_conv_unit1 = None)
         if i > 0:
             rename_keys.append(
@@ -285,7 +273,7 @@ def create_rename_keys_head(config: CHMv2Config, head_only: bool = False) -> lis
             (f"{src_prefix}fusion_blocks.{i}.project.conv.bias", f"head.fusion_layers.{i}.project.bias")
         )
 
-    # UpConvHead (conv_depth) - both use nn.Sequential with same indices
+    # UpConvHead - both use nn.Sequential with same indices
     # head[0]: Conv2d(features, features // 2, kernel_size=3)
     # head[1]: Interpolate (no weights)
     # head[2]: Conv2d(features // 2, n_hidden_channels, kernel_size=3)
@@ -333,7 +321,7 @@ def convert_chmv2_checkpoint(
     Convert CHMv2 checkpoint to HuggingFace format.
 
     Supports two checkpoint formats:
-    1. Head-only checkpoint (from dinov3-private release): Keys like 'reassemble_blocks.projects.0...'
+    1. Head-only checkpoint (from DINOv3 CHMv2 release): Keys like 'reassemble_blocks.projects.0...'
        Use with --backbone_repo_id to load backbone from HuggingFace.
     2. Full model checkpoint: Keys like 'backbone...' and 'head...'
     
@@ -372,7 +360,7 @@ def convert_chmv2_checkpoint(
 
     # Rename head keys
     logger.info(f"Converting head weights (head_only={head_only})...")
-    rename_keys = create_rename_keys_head(config, head_only=head_only)
+    rename_keys = create_rename_keys_head(head_only=head_only)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
 
@@ -390,8 +378,8 @@ def convert_chmv2_checkpoint(
     # Create processor
     processor = DPTImageProcessor(
         do_resize=True,
-        size={"height": 518, "width": 518},
-        ensure_multiple_of=14,
+        size={"height": 512, "width": 512},
+        ensure_multiple_of=16,
         keep_aspect_ratio=True,
         do_rescale=True,
         do_normalize=True,

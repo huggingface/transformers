@@ -44,9 +44,8 @@ class CHMv2Config(PreTrainedConfig):
             The number of input channels of the reassemble layers.
         reassemble_factors (`list[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
             The up/downsampling factors of the reassemble layers.
-        neck_hidden_sizes (`list[str]`, *optional*, defaults to `[128, 256, 512, 1024]`):
+        post_process_channels (`list[str]`, *optional*, defaults to `[128, 256, 512, 1024]`):
             The output channel sizes of the reassemble stage for each backbone feature level.
-            These correspond to post_process_channels in the CHMv2Head.
         fusion_hidden_size (`int`, *optional*, defaults to 256):
             The number of channels before fusion.
         head_in_index (`int`, *optional*, defaults to -1):
@@ -71,21 +70,7 @@ class CHMv2Config(PreTrainedConfig):
             The strategy for depth bins distribution. Can be one of `["linear", "log", "chmv2_mixlog"]`.
         norm_strategy (`str`, *optional*, defaults to `"chmv2_mixlog"`):
             The normalization strategy for depth prediction. Can be one of `["linear", "softmax", "sigmoid", "chmv2_mixlog"]`.
-
-    Example:
-
-    ```python
-    >>> from transformers import CHMv2Config, CHMv2ForCanopyHeightEstimation
-
-    >>> # Initializing a CHMv2 style configuration with DINOv3 backbone
-    >>> configuration = CHMv2Config(backbone_type="dinov3_vitl16")
-
-    >>> # Initializing a model from the CHMv2 style configuration
-    >>> model = CHMv2ForCanopyHeightEstimation(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+    """
 
     model_type = "chmv2"
     sub_configs = {"backbone_config": AutoConfig}
@@ -98,7 +83,7 @@ class CHMv2Config(PreTrainedConfig):
         initializer_range=0.02,
         reassemble_hidden_size=1024,
         reassemble_factors=[4, 2, 1, 0.5],
-        neck_hidden_sizes=[128, 256, 512, 1024],
+        post_process_channels=[128, 256, 512, 1024],
         fusion_hidden_size=256,
         head_in_index=-1,
         head_hidden_size=128,
@@ -144,7 +129,7 @@ class CHMv2Config(PreTrainedConfig):
         self.patch_size = patch_size
         self.initializer_range = initializer_range
         self.reassemble_factors = reassemble_factors
-        self.neck_hidden_sizes = neck_hidden_sizes
+        self.post_process_channels = post_process_channels
         self.fusion_hidden_size = fusion_hidden_size
         self.head_in_index = head_in_index
         self.head_hidden_size = head_hidden_size

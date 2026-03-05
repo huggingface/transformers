@@ -11,12 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch CHMv2 model.
-
-This is adapted from DPT (https://arxiv.org/abs/2103.13413) with the following changes:
-- Uses a 4-layer Convolutional head with intermediate upsampling (instead of 3)
-- No projection layer after fusion blocks
-- A Conv2D layer is applied after UpConvHead
+"""PyTorch CHMv2 model, adapted from DPT (https://arxiv.org/abs/2103.13413).
 """
 
 import torch
@@ -157,11 +152,11 @@ class CHMv2ReassembleStage(nn.Module):
         self.config = config
         self.readout_type = config.readout_type
 
-        in_channels = [config.reassemble_hidden_size] * len(config.neck_hidden_sizes)
+        in_channels = [config.reassemble_hidden_size] * len(config.post_process_channels)
         factors = config.reassemble_factors
 
         self.layers = nn.ModuleList()
-        for idx, (out_channels, factor) in enumerate(zip(config.neck_hidden_sizes, factors)):
+        for idx, (out_channels, factor) in enumerate(zip(config.post_process_channels, factors)):
             self.layers.append(
                 CHMv2ReassembleLayer(
                     in_channels=in_channels[idx],
@@ -308,7 +303,7 @@ class CHMv2FeatureFusionLayer(nn.Module):
 
 class CHMv2UpConvHead(nn.Module):
     """
-    A 4-layer Convolutional head with intermediate upsampling.
+    A Convolutional head with intermediate upsampling.
     kaiming_init is used on the 2nd Conv2d module.
 
     This follows the CHMv2 design from dinov3:
@@ -372,11 +367,11 @@ class CHMv2Head(nn.Module):
         self.reassemble_stage = CHMv2ReassembleStage(config)
 
         self.convs = nn.ModuleList()
-        for channel in config.neck_hidden_sizes:
+        for channel in config.post_process_channels:
             self.convs.append(nn.Conv2d(channel, config.fusion_hidden_size, kernel_size=3, padding=1, bias=False))
 
         self.fusion_layers = nn.ModuleList()
-        for idx in range(len(config.neck_hidden_sizes)):
+        for idx in range(len(config.post_process_channels)):
             self.fusion_layers.append(CHMv2FeatureFusionLayer(config, is_first_layer=(idx == 0)))
 
         self.conv_depth = CHMv2UpConvHead(
@@ -683,40 +678,6 @@ class CHMv2ForCanopyHeightEstimation(CHMv2PreTrainedModel):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth depth estimation maps for computing the loss.
-
-        Examples:
-        ```python
-        >>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
-        >>> import torch
-        >>> import numpy as np
-        >>> from PIL import Image
-        >>> import httpx
-        >>> from io import BytesIO
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> with httpx.stream("GET", url) as response:
-        ...     image = Image.open(BytesIO(response.read()))
-
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/chmv2-large-hf")
-        >>> model = AutoModelForDepthEstimation.from_pretrained("facebook/chmv2-large-hf")
-
-        >>> # prepare image for the model
-        >>> inputs = image_processor(images=image, return_tensors="pt")
-
-        >>> with torch.no_grad():
-        ...     outputs = model(**inputs)
-
-        >>> # interpolate to original size
-        >>> post_processed_output = image_processor.post_process_depth_estimation(
-        ...     outputs,
-        ...     target_sizes=[(image.height, image.width)],
-        ... )
-
-        >>> # visualize the prediction
-        >>> predicted_depth = post_processed_output[0]["predicted_depth"]
-        >>> depth = predicted_depth * 255 / predicted_depth.max()
-        >>> depth = depth.detach().cpu().numpy()
-        >>> depth = Image.fromarray(depth.astype("uint8"))
         ```"""
         loss = None
         if labels is not None:
@@ -736,17 +697,12 @@ class CHMv2ForCanopyHeightEstimation(CHMv2PreTrainedModel):
         # This replicates DINOv3's CenterPadding behavior
         pixel_values_padded = self._center_pad(pixel_values, multiple=patch_size)
 
-        # Use custom method to extract (feature_map, cls_token) tuples from intermediate layers
-        # This replicates DINOv3's get_intermediate_layers(reshape=True, return_class_token=True)
-        # Note: _get_intermediate_layers_with_cls also applies padding internally, but we need
-        # the padded dimensions here for interpolation
+        # Custom method to extract (feature_map, cls_token) tuples from intermediate layers
         hidden_states_with_cls = self._get_intermediate_layers_with_cls(
             pixel_values,
             out_indices=out_indices,
             apply_norm=self.backbone.config.apply_layernorm,
         )
-
-        # Get spatial dimensions from PADDED input (not original)
         _, _, padded_height, padded_width = pixel_values_padded.shape
         patch_height = padded_height // patch_size
         patch_width = padded_width // patch_size
