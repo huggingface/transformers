@@ -544,6 +544,12 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
                 if getattr(config.text_config, key, None) is not None:
                     setattr(config.text_config, key, max_position)
 
+    # TODO: We have this `self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size` in `InstructBlipConfig`,
+    #   and we need to do it here otherwise shape issue!!!
+    # TODO: But the actual problem is that we should try to get `InstructBlipConfig` in the first place instead of `InstructBlipVisionConfig`.
+    if config.__class__.__name__ in ["InstructBlipConfig", "InstructBlipVideoConfig"]:
+        config.qformer_config.encoder_hidden_size = config.vision_config.hidden_size
+
     # breakpoint()
     return config
 
@@ -877,11 +883,16 @@ def build_model(model_arch, tiny_config, output_dir):
 
     # breakpoint()
     model = model_arch(config=tiny_config)
-    model.save_pretrained(checkpoint_dir)
+    # breakpoint()
 
-    # can't call from_pretrained from saved one
-    if not tiny_config.__class__.__name__.endswith(("TimmBackboneConfig",)):
-        model.from_pretrained(checkpoint_dir)
+    with tempfile.TemporaryDirectory(dir=checkpoint_dir) as tmpdir:
+        checkpoint_dir_tmp = tmpdir
+        model.save_pretrained(checkpoint_dir_tmp)
+
+        # can't call from_pretrained from saved one
+        if not tiny_config.__class__.__name__.endswith(("TimmBackboneConfig",)):
+            # breakpoint()
+            model.from_pretrained(checkpoint_dir_tmp)
 
     return model
 
@@ -1643,7 +1654,7 @@ if __name__ == "__main__":
     if not args.all and not args.model_types:
         raise ValueError("Please provide at least one model type or pass `--all` to export all architectures.")
 
-    # os.environ["HF_TOKEN"] = args.token
+    os.environ["HF_TOKEN"] = args.token
 
     create_tiny_models(
         args.output_path,
