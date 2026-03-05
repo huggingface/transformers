@@ -480,27 +480,6 @@ class ServeCompletionsGenerateMockTests(unittest.TestCase):
             else:
                 raise ValueError("VLMs should only receive content as lists.")
 
-    def test_apply_chat_template_tokenize_for_vlm(self):
-        from transformers import AutoProcessor
-
-        processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM-Instruct")
-
-        messages = [{"role": "user", "content": "Hello"}]
-        processor_inputs = Serve.get_processor_inputs_from_inbound_messages(messages, Modality.VLM)
-        result = processor.apply_chat_template(
-            processor_inputs, return_tensors="pt", add_generation_prompt=True, return_dict=True, tokenize=True
-        )
-        self.assertIn("input_ids", result)
-        self.assertTrue(hasattr(result, "to"))
-
-        messages_list = [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]
-        processor_inputs = Serve.get_processor_inputs_from_inbound_messages(messages_list, Modality.VLM)
-        result_list = processor.apply_chat_template(
-            processor_inputs, return_tensors="pt", add_generation_prompt=True, return_dict=True, tokenize=True
-        )
-        self.assertIn("input_ids", result_list)
-        self.assertTrue(hasattr(result_list, "to"))
-
 
 @slow  # server startup time is slow on our push CI
 @require_openai
@@ -683,27 +662,6 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
                 "I can assist you with a wide range of tasks, from answering questions to providing information on various sports topics."
             )
         )
-
-    def test_full_request_vlm(self):
-        """Tests that an inference using Continuous Batching works with a VLM"""
-
-        request = {
-            "model": "HuggingFaceTB/SmolVLM-Instruct",
-            "messages": [
-                {"role": "user", "content": "Describe this image."},
-            ],
-            "stream": True,
-            "max_tokens": 30,
-        }
-        all_payloads = self.run_server(request)
-
-        full_text = ""
-        for token in all_payloads:
-            if isinstance(token, ChatCompletionStreamOutput) and token.choices and len(token.choices) > 0:
-                content = token.choices[0].delta.get("content", "")
-                full_text += content if content is not None else ""
-
-        self.assertTrue(len(full_text) > 0)
 
     def test_max_tokens_not_set_in_req(self):
         request = {

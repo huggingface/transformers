@@ -807,6 +807,11 @@ class Serve:
                 self.running_continuous_batching_manager = None
 
         model, processor = self.load_model_and_processor(model_id_and_revision)
+
+        # Continuous batching only supports text-only models
+        if self.get_model_modality(model, processor=processor) != Modality.LLM:
+            return self.generate_chat_completion(req)
+
         tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
 
         generation_config = create_generation_config_from_req(
@@ -829,11 +834,8 @@ class Serve:
             self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
-        modality = self.get_model_modality(model, processor=processor)
-        processor_inputs = self.get_processor_inputs_from_inbound_messages(req["messages"], modality)
-
         inputs = processor.apply_chat_template(
-            processor_inputs, return_tensors="pt", add_generation_prompt=True, return_dict=True, tokenize=True
+            req["messages"], return_tensors="pt", add_generation_prompt=True, return_dict=True
         ).to(model.device)["input_ids"][0]
 
         def stream_chat_completion(request_id, decode_stream):
