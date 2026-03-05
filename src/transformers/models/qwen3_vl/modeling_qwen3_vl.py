@@ -1093,9 +1093,21 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
             dtype=input_ids.dtype,
             device=input_ids.device,
         )
+        # Qwen3VL inserts vision_start/end around each frame individually, creating
+        # one type-2 group per frame in mm_token_type_ids.  But video_grid_thw has
+        # one entry per *video* with shape [T, H, W].  Expand it to one entry per
+        # frame ([1, H, W]) so the iterator below has the right number of entries.
+        if video_grid_thw is not None:
+            expanded_video_grid = torch.cat(
+                [thw[1:].unsqueeze(0).expand(thw[0].item(), -1) for thw in video_grid_thw], dim=0
+            )
+            ones = torch.ones(expanded_video_grid.shape[0], 1, dtype=video_grid_thw.dtype, device=video_grid_thw.device)
+            expanded_video_grid = torch.cat([ones, expanded_video_grid], dim=1)
+        else:
+            expanded_video_grid = None
         grid_iters = {
             1: iter(image_grid_thw) if image_grid_thw is not None else None,
-            2: iter(video_grid_thw) if video_grid_thw is not None else None,
+            2: iter(expanded_video_grid) if expanded_video_grid is not None else None,
         }
 
         for batch_idx, current_input_ids in enumerate(input_ids):
