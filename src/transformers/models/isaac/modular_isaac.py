@@ -329,8 +329,6 @@ class IsaacVisionEmbeddings(Siglip2VisionEmbeddings):
         )
         nn.init.normal_(self.position_embedding)
 
-    @merge_with_config_defaults
-    @capture_outputs
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -1413,7 +1411,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
 
     @auto_docstring
     @can_return_tuple
-    @merge_with_config_defaults
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
