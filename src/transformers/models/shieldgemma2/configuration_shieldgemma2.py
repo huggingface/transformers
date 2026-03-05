@@ -47,7 +47,8 @@ class ShieldGemma2Config(PreTrainedConfig):
             The image token index to encode the image prompt.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+        tie_word_embeddings (`bool`, *optional*):
+            Whether to tie the word embeddings. Defaults to the value of `text_config.tie_word_embeddings` if not set.
 
     Example:
 
