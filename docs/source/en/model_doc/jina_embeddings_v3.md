@@ -14,6 +14,8 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
 
@@ -41,7 +43,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="feature-extraction",
     model="jinaai/jina-embeddings-v3",
-    dtype=torch.float16,
     device="cuda" if torch.cuda.is_available() else "cpu",
     revision="refs/pr/137",
 )
@@ -101,7 +102,7 @@ def mean_pooling(model_output, attention_mask):
     # First element of model_output contains all token embeddings
     token_embeddings = model_output[0]
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-    
+
     # Sum the embeddings and divide by the number of non-padding tokens
     sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1)
     sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
@@ -123,7 +124,7 @@ task = 'retrieval_query'  # Can be any of (retrieval_passage, separation, classi
 
 model.load_adapter("jinaai/jina-embeddings-v3", revision="refs/pr/137", adapter_name=task, adapter_kwargs={"subfolder": task})
 
-model.set_adapter("retrieval_query")
+model.set_adapter(task)
 
 with torch.no_grad():
     model_output = model(**encoded_input)

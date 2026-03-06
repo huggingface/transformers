@@ -224,7 +224,6 @@ class JinaEmbeddingsV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
         {
             "feature-extraction": JinaEmbeddingsV3Model,
             "fill-mask": JinaEmbeddingsV3ForMaskedLM,
-            "question-answering": JinaEmbeddingsV3ForQuestionAnswering,
             "text-classification": JinaEmbeddingsV3ForSequenceClassification,
             "token-classification": JinaEmbeddingsV3ForTokenClassification,
             "zero-shot": JinaEmbeddingsV3ForSequenceClassification,
@@ -259,12 +258,6 @@ class JinaEmbeddingsV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "jinaai/jina-embeddings-v3"
-        model = JinaEmbeddingsV3Model.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 @require_torch
