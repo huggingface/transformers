@@ -193,15 +193,15 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_eager_matches_sdpa_inference(self, *args):
         pass
 
-    @unittest.skip("Not sure MoE can pass this + indexer outputs are not deterministic wrt padding")
+    @unittest.skip("DSA indexer outputs are padding-sensitive, so left-padding compatibility is not deterministic")
     def test_left_padding_compatibility(self):
         pass
 
-    @unittest.skip("Not sure MoE can pass this + indexer outputs are not deterministic wrt padding")
+    @unittest.skip("DSA indexer outputs are padding-sensitive, so SDPA and padding-free paths cannot be compared")
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("Not sure MoE can pass this + indexer outputs are not deterministic wrt padding")
+    @unittest.skip("DSA indexer outputs are padding-sensitive, making this generic overfitting test unreliable")
     def test_training_overfit(self):
         pass
 

@@ -72,7 +72,7 @@ def _attach_align_device_hook_on_blocks_for_preload(
     Compatibility shim for `accelerate` releases that keep recursing into children after attaching a preloaded
     parent block hook. When `preload_module_classes` is active, the parent hook already manages its submodules.
     """
-    if not isinstance(execution_device, Mapping) and not isinstance(offload, dict):
+    if not isinstance(execution_device, Mapping) and not isinstance(offload, Mapping):
         if not offload:
             hook = accelerate_hooks.AlignDevicesHook(
                 execution_device=execution_device,

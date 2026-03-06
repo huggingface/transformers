@@ -24,9 +24,11 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import is_flash_attention_requested
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..llama.modeling_llama import (
@@ -643,7 +645,49 @@ class DeepseekV32Model(LlamaModel):
 
 
 class DeepseekV32ForCausalLM(LlamaForCausalLM):
-    pass
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, DeepseekV32ForCausalLM
+
+        >>> model = DeepseekV32ForCausalLM.from_pretrained("deepseek-ai/DeepSeek-V3.2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2")
+
+        >>> prompt = "See"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=5)
+        >>> tokenizer.decode(generate_ids[0, inputs.input_ids.shape[-1] :], skip_special_tokens=True)
+        "..."
+        ```"""
+        return super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            labels=labels,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
+            **kwargs,
+        )
 
 
 __all__ = ["DeepseekV32Config", "DeepseekV32PreTrainedModel", "DeepseekV32Model", "DeepseekV32ForCausalLM"]
