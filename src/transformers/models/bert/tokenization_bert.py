@@ -38,7 +38,6 @@ def load_vocab(vocab_file):
         raise FileNotFoundError(f"Vocabulary file not found at path: {vocab_file}")
 
     vocab = collections.OrderedDict()
-
     with open(vocab_file, "r", encoding="utf-8") as reader:
         tokens = reader.readlines()
 
