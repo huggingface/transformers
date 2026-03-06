@@ -46,6 +46,7 @@ from transformers import (
 from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.core_model_loading import WeightRenaming, process_target_pattern
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
+from transformers.exporters.exporter_executorch import ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.utils import get_leaf_tensors, prepare_for_export
 from transformers.integrations import HfDeepSpeedConfig
@@ -90,6 +91,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_bitsandbytes,
     require_deepspeed,
+    require_executorch,
     require_flash_attn,
     require_flash_attn_3,
     require_kernels,
@@ -117,6 +119,7 @@ from transformers.utils import (
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
+from transformers.utils.export_config import ExecutorchConfig
 from transformers.utils.output_capturing import CompileableContextVar
 
 from .generation.test_utils import GenerationTesterMixin
@@ -4209,6 +4212,66 @@ class ModelTesterMixin:
 
                 # Check if outputs are close:
                 torch.testing.assert_close(onnx_outputs, eager_outputs, atol=atol, rtol=rtol, check_device=False)
+
+    @slow
+    @require_executorch
+    def test_executorch_export(self, atol=1e-2, rtol=1e-2):
+        """
+        Test if model can be exported with ExecuTorchExporter.
+
+        Args:
+            atol (`float`, *optional*, defaults to 1e-2): absolute tolerance for output comparison
+            rtol (`float`, *optional*, defaults to 1e-2): relative tolerance for output comparison
+        """
+
+        if not self.test_torch_exportable:
+            self.skipTest(reason="Model architecture is not TorchDynamo exportable/traceable")
+
+        with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
+            source_code = f.read()
+            if "for q, k, v in zip(*splits)" in source_code:
+                self.skipTest(reason="Model architecture uses chunked attention which is not torch exportable")
+            if "for expert" in source_code and "use_experts_implementation" not in source_code:
+                self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
+            if "get_rope_index" in source_code:
+                self.skipTest(reason="Model architecture uses get_rope_index which is not torch exportable")
+
+        exporter = ExecutorchExporter(export_config=ExecutorchConfig())
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                if model_class.__name__ in ["VideoMAEForPreTraining", "MllamaForConditionalGeneration"]:
+                    continue
+
+                if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
+                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+                else:
+                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+                set_config_for_less_flaky_test(config)
+                inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                model = model_class(config).eval().to(torch_device)
+                set_model_for_less_flaky_test(model)
+
+                model, inputs_dict, _ = prepare_for_export(model, inputs_dict)
+
+                with torch.no_grad():
+                    set_seed(1234)
+                    eager_outputs = model(**copy.deepcopy(inputs_dict))
+                    eager_outputs = get_leaf_tensors(eager_outputs)
+                    self.assertTrue(eager_outputs, "Eager model's outputs are empty.")
+
+                try:
+                    executorch_program = exporter.export(model, inputs_dict)
+                except NotImplementedError:
+                    continue
+
+                with torch.no_grad():
+                    set_seed(1234)
+                    exported_outputs = executorch_program.module()(**copy.deepcopy(inputs_dict))
+                    exported_outputs = get_leaf_tensors(exported_outputs)
+                    self.assertTrue(exported_outputs, "Exported model's outputs are empty.")
+
+                torch.testing.assert_close(exported_outputs, eager_outputs, atol=atol, rtol=rtol)
 
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
