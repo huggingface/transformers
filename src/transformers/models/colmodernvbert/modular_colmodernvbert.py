@@ -24,6 +24,7 @@ from ...processing_utils import Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
+from ...utils.import_utils import requires
 from ..auto import CONFIG_MAPPING
 from ..auto.modeling_auto import AutoModel
 from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
@@ -34,25 +35,9 @@ from ..idefics3.processing_idefics3 import Idefics3Processor, Idefics3ProcessorK
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="ModernVBERT/colmodernvbert-merged")
 class ColModernVBertConfig(ColQwen2Config):
     r"""
-    Configuration class to store the configuration of a [`ColModernVBertForRetrieval`]. It is used to instantiate an instance
-    of `ColModernVBertForRetrieval` according to the specified arguments, defining the model architecture following the methodology
-    from the "ColPali: Efficient Document Retrieval with Vision Language Models" paper.
-
-    Instantiating a configuration with the defaults will yield a similar configuration to the vision encoder used by the pre-trained
-    ColModernVBert model, e.g. [ModernVBERT/colmodernvbert-merged](https://huggingface.co/ModernVBERT/colmodernvbert-merged).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vlm_config (`PreTrainedConfig`, *optional*):
-            Configuration of the VLM backbone model.
-        embedding_dim (`int`, *optional*, defaults to 128):
-            Dimension of the multi-vector embeddings produced by the model.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     Example:
 
     ```python
@@ -99,6 +84,8 @@ class ColModernVBertProcessorKwargs(Idefics3ProcessorKwargs, total=False):
     }
 
 
+@requires(backends=("torch",))
+@auto_docstring
 class ColModernVBertProcessor(Idefics3Processor):
     r"""
     Constructs a ColModernVBert processor which wraps a ModernVBertProcessor and special methods to process images and queries, as

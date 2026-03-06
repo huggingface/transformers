@@ -3,11 +3,13 @@
 import inspect
 import shutil
 import tempfile
+import unittest
 from typing import TYPE_CHECKING
 
 from parameterized import parameterized
 
-from transformers import TokenizersBackend
+from transformers import AutoTokenizer, TokenizersBackend
+from transformers.testing_utils import require_tokenizers, slow
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 
@@ -483,3 +485,84 @@ class TokenizersBackendTesterMixin:
                 except Exception as e:
                     # if the pretrained model is not loadable how could it pass locally :)
                     print(f"Could not load tokenizer model: {e}")
+
+
+@slow
+@require_tokenizers
+class TokenizersBackendV5RoundtripIntegrationTest(unittest.TestCase):
+    """Integration tests: one decode(encode(text)) check per TokenizersBackend v5 model (PR #44255)."""
+
+    ROUNDTRIP_TEST_TEXT = """This is a test 😊
+I was born in 92000, and this is falsé.
+生活的真谛是
+Hi  Hello
+Hi   Hello
+
+ 
+  
+ Hello
+<s>
+hi<s>there
+The following string should be properly encoded: Hello.
+But ird and ปี   ird   ด
+Hey how are you doing"""  # noqa: W293
+
+    ADDITIONAL_ROUNDTRIP_CASES = [
+        "وقال، ماما، لقد عدت للمنزل.",
+        "لم ينطق ببنت شفة.",
+        "Он ничего не сказал.",
+        "Αυτό είναι ένα δοκιμαστικό κείμενο.",
+        "यह सिर्फ एक परीक्षण वाक्य है।",
+        "Tôi đã sống ở Việt Nam từ năm 1990.",
+        "def foo(x):\n    return x + 1\n",
+    ]
+
+    EXPECTED_XLANGAI_OPENCUA_7B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_INTERNLM_INTERNLM2_CHAT_7B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n\nhithere\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_STEPFUN_AI_STEP_35_FLASH = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_AI21LABS_JAMBA_TINY_DEV = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_ADEPT_FUYU_8B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_MICROSOFT_PHI_3_MINI_4K_INSTRUCT = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n \nhi there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_MUCAI_VIP_LLAVA_7B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n\nhithere\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+
+    TOKENIZERS_BACKEND_V5_MODELS_WITH_EXPECTED = [
+        ("xlangai/OpenCUA-7B", EXPECTED_XLANGAI_OPENCUA_7B),
+        ("internlm/internlm2-chat-7b", EXPECTED_INTERNLM_INTERNLM2_CHAT_7B),
+        ("stepfun-ai/Step-3.5-Flash", EXPECTED_STEPFUN_AI_STEP_35_FLASH),
+        ("ai21labs/Jamba-tiny-dev", EXPECTED_AI21LABS_JAMBA_TINY_DEV),
+        ("adept/fuyu-8b", EXPECTED_ADEPT_FUYU_8B),
+        ("microsoft/Phi-3-mini-4k-instruct", EXPECTED_MICROSOFT_PHI_3_MINI_4K_INSTRUCT),
+        ("mucai/vip-llava-7b", EXPECTED_MUCAI_VIP_LLAVA_7B),
+    ]
+
+    @parameterized.expand(TOKENIZERS_BACKEND_V5_MODELS_WITH_EXPECTED)
+    def test_decode_encode_roundtrip(self, model_id: str, expected_decoded_text: str) -> None:
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_id,
+            trust_remote_code=True,
+            use_fast=True,
+        )
+        ids = tokenizer.encode(self.ROUNDTRIP_TEST_TEXT, add_special_tokens=False)
+        decoded = tokenizer.decode(ids, skip_special_tokens=True)
+        self.assertEqual(
+            decoded,
+            expected_decoded_text,
+            f"Roundtrip failed for {model_id}: got {decoded!r}",
+        )
+
+    @parameterized.expand(TOKENIZERS_BACKEND_V5_MODELS_WITH_EXPECTED)
+    def test_additional_roundtrip_cases(self, model_id: str, _expected_decoded_text: str) -> None:
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_id,
+            trust_remote_code=True,
+            use_fast=True,
+        )
+        for text in self.ADDITIONAL_ROUNDTRIP_CASES:
+            with self.subTest(text=text):
+                ids = tokenizer.encode(text, add_special_tokens=False)
+                decoded = tokenizer.decode(ids, skip_special_tokens=True)
+                self.assertEqual(
+                    decoded,
+                    text,
+                    f"Roundtrip failed for {model_id} on sample {text!r}",
+                )

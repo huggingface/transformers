@@ -311,7 +311,7 @@ class DepthProModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
         model_path = "apple/DepthPro-hf"
         image_processor = DepthProImageProcessor.from_pretrained(model_path)
-        model = DepthProForDepthEstimation.from_pretrained(model_path).to(torch_device)
+        model = DepthProForDepthEstimation.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
         config = model.config
 
         image = prepare_img()

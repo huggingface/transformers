@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import AutoConfig
 
 
@@ -28,28 +28,9 @@ logger = logging.get_logger(__name__)
 
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
+@auto_docstring(checkpoint="")
 class EncoderDecoderConfig(PreTrainedConfig):
     r"""
-    [`EncoderDecoderConfig`] is the configuration class to store the configuration of a [`EncoderDecoderModel`]. It is
-    used to instantiate an Encoder Decoder model according to the specified arguments, defining the encoder and decoder
-    configs.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        decoder_start_token_id (`int`, *optional*):
-            If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token.
-        kwargs (*optional*):
-            Dictionary of keyword arguments. Notably:
-
-                - **encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the encoder config.
-                - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the decoder config.
-
     Examples:
 
     ```python
