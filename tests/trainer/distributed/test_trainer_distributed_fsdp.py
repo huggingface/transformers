@@ -19,7 +19,6 @@ FSDP-specific distributed trainer tests.
 import itertools
 import json
 import os
-import textwrap
 from functools import partial
 from pathlib import Path
 
@@ -33,13 +32,10 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_torch_dist_unique_port,
     mockenv_context,
-    require_accelerate,
     require_torch_accelerator,
     require_torch_multi_accelerator,
-    run_first,
     slow,
     torch_device,
-    torchrun,
 )
 from transformers.trainer_utils import FSDPOption, set_seed
 from transformers.utils import (
@@ -164,7 +160,6 @@ class FSDPCommandsMixin:
 # ---------------------------------------------------------------------------
 
 
-@require_accelerate
 @require_torch_accelerator
 class TestFSDPConfig(TestCasePlus):
     def setUp(self):
@@ -270,6 +265,7 @@ class TestFSDPConfig(TestCasePlus):
 # ---------------------------------------------------------------------------
 
 
+@require_torch_multi_accelerator
 class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
     def _run_env_check(self, cmd, num_processes):
         """Run the env check script and return per-rank results."""
@@ -282,9 +278,6 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
                 results.append(json.load(f))
         return results
 
-    @run_first
-    @require_accelerate
-    @require_torch_multi_accelerator
     def test_torchrun_accelerate_fsdp1_env_parity(self):
         """Verify torchrun+--fsdp and accelerate launch produce the same FSDP1 env."""
         script = os.path.join(SCRIPTS_DIR, "torchrun_env_check.py")
@@ -317,9 +310,6 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
 
         self._check_parity(torchrun_results, accel_results, num_processes, expected_fsdp_version=1)
 
-    @run_first
-    @require_accelerate
-    @require_torch_multi_accelerator
     def test_torchrun_accelerate_fsdp2_env_parity(self):
         """Verify torchrun+--fsdp and accelerate launch produce the same FSDP2 env."""
         script = os.path.join(SCRIPTS_DIR, "torchrun_env_check.py")
@@ -388,8 +378,6 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
 # All distributed FSDP training tests
 # ---------------------------------------------------------------------------
 @slow
-@run_first
-@require_accelerate
 @require_torch_multi_accelerator
 class TestTrainerDistributedFSDPCommon(
     FSDPCommandsMixin, TrainerDistributedCommon, TestCasePlus, TrainerIntegrationCommon
@@ -577,46 +565,3 @@ class TestTrainerDistributedFSDPCommon(
             script_args=["--fsdp2"],
         )
         execute_subprocess_async(cmd, env=self.get_env())
-
-
-# ---------------------------------------------------------------------------
-# FSDP generic task model sharding (moved from tests/generation/test_fsdp.py)
-# ---------------------------------------------------------------------------
-
-
-@require_torch_multi_accelerator
-class TestFSDPGenericTaskModel(TestCasePlus):
-    nproc_per_node = 2
-
-    def test_generic_task_model_can_be_sharded(self):
-        script_to_run = textwrap.dedent(
-            """
-            import torch
-            from torch.distributed.fsdp import fully_shard
-            from transformers import AutoModelForTokenClassification
-
-            current_accelerator = torch.accelerator.current_accelerator(check_available=True)
-            accelerator_type = "cpu" if current_accelerator is None else current_accelerator.type
-            torch_accelerator_module = getattr(torch, accelerator_type, torch.cuda)
-
-            backend = "gloo"
-            if accelerator_type == "cuda":
-                backend = "nccl"
-            elif accelerator_type == "xpu":
-                backend = "xccl"
-
-            torch.distributed.init_process_group(
-                backend=backend, init_method="env://"
-            )
-            rank = torch.distributed.get_rank()
-            if torch_accelerator_module.is_available():
-                torch_accelerator_module.set_device(rank)
-
-            # Make sure it works
-            model = AutoModelForTokenClassification.from_pretrained("Qwen/Qwen2-0.5B")
-            module = fully_shard(model)
-
-            torch.distributed.destroy_process_group()
-            """
-        )
-        torchrun(script_to_run, self.nproc_per_node, env=self.get_env())

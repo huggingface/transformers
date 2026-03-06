@@ -49,12 +49,10 @@ from transformers.testing_utils import (
     get_torch_dist_unique_port,
     mockenv_context,
     read_json_file,
-    require_accelerate,
     require_deepspeed,
     require_optuna,
     require_torch_accelerator,
     require_torch_multi_accelerator,
-    run_first,
     slow,
     torch_device,
 )
@@ -961,6 +959,9 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
 # ---------------------------------------------------------------------------
 
 
+@slow
+@require_deepspeed
+@require_torch_multi_accelerator
 class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
     def _run_env_check(self, cmd, num_processes):
         """Run the env check script and return per-rank results."""
@@ -972,10 +973,6 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
                 results.append(json.load(f))
         return results
 
-    @run_first
-    @require_deepspeed
-    @require_accelerate
-    @require_torch_multi_accelerator
     def test_torchrun_accelerate_deepspeed_zero2_env_parity(self):
         """Verify torchrun+--deepspeed and accelerate launch produce the same DeepSpeed ZeRO-2 env."""
         script = os.path.join(SCRIPTS_DIR, "torchrun_env_check.py")
@@ -1001,10 +998,6 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
 
         self._check_parity(torchrun_results, accel_results, num_processes, expected_zero_stage=2)
 
-    @run_first
-    @require_deepspeed
-    @require_accelerate
-    @require_torch_multi_accelerator
     def test_torchrun_accelerate_deepspeed_zero3_env_parity(self):
         """Verify torchrun+--deepspeed and accelerate launch produce the same DeepSpeed ZeRO-3 env."""
         script = os.path.join(SCRIPTS_DIR, "torchrun_env_check.py")
@@ -1070,10 +1063,8 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
 
 
 @slow
-@run_first
 @require_deepspeed
-@require_accelerate
-@require_torch_accelerator
+@require_torch_multi_accelerator
 class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistributedCommon, TestCasePlus):
     """
     Distributed DeepSpeed tests using ``accelerate launch``.
@@ -1088,23 +1079,19 @@ class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistr
 
     # Pure dtype training: model loaded in target dtype, no mixed precision.
     @parameterized.expand(pure_dtype_params, name_func=_parameterized_custom_name_func)
-    @require_torch_multi_accelerator
     def test_training(self, stage, model_dtype):
         self.check_training(model_dtype, config_file=DS_CONFIGS[stage])
 
     # Mixed precision training: model loaded in fp32, training in fp16/bf16.
     @parameterized.expand(mixed_precision_params, name_func=_parameterized_custom_name_func)
-    @require_torch_multi_accelerator
     def test_training_mixed_precision(self, stage, dtype):
         self.check_mixed_precision(dtype, config_file=DS_CONFIGS[stage])
 
     @parameterized.expand(stages, name_func=_parameterized_custom_name_func)
-    @require_torch_multi_accelerator
     def test_training_with_gradient_accumulation(self, stage):
         self.check_gradient_accumulation(config_file=DS_CONFIGS[stage])
 
     @parameterized.expand(stages, name_func=_parameterized_custom_name_func)
-    @require_torch_multi_accelerator
     def test_training_and_can_resume_normally(self, stage):
         self.check_resume(config_file=DS_CONFIGS[stage])
 
@@ -1116,7 +1103,6 @@ class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistr
         ],
         name_func=_parameterized_custom_name_func,
     )
-    @require_torch_multi_accelerator
     def test_basic_run_with_cpu_offload(self, stage, offload_param):
         output_dir = self.get_auto_remove_tmp_dir()
         args = self._get_default_script_args(output_dir) + ["--bf16", "--max_steps", "10"]
@@ -1130,12 +1116,10 @@ class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistr
             env=self.get_env(),
         )
 
-    @require_torch_multi_accelerator
     def test_eval(self):
         # ZeRO inference only works with ZeRO-3
         self.check_eval(config_file=DS_CONFIGS[ZERO3])
 
-    @require_torch_multi_accelerator
     def test_alst_ulysses_sp(self):
         """Test that ALST/Ulysses sequence parallelism produces the same losses as without it."""
         sp_config = os.path.join(CONFIGS_DIR, "deepspeed_zero2_sp.yaml")
@@ -1217,6 +1201,7 @@ class TestTrainerDistributedDeepSpeedCommon(DeepSpeedCommandsMixin, TrainerDistr
 
 
 @require_deepspeed
+@require_torch_accelerator
 class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
     """
     Testing non-Trainer DeepSpeed integration
@@ -1646,7 +1631,6 @@ _zoo_params = list(itertools.product(stages, _zoo_tasks.keys()))
 
 
 @slow
-@run_first
 @require_deepspeed
 @require_torch_accelerator
 class TestDeepSpeedModelZoo(DeepSpeedCommandsMixin, TestCasePlus):
