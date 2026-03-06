@@ -26,13 +26,13 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_vitpose_backbone import VitPoseBackboneConfig
 
@@ -392,6 +392,8 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,

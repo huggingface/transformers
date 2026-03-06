@@ -27,7 +27,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -552,6 +552,8 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,

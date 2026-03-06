@@ -19,7 +19,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -270,6 +270,8 @@ class DINOv3ConvNextBackbone(BackboneMixin, DINOv3ConvNextPreTrainedModel):
     def get_input_embeddings(self):
         return None
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BackboneOutput:
         kwargs["output_hidden_states"] = True  # required to extract layers for the stages

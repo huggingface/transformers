@@ -18,7 +18,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
@@ -364,6 +364,8 @@ class ConvNextBackbone(BackboneMixin, ConvNextPreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,

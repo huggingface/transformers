@@ -30,7 +30,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithCrossAttentions
@@ -380,6 +380,8 @@ class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
     def get_input_embeddings(self) -> LwDetrViTEmbeddings:
         return self.embeddings.projection
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""

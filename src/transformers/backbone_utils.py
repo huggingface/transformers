@@ -21,7 +21,6 @@ import inspect
 from huggingface_hub import repo_exists
 
 from .utils import logging
-from .utils.generic import can_return_tuple
 
 
 logger = logging.get_logger(__name__)
@@ -203,12 +202,6 @@ class BackboneMixin:
             self._init_transformers_backbone()
         else:
             raise ValueError(f"backbone_type {self.backbone_type} not supported.")
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-
-        if "forward" in cls.__dict__:
-            cls.forward = can_return_tuple(filter_output_hidden_states(cls.forward))
 
     def _init_timm_backbone(self, backbone) -> None:
         """
