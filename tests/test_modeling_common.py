@@ -4233,14 +4233,10 @@ class ModelTesterMixin:
 
     @slow
     @require_executorch
-    @require_torch_accelerator
-    def test_executorch_export(self, atol=1e-2, rtol=1e-2):
+    @pytest.mark.executorch_export_test
+    def test_executorch_export(self):
         """
         Test if model can be exported with ExecuTorchExporter.
-
-        Args:
-            atol (`float`, *optional*, defaults to 1e-2): absolute tolerance for output comparison
-            rtol (`float`, *optional*, defaults to 1e-2): relative tolerance for output comparison
         """
 
         if not self.test_torch_exportable:
@@ -4256,6 +4252,7 @@ class ModelTesterMixin:
                 self.skipTest(reason="Model architecture uses get_rope_index which is not torch exportable")
 
         backend = "cuda" if torch_device == "cuda" else "xnnpack"
+        dtype = torch.bfloat16 if torch_device == "cuda" else torch.float32
         exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend=backend))
 
         for model_class in self.all_model_classes:
@@ -4269,7 +4266,7 @@ class ModelTesterMixin:
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
                 set_config_for_less_flaky_test(config)
                 inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                model = model_class(config).eval().to(torch_device)
+                model = model_class(config).eval().to(torch_device).to(dtype)
                 set_model_for_less_flaky_test(model)
 
                 model, inputs_dict, _ = prepare_for_export(model, inputs_dict)
