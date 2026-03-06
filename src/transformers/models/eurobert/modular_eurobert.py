@@ -77,6 +77,7 @@ class EuroBertConfig(LlamaConfig):
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
 class EuroBertRMSNorm(LlamaRMSNorm):

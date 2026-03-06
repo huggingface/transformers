@@ -31,7 +31,22 @@ logger = logging.get_logger(__name__)
 class DiaEncoderConfig(PreTrainedConfig):
     model_type = "dia_encoder"
 
+    max_position_embeddings: int = 1024
+    num_hidden_layers: int = 12
+    hidden_size: int = 1024
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 16
+    head_dim: int = 128
+    intermediate_size: int = 4096
+    norm_eps: float = 1e-5
+    vocab_size: int = 256
+    hidden_act: str = "silu"
+    rope_parameters: dict | None = None
+    initializer_range: float = 0.02
 
+
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
 class DiaDecoderConfig(PreTrainedConfig):
     r"""
@@ -73,6 +88,7 @@ class DiaDecoderConfig(PreTrainedConfig):
 
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
+@auto_docstring(checkpoint="nari-labs/Dia-1.6B")
 class DiaConfig(PreTrainedConfig):
     r"""
     delay_pattern (`list[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):

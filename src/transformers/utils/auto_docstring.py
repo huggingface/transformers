@@ -4070,10 +4070,6 @@ def auto_method_docstring(
     model_name_lowercase, class_name, config_class = _get_model_info(func, parent_class)
     func_documentation = func.__doc__
 
-    # Temporary workaround for config classes until #41250 is merged. We usually add docs at class-lvl
-    if func_documentation is None and parent_class and parent_class.__name__.endswith("Config"):
-        func_documentation = parent_class.__doc__
-
     if custom_args is not None and func_documentation is not None:
         func_documentation = "\n" + set_min_indent(custom_args.strip("\n"), 0) + "\n" + func_documentation
     elif custom_args is not None:
@@ -4128,6 +4124,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
 
     is_dataclass = False
     is_processor = False
+    is_config = False
     is_image_processor = False
     docstring_init = ""
     docstring_args = ""
@@ -4167,6 +4164,10 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             source_args_dict=get_args_doc_from_source(ImageProcessorArgs),
         ).__doc__
     elif "PreTrainedConfig" in (x.__name__ for x in cls.__mro__):
+        is_config = True
+        doc_class = cls.__doc__
+        if custom_args is None and doc_class:
+            custom_args = doc_class
         docstring_init = auto_method_docstring(
             cls.__init__,
             parent_class=cls,
@@ -4201,7 +4202,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}.\n"
             "Add a `custom_intro` to the decorator if you want to use `auto_docstring` on a class not registered in the auto doc."
         )
-    if name != [] or custom_intro is not None or is_dataclass or is_processor or is_image_processor:
+    if name != [] or custom_intro is not None or is_config or is_dataclass or is_processor or is_image_processor:
         name = name[0] if name else None
         formatting_kwargs = {"model_name": model_name_title}
         if name == "Config":
@@ -4232,7 +4233,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         # Add the __init__ docstring
         if docstring_init:
             docstring += set_min_indent(f"\n{docstring_init}", indent_level)
-        elif is_dataclass:
+        elif is_dataclass or is_config:
             # No init function, we have a data class
             docstring += docstring_args if docstring_args else "\nArgs:\n"
             source_args_dict = get_args_doc_from_source(ModelOutputArgs)
