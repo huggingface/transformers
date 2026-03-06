@@ -4288,7 +4288,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
             # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialized` flag)
-            model._initialize_missing_keys(loading_info.missing_and_mismatched(), load_config.is_quantized)
+            model._initialize_missing_keys(load_config.is_quantized)
 
             # Tie the weights
             model.tie_weights(missing_keys=loading_info.missing_keys, recompute_mapping=False)
@@ -4539,7 +4539,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             value = torch.empty_like(buffer, device=buffer_device)
             _load_parameter_into_model(self, key, value)
 
-    def _initialize_missing_keys(self, missing_keys: set[str], is_quantized: bool) -> None:
+    def _initialize_missing_keys(self, is_quantized: bool) -> None:
         """
         Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to
         `_initialize_weights`. Indeed, since the corresponding weights are missing from the state dict, they will not be replaced and need to
@@ -4550,13 +4550,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         if is_fsdp_enabled() and not is_local_dist_rank_0():
             # Handle FSDP edge case when using cpu ram efficient loading to ensure it is marked as initialized
-            # since it will get it's weights broadcasted from rank0
+            # since it will get its weights broadcasted from rank0
             for key in self.state_dict():
-                if key not in missing_keys:
-                    param_or_buffer = self.get_parameter_or_buffer(key)
-                    param_or_buffer._is_hf_initialized = True
-            if len(missing_keys) == 0:
-                self._is_hf_initialized = True
+                param_or_buffer = self.get_parameter_or_buffer(key)
+                param_or_buffer._is_hf_initialized = True
+            self._is_hf_initialized = True
 
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:

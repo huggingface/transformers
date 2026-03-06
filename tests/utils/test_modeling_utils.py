@@ -2337,7 +2337,13 @@ class ModelUtilsTest(TestCasePlus):
 
 @require_torch
 class InitializeMissingKeysTest(unittest.TestCase):
-    """Tests for _initialize_missing_keys to prevent regressions in FSDP non-rank-0 weight initialization."""
+    """Tests for _initialize_missing_keys to prevent regressions in FSDP non-rank-0 weight initialization.
+
+    On FSDP non-rank-0 processes, weights are loaded on meta device and then moved to CPU via
+    _move_missing_keys_from_meta_to_device. The _initialize_missing_keys method must mark all
+    params as _is_hf_initialized so that guarded init functions (init.normal_, init.zeros_, etc.)
+    skip them, preventing expensive and unnecessary re-initialization.
+    """
 
     def _clear_init_flags(self, model):
         """Clear all _is_hf_initialized flags from params, buffers, and modules."""
@@ -2351,92 +2357,56 @@ class InitializeMissingKeysTest(unittest.TestCase):
             if hasattr(buffer, "_is_hf_initialized"):
                 delattr(buffer, "_is_hf_initialized")
 
-    def test_initialize_missing_keys_marks_non_missing_params(self):
-        """Non-missing params should get _is_hf_initialized=True, missing ones should not."""
+    @staticmethod
+    def _fsdp_non_rank0_patches():
+        """Return a context manager that mocks FSDP as enabled on a non-rank-0 process."""
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+        stack.enter_context(patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True))
+        stack.enter_context(patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False))
+        return stack
+
+    def test_initialize_missing_keys_marks_all_params(self):
+        """On FSDP non-rank-0, all params/buffers should get _is_hf_initialized=True."""
         model = BaseModel(PreTrainedConfig())
         self._clear_init_flags(model)
 
-        missing_keys = {"linear_2.weight", "linear_2.bias"}
-        model._initialize_missing_keys(missing_keys=missing_keys, is_quantized=False)
+        with self._fsdp_non_rank0_patches():
+            model._initialize_missing_keys(is_quantized=False)
 
-        # Non-missing params should be marked
-        self.assertTrue(getattr(model.linear.weight, "_is_hf_initialized", False))
-        self.assertTrue(getattr(model.linear.bias, "_is_hf_initialized", False))
+        for name, param in model.named_parameters():
+            self.assertTrue(
+                getattr(param, "_is_hf_initialized", False),
+                f"param {name} should be marked as initialized",
+            )
 
-    def test_initialize_missing_keys_sets_module_flag(self):
-        """Modules with all params initialized should get module-level _is_hf_initialized=True."""
+    def test_initialize_missing_keys_sets_model_flag(self):
+        """On FSDP non-rank-0, the model itself should get _is_hf_initialized=True."""
         model = BaseModel(PreTrainedConfig())
         self._clear_init_flags(model)
 
-        # No missing keys: all params get marked, all modules should too
-        model._initialize_missing_keys(missing_keys=set(), is_quantized=False)
+        with self._fsdp_non_rank0_patches():
+            model._initialize_missing_keys(is_quantized=False)
 
-        self.assertTrue(getattr(model.linear, "_is_hf_initialized", False))
-        self.assertTrue(getattr(model.linear_2, "_is_hf_initialized", False))
         self.assertTrue(getattr(model, "_is_hf_initialized", False))
 
-    def test_initialize_missing_keys_module_flag_not_set_when_params_missing(self):
-        """Modules with missing params should NOT get module-level _is_hf_initialized=True
-        (before initialize_weights runs)."""
+    def test_initialize_missing_keys_no_reinit_of_marked_params(self):
+        """Guarded init functions should not modify params that have _is_hf_initialized=True."""
         model = BaseModel(PreTrainedConfig())
         self._clear_init_flags(model)
 
-        missing_keys = {"linear_2.weight", "linear_2.bias"}
+        # Snapshot values before _initialize_missing_keys
+        pre_values = {name: param.clone() for name, param in model.named_parameters()}
 
-        # Mark non-missing params manually (simulating what _initialize_missing_keys does internally)
-        for key in model.state_dict():
-            if key not in missing_keys:
-                model.get_parameter_or_buffer(key)._is_hf_initialized = True
+        with self._fsdp_non_rank0_patches():
+            model._initialize_missing_keys(is_quantized=False)
 
-        # Check module flag propagation (simulating the set_is_initialized_for_modules logic)
-        # linear has all params initialized → should be marked
-        # linear_2 has missing params → should NOT be marked
-        all_linear_init = all(
-            getattr(p, "_is_hf_initialized", False) for p in model.linear.parameters(recurse=False)
-        )
-        all_linear2_init = all(
-            getattr(p, "_is_hf_initialized", False) for p in model.linear_2.parameters(recurse=False)
-        )
-        self.assertTrue(all_linear_init)
-        self.assertFalse(all_linear2_init)
-
-    def test_initialize_missing_keys_skips_init_on_fully_initialized_modules(self):
-        """_init_weights should NOT be called on modules where all params are already initialized."""
-        init_calls = []
-
-        class TrackedModel(BaseModel):
-            def _init_weights(self, module):
-                init_calls.append(module)
-
-        model = TrackedModel(PreTrainedConfig())
-        self._clear_init_flags(model)
-        init_calls.clear()
-
-        # No missing keys → all params marked → all modules marked → _init_weights skipped
-        model._initialize_missing_keys(missing_keys=set(), is_quantized=False)
-
-        self.assertEqual(len(init_calls), 0, "_init_weights should not be called when all params are initialized")
-
-    def test_initialize_missing_keys_calls_init_on_modules_with_missing_params(self):
-        """_init_weights SHOULD be called on modules that have missing params."""
-        init_calls = []
-
-        class TrackedModel(BaseModel):
-            def _init_weights(self, module):
-                init_calls.append(module)
-
-        model = TrackedModel(PreTrainedConfig())
-        self._clear_init_flags(model)
-        init_calls.clear()
-
-        missing_keys = {"linear_2.weight", "linear_2.bias"}
-        model._initialize_missing_keys(missing_keys=missing_keys, is_quantized=False)
-
-        # linear_2 has missing params → _init_weights should be called on it
-        init_call_types = [type(m) for m in init_calls]
-        self.assertIn(nn.Linear, init_call_types, "_init_weights should be called on modules with missing params")
-        # linear should NOT have _init_weights called (fully initialized → module flag set)
-        self.assertNotIn(model.linear, init_calls, "_init_weights should not be called on fully initialized modules")
+        # Params should not have changed (guarded inits skip marked params)
+        for name, param in model.named_parameters():
+            torch.testing.assert_close(
+                param, pre_values[name], msg=f"param {name} should not be re-initialized"
+            )
 
     def test_move_missing_keys_fsdp_non_rank0_moves_meta_to_cpu(self):
         """FSDP non-rank-0 path should move all params/buffers from meta to CPU."""
@@ -2460,23 +2430,19 @@ class InitializeMissingKeysTest(unittest.TestCase):
             self.assertEqual(param.device, torch.device("cpu"), f"param {name} should be on CPU after FSDP move")
 
     def test_fsdp_non_rank0_end_to_end_no_reinit(self):
-        """End-to-end: FSDP non-rank-0 move + _initialize_missing_keys should not re-init non-missing params."""
+        """End-to-end: FSDP non-rank-0 move + _initialize_missing_keys should not re-init params."""
         with torch.device("meta"):
             model = BaseModel(PreTrainedConfig())
 
-        with (
-            patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
-            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
-        ):
+        with self._fsdp_non_rank0_patches():
             model._move_missing_keys_from_meta_to_device(
                 missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
             )
 
-        # After move: params are empty CPU tensors. Snapshot values.
-        pre_init_values = {name: param.clone() for name, param in model.named_parameters()}
+            # After move: params are empty CPU tensors. Snapshot values.
+            pre_init_values = {name: param.clone() for name, param in model.named_parameters()}
 
-        # Run _initialize_missing_keys with no missing keys
-        model._initialize_missing_keys(missing_keys=set(), is_quantized=False)
+            model._initialize_missing_keys(is_quantized=False)
 
         # All params should be marked as initialized
         for name, param in model.named_parameters():
@@ -2484,11 +2450,8 @@ class InitializeMissingKeysTest(unittest.TestCase):
                 getattr(param, "_is_hf_initialized", False), f"param {name} should be marked as initialized"
             )
 
-        # All modules should be marked
-        for name, module in model.named_modules():
-            self.assertTrue(
-                getattr(module, "_is_hf_initialized", False), f"module {name} should be marked as initialized"
-            )
+        # Model should be marked as initialized
+        self.assertTrue(getattr(model, "_is_hf_initialized", False), "model should be marked as initialized")
 
         # Param values should NOT have changed (no re-initialization)
         for name, param in model.named_parameters():
