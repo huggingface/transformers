@@ -54,10 +54,9 @@ class AqlmHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        modules_to_not_convert = self.quantization_config.linear_weights_not_to_quantize
         replace_with_aqlm_linear(
             model,
-            modules_to_not_convert=modules_to_not_convert,
+            modules_to_not_convert=self.quantization_config.linear_weights_not_to_quantize,
             quantization_config=self.quantization_config,
         )
 
