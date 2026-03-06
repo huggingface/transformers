@@ -90,11 +90,11 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             if torch.cuda.is_available():
                 device_map = {"": torch.cuda.current_device()}
             elif is_torch_npu_available():
-                device_map = {"": f"npu:{torch.npu.current_device()}"}  # type: ignore[attr-defined]
+                device_map = {"": f"npu:{getattr(torch, 'npu').current_device()}"}
             elif is_torch_hpu_available():
-                device_map = {"": f"hpu:{torch.hpu.current_device()}"}  # type: ignore[attr-defined]
+                device_map = {"": f"hpu:{getattr(torch, 'hpu').current_device()}"}
             elif is_torch_xpu_available():
-                device_map = {"": torch.xpu.current_device()}
+                device_map = {"": getattr(torch, "xpu").current_device()}
             else:
                 device_map = {"": "cpu"}
             logger.info(
