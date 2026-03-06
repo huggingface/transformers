@@ -113,7 +113,6 @@ class OnnxConfig(DynamoConfig):
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
-    dynamic: bool | None = None
 
     f: str | PathLike | None = None
     dynamic_shapes: dict[str, Any] | None = None
@@ -139,4 +138,5 @@ class ExecutorchConfig(DynamoConfig):
     """
 
     export_format: ExportFormat = ExportFormat.EXECUTORCH
-    dynamic: bool | None = None
+
+    backend: str | None = None

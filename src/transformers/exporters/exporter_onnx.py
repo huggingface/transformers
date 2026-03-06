@@ -65,21 +65,16 @@ ONNX_UNSUPPORTED_MODEL_TYPES: set[str] = {
 # are extremely inaccurate compared to the original model.
 ONNX_EXTREMELY_INACCURATE_MODEL_TYPES: set[str] = {
     "blt",  # 94.3% mismatch in last_hidden_state
-    "depth_pro",  # 0.1% mismatch in predicted_depth (max diff 0.029, exceeds tolerance 0.01)
     "flaubert",  # 40% mismatch in end_top_index (top-k beam search non-determinism)
     "parakeet_ctc",  # 100% NaN in logits
     "parakeet_encoder",  # 100% NaN in last_hidden_state
     "patchtst",  # NaN loss output
     "pp_doclayout_v3",  # 68.3% mismatch in enc_topk_bboxes
     "rt_detr",  # 43.3% mismatch in enc_topk_bboxes
-    "siglip2",  # 4.7% mismatch in image_embeds
+    "siglip2",  # 100% mismatch in logits
     "siglip2_vision_model",  # 73.8% mismatch in last_hidden_state
-    "unispeech",  # 0.1% mismatch in projected_quantized_states
     "vit_mae",  # 99.3% mismatch in ids_restore (random masking)
-    "wav2vec2",  # 0.4% mismatch in projected_quantized_states
-    "wav2vec2-conformer",  # 0.5% mismatch in projected_quantized_states
     "xlm",  # 6.2% mismatch in end_top_index
-    "xlnet",  # 2.9% mismatch in start_top_index
 }
 
 

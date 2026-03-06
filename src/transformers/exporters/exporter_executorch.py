@@ -25,7 +25,7 @@ if is_torch_available():
     from torch.export import ExportedProgram
 
 if is_executorch_available():
-    from executorch.exir import to_edge_transform_and_lower
+    from executorch.exir.program import ExecutorchProgramManager, to_edge_transform_and_lower
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -38,7 +38,7 @@ class ExecutorchExporter(DynamoExporter):
 
     required_packages = ["torch", "executorch"]
 
-    def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> Any:
+    def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ExecutorchProgramManager":
         """
         Exports a model for ExecuTorch using the full export and lowering workflow.
         Args:
@@ -49,6 +49,22 @@ class ExecutorchExporter(DynamoExporter):
         """
 
         exported_program: ExportedProgram = super().export(model, sample_inputs)
-        executorch_program = to_edge_transform_and_lower(exported_program).to_executorch()
 
-        return executorch_program
+        if self.export_config.backend == "xnnpack":
+            from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+
+            partitioner = [XnnpackPartitioner()]
+        elif self.export_config.backend == "cuda":
+            from executorch.backends.cuda.cuda_backend import CudaBackend
+            from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
+
+            model_name = model.__class__.__name__
+            partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model_name)])]
+        else:
+            raise ValueError(f"Unsupported backend {self.export_config.backend} for ExecuTorch export")
+
+        executorch_programs_manager: ExecutorchProgramManager = to_edge_transform_and_lower(
+            exported_program, partitioner=partitioner
+        ).to_executorch()
+
+        return executorch_programs_manager
