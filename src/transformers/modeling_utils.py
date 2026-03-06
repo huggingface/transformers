@@ -4548,31 +4548,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Also marks non-missing params/buffers with `_is_hf_initialized` and propagates this flag to modules,
         so that `_initialize_weights` can skip fully-initialized modules entirely.
         """
-        # Mark non-missing params/buffers as already initialized so they are not re-initialized
-        for key in self.state_dict():
-            if key not in missing_keys:
-                param_or_buffer = self.get_parameter_or_buffer(key)
-                param_or_buffer._is_hf_initialized = True
-
-        # Propagate the flag to modules: a module is fully initialized if all its children,
-        # direct parameters and persistent buffers are initialized. This prevents _init_weights
-        # from being called on fully-initialized modules (which matters because _init_weights may
-        # contain unguarded tensor operations like .data.normal_() that the init guards don't catch).
-        def set_is_initialized_for_modules(module):
-            if (
-                all(getattr(child, "_is_hf_initialized", False) for child in module.children())
-                and all(
-                    getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False)
-                )
-                and all(
-                    getattr(buffer, "_is_hf_initialized", False)
-                    for buffer in module.buffers(recurse=False)
-                    if buffer not in module._non_persistent_buffers_set
-                )
-            ):
-                module._is_hf_initialized = True
-
-        self.apply(set_is_initialized_for_modules)
+        if is_fsdp_enabled() and not is_local_dist_rank_0():
+            # Handle FSDP edge case when using cpu ram efficient loading to ensure it is marked as initialized
+            # since it will get it's weights broadcasted from rank0
+            for key in self.state_dict():
+                if key not in missing_keys:
+                    param_or_buffer = self.get_parameter_or_buffer(key)
+                    param_or_buffer._is_hf_initialized = True
+            if len(missing_keys) == 0:
+                self._is_hf_initialized = True
 
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
