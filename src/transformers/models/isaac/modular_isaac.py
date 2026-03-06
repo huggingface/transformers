@@ -101,8 +101,6 @@ class IsaacVisionConfig(Siglip2VisionConfig):
     Args:
         pixel_shuffle_scale_factor (`int`, *optional*, defaults to 1):
             Spatial factor applied before pixel shuffle reduces the resolution.
-        num_patches (`int`, *optional*, defaults to 256):
-            Maximum number of learnable positional embeddings to initialize.
     """
 
     model_type = "isaac_vision"
@@ -110,20 +108,10 @@ class IsaacVisionConfig(Siglip2VisionConfig):
 
     def __init__(
         self,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
-        num_patches=256,
-        patch_size=16,
-        hidden_act="gelu_pytorch_tanh",
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
         pixel_shuffle_scale_factor=1,
-        **kwargs,
+        **super_kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(**super_kwargs)
         # Add our custom fields
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
 
