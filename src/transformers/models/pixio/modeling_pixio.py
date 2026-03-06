@@ -374,6 +374,7 @@ class PixioEncoder(PixioPreTrainedModel):
     def __init__(self, config: PixioConfig):
         super().__init__(config)
         self.layer = nn.ModuleList([PixioLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
         self.post_init()
 
     @merge_with_config_defaults

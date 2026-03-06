@@ -186,6 +186,7 @@ class Phi4MultimodalVisionEncoder(nn.Module):
         self.layers = nn.ModuleList(
             [Phi4MultimodalVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
+        self.gradient_checkpointing = False
 
     # Ignore copy
     @auto_docstring
