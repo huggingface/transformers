@@ -699,9 +699,9 @@ class ZambaMambaDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class ZambaMixedLayer(GradientCheckpointingLayer):
+class ZambaHybridLayer(GradientCheckpointingLayer):
     def __init__(
-        self, shared_transf: ZambaAttentionDecoderLayer | None, linear: nn.Linear | None, mamba: ZambaMambaDecoderLayer
+        self, shared_transf: ZambaAttentionDecoderLayer, linear: nn.Linear, mamba: ZambaMambaDecoderLayer
     ):
         super().__init__()
         self.shared_transf = shared_transf
@@ -736,19 +736,17 @@ class ZambaMixedLayer(GradientCheckpointingLayer):
                 Indices depicting the position of the input sequence tokens in the sequence.
         """
 
-        transformer_hidden_states = None
-        if self.linear is not None:
-            transformer_hidden_states = self.shared_transf(
-                hidden_states,
-                original_hidden_states=original_hidden_states,
-                layer_idx=layer_idx,
-                attention_mask=causal_mask,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                **kwargs,
-            )
-            transformer_hidden_states = self.linear(transformer_hidden_states)
+        transformer_hidden_states = self.shared_transf(
+            hidden_states,
+            original_hidden_states=original_hidden_states,
+            layer_idx=layer_idx,
+            attention_mask=causal_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
+        )
+        transformer_hidden_states = self.linear(transformer_hidden_states)
 
         hidden_states = self.mamba_decoder(
             hidden_states,
@@ -775,7 +773,7 @@ class ZambaPreTrainedModel(PreTrainedModel):
     # Note: only supports ZambaHybridDynamicCache
     _is_stateful = True
     _can_record_outputs = {
-        "hidden_states": ZambaMixedLayer,
+        "hidden_states": ZambaMambaDecoderLayer,
         "attentions": ZambaAttention,
     }
 
@@ -823,17 +821,16 @@ class ZambaModel(ZambaPreTrainedModel):
         layers = []
         self._tied_weights_keys = None
         for layer_id, layer_type in enumerate(self.layers_block_type):
-            linear = None
-            shared_transformer = None
             mamba = ZambaMambaDecoderLayer(config, layer_idx=layer_id)
             if layer_type == "hybrid":
                 linear = nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False)
-                shared_transformer = ZambaAttentionDecoderLayer(config)
+                layers.append(ZambaHybridLayer(ZambaAttentionDecoderLayer(config), linear, mamba))
                 if self._tied_weights_keys is None:
                     self._tied_weights_keys = {
                         rf"layers.(?!{layer_id}\.)\d+.shared_transf": f"layers.{layer_id}.shared_transf"
                     }
-            layers.append(ZambaMixedLayer(shared_transformer, linear, mamba))
+            else:
+                layers.append(mamba)
         self.layers = nn.ModuleList(layers)
 
         self.final_layernorm = ZambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
