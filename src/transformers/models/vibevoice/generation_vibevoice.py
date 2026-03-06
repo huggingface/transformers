@@ -194,7 +194,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         negative_generation_config, negative_model_kwargs = self._prepare_generation_config(
             generation_config, **negative_kwargs
         )
-        _, _, negative_model_kwargs = self._prepare_model_inputs(None, model_kwargs=negative_model_kwargs)
+        _, _, negative_model_kwargs = self._prepare_model_inputs(
+            None, model_kwargs=negative_model_kwargs, bos_token_id=self.config.audio_bos_token_id
+        )
         self._prepare_special_tokens(negative_generation_config, True, device=input_ids.device)
         negative_input_ids = negative_kwargs["input_ids"]
         negative_has_default_max_length = (
