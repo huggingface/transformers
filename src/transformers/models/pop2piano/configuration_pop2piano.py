@@ -14,58 +14,25 @@
 """Pop2Piano model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="sweetcocoa/pop2piano")
 class Pop2PianoConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Pop2PianoForConditionalGeneration`]. It is used
-    to instantiate a Pop2PianoForConditionalGeneration model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    Pop2Piano [sweetcocoa/pop2piano](https://huggingface.co/sweetcocoa/pop2piano) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Arguments:
-        vocab_size (`int`, *optional*, defaults to 2400):
-            Vocabulary size of the `Pop2PianoForConditionalGeneration` model. Defines the number of different tokens
-            that can be represented by the `inputs_ids` passed when calling [`Pop2PianoForConditionalGeneration`].
-        composer_vocab_size (`int`, *optional*, defaults to 21):
-            Denotes the number of composers.
-        d_model (`int`, *optional*, defaults to 512):
-            Size of the encoder layers and the pooler layer.
-        d_kv (`int`, *optional*, defaults to 64):
-            Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
-            be defined as `num_heads * d_kv`.
-        d_ff (`int`, *optional*, defaults to 2048):
-            Size of the intermediate feed forward layer in each `Pop2PianoBlock`.
-        num_layers (`int`, *optional*, defaults to 6):
-            Number of hidden layers in the Transformer encoder.
-        num_decoder_layers (`int`, *optional*):
-            Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
-        num_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
-            The number of buckets to use for each attention layer.
-        relative_attention_max_distance (`int`, *optional*, defaults to 128):
-            The maximum distance of the longer sequences for the bucket separation.
-        dropout_rate (`float`, *optional*, defaults to 0.1):
-            The ratio for all dropout layers.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-6):
-            The epsilon used by the layer normalization layers.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1.0, used internally for initialization
-            testing).
-        feed_forward_proj (`string`, *optional*, defaults to `"gated-gelu"`):
-            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-        dense_act_fn (`string`, *optional*, defaults to `"relu"`):
-            Type of Activation Function to be used in `Pop2PianoDenseActDense` and in `Pop2PianoDenseGatedActDense`.
+    composer_vocab_size (`int`, *optional*, defaults to 21):
+        Denotes the number of composers.
+    relative_attention_num_buckets (`int`, *optional*, defaults to 32):
+        The number of buckets to use for each attention layer.
+    relative_attention_max_distance (`int`, *optional*, defaults to 128):
+        The maximum distance of the longer sequences for the bucket separation.
+    feed_forward_proj (`string`, *optional*, defaults to `"gated-gelu"`):
+        Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`.
+    dense_act_fn (`string`, *optional*, defaults to `"relu"`):
+        Type of Activation Function to be used in `Pop2PianoDenseActDense` and in `Pop2PianoDenseGatedActDense`.
     """
 
     model_type = "pop2piano"

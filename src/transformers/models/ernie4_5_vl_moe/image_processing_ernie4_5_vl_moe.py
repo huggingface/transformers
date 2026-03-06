@@ -46,7 +46,7 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class Ernie4_5_VL_MoeImageProcessorKwargs(ImagesKwargs, total=False):
+class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
@@ -90,7 +90,7 @@ def smart_resize(
     return h_bar, w_bar
 
 
-class Ernie4_5_VL_MoeImageProcessor(BaseImageProcessor):
+class Ernie4_5_VLMoeImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Ernie 4.5 VL image processor that dynamically resizes images based on the original images.
 
@@ -123,7 +123,7 @@ class Ernie4_5_VL_MoeImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "image_grid_thw"]
-    valid_kwargs = Ernie4_5_VL_MoeImageProcessorKwargs
+    valid_kwargs = Ernie4_5_VLMoeImageProcessorKwargs
 
     def __init__(
         self,
@@ -452,4 +452,12 @@ class Ernie4_5_VL_MoeImageProcessor(BaseImageProcessor):
         return grid_h * grid_w
 
 
-__all__ = ["Ernie4_5_VL_MoeImageProcessor"]
+class Ernie4_5_VL_MoeImageProcessor(Ernie4_5_VLMoeImageProcessor):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeImageProcessor` is deprecated; please use `Ernie4_5_VLMoeImageProcessor` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+__all__ = ["Ernie4_5_VL_MoeImageProcessor", "Ernie4_5_VLMoeImageProcessor"]
