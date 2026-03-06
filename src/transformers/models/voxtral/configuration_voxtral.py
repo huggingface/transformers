@@ -13,45 +13,15 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="mistralai/Voxtral-Mini-3B-2507")
 class VoxtralEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VoxtralEncoder`]. It is used to instantiate a
-    Voxtral audio encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the Voxtral
-    architecture.
-
-    e.g. [mistralai/Voxtral-Mini-3B-2507](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 51866):
-            Vocabulary size of the model.
-        hidden_size (`int`, *optional*, defaults to 1280):
-            Dimensionality of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 5120):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 20):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        scale_embedding (`bool`, *optional*, defaults to `False`):
-            Scale embeddings by dividing by sqrt(hidden_size) if True.
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, "gelu",
-        num_mel_bins (`int`, *optional*, defaults to 128):
-            Number of mel features used per input features. Should correspond to the value used in the
-            `VoxtralProcessor` class.
-        max_source_positions (`int`, *optional*, defaults to 1500):
-            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
+    max_source_positions (`int`, *optional*, defaults to 1500):
+        The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
 
     ```python
     >>> from transformers import VoxtralEncoderConfig, VoxtralEncoder
@@ -115,26 +85,10 @@ class VoxtralEncoderConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
+@auto_docstring(checkpoint="mistralai/Voxtral-Mini-3B-2507")
 class VoxtralConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VoxtralForConditionalGeneration`]. It is used to instantiate an
-    Voxtral model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Voxtral-Mini-3B.
-
-    e.g. [mistralai/Voxtral-Mini-3B-2507](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        audio_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object or dictionary of the audio encoder.
-        text_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object or dictionary of the text model.
-        audio_token_id (`int`, *optional*):
-            The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function (function or string) in the multi-modal projector.
+    Example:
 
     ```python
     >>> from transformers import VoxtralForConditionalGeneration, VoxtralConfig

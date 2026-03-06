@@ -119,11 +119,12 @@ _deps = [
     "pytest-xdist",
     "pytest-order",
     "python>=3.10.0",
-    "regex!=2019.12.17",
+    "regex>=2025.10.22",
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff==0.14.10",
+    "ty==0.0.20",
     # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
     # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
     # `Trainer` tests (see references to `run_translation.py`).
@@ -180,7 +181,7 @@ if PYTHON_MINOR_VERSION < 13:
     extras["audio"] += deps_list("kenlm")
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
-extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich")
+extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty")
 extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")

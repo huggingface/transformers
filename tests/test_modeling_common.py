@@ -1739,6 +1739,17 @@ class ModelTesterMixin:
         # Scenario - 3 with `use_reentrant=True` (old default behaviour, not recommended)
         self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
 
+    def _set_subconfig_attributes(self, config, attribute_name, value):
+        """Helper function to recursively set a config attr to a given value"""
+        for k in config.sub_configs:
+            if (
+                self._is_composite and attribute_name == "output_attentions" and k == "vision_config"
+            ):  # skip because it's not needed and causes errors e.g with Timm
+                continue
+            if getattr(config, k) is not None:
+                setattr(getattr(config, k), attribute_name, value)
+                self._set_subconfig_attributes(getattr(config, k), attribute_name, value)
+
     def test_attention_outputs(self):
         if not self.has_attentions:
             self.skipTest(reason="Model does not output attentions")
@@ -1773,14 +1784,7 @@ class ModelTesterMixin:
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            for k in config.sub_configs:
-                if (
-                    self._is_composite and k == "vision_config"
-                ):  # skip because it's not needed and causes errors e.g with Timm
-                    continue
-                if getattr(config, k) is not None:
-                    getattr(config, k).output_attentions = True
-
+            self._set_subconfig_attributes(config, "output_attentions", True)
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -1921,28 +1925,16 @@ class ModelTesterMixin:
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
-            for k in config.sub_configs:
-                if getattr(config, k) is not None:
-                    getattr(config, k).output_hidden_states = True
-
+            self._set_subconfig_attributes(config, "output_hidden_states", True)
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self._prepare_config_and_inputs_for_retain_grad_hidden_states_attentions()
-        for k in config.sub_configs:
-            if getattr(config, k) is not None:
-                getattr(config, k).output_hidden_states = True
+        self._set_subconfig_attributes(config, "output_hidden_states", True)
 
         config.output_hidden_states = True
         config.output_attentions = self.has_attentions
-
-        for k in config.sub_configs:
-            if (
-                self._is_composite and k == "vision_config"
-            ):  # skip because it's not needed and causes errors e.g with Timm
-                continue
-            if getattr(config, k) is not None:
-                getattr(config, k).output_attentions = self.has_attentions
+        self._set_subconfig_attributes(config, "output_attentions", self.has_attentions)
 
         # force eager attention to support output attentions
         if self.has_attentions:
@@ -3607,6 +3599,7 @@ class ModelTesterMixin:
                 "jamba",
                 "kosmos-2",
                 "mllama",
+                "lighton_ocr",
                 "pixtral",
                 "sam",
                 "sam_hq",
@@ -3879,9 +3872,6 @@ class ModelTesterMixin:
 
         if not is_torch_fp16_available_on_device(torch_device):
             self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
-
-        if torch_device == "xpu":
-            self.skipTest("XPU FA2 currently does not support backward.")
 
         torch.compiler.reset()
         dtype = torch.float16
@@ -4173,6 +4163,10 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
+                if model_class.__name__ == "VideoMAEForPreTraining":
+                    # this model computes the loss unconditionally
+                    continue
+
                 if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
                 else:
@@ -5227,30 +5221,36 @@ class ModelTesterMixin:
                 outputs = model.get_audio_features(**inputs_dict)
 
             if return_dict in (True, None):
-                self.assertTrue(isinstance(outputs, ModelOutput), "get_audio_features() must return a BaseModelOutput")
+                self.assertTrue(
+                    isinstance(outputs, ModelOutput), "get_audio_features() must return a BaseModelOutputWithPooling"
+                )
                 self.assertTrue(
                     hasattr(outputs, "last_hidden_state"),
-                    "get_audio_features() must return a BaseModelOutput with last_hidden_state",
+                    "get_audio_features() must return a BaseModelOutputWithPooling with last_hidden_state",
                 )
                 self.assertTrue(
                     hasattr(outputs, "pooler_output"),
-                    "get_audio_features() must return a BaseModelOutput with pooler_output",
+                    "get_audio_features() must return a BaseModelOutputWithPooling with pooler_output",
                 )
                 self.assertTrue(
                     hasattr(outputs, "hidden_states"),
-                    "get_audio_features() must return a BaseModelOutput with hidden_states",
+                    "get_audio_features() must return a BaseModelOutputWithPooling with hidden_states",
                 )
                 if self.has_attentions:
                     self.assertTrue(
                         hasattr(outputs, "attentions"),
-                        "get_audio_features() must return a BaseModelOutput with attentions",
+                        "get_audio_features() must return a BaseModelOutputWithPooling with attentions",
                     )
 
                 if getattr(self, "skip_test_audio_features_output_shape", False):
                     return
 
                 last_hidden_state_shape = outputs.last_hidden_state.shape
-                batch_size = inputs_dict["input_features"].shape[0]
+
+                if "input_features" in inputs_dict:
+                    batch_size = inputs_dict["input_features"].shape[0]
+                else:
+                    batch_size = inputs_dict["input_values"].shape[0]
                 self.assertEqual(
                     last_hidden_state_shape[0],
                     batch_size,

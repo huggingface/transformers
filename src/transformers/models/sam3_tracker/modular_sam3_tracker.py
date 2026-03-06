@@ -41,31 +41,15 @@ from ..sam2.modeling_sam2 import (
 from ..sam2.processing_sam2 import Sam2Processor
 
 
+@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
 class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Sam3TrackerPromptEncoder`]. The [`Sam3TrackerPromptEncoder`]
-    module is used to encode the input 2D points and bounding boxes.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        image_size (`int`, *optional*, defaults to 1008):
-            The expected output resolution of the image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        mask_input_channels (`int`, *optional*, defaults to 16):
-            The number of channels to be fed to the `MaskDecoder` module.
-        num_point_embeddings (`int`, *optional*, defaults to 4):
-            The number of point embeddings to be used.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the encoder and pooler.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        scale (`float`, *optional*, defaults to 1):
-            The scale factor for the prompt encoder.
+    mask_input_channels (`int`, *optional*, defaults to 16):
+        The number of channels to be fed to the `MaskDecoder` module.
+    num_point_embeddings (`int`, *optional*, defaults to 4):
+        The number of point embeddings to be used.
+    scale (`float`, *optional*, defaults to 1):
+        The scale factor for the prompt encoder.
     """
 
     base_config_key = "prompt_encoder_config"
@@ -85,41 +69,23 @@ class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
 class Sam3TrackerProcessor(Sam2Processor):
     pass
 
 
+@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
 class Sam3TrackerMaskDecoderConfig(Sam2MaskDecoderConfig):
     pass
 
 
+@auto_docstring(checkpoint="facebook/sam3_tracker.1-hiera-tiny")
 class Sam3TrackerConfig(Sam2Config):
     r"""
-    [`Sam3TrackerConfig`] is the configuration class to store the configuration of a [`Sam3TrackerModel`]. It is used to instantiate a
-    SAM3_TRACKER model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
-    configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
-    [facebook/sam3_tracker.1-hiera-tiny](https://huggingface.co/facebook/sam3_tracker.1-hiera-tiny) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    <Tip>
-
-    SAM3 Tracker checkpoints with `model_type="sam3_tracker_video"` are compatible with `Sam3TrackerModel` since the
-    video variant weights are a superset of the image-only model weights. You may see a warning about model type
-    mismatch when loading such checkpoints, which can be safely ignored in this case.
-
-    </Tip>
-
-    Args:
-        vision_config (Union[`dict`, `Sam3TrackerVisionConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam3TrackerVisionConfig`].
-        prompt_encoder_config (Union[`dict`, `Sam3TrackerPromptEncoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam3TrackerPromptEncoderConfig`].
-        mask_decoder_config (Union[`dict`, `Sam3TrackerMaskDecoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam3TrackerMaskDecoderConfig`].
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation for parameter initialization.
+    prompt_encoder_config (Union[`dict`, `Sam3TrackerPromptEncoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`Sam3TrackerPromptEncoderConfig`].
+    mask_decoder_config (Union[`dict`, `Sam3TrackerMaskDecoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`Sam3TrackerMaskDecoderConfig`].
 
     Example:
 

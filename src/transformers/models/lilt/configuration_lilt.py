@@ -14,56 +14,20 @@
 """LiLT configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="SCUT-DLVCLab/lilt-roberta-en-base")
 class LiltConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LiltModel`]. It is used to instantiate a LiLT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the LiLT
-    [SCUT-DLVCLab/lilt-roberta-en-base](https://huggingface.co/SCUT-DLVCLab/lilt-roberta-en-base) architecture.
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the LiLT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`LiltModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer. Should be a multiple of 24.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`LiltModel`].
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
-        channel_shrink_ratio (`int`, *optional*, defaults to 4):
-            The shrink ratio compared to the `hidden_size` for the channel dimension of the layout embeddings.
-        max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
-            The maximum value that the 2D position embedding might ever be used with. Typically set this to something
-            large just in case (e.g., 1024).
+    channel_shrink_ratio (`int`, *optional*, defaults to 4):
+        The shrink ratio compared to the `hidden_size` for the channel dimension of the layout embeddings.
+    max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
+        The maximum value that the 2D position embedding might ever be used with. Typically set this to something
+        large just in case (e.g., 1024).
 
     Examples:
 
