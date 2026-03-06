@@ -2552,6 +2552,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # checkpoint -> let's raise a warning and NOT tie them
                 if source_is_there and target_is_there:
                     # If both are present, check if the weights are exactly similar, and only tie in this case
+                    # This check is important, as torch `.bin` checkpoints always contain both keys, referencing the same storage
                     if not (self.get_parameter(source_param_name) == self.get_parameter(target_param_name)).all():
                         logger.warning(
                             f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
