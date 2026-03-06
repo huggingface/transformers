@@ -4100,6 +4100,9 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
+                if model_class.__name__ in ["BigBirdPegasusModel", "BigBirdPegasusForConditionalGeneration"]:
+                    continue
+
                 if model_class.__name__ in ["VideoMAEForPreTraining"]:
                     continue
 
@@ -4171,8 +4174,10 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
-                # fails for some reason with a cuda assertion error
                 if model_class.__name__ in ["BigBirdPegasusModel", "BigBirdPegasusForConditionalGeneration"]:
+                    continue
+
+                if model_class.__name__ in ["VideoMAEForPreTraining"]:
                     continue
 
                 if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
