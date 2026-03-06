@@ -30,6 +30,9 @@ from safetensors import safe_open
 from ..utils import is_torch_available, is_torchao_available, logging
 
 
+MIN_TORCHAO_VERSION = "0.15.0"
+
+
 if is_torch_available():
     from ..core_model_loading import WeightConverter
 
@@ -38,7 +41,7 @@ if is_torch_available():
     import torch
 
 if is_torchao_available():
-    if version.parse(metadata.version("torchao")) >= version.parse("0.15.0"):
+    if version.parse(metadata.version("torchao")) >= version.parse(MIN_TORCHAO_VERSION):
         from torchao.prototype.safetensors.safetensors_support import (
             flatten_tensor_state_dict,
         )
@@ -147,11 +150,11 @@ class TorchAoHfQuantizer(HfQuantizer):
         """
         We flatten the state dict of tensor subclasses so that it is compatible with the safetensors format.
         """
-        if version.parse("0.15.0") <= TORCHAO_VERSION:
+        if version.parse(MIN_TORCHAO_VERSION) <= TORCHAO_VERSION:
             return flatten_tensor_state_dict(model.state_dict())
         else:
             raise RuntimeError(
-                f"In order to use safetensors with torchao, please use torchao version >= 0.15.0. Current version: {TORCHAO_VERSION}"
+                f"In order to use safetensors with torchao, please use torchao version >= {MIN_TORCHAO_VERSION}. Current version: {TORCHAO_VERSION}"
             )
 
     def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
@@ -194,7 +197,7 @@ class TorchAoHfQuantizer(HfQuantizer):
             _QUANTIZABLE.append(torch.nn.Embedding)
 
         # Handle FqnToConfig, introduced in torchao 0.15.0+
-        if self.quantization_config._get_ao_version() >= version.parse("0.15.0"):
+        if self.quantization_config._get_ao_version() >= version.parse(MIN_TORCHAO_VERSION):
             from torchao.quantization import FqnToConfig, fqn_matches_fqn_config
 
             if isinstance(self.quantization_config.quant_type, FqnToConfig):
@@ -215,10 +218,10 @@ class TorchAoHfQuantizer(HfQuantizer):
         return
 
     def is_serializable(self) -> bool:
-        _is_torchao_serializable = version.parse("0.15.0") <= TORCHAO_VERSION
+        _is_torchao_serializable = version.parse(MIN_TORCHAO_VERSION) <= TORCHAO_VERSION
         if not version.parse("0.15.0") <= TORCHAO_VERSION:
             logger.warning(
-                "torchao quantized model only supports serialization for torchao version >= 0.15.0, please upgrade "
+                "torchao quantized model only supports serialization for torchao version >= {MIN_TORCHAO_VERSION}, please upgrade "
                 "your version to save the quantized model"
             )
         return _is_torchao_serializable
