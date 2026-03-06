@@ -240,6 +240,39 @@ We're always looking for improvements to the documentation that make it more cle
 
 For more details about how to generate, build, and write the documentation, take a look at the documentation [README](https://github.com/huggingface/transformers/tree/main/docs).
 
+## Coding with AI agents
+
+This repository supports two local agent setups, generated from a single source of truth in `.ai/`.
+
+- Source files you should edit:
+  - `.ai/AGENTS.md`
+  - `.ai/skills/<skill_name>/...`
+- Generated artifacts (do not edit manually):
+  - `AGENTS.md`
+  - `CLAUDE.md`
+  - `.agents/skills/...`
+  - `.claude/skills/...`
+
+To configure the repository for each agent system:
+
+```bash
+make codex
+```
+
+- Removes `CLAUDE.md` if present
+- Recreates `AGENTS.md` from `.ai/AGENTS.md`
+- Recreates `.agents/skills/` from `.ai/skills/`
+
+```bash
+make claude
+```
+
+- Removes `AGENTS.md` if present
+- Recreates `CLAUDE.md` from `.ai/AGENTS.md`
+- Recreates `.claude/skills/` from `.ai/skills/`
+
+Both targets are idempotent: re-running `make codex` or `make claude` will recreate the generated files cleanly from `.ai/`.
+
 ## Create a Pull Request
 
 Before writing any code, we strongly advise you to search through the existing PRs or

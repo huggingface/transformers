@@ -176,3 +176,9 @@ tags
 # Cursor IDE files
 .cursor/
 test-results/
+
+# AI agent generated artifacts
+/AGENTS.md
+/CLAUDE.md
+/.agents/skills/
+/.claude/skills/
