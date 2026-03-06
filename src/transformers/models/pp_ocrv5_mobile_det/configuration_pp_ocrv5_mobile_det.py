@@ -6,8 +6,13 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class PPOCRV5MobileDetConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PPOCRV5MobileDet`]. It is used to instantiate a
@@ -50,9 +55,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
             The interpolation mode used for upsampling or downsampling feature maps in the neck network. Supported
             modes include `"nearest"` (nearest neighbor interpolation) and `"bilinear"`.
-        k (`int`, *optional*, defaults to 50):
-            The candidate box number threshold for the head network, which controls the maximum number of text region
-            candidates generated during the text detection process.
         kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`):
             The list of kernel sizes for convolutional layers in the head network, used for multi-scale feature
             extraction to detect text regions of different sizes.
@@ -82,7 +84,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         neck_out_channels=96,
         shortcut=True,
         interpolate_mode="nearest",
-        k=50,
         kernel_list=[3, 2, 2],
         **kwargs,
     ):
@@ -103,7 +104,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         self.interpolate_mode = interpolate_mode
 
         # ---- Head ----
-        self.k = k
         self.kernel_list = kernel_list
 
 

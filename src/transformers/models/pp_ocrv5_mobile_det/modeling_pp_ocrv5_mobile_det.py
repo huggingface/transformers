@@ -5,7 +5,6 @@
 #                          modular_pp_ocrv5_mobile_det.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -13,9 +12,11 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithNoAttention
+from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.output_capturing import capture_outputs
 from .configuration_pp_ocrv5_mobile_det import PPOCRV5MobileDetConfig
 
 
@@ -302,7 +303,7 @@ class PPOCRV5MobileDetLCNetV3Block(nn.Module):
         return hidden_state
 
 
-def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
+def make_divisible(value: int, divisor: int = 8, min_value: int | None = None) -> int:
     """
     Ensure that all layers have a channel count that is divisible by `divisor`.
     """
@@ -340,24 +341,51 @@ class PPOCRV5MobileDetBlock(nn.Module):
         return hidden_state
 
 
-class PPOCRV5MobileDetBackbone(nn.Module):
+@auto_docstring(
+    custom_intro="""
     """
+)
+class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
+    """
+    Base class for all PPOCRV5 Mobile Det pre-trained models. Handles model initialization,
+    configuration, and loading of pre-trained weights, following the Transformers library conventions.
+    """
+
+    config: PPOCRV5MobileDetConfig
+    base_model_prefix = "pp_ocrv5_mobile_det"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, PPOCRV5MobileDetConvBNLayer):
+            nn.init.kaiming_normal_(module.convolution.weight)
+
+        if isinstance(module, PPOCRV5MobileDetHead):
+            nn.init.constant_(module.bn1.weight, 1.0)
+            nn.init.constant_(module.bn1.bias, 1e-4)
+            nn.init.constant_(module.bn2.weight, 1.0)
+            nn.init.constant_(module.bn2.bias, 1e-4)
+            nn.init.kaiming_uniform_(module.conv2.weight)
+            nn.init.kaiming_uniform_(module.conv3.weight)
+
+        if isinstance(module, PPOCRV5MobileDetRSELayer):
+            nn.init.kaiming_uniform_(module.in_conv.weight)
+
+
+@auto_docstring(
+    custom_intro="""
     Backbone network for PPOCRV5 Mobile Det, built with LCNetV3Blocks.
     Extracts multi-scale feature maps from input images, which are passed to the neck network for further fusion.
     Optimized for mobile devices with lightweight, efficient layers and channel scaling.
     """
-
+)
+class PPOCRV5MobileDetBackbone(PPOCRV5MobileDetPreTrainedModel):
     def __init__(self, config: PPOCRV5MobileDetConfig):
-        """
-        Initialize the PPOCRV5MobileDetBackbone with the specified model configuration.
-
-        Args:
-            config (PPOCRV5MobileDetConfig): Configuration object containing backbone hyperparameters.
-        """
-        super().__init__()
-
+        super().__init__(config)
         self.out_channels = make_divisible(config.backbone_out_channels * config.scale, config.divisor)
-
         self.conv1 = PPOCRV5MobileDetConvBNLayer(
             in_channels=3,
             out_channels=make_divisible(16 * config.scale, config.divisor),
@@ -365,23 +393,19 @@ class PPOCRV5MobileDetBackbone(nn.Module):
             stride=2,
             activation=None,
         )
-
         self.blocks = nn.ModuleList([])
         for block_index in config.backbone_config.keys():
             if "layer_list_out_channels" in block_index:
                 continue
             block = PPOCRV5MobileDetBlock(config, block_index)
             self.blocks.append(block)
-
         mv_c = config.backbone_config["layer_list_out_channels"]
-
         self.out_channels = [
             make_divisible(config.backbone_config["blocks3"][-1][2] * config.scale, config.divisor),
             make_divisible(config.backbone_config["blocks4"][-1][2] * config.scale, config.divisor),
             make_divisible(config.backbone_config["blocks5"][-1][2] * config.scale, config.divisor),
             make_divisible(config.backbone_config["blocks6"][-1][2] * config.scale, config.divisor),
         ]
-
         self.layer_list = nn.ModuleList(
             [
                 nn.Conv2d(self.out_channels[0], int(mv_c[0] * config.scale), 1, 1, 0),
@@ -397,47 +421,27 @@ class PPOCRV5MobileDetBackbone(nn.Module):
             int(mv_c[3] * config.scale),
         ]
 
-    def forward(self, hidden_state: torch.Tensor, output_hidden_states: bool, return_dict: bool = True):
-        """
-        Forward pass of the backbone network, extracting multi-scale feature maps and optional hidden states.
-
-        Args:
-            hidden_state (torch.Tensor): Input image tensor of shape (B, 3, H, W).
-            output_hidden_states (bool): Whether to return all intermediate hidden states for analysis.
-            return_dict (bool, optional): Unused (for consistency with other modules). Defaults to True.
-
-        Returns:
-            tuple:
-                - list[torch.Tensor]: Multi-scale feature maps after projection (4 feature maps).
-                - torch.Tensor: Last hidden state (output of blocks6).
-                - tuple[torch.Tensor, ...]: All intermediate hidden states (if output_hidden_states is True).
-        """
-        hidden_states = () if output_hidden_states else None
-
-        out_list = []
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        hidden_state = self.conv1(hidden_state)
-
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BackboneOutput:
+        hidden_state = self.conv1(pixel_values)
+        out_list: list[torch.Tensor] = []
         first_block = True
         for block in self.blocks:
-            if output_hidden_states:
-                hidden_states = hidden_states + (hidden_state,)
             hidden_state = block(hidden_state)
             if first_block:
                 first_block = False
             else:
                 out_list.append(hidden_state)
-
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        last_hidden_state = hidden_state
-        out_list[0] = self.layer_list[0](out_list[0])
-        out_list[1] = self.layer_list[1](out_list[1])
-        out_list[2] = self.layer_list[2](out_list[2])
-        out_list[3] = self.layer_list[3](out_list[3])
-
-        return out_list, last_hidden_state, hidden_states
+        if out_list:
+            out_list[0] = self.layer_list[0](out_list[0])
+            out_list[1] = self.layer_list[1](out_list[1])
+            out_list[2] = self.layer_list[2](out_list[2])
+            out_list[3] = self.layer_list[3](out_list[3])
+        feature_maps = tuple(out_list)
+        return feature_maps
 
 
 class PPOCRV5MobileDetSEModule(nn.Module):
@@ -679,7 +683,6 @@ class PPOCRV5MobileDetHead(nn.Module):
 class PPOCRV5MobileDetDBHead(nn.Module):
     """
     Head network for PPOCRV5 Mobile Det, wrapping the Head sub-module to generate text segmentation maps.
-    Contains the `k` parameter for candidate box selection during post-processing.
     """
 
     def __init__(self, config: PPOCRV5MobileDetConfig):
@@ -690,7 +693,6 @@ class PPOCRV5MobileDetDBHead(nn.Module):
             config (PPOCRV5MobileDetConfig): Configuration object containing head hyperparameters.
         """
         super().__init__()
-        self.k = config.k
         self.binarize = PPOCRV5MobileDetHead(config.neck_out_channels, config.kernel_list)
 
     def forward(self, hidden_state):
@@ -713,49 +715,19 @@ class PPOCRV5MobileDetModelOutput(ModelOutput):
     Output class for the PPOCRV5MobileDetModel.
 
     Args:
-        logits (torch.FloatTensor, optional): Binary segmentation logits from the head network,
-            shape (B, 1, H, W).
         last_hidden_state (torch.FloatTensor, optional): Last hidden state from the backbone network,
             shape (B, C, H, W).
-        hidden_states (tuple[torch.FloatTensor], optional): Tuple of all intermediate hidden states from the backbone,
-            if `output_hidden_states` is True.
+        hidden_states (tuple[torch.FloatTensor], optional): Tuple of all intermediate hidden states from the backbone
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
+@auto_docstring(
+    custom_intro="""
     """
-    Base class for all PPOCRV5 Mobile Det pre-trained models. Handles model initialization,
-    configuration, and loading of pre-trained weights, following the Transformers library conventions.
-    """
-
-    config: PPOCRV5MobileDetConfig
-    base_model_prefix = "pp_ocrv5_mobile_det"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, PPOCRV5MobileDetConvBNLayer):
-            nn.init.kaiming_normal_(module.convolution.weight)
-
-        if isinstance(module, PPOCRV5MobileDetHead):
-            nn.init.constant_(module.bn1.weight, 1.0)
-            nn.init.constant_(module.bn1.bias, 1e-4)
-            nn.init.constant_(module.bn2.weight, 1.0)
-            nn.init.constant_(module.bn2.bias, 1e-4)
-            nn.init.kaiming_uniform_(module.conv2.weight)
-            nn.init.kaiming_uniform_(module.conv3.weight)
-
-        if isinstance(module, PPOCRV5MobileDetRSELayer):
-            nn.init.kaiming_uniform_(module.in_conv.weight)
-
-
+)
 class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     """
     Core PPOCRV5 Mobile Det model, consisting of Backbone, Neck, and Head networks.
@@ -763,55 +735,24 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     """
 
     def __init__(self, config: PPOCRV5MobileDetConfig):
-        """
-        Initialize the PPOCRV5MobileDetModel with the specified configuration.
-
-        Args:
-            config (PPOCRV5MobileDetConfig): Configuration object containing all model hyperparameters.
-        """
         super().__init__(config)
 
         self.backbone = PPOCRV5MobileDetBackbone(config)
         self.neck = PPOCRV5MobileDetNeck(config, self.backbone.out_channels)
-        self.head = PPOCRV5MobileDetDBHead(config)
         self.post_init()
 
+    @capture_outputs
+    @can_return_tuple
     def forward(
         self,
         hidden_state: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], PPOCRV5MobileDetModelOutput]:
-        """
-        Forward pass of the PPOCRV5MobileDetModel, processing input images to generate segmentation logits.
-
-        Args:
-            hidden_state (torch.FloatTensor): Input image tensor of shape (B, 3, H, W) (pixel values).
-            output_hidden_states (bool, optional): Whether to return all intermediate hidden states from the backbone.
-                If None, uses the configuration's `output_hidden_states` value.
-            return_dict (bool, optional): Whether to return a `PPOCRV5MobileDetModelOutput` object or a tuple.
-                If None, uses the configuration's `use_return_dict` value.
-
-        Returns:
-            Union[tuple[torch.FloatTensor], PPOCRV5MobileDetModelOutput]: Model output containing segmentation logits,
-                last hidden state, and optional hidden states.
-        """
-        hidden_state, last_hidden_state, all_hidden_states = self.backbone(hidden_state, output_hidden_states)
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.FloatTensor] | PPOCRV5MobileDetModelOutput:
+        hidden_state = self.backbone(hidden_state)
         hidden_state = self.neck(hidden_state)
-        hidden_state = self.head(hidden_state)
-
-        if not return_dict:
-            output = (last_hidden_state,)
-            if output_hidden_states:
-                output += (all_hidden_states,)
-            output += (hidden_state,)
-            return output
 
         return PPOCRV5MobileDetModelOutput(
-            logits=hidden_state,
-            last_hidden_state=last_hidden_state,
-            hidden_states=all_hidden_states if output_hidden_states else None,
+            last_hidden_state=hidden_state,
         )
 
 
@@ -826,14 +767,17 @@ class PPOCRV5MobileDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
             shape (B, 1, H, W).
         shape (torch.FloatTensor, optional): Unused placeholder for consistency with object detection output formats.
         last_hidden_state (torch.FloatTensor, optional): Last hidden state from the backbone network.
-        hidden_states (tuple[torch.FloatTensor], optional): Tuple of all intermediate hidden states from the backbone,
-            if `output_hidden_states` is True.
+        hidden_states (tuple[torch.FloatTensor], optional): Tuple of all intermediate hidden states from the backbone
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    shape: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor | None = None
+    shape: torch.FloatTensor | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
     """
     PPOCRV5 Mobile Det model for object (text) detection tasks. Wraps the core PPOCRV5MobileDetModel
@@ -843,61 +787,24 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
 
     def __init__(self, config: PPOCRV5MobileDetConfig):
-        """
-        Initialize the PPOCRV5MobileDetForObjectDetection with the specified configuration.
-
-        Args:
-            config (PPOCRV5MobileDetConfig): Configuration object containing all model hyperparameters.
-        """
         super().__init__(config)
         self.model = PPOCRV5MobileDetModel(config)
+        self.head = PPOCRV5MobileDetDBHead(config)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[list[dict]] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], PPOCRV5MobileDetForObjectDetectionOutput]:
-        """
-        Forward pass of the PPOCRV5MobileDetForObjectDetection model, processing input images to generate
-        text detection logits.
-
-        Args:
-            pixel_values (torch.FloatTensor): Input image tensor of shape (B, 3, H, W) (preprocessed pixel values).
-            labels (list[dict], optional): Unused placeholder for training (object detection labels). Defaults to None.
-            output_hidden_states (bool, optional): Whether to return all intermediate hidden states from the backbone.
-                If None, uses the configuration's `output_hidden_states` value.
-            return_dict (bool, optional): Whether to return a `PPOCRV5MobileDetForObjectDetectionOutput` object or a tuple.
-                If None, uses the configuration's `use_return_dict` value.
-            **kwargs: Additional unused keyword arguments for compatibility.
-
-        Returns:
-            Union[tuple[torch.FloatTensor], PPOCRV5MobileDetForObjectDetectionOutput]: Detection output containing
-                segmentation logits, last hidden state, and optional hidden states.
-        """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.model(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        if not return_dict:
-            output = (outputs[0],)
-            if output_hidden_states:
-                output += (outputs[1], outputs[2])
-            else:
-                output += (outputs[1],)
-
-            return output
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.FloatTensor] | PPOCRV5MobileDetForObjectDetectionOutput:
+        outputs = self.model(pixel_values, **kwargs)
+        logits = self.head(outputs.last_hidden_state)
 
         return PPOCRV5MobileDetForObjectDetectionOutput(
-            logits=outputs.logits,
+            logits=logits,
             last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
         )
 
 

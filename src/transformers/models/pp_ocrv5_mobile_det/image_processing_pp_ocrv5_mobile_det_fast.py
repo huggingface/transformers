@@ -5,7 +5,7 @@
 #                          modular_pp_ocrv5_mobile_det.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 import torch
@@ -14,7 +14,7 @@ import torchvision.transforms.v2.functional as tvF
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import SizeDict
-from ...utils import is_cv2_available
+from ...utils import auto_docstring, is_cv2_available
 from ...utils.generic import TensorType
 
 
@@ -379,40 +379,10 @@ def boxes_from_bitmap(
     return np.array(boxes, dtype=np.int16), scores
 
 
-def process(
-    logit: np.ndarray,
-    size: np.ndarray,
-    threshold: float,
-    box_thresh: float,
-    unclip_ratio: float,
-    min_size: int,
-    max_candidates: int,
-) -> tuple[Union[list[np.ndarray], np.ndarray], list[float]]:
+@auto_docstring(
+    custom_intro="""
     """
-    Main post-processing function to convert model predictions into text boxes.
-
-    Args:
-        logit (torch.Tensor): Model output of shape (1, H, W).
-        size (torch.Tensor): Original image size (height, width).
-        threshold (float): Threshold for binarizing the prediction map.
-        box_thresh (float): Score threshold for filtering boxes.
-        unclip_ratio (float): Expansion ratio for unclipping.
-        min_size (int): Minimum side length of valid boxes.
-        max_candidates (int): Maximum number of boxes to extract.
-
-    Returns:
-        tuple:
-            - boxes (list or np.ndarray): Extracted text boxes.
-            - scores (list): Corresponding confidence scores.
-    """
-    src_height, src_width = size
-    mask = logit > threshold
-    boxes, scores = boxes_from_bitmap(
-        logit, mask, src_width, src_height, box_thresh, unclip_ratio, min_size, max_candidates
-    )
-    return boxes, scores
-
-
+)
 class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
     """
     Image processor for PPOCRV5 Mobile Det model, handling preprocessing (resizing, normalization)
@@ -438,6 +408,9 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
+        # limit_side_len: int,
+        # limit_type: str,
+        # max_side_limit: int,
         interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
@@ -451,7 +424,12 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         resize_images, target_sizes = [], []
         if do_resize:
             for image in images:
-                size, shape = self.get_image_size(image, self.limit_side_len, self.limit_type, self.max_side_limit)
+                size, shape = self.get_image_size(
+                    image=image,
+                    limit_side_len=self.limit_side_len,
+                    limit_type=self.limit_type,
+                    max_side_limit=self.max_side_limit,
+                )
                 image = self.resize(image, size=size, interpolation=interpolation)
                 resize_images.append(image)
                 target_sizes.append(shape)
@@ -470,58 +448,13 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
 
         return encoded_inputs
 
-    def post_process_object_detection(
-        self,
-        outputs,
-        threshold: float = 0.3,
-        target_sizes: Optional[Union[list[tuple[int, int]], torch.Tensor]] = None,
-        box_thresh: float = 0.6,
-        max_candidates: int = 1000,
-        min_size: int = 3,
-        unclip_ratio: float = 1.5,
-    ):
-        """
-        Converts model outputs into detected text boxes.
-
-        Args:
-            preds (torch.Tensor): Model outputs.
-            threshold (float):Binarization threshold.
-            target_sizes (TensorType or list[tuple]): Original image sizes.
-            box_thresh (float): Box score threshold.
-            max_candidates (int): Maximum number of boxes.
-            min_size (int): Minimum box size.
-            unclip_ratio (float): Expansion ratio.
-
-        Returns:
-            list[dict]: List of detection results.
-        """
-
-        results = []
-        for logit, size in zip(outputs.logits, target_sizes):
-            box, score = process(
-                logit=logit[0, :, :].cpu().detach().numpy(),
-                size=size.cpu().detach().numpy(),
-                threshold=threshold,
-                box_thresh=box_thresh,
-                unclip_ratio=unclip_ratio,
-                min_size=min_size,
-                max_candidates=max_candidates,
-            )
-
-            results.append(
-                {
-                    "boxes": box,
-                    "scores": score,
-                }
-            )
-        return results
-
     def get_image_size(
         self,
         image: np.ndarray,
         limit_side_len: int,
         limit_type: str,
         max_side_limit: int = 4000,
+        **kwargs,
     ) -> tuple[dict, np.ndarray]:
         """
         Computes the target size for resizing an image while preserving aspect ratio.
@@ -577,6 +510,46 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
             return None, (None, None)
 
         return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32)
+
+    def post_process_object_detection(
+        self,
+        outputs,
+        threshold: float = 0.3,
+        target_sizes: list[tuple[int, int]] | torch.Tensor | None = None,
+        box_thresh: float = 0.6,
+        max_candidates: int = 1000,
+        min_size: int = 3,
+        unclip_ratio: float = 1.5,
+    ):
+        """
+        Converts model outputs into detected text boxes.
+
+        Args:
+            preds (torch.Tensor): Model outputs.
+            threshold (float):Binarization threshold.
+            target_sizes (TensorType or list[tuple]): Original image sizes.
+            box_thresh (float): Box score threshold.
+            max_candidates (int): Maximum number of boxes.
+            min_size (int): Minimum box size.
+            unclip_ratio (float): Expansion ratio.
+
+        Returns:
+            list[dict]: List of detection results.
+        """
+
+        results = []
+        for logit, size in zip(outputs.logits, target_sizes):
+            logit = logit[0, :, :].cpu().detach().numpy()
+            size = size.cpu().detach().numpy()
+
+            src_height, src_width = size
+            mask = logit > threshold
+            box, score = boxes_from_bitmap(
+                logit, mask, src_width, src_height, box_thresh, unclip_ratio, min_size, max_candidates
+            )
+
+            results.append({"scores": score, "boxes": box})
+        return results
 
 
 __all__ = ["PPOCRV5MobileDetImageProcessorFast"]

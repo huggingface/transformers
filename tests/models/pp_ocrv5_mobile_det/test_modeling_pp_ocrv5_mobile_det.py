@@ -22,7 +22,7 @@ from parameterized import parameterized
 from transformers import (
     PPOCRV5MobileDetConfig,
     PPOCRV5MobileDetForObjectDetection,
-    PPOCRV5MobileDetImageProcessor,
+    PPOCRV5MobileDetImageProcessorFast,
     is_torch_available,
     is_vision_available,
 )
@@ -239,7 +239,7 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
+            breakpoint()
             hidden_states = outputs.hidden_states
 
             expected_num_stages = self.model_tester.num_stages
@@ -299,7 +299,7 @@ class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
         model_path = "/workspace/model_weight_torch/PP-OCRv5_mobile_det"
         self.model = PPOCRV5MobileDetForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
-            PPOCRV5MobileDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
+            PPOCRV5MobileDetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
         )
         path = "/workspace/PaddleX/paddlex/inference/models/text_detection/modeling/general_ocr_001.png"
         self.image = Image.open(path)

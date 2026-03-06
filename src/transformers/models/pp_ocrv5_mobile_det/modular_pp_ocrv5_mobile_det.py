@@ -30,14 +30,19 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...modeling_outputs import BaseModelOutputWithNoAttention
+from ...processing_utils import ImagesKwargs, Unpack
+from ...modeling_outputs import BaseModelOutputWithNoAttentionfrom, BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
     filter_out_non_signature_kwargs,
+    auto_docstring,
+    can_return_tuple,
     is_cv2_available,
     logging,
+    TransformersKwargs,
 )
+from ...utils.output_capturing import capture_outputs
 from ...utils.generic import TensorType
 
 
@@ -48,6 +53,10 @@ if is_cv2_available():
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class PPOCRV5MobileDetConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PPOCRV5MobileDet`]. It is used to instantiate a
@@ -90,9 +99,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
             The interpolation mode used for upsampling or downsampling feature maps in the neck network. Supported
             modes include `"nearest"` (nearest neighbor interpolation) and `"bilinear"`.
-        k (`int`, *optional*, defaults to 50):
-            The candidate box number threshold for the head network, which controls the maximum number of text region
-            candidates generated during the text detection process.
         kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`):
             The list of kernel sizes for convolutional layers in the head network, used for multi-scale feature
             extraction to detect text regions of different sizes.
@@ -122,7 +128,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         neck_out_channels=96,
         shortcut=True,
         interpolate_mode="nearest",
-        k=50,
         kernel_list=[3, 2, 2],
         **kwargs,
     ):
@@ -143,7 +148,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         self.interpolate_mode = interpolate_mode
 
         # ---- Head ----
-        self.k = k
         self.kernel_list = kernel_list
 
 
@@ -504,285 +508,10 @@ def boxes_from_bitmap(
     return np.array(boxes, dtype=np.int16), scores
 
 
-def process(
-    logit: np.ndarray,
-    size: np.ndarray,
-    threshold: float,
-    box_thresh: float,
-    unclip_ratio: float,
-    min_size: int,
-    max_candidates: int,
-) -> tuple[Union[list[np.ndarray], np.ndarray], list[float]]:
+@auto_docstring(
+    custom_intro="""
     """
-    Main post-processing function to convert model predictions into text boxes.
-
-    Args:
-        logit (torch.Tensor): Model output of shape (1, H, W).
-        size (torch.Tensor): Original image size (height, width).
-        threshold (float): Threshold for binarizing the prediction map.
-        box_thresh (float): Score threshold for filtering boxes.
-        unclip_ratio (float): Expansion ratio for unclipping.
-        min_size (int): Minimum side length of valid boxes.
-        max_candidates (int): Maximum number of boxes to extract.
-
-    Returns:
-        tuple:
-            - boxes (list or np.ndarray): Extracted text boxes.
-            - scores (list): Corresponding confidence scores.
-    """
-    src_height, src_width = size
-    mask = logit > threshold
-    boxes, scores = boxes_from_bitmap(logit, mask, src_width, src_height, box_thresh, unclip_ratio, min_size, max_candidates)
-    return boxes, scores
-
-
-class PPOCRV5MobileDetImageProcessor(BaseImageProcessor):
-    r"""
-    Image Processor for the PPOCRV5 Mobile Det text detection model.
-
-    Args:
-        do_resize (bool): Whether to resize input images.
-        size (dict[str, int]): Default target size for resizing (height, width).
-        resample (PILImageResampling): Resampling mode for image resizing.
-        do_rescale (bool): Whether to rescale pixel values from [0, 255] to [0, 1].
-        rescale_factor (Union[int, float]): Factor used for pixel value rescaling (1/255 by default).
-        do_normalize (bool): Whether to normalize images using mean and standard deviation.
-        image_mean (Union[float, List[float]]): Mean values for image normalization (BGR order, compatible with model).
-        image_std (Union[float, List[float]]): Standard deviation values for image normalization (BGR order).
-        limit_side_len (int): Maximum/minimum side length for image resizing (depending on `limit_type`).
-        limit_type (str): Resizing strategy ("max", "min", or "resize_long").
-        max_side_limit (int): Hard maximum limit for the longest image side to prevent excessive memory usage.
-    """
-
-    model_input_names = ["pixel_values"]
-
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: Optional[Union[int, float]] = None,
-        do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        limit_side_len: int = 960,
-        limit_type: str = "max",
-        max_side_limit: int = 4000,
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-        size = size if size is not None else {"height": 960, "width": 960}
-
-        self.limit_side_len = limit_side_len
-        self.limit_type = limit_type
-        self.max_side_limit = max_side_limit
-
-        self.do_resize = do_resize
-        self.size = size
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.resample = resample
-
-    @filter_out_non_signature_kwargs()
-    def preprocess(
-        self,
-        images: ImageInput,
-        limit_side_len: int = 960,
-        limit_type: str = "max",
-        max_side_limit: int = 4000,
-        size: Optional[dict[str, int]] = None,
-        do_resize: Optional[bool] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[Union[int, float]] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        return_tensors: Optional[Union[TensorType, str]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> BatchFeature:
-        size = self.size if size is None else size
-        limit_side_len = self.limit_side_len if limit_side_len is None else limit_side_len
-        limit_type = self.limit_type if limit_type is None else limit_type
-        max_side_limit = max_side_limit if max_side_limit is not None else self.max_side_limit
-        do_resize = self.do_resize if do_resize is None else do_resize
-        resample = self.resample if resample is None else resample
-        do_rescale = self.do_rescale if do_rescale is None else do_rescale
-        rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
-        do_normalize = self.do_normalize if do_normalize is None else do_normalize
-        image_mean = self.image_mean if image_mean is None else image_mean
-        image_std = self.image_std if image_std is None else image_std
-
-        images = make_flat_list_of_images(images)
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            size=size,
-            do_resize=do_resize,
-            resample=resample,
-        )
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        # All transformations expect numpy arrays
-        images = [to_numpy_array(image) for image in images]
-
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        # transformations
-        resize_images, target_sizes = [], []
-        if do_resize:
-            for image in images:
-                size, shape = self.get_image_size(image, self.limit_side_len, self.limit_type, max_side_limit)
-                try:
-                    image = resize(
-                        image,
-                        size=(size["height"], size["width"]),
-                        resample=resample,
-                        input_data_format=input_data_format,
-                    )
-                except Exception as e:
-                    print(size)
-                    raise RuntimeError(f"Failed to resize image: {e}") from e
-
-                resize_images.append(image)
-                target_sizes.append(shape)
-            images = resize_images
-
-        if do_rescale:
-            images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
-
-        if do_normalize:
-            images = [
-                self.normalize(image, image_mean, image_std, input_data_format=input_data_format) for image in images
-            ]
-        # flip color channels from RGB to BGR
-        images = [flip_channel_order(image, input_data_format=input_data_format) for image in images]
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        encoded_inputs = BatchFeature(
-            data={"pixel_values": images, "target_sizes": target_sizes}, tensor_type=return_tensors
-        )
-
-        return encoded_inputs
-
-    def post_process_object_detection(
-        self,
-        outputs,
-        threshold: float = 0.3,
-        target_sizes: Optional[Union[list[tuple[int, int]], torch.Tensor]] = None,
-        box_thresh: float = 0.6,
-        max_candidates: int = 1000,
-        min_size: int = 3,
-        unclip_ratio: float = 1.5,
-    ):
-        """
-        Converts model outputs into detected text boxes.
-
-        Args:
-            preds (torch.Tensor): Model outputs.
-            target_sizes (TensorType or list[tuple]): Original image sizes.
-            threshold (float): Binarization threshold.
-            box_thresh (float): Box score threshold.
-            max_candidates (int): Maximum number of boxes.
-            min_size (int): Minimum box size.
-            unclip_ratio (float): Expansion ratio.
-
-        Returns:
-            list[dict]: List of detection results.
-        """
-
-        results = []
-        for logit, size in zip(outputs.logits, target_sizes):
-            box, score = process(
-                logit=logit[0, :, :].cpu().detach().numpy(),
-                size=size.cpu().detach().numpy(),
-                threshold=threshold,
-                box_thresh=box_thresh,
-                unclip_ratio=unclip_ratio,
-                min_size=min_size,
-                max_candidates=max_candidates,
-            )
-            results.append({"scores": score, "boxes": box})
-        return results
-
-    def get_image_size(
-        self,
-        image: np.ndarray,
-        limit_side_len: int,
-        limit_type: str,
-        max_side_limit: int = 4000,
-    ) -> tuple[dict, np.ndarray]:
-        """
-        Computes the target size for resizing an image while preserving aspect ratio.
-
-        Args:
-            image (torch.Tensor): Input image.
-            limit_side_len (int): Maximum or minimum side length.
-            limit_type (str): Resizing strategy: "max", "min", or "resize_long".
-            max_side_limit (int): Maximum allowed side length.
-
-        Returns:
-            tuple:
-                - SizeDict: Target size.
-                - torch.Tensor: Original size.
-        """
-        limit_side_len = limit_side_len or self.limit_side_len
-        limit_type = limit_type or self.limit_type
-        height, width, _ = image.shape
-
-        if limit_type == "max":
-            if max(height, width) > limit_side_len:
-                if height > width:
-                    ratio = float(limit_side_len) / height
-                else:
-                    ratio = float(limit_side_len) / width
-            else:
-                ratio = 1.0
-        elif limit_type == "min":
-            if min(height, width) < limit_side_len:
-                if height < width:
-                    ratio = float(limit_side_len) / height
-                else:
-                    ratio = float(limit_side_len) / width
-            else:
-                ratio = 1.0
-        elif limit_type == "resize_long":
-            ratio = float(limit_side_len) / max(height, width)
-        else:
-            raise Exception("not support limit type, image ")
-        resize_height = int(height * ratio)
-        resize_width = int(width * ratio)
-
-        if max(resize_height, resize_width) > max_side_limit:
-            ratio = float(max_side_limit) / max(resize_height, resize_width)
-            resize_height, resize_width = int(resize_height * ratio), int(resize_width * ratio)
-
-        resize_height = max(int(round(resize_height / 32) * 32), 32)
-        resize_width = max(int(round(resize_width / 32) * 32), 32)
-
-        if resize_height == height and resize_width == width:
-            return {"height": resize_height, "width": resize_width}, np.array([height, width])
-
-        if int(resize_width) <= 0 or int(resize_height) <= 0:
-            return None, (None, None)
-
-        return {"height": resize_height, "width": resize_width}, np.array([height, width])
-
-
+)
 class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
     """
     Image processor for PPOCRV5 Mobile Det model, handling preprocessing (resizing, normalization)
@@ -808,6 +537,9 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
+        # limit_side_len: int,
+        # limit_type: str,
+        # max_side_limit: int,
         interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
@@ -821,7 +553,12 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
         resize_images, target_sizes = [], []
         if do_resize:
             for image in images:
-                size, shape = self.get_image_size(image, self.limit_side_len, self.limit_type, self.max_side_limit)
+                size, shape = self.get_image_size(
+                    image=image, 
+                    limit_side_len=self.limit_side_len, 
+                    limit_type=self.limit_type, 
+                    max_side_limit=self.max_side_limit
+                )
                 image = self.resize(image, size=size, interpolation=interpolation)
                 resize_images.append(image)
                 target_sizes.append(shape)
@@ -840,58 +577,13 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
 
         return encoded_inputs
 
-    def post_process_object_detection(
-        self,
-        outputs,
-        threshold: float = 0.3,
-        target_sizes: Optional[Union[list[tuple[int, int]], torch.Tensor]] = None,
-        box_thresh: float = 0.6,
-        max_candidates: int = 1000,
-        min_size: int = 3,
-        unclip_ratio: float = 1.5,
-    ):
-        """
-        Converts model outputs into detected text boxes.
-
-        Args:
-            preds (torch.Tensor): Model outputs.
-            threshold (float):Binarization threshold.
-            target_sizes (TensorType or list[tuple]): Original image sizes.
-            box_thresh (float): Box score threshold.
-            max_candidates (int): Maximum number of boxes.
-            min_size (int): Minimum box size.
-            unclip_ratio (float): Expansion ratio.
-
-        Returns:
-            list[dict]: List of detection results.
-        """
-
-        results = []
-        for logit, size in zip(outputs.logits, target_sizes):
-            box, score = process(
-                logit=logit[0, :, :].cpu().detach().numpy(),
-                size=size.cpu().detach().numpy(),
-                threshold=threshold,
-                box_thresh=box_thresh,
-                unclip_ratio=unclip_ratio,
-                min_size=min_size,
-                max_candidates=max_candidates,
-            )
-
-            results.append(
-                {
-                    "boxes": box,
-                    "scores": score,
-                }
-            )
-        return results
-
     def get_image_size(
         self,
         image: np.ndarray,
         limit_side_len: int,
         limit_type: str,
         max_side_limit: int = 4000,
+        **kwargs,
     ) -> tuple[dict, np.ndarray]:
         """
         Computes the target size for resizing an image while preserving aspect ratio.
@@ -945,6 +637,44 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
             return None, (None, None)
 
         return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32)
+
+    def post_process_object_detection(
+        self,
+        outputs,
+        threshold: float = 0.3,
+        target_sizes: Optional[Union[list[tuple[int, int]], torch.Tensor]] = None,
+        box_thresh: float = 0.6,
+        max_candidates: int = 1000,
+        min_size: int = 3,
+        unclip_ratio: float = 1.5,
+    ):
+        """
+        Converts model outputs into detected text boxes.
+
+        Args:
+            preds (torch.Tensor): Model outputs.
+            threshold (float):Binarization threshold.
+            target_sizes (TensorType or list[tuple]): Original image sizes.
+            box_thresh (float): Box score threshold.
+            max_candidates (int): Maximum number of boxes.
+            min_size (int): Minimum box size.
+            unclip_ratio (float): Expansion ratio.
+
+        Returns:
+            list[dict]: List of detection results.
+        """
+
+        results = []
+        for logit, size in zip(outputs.logits, target_sizes):
+            logit = logit[0, :, :].cpu().detach().numpy()
+            size=size.cpu().detach().numpy()
+
+            src_height, src_width = size
+            mask = logit > threshold
+            box, score = boxes_from_bitmap(logit, mask, src_width, src_height, box_thresh, unclip_ratio, min_size, max_candidates)
+
+            results.append({"scores": score, "boxes": box})
+        return results
 
 
 class PPOCRV5MobileDetLearnableAffineBlock(HGNetV2LearnableAffineBlock):
@@ -1216,24 +946,53 @@ class PPOCRV5MobileDetBlock(nn.Module):
         return hidden_state
 
 
-class PPOCRV5MobileDetBackbone(nn.Module):
+@auto_docstring(
+    custom_intro="""
     """
+)
+class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
+    """
+    Base class for all PPOCRV5 Mobile Det pre-trained models. Handles model initialization,
+    configuration, and loading of pre-trained weights, following the Transformers library conventions.
+    """
+
+    config: PPOCRV5MobileDetConfig
+    base_model_prefix = "pp_ocrv5_mobile_det"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, PPOCRV5MobileDetConvBNLayer):
+            nn.init.kaiming_normal_(module.convolution.weight)
+
+        if isinstance(module, PPOCRV5MobileDetHead):
+            nn.init.constant_(module.bn1.weight, 1.0)
+            nn.init.constant_(module.bn1.bias, 1e-4)
+            nn.init.constant_(module.bn2.weight, 1.0)
+            nn.init.constant_(module.bn2.bias, 1e-4)
+            nn.init.kaiming_uniform_(module.conv2.weight)
+            nn.init.kaiming_uniform_(module.conv3.weight)
+
+        if isinstance(module, PPOCRV5MobileDetRSELayer):
+            nn.init.kaiming_uniform_(module.in_conv.weight)
+
+
+
+@auto_docstring(
+    custom_intro="""
     Backbone network for PPOCRV5 Mobile Det, built with LCNetV3Blocks.
     Extracts multi-scale feature maps from input images, which are passed to the neck network for further fusion.
     Optimized for mobile devices with lightweight, efficient layers and channel scaling.
     """
+)
+class PPOCRV5MobileDetBackbone(PPOCRV5MobileDetPreTrainedModel):
 
     def __init__(self, config: PPOCRV5MobileDetConfig):
-        """
-        Initialize the PPOCRV5MobileDetBackbone with the specified model configuration.
-
-        Args:
-            config (PPOCRV5MobileDetConfig): Configuration object containing backbone hyperparameters.
-        """
-        super().__init__()
-
+        super().__init__(config)
         self.out_channels = make_divisible(config.backbone_out_channels * config.scale, config.divisor)
-
         self.conv1 = PPOCRV5MobileDetConvBNLayer(
             in_channels=3,
             out_channels=make_divisible(16 * config.scale, config.divisor),
@@ -1241,23 +1000,19 @@ class PPOCRV5MobileDetBackbone(nn.Module):
             stride=2,
             activation=None,
         )
-
         self.blocks = nn.ModuleList([])
         for block_index in config.backbone_config.keys():
             if "layer_list_out_channels" in block_index:
                 continue
             block = PPOCRV5MobileDetBlock(config, block_index)
             self.blocks.append(block)
-
         mv_c = config.backbone_config["layer_list_out_channels"]
-
         self.out_channels = [
             make_divisible(config.backbone_config["blocks3"][-1][2] * config.scale, config.divisor),
             make_divisible(config.backbone_config["blocks4"][-1][2] * config.scale, config.divisor),
             make_divisible(config.backbone_config["blocks5"][-1][2] * config.scale, config.divisor),
             make_divisible(config.backbone_config["blocks6"][-1][2] * config.scale, config.divisor),
         ]
-
         self.layer_list = nn.ModuleList(
             [
                 nn.Conv2d(self.out_channels[0], int(mv_c[0] * config.scale), 1, 1, 0),
@@ -1273,47 +1028,27 @@ class PPOCRV5MobileDetBackbone(nn.Module):
             int(mv_c[3] * config.scale),
         ]
 
-    def forward(self, hidden_state: torch.Tensor, output_hidden_states: bool, return_dict: bool = True):
-        """
-        Forward pass of the backbone network, extracting multi-scale feature maps and optional hidden states.
-
-        Args:
-            hidden_state (torch.Tensor): Input image tensor of shape (B, 3, H, W).
-            output_hidden_states (bool): Whether to return all intermediate hidden states for analysis.
-            return_dict (bool, optional): Unused (for consistency with other modules). Defaults to True.
-
-        Returns:
-            tuple:
-                - list[torch.Tensor]: Multi-scale feature maps after projection (4 feature maps).
-                - torch.Tensor: Last hidden state (output of blocks6).
-                - tuple[torch.Tensor, ...]: All intermediate hidden states (if output_hidden_states is True).
-        """
-        hidden_states = () if output_hidden_states else None
-
-        out_list = []
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        hidden_state = self.conv1(hidden_state)
-
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BackboneOutput:
+        hidden_state = self.conv1(pixel_values)
+        out_list: list[torch.Tensor] = []
         first_block = True
         for block in self.blocks:
-            if output_hidden_states:
-                hidden_states = hidden_states + (hidden_state,)
             hidden_state = block(hidden_state)
             if first_block:
                 first_block = False
             else:
                 out_list.append(hidden_state)
-
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        last_hidden_state = hidden_state
-        out_list[0] = self.layer_list[0](out_list[0])
-        out_list[1] = self.layer_list[1](out_list[1])
-        out_list[2] = self.layer_list[2](out_list[2])
-        out_list[3] = self.layer_list[3](out_list[3])
-
-        return out_list, last_hidden_state, hidden_states
+        if out_list:
+            out_list[0] = self.layer_list[0](out_list[0])
+            out_list[1] = self.layer_list[1](out_list[1])
+            out_list[2] = self.layer_list[2](out_list[2])
+            out_list[3] = self.layer_list[3](out_list[3])
+        feature_maps = tuple(out_list)
+        return feature_maps
 
 
 class PPOCRV5MobileDetSEModule(nn.Module):
@@ -1555,7 +1290,6 @@ class PPOCRV5MobileDetHead(nn.Module):
 class PPOCRV5MobileDetDBHead(nn.Module):
     """
     Head network for PPOCRV5 Mobile Det, wrapping the Head sub-module to generate text segmentation maps.
-    Contains the `k` parameter for candidate box selection during post-processing.
     """
 
     def __init__(self, config: PPOCRV5MobileDetConfig):
@@ -1566,7 +1300,6 @@ class PPOCRV5MobileDetDBHead(nn.Module):
             config (PPOCRV5MobileDetConfig): Configuration object containing head hyperparameters.
         """
         super().__init__()
-        self.k = config.k
         self.binarize = PPOCRV5MobileDetHead(config.neck_out_channels, config.kernel_list)
 
     def forward(self, hidden_state):
@@ -1589,49 +1322,21 @@ class PPOCRV5MobileDetModelOutput(ModelOutput):
     Output class for the PPOCRV5MobileDetModel.
 
     Args:
-        logits (torch.FloatTensor, optional): Binary segmentation logits from the head network,
-            shape (B, 1, H, W).
         last_hidden_state (torch.FloatTensor, optional): Last hidden state from the backbone network,
             shape (B, C, H, W).
-        hidden_states (tuple[torch.FloatTensor], optional): Tuple of all intermediate hidden states from the backbone,
-            if `output_hidden_states` is True.
+        hidden_states (tuple[torch.FloatTensor], optional): Tuple of all intermediate hidden states from the backbone
     """
 
-    logits: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
-class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
+
+
+@auto_docstring(
+    custom_intro="""
     """
-    Base class for all PPOCRV5 Mobile Det pre-trained models. Handles model initialization,
-    configuration, and loading of pre-trained weights, following the Transformers library conventions.
-    """
-
-    config: PPOCRV5MobileDetConfig
-    base_model_prefix = "pp_ocrv5_mobile_det"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, PPOCRV5MobileDetConvBNLayer):
-            nn.init.kaiming_normal_(module.convolution.weight)
-
-        if isinstance(module, PPOCRV5MobileDetHead):
-            nn.init.constant_(module.bn1.weight, 1.0)
-            nn.init.constant_(module.bn1.bias, 1e-4)
-            nn.init.constant_(module.bn2.weight, 1.0)
-            nn.init.constant_(module.bn2.bias, 1e-4)
-            nn.init.kaiming_uniform_(module.conv2.weight)
-            nn.init.kaiming_uniform_(module.conv3.weight)
-
-        if isinstance(module, PPOCRV5MobileDetRSELayer):
-            nn.init.kaiming_uniform_(module.in_conv.weight)
-
-
+)
 class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     """
     Core PPOCRV5 Mobile Det model, consisting of Backbone, Neck, and Head networks.
@@ -1639,55 +1344,25 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     """
 
     def __init__(self, config: PPOCRV5MobileDetConfig):
-        """
-        Initialize the PPOCRV5MobileDetModel with the specified configuration.
-
-        Args:
-            config (PPOCRV5MobileDetConfig): Configuration object containing all model hyperparameters.
-        """
         super().__init__(config)
 
         self.backbone = PPOCRV5MobileDetBackbone(config)
         self.neck = PPOCRV5MobileDetNeck(config, self.backbone.out_channels)
-        self.head = PPOCRV5MobileDetDBHead(config)
         self.post_init()
 
+    @capture_outputs
+    @can_return_tuple
     def forward(
         self,
         hidden_state: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], PPOCRV5MobileDetModelOutput]:
-        """
-        Forward pass of the PPOCRV5MobileDetModel, processing input images to generate segmentation logits.
-
-        Args:
-            hidden_state (torch.FloatTensor): Input image tensor of shape (B, 3, H, W) (pixel values).
-            output_hidden_states (bool, optional): Whether to return all intermediate hidden states from the backbone.
-                If None, uses the configuration's `output_hidden_states` value.
-            return_dict (bool, optional): Whether to return a `PPOCRV5MobileDetModelOutput` object or a tuple.
-                If None, uses the configuration's `use_return_dict` value.
-
-        Returns:
-            Union[tuple[torch.FloatTensor], PPOCRV5MobileDetModelOutput]: Model output containing segmentation logits,
-                last hidden state, and optional hidden states.
-        """
-        hidden_state, last_hidden_state, all_hidden_states = self.backbone(hidden_state, output_hidden_states)
+        
+        hidden_state = self.backbone(hidden_state)
         hidden_state = self.neck(hidden_state)
-        hidden_state = self.head(hidden_state)
-
-        if not return_dict:
-            output = (last_hidden_state,)
-            if output_hidden_states:
-                output += (all_hidden_states,)
-            output += (hidden_state,)
-            return output
 
         return PPOCRV5MobileDetModelOutput(
-            logits=hidden_state,
-            last_hidden_state=last_hidden_state,
-            hidden_states=all_hidden_states if output_hidden_states else None,
+            last_hidden_state=hidden_state,
         )
 
 
@@ -1702,14 +1377,17 @@ class PPOCRV5MobileDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
             shape (B, 1, H, W).
         shape (torch.FloatTensor, optional): Unused placeholder for consistency with object detection output formats.
         last_hidden_state (torch.FloatTensor, optional): Last hidden state from the backbone network.
-        hidden_states (tuple[torch.FloatTensor], optional): Tuple of all intermediate hidden states from the backbone,
-            if `output_hidden_states` is True.
+        hidden_states (tuple[torch.FloatTensor], optional): Tuple of all intermediate hidden states from the backbone
     """
 
     logits: Optional[torch.FloatTensor] = None
     shape: Optional[torch.FloatTensor] = None
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
     """
     PPOCRV5 Mobile Det model for object (text) detection tasks. Wraps the core PPOCRV5MobileDetModel
@@ -1719,67 +1397,30 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
 
     def __init__(self, config: PPOCRV5MobileDetConfig):
-        """
-        Initialize the PPOCRV5MobileDetForObjectDetection with the specified configuration.
-
-        Args:
-            config (PPOCRV5MobileDetConfig): Configuration object containing all model hyperparameters.
-        """
         super().__init__(config)
         self.model = PPOCRV5MobileDetModel(config)
+        self.head = PPOCRV5MobileDetDBHead(config)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[list[dict]] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], PPOCRV5MobileDetForObjectDetectionOutput]:
-        """
-        Forward pass of the PPOCRV5MobileDetForObjectDetection model, processing input images to generate
-        text detection logits.
-
-        Args:
-            pixel_values (torch.FloatTensor): Input image tensor of shape (B, 3, H, W) (preprocessed pixel values).
-            labels (list[dict], optional): Unused placeholder for training (object detection labels). Defaults to None.
-            output_hidden_states (bool, optional): Whether to return all intermediate hidden states from the backbone.
-                If None, uses the configuration's `output_hidden_states` value.
-            return_dict (bool, optional): Whether to return a `PPOCRV5MobileDetForObjectDetectionOutput` object or a tuple.
-                If None, uses the configuration's `use_return_dict` value.
-            **kwargs: Additional unused keyword arguments for compatibility.
-
-        Returns:
-            Union[tuple[torch.FloatTensor], PPOCRV5MobileDetForObjectDetectionOutput]: Detection output containing
-                segmentation logits, last hidden state, and optional hidden states.
-        """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.model(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        if not return_dict:
-            output = (outputs[0],)
-            if output_hidden_states:
-                output += (outputs[1], outputs[2])
-            else:
-                output += (outputs[1],)
-
-            return output
+        
+        outputs = self.model(pixel_values, **kwargs)
+        logits = self.head(outputs.last_hidden_state)
 
         return PPOCRV5MobileDetForObjectDetectionOutput(
-            logits=outputs.logits,
+            logits=logits,
             last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
         )
 
 
 __all__ = [
     "PPOCRV5MobileDetForObjectDetection",
-    "PPOCRV5MobileDetImageProcessor",
     "PPOCRV5MobileDetImageProcessorFast",
     "PPOCRV5MobileDetConfig",
     "PPOCRV5MobileDetModel",
