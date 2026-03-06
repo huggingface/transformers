@@ -512,6 +512,7 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
                 if attention_mask is None:
                     pooled_output = last_hidden_state.mean(dim=1)
                 else:
+                    attention_mask = attention_mask.to(last_hidden_state.device)
                     pooled_output = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1)
                     pooled_output /= attention_mask.sum(dim=1, keepdim=True)
 
@@ -526,6 +527,7 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
             if attention_mask is None:
                 logits = logits.mean(dim=1)
             else:
+                attention_mask = attention_mask.to(logits.device)
                 logits = (logits * attention_mask.unsqueeze(-1)).sum(dim=1)
                 logits /= attention_mask.sum(dim=1, keepdim=True)
 
