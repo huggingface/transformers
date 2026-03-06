@@ -188,6 +188,8 @@ class RfDetrConfig(LwDetrConfig):
         num_queries (`int`, *optional*, defaults to 300):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
             [`RfDetrModel`] can detect in a single image.
+        num_feature_levels (`int`, *optional*, defaults to 1):
+            Number of feature levels used in the multiscale deformable attention.
         attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to add bias to the attention layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -198,8 +200,6 @@ class RfDetrConfig(LwDetrConfig):
             Number of groups for Group DETR attention mechanism, which helps reduce computational complexity.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        num_feature_levels (`int`, *optional*, defaults to 1):
-            Number of feature levels used in the multiscale deformable attention.
         disable_custom_kernels (`bool`, *optional*, defaults to `True`):
             Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
             kernels are not supported by PyTorch ONNX export.

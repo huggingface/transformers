@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     Expectations,
     require_torch,
     require_vision,
+    slow,
     torch_device,
 )
 
@@ -723,6 +724,7 @@ EXPECTED_SEGMENTATION_OUTPUTS = {
 
 @require_torch
 @require_vision
+@slow
 class RfDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
     def annotations(self):
