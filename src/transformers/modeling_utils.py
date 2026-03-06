@@ -4552,8 +4552,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Handle FSDP edge case when using cpu ram efficient loading to ensure it is marked as initialized
             # since it will get its weights broadcasted from rank0
             for key in self.state_dict():
-                param_or_buffer = self.get_parameter_or_buffer(key)
-                param_or_buffer._is_hf_initialized = True
+                try:
+                    param_or_buffer = self.get_parameter_or_buffer(key)
+                    param_or_buffer._is_hf_initialized = True
+                except AttributeError:
+                    pass  # may happen when handling pre-quantized weights
             self._is_hf_initialized = True
 
         # This will only initialize submodules that are not marked as initialized by the line above.
