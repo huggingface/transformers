@@ -32,7 +32,6 @@ from ..dinov2.modeling_dinov2 import (
     Dinov2Encoder,
     Dinov2Layer,
     Dinov2PreTrainedModel,
-    Dinov2SelfAttention,
 )
 from ..lw_detr.configuration_lw_detr import LwDetrConfig
 from ..lw_detr.modeling_lw_detr import (
@@ -43,7 +42,6 @@ from ..lw_detr.modeling_lw_detr import (
     LwDetrLayerNorm,
     LwDetrModel,
     LwDetrModelOutput,
-    LwDetrMultiscaleDeformableAttention,
     LwDetrObjectDetectionOutput,
     LwDetrPreTrainedModel,
     LwDetrScaleProjector,
@@ -200,6 +198,8 @@ class RfDetrConfig(LwDetrConfig):
             Number of groups for Group DETR attention mechanism, which helps reduce computational complexity.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        num_feature_levels (`int`, *optional*, defaults to 1):
+            Number of feature levels used in the multiscale deformable attention.
         disable_custom_kernels (`bool`, *optional*, defaults to `True`):
             Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
             kernels are not supported by PyTorch ONNX export.
@@ -272,6 +272,7 @@ class RfDetrConfig(LwDetrConfig):
         decoder_activation_function="relu",
         # model
         num_queries=300,
+        num_feature_levels=1,
         attention_bias=True,
         attention_dropout=0.0,
         activation_dropout=0.0,
@@ -342,6 +343,7 @@ class RfDetrConfig(LwDetrConfig):
         self.d_model = d_model
         self.dropout = dropout
         self.num_queries = num_queries
+        self.num_feature_levels = num_feature_levels
         self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_n_points = decoder_n_points
         self.decoder_layers = decoder_layers
@@ -484,12 +486,6 @@ def window_partition_after_attention(
         batch_size * num_windows_squared, seq_len // num_windows_squared, channels
     )
     return self_attention_output
-
-
-class RfDetrDinov2SelfAttention(Dinov2SelfAttention):
-    def __init__(self, config: RfDetrDinov2Config):
-        super().__init__(config)
-        self.num_key_value_groups = 1
 
 
 class RfDetrDinov2Layer(Dinov2Layer):
@@ -692,14 +688,12 @@ class RfDetrConvEncoder(LwDetrConvEncoder):
         return features, mask
 
 
-class RfDetrMultiscaleDeformableAttention(LwDetrMultiscaleDeformableAttention):
-    def __init__(self, config: RfDetrConfig, num_heads: int, n_points: int):
-        super().__init__(config, num_heads, n_points)
-        self.n_levels = 1
-
-
 class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
-    pass
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if hasattr(module, "segmentation_bias") and isinstance(module.segmentation_bias, nn.Parameter):
+            nn.init.constant_(module.segmentation_bias, 0.0)
 
 
 class RfDetrModelOutput(LwDetrModelOutput):
@@ -724,6 +718,9 @@ class RfDetrModelOutput(LwDetrModelOutput):
 
 
 class RfDetrModel(LwDetrModel):
+    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
+    # We can't initialize the model on meta device as some weights are modified during the initialization
+    _no_split_modules = None
     _checkpoint_conversion_mapping = {
         # backbone RfDetrConvEncoder
         "backbone.0.encoder.encoder": "backbone.backbone",
@@ -1199,6 +1196,9 @@ class RfDetrSegmentationMLPBlock(nn.Module):
 
 
 class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
+    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
+    # We can't initialize the model on meta device as some weights are modified during the initialization
+    _no_split_modules = None
     _checkpoint_conversion_mapping = {
         # rf_detr (RfDetrForObjectDetection)
         # backbone RfDetrConvEncoder
