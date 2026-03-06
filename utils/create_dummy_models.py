@@ -1662,7 +1662,7 @@ def create_tiny_models(
     if not all:
         config_classes = [CONFIG_MAPPING[model_type] for model_type in model_types]
 
-    config_classes = [x for x in config_classes if x.__name__ in ["JanusConfig", "Emu3Config", "ClvpConfig", "BarkConfig", "FastSpeech2ConformerWithHifiGanConfig", "FastSpeech2ConformerConfig", "Pop2PianoConfig"]]
+    # config_classes = [x for x in config_classes if x.__name__ in ["JanusConfig", "Emu3Config", "ClvpConfig", "BarkConfig", "FastSpeech2ConformerWithHifiGanConfig", "FastSpeech2ConformerConfig", "Pop2PianoConfig"]]
 
     # A map from config classes to tuples of processors (tokenizer, feature extractor, processor) classes
     processor_type_map = {c: get_processor_types_from_config_class(c) for c in config_classes}
