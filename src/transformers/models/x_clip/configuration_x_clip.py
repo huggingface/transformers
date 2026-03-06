@@ -14,51 +14,15 @@
 """X-CLIP model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 class XCLIPTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`XCLIPModel`]. It is used to instantiate an X-CLIP
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the X-CLIP
-    [microsoft/xclip-base-patch32](https://huggingface.co/microsoft/xclip-base-patch32) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the X-CLIP text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`XCLIPModel`].
-        hidden_size (`int`, *optional*, defaults to 512):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 77):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-
     Example:
 
     ```python
@@ -113,53 +77,20 @@ class XCLIPTextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
+@auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 class XCLIPVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`XCLIPModel`]. It is used to instantiate an X-CLIP
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the X-CLIP
-    [microsoft/xclip-base-patch32](https://huggingface.co/microsoft/xclip-base-patch32) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        mit_hidden_size (`int`, *optional*, defaults to 512):
-            Dimensionality of the encoder layers of the Multiframe Integration Transformer (MIT).
-        mit_intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Multiframe Integration Transformer
-            (MIT).
-        mit_num_hidden_layers (`int`, *optional*, defaults to 1):
-            Number of hidden layers in the Multiframe Integration Transformer (MIT).
-        mit_num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Multiframe Integration Transformer (MIT).
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"`, `"gelu_new"` and `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            Stochastic depth rate.
+    num_frames (`int`, *optional*, defaults to 8):
+        The number of frames in each video.
+    mit_hidden_size (`int`, *optional*, defaults to 512):
+        Dimensionality of the encoder layers of the Multiframe Integration Transformer (MIT).
+    mit_intermediate_size (`int`, *optional*, defaults to 2048):
+        Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Multiframe Integration Transformer
+        (MIT).
+    mit_num_hidden_layers (`int`, *optional*, defaults to 1):
+        Number of hidden layers in the Multiframe Integration Transformer (MIT).
+    mit_num_attention_heads (`int`, *optional*, defaults to 8):
+        Number of attention heads for each attention layer in the Multiframe Integration Transformer (MIT).
 
     Example:
 
@@ -223,40 +154,22 @@ class XCLIPVisionConfig(PreTrainedConfig):
         self.drop_path_rate = drop_path_rate
 
 
+@auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 class XCLIPConfig(PreTrainedConfig):
     r"""
-    [`XCLIPConfig`] is the configuration class to store the configuration of a [`XCLIPModel`]. It is used to
-    instantiate X-CLIP model according to the specified arguments, defining the text model and vision model configs.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the X-CLIP
-    [microsoft/xclip-base-patch32](https://huggingface.co/microsoft/xclip-base-patch32) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`XCLIPTextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`XCLIPVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        prompt_layers (`int`, *optional*, defaults to 2):
-            Number of layers in the video specific prompt generator.
-        prompt_alpha (`float`, *optional*, defaults to 0.1):
-            Alpha value to use in the video specific prompt generator.
-        prompt_hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the video specific prompt generator. If string,
-            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        prompt_num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads in the cross-attention of the video specific prompt generator.
-        prompt_attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the attention layers in the video specific prompt generator.
-        prompt_projection_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the projection layers in the video specific prompt generator.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original XCLIP implementation.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    prompt_layers (`int`, *optional*, defaults to 2):
+        Number of layers in the video specific prompt generator.
+    prompt_alpha (`float`, *optional*, defaults to 0.1):
+        Alpha value to use in the video specific prompt generator.
+    prompt_hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+        The non-linear activation function (function or string) in the video specific prompt generator. If string,
+        `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+    prompt_num_attention_heads (`int`, *optional*, defaults to 8):
+        Number of attention heads in the cross-attention of the video specific prompt generator.
+    prompt_attention_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout probability for the attention layers in the video specific prompt generator.
+    prompt_projection_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout probability for the projection layers in the video specific prompt generator.
     """
 
     model_type = "xclip"

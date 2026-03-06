@@ -280,10 +280,9 @@ class HybridMambaAttentionDynamicCache:
                 device = self.ssm_states[layer_idx].device
                 self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
 
-    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the mask"""
         kv_offset = 0
-        query_length = cache_position.shape[0]
         kv_length = self.get_seq_length(layer_idx) + query_length
         return kv_length, kv_offset
 
@@ -1317,11 +1316,11 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = create_causal_mask(
-            self.config,
-            inputs_embeds,
-            attention_mask,
-            cache_position,
-            past_key_values,
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
         mamba_mask = self._update_mamba_mask(attention_mask, cache_position)
 
@@ -1478,7 +1477,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         output_router_logits: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | MoeCausalLMOutputWithPast:
@@ -1514,7 +1512,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 

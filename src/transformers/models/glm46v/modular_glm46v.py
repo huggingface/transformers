@@ -16,6 +16,7 @@
 import numpy as np
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ...video_utils import VideoMetadata
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
@@ -25,35 +26,17 @@ from ..glm4v.processing_glm4v import Glm4vProcessor
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 
 
+@auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
 class Glm46VConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
-    GLM-4.6V model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of
-    GLM-4.1V-9B-Thinking [zai-org/GLM-4.1V-9B-Thinking](https://huggingface.co/zai-org/GLM-4.1V-9B-Thinking).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Glm4vTextConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Glm4vVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 151343):
-            The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 151344):
-            The video token index to encode the image prompt.
-        image_start_token_id (`int`, *optional*, defaults to 151339):
-            The image start token index to encode the start of image.
-        image_end_token_id (`int`, *optional*, defaults to 151340):
-            The image end token index to encode the end of image.
-        video_start_token_id (`int`, *optional*, defaults to 151361):
-            The video start token index to encode the start of video.
-        video_end_token_id (`int`, *optional*, defaults to 151362):
-            The video end token index to encode the end of video.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
+    image_start_token_id (`int`, *optional*, defaults to 151339):
+        The image start token index to encode the start of image.
+    image_end_token_id (`int`, *optional*, defaults to 151340):
+        The image end token index to encode the end of image.
+    video_start_token_id (`int`, *optional*, defaults to 151361):
+        The video start token index to encode the start of video.
+    video_end_token_id (`int`, *optional*, defaults to 151362):
+        The video end token index to encode the end of video.
 
     ```python
     >>> from transformers import Glm46VForConditionalGeneration, Glm46VConfig

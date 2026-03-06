@@ -14,59 +14,22 @@
 
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="OpenGVLab/InternVL3-1B-hf")
 class InternVLVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`InternVLVisionModel`]. It is used to instantiate an InternVLVisionModel
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
-    a similar configuration to that of the InternVL3-1B.
-    e.g. [OpenGVLab/InternVL3-1B-hf](https://huggingface.co/OpenGVLab/InternVL3-1B-hf)
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to add a bias to the queries, keys and values.
-        use_qk_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply normalization to the queries and keys before the attention operation.
-        intermediate_size (`int`, *optional*, defaults to 4096):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for attention weights.
-        projection_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for the projection layer.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        norm_type (`str`, *optional*, defaults to `"layer_norm"`):
-            The type of normalization to use in the encoder. Can be `"layer_norm"` or `"rms_norm"`.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        image_size (`int` or `list[int]`, *optional*, defaults to `[448, 448]`):
-            The size (resolution) of each image.
-        patch_size (`int` or `list[int]`, *optional*, defaults to `[14, 14]`):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        use_mask_token (`bool`, *optional*, defaults to `False`):
-            Whether to use a mask token for masked image modeling.
-        use_absolute_position_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to use BERT-style absolute position embeddings.
-        layer_scale_init_value (`float`, *optional*, defaults to 0.1):
-            Scale to use in the self-attention layers. 0.1 for base, 1e-5 for large. Set 0 to disable layer scale.
-        use_mean_pooling (`bool`, *optional*, defaults to `True`):
-            Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
-            CLS token, before applying the classification head.
+    projection_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability for the projection layer.
+    norm_type (`str`, *optional*, defaults to `"layer_norm"`):
+        The type of normalization to use in the encoder. Can be `"layer_norm"` or `"rms_norm"`.
+    use_mask_token (`bool`, *optional*, defaults to `False`):
+        Whether to use a mask token for masked image modeling
+    use_mean_pooling (`bool`, *optional*, defaults to `True`):
+        Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
+        CLS token, before applying the classification head.
 
     Example:
 
@@ -138,38 +101,13 @@ class InternVLVisionConfig(PreTrainedConfig):
         self.use_mean_pooling = use_mean_pooling
 
 
+@auto_docstring(checkpoint="OpenGVLab/InternVL3-1B-hf")
 class InternVLConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`InternVLForConditionalGeneration`]. It is used to instantiate a
-    InternVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of InternVL3-1B.
-    e.g. [OpenGVLab/InternVL3-1B-hf](https://huggingface.co/OpenGVLab/InternVL3-1B-hf)
+    downsample_ratio (`float`, *optional*, defaults to 0.5):
+        Factor by which to downsample the image.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `InternVisonConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Qwen2Config`):
-            The config object or dictionary of the text backbone.
-        image_token_id (`int`, *optional*, defaults to 151667):
-            The image token index to encode the image prompt.
-        image_seq_length (`int`, *optional*, defaults to 256):
-            Number of image tokens to use per image patch.
-        downsample_ratio (`float`, *optional*, defaults to 0.5):
-            Factor by which to downsample the image.
-        projector_hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the projector.
-        vision_feature_layer (`int`, *optional*, defaults to -1):
-            The index of the layer to use as the image features.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
-
+    Example:
 
     ```python
     >>> from transformers import InternVLForConditionalGeneration, InternVLConfig

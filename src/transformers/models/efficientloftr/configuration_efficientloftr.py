@@ -13,69 +13,44 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="zju-community/efficientloftr")
 class EfficientLoFTRConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`EfficientLoFTRFromKeypointMatching`].
-    It is used to instantiate a EfficientLoFTR model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    EfficientLoFTR [zju-community/efficientloftr](https://huggingface.co/zju-community/efficientloftr) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        stage_num_blocks (`List`, *optional*, defaults to [1, 2, 4, 14]):
-            The number of blocks in each stages
-        out_features (`List`, *optional*, defaults to [64, 64, 128, 256]):
-            The number of channels in each stage
-        stage_stride (`List`, *optional*, defaults to [2, 1, 2, 2]):
-            The stride used in each stage
-        hidden_size (`int`, *optional*, defaults to 256):
-            The dimension of the descriptors.
-        activation_function (`str`, *optional*, defaults to `"relu"`):
-            The activation function used in the backbone
-        q_aggregation_kernel_size (`int`, *optional*, defaults to 4):
-            The kernel size of the aggregation of query states in the fusion network
-        kv_aggregation_kernel_size (`int`, *optional*, defaults to 4):
-            The kernel size of the aggregation of key and value states in the fusion network
-        q_aggregation_stride (`int`, *optional*, defaults to 4):
-            The stride of the aggregation of query states in the fusion network
-        kv_aggregation_stride (`int`, *optional*, defaults to 4):
-            The stride of the aggregation of key and value states in the fusion network
-        num_attention_layers (`int`, *optional*, defaults to 4):
-            Number of attention layers in the LocalFeatureTransformer
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            The number of heads in the GNN layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during attention.
-        mlp_activation_function (`str`, *optional*, defaults to `"leaky_relu"`):
-            Activation function used in the attention mlp layer.
-        coarse_matching_skip_softmax (`bool`, *optional*, defaults to `False`):
-            Whether to skip softmax or not at the coarse matching step.
-        coarse_matching_threshold (`float`, *optional*, defaults to 0.2):
-            The threshold for the minimum score required for a match.
-        coarse_matching_temperature (`float`, *optional*, defaults to 0.1):
-            The temperature to apply to the coarse similarity matrix
-        coarse_matching_border_removal (`int`, *optional*, defaults to 2):
-            The size of the border to remove during coarse matching
-        fine_kernel_size (`int`, *optional*, defaults to 8):
-            Kernel size used for the fine feature matching
-        batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the batch normalization layers
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        fine_matching_slice_dim (`int`, *optional*, defaults to 8):
-            The size of the slice used to divide the fine features for the first and second fine matching stages.
-        fine_matching_regress_temperature (`float`, *optional*, defaults to 10.0):
-            The temperature to apply to the fine similarity matrix
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    stage_num_blocks (`List`, *optional*, defaults to [1, 2, 4, 14]):
+        The number of blocks in each stages
+    stage_stride (`List`, *optional*, defaults to [2, 1, 2, 2]):
+        The stride used in each stage
+    q_aggregation_kernel_size (`int`, *optional*, defaults to 4):
+        The kernel size of the aggregation of query states in the fusion network
+    kv_aggregation_kernel_size (`int`, *optional*, defaults to 4):
+        The kernel size of the aggregation of key and value states in the fusion network
+    q_aggregation_stride (`int`, *optional*, defaults to 4):
+        The stride of the aggregation of query states in the fusion network
+    kv_aggregation_stride (`int`, *optional*, defaults to 4):
+        The stride of the aggregation of key and value states in the fusion network
+    mlp_activation_function (`str`, *optional*, defaults to `"leaky_relu"`):
+        Activation function used in the attention mlp layer.
+    coarse_matching_skip_softmax (`bool`, *optional*, defaults to `False`):
+        Whether to skip softmax or not at the coarse matching step.
+    coarse_matching_threshold (`float`, *optional*, defaults to 0.2):
+        The threshold for the minimum score required for a match.
+    coarse_matching_temperature (`float`, *optional*, defaults to 0.1):
+        The temperature to apply to the coarse similarity matrix
+    coarse_matching_border_removal (`int`, *optional*, defaults to 2):
+        The size of the border to remove during coarse matching
+    fine_kernel_size (`int`, *optional*, defaults to 8):
+        Kernel size used for the fine feature matching
+    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
+        The epsilon used by the batch normalization layers
+    fine_matching_slice_dim (`int`, *optional*, defaults to 8):
+        The size of the slice used to divide the fine features for the first and second fine matching stages.
+    fine_matching_regress_temperature (`float`, *optional*, defaults to 10.0):
+        The temperature to apply to the fine similarity matrix
+    num_attention_layers (`int`, *optional*, defaults to 4):
+        Number of attention layers in the LocalFeatureTransformer
 
     Examples:
         ```python
