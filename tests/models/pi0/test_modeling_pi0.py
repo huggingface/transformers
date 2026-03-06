@@ -238,7 +238,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
                 timestep=timestep,
             )
         self.assertEqual(outputs.loss.shape, (1, 50, 32))
-        self.assertAlmostEqual(outputs.loss.mean().item(), 3.8777, places=3)
+        self.assertAlmostEqual(outputs.loss.mean().item(), 3.8787, places=3)
 
         torch.manual_seed(99)
         model.model.dit.config._attn_implementation = "eager"  # as per LeRobot impl

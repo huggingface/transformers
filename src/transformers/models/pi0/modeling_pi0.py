@@ -184,14 +184,25 @@ class PI0Model(PI0PreTrainedModel):
             dit_attention_mask = torch.cat([attention_mask, noise_mask], dim=1)
             dit_position_ids = (torch.cumsum(dit_attention_mask, dim=1) - 1)[:, -action_embeds.shape[1] :]
 
+        def blockwise_bidirectional_mask(block_boundaries: torch.Tensor):
+            def inner_mask(b_idx, h_idx, q_idx, kv_idx):
+                q_block = torch.bucketize(q_idx, block_boundaries)
+                kv_block = torch.bucketize(kv_idx, block_boundaries)
+                return kv_block <= q_block
+
+            return inner_mask
+
+        # Only 1 state token and the rest are actions
+        vlm_input_length = past_key_values.get_seq_length()
+        block_sizes = torch.tensor([vlm_input_length + 1, action_embeds.shape[1] - 1])
+        block_boundaries = torch.cumsum(block_sizes, dim=0) - 1
         bidirectional_mask = create_bidirectional_mask(
             config=self.config.dit_config,
             inputs_embeds=action_embeds,
             attention_mask=dit_attention_mask,
             past_key_values=past_key_values,
-            # and_mask_function=packed_sequence_mask_function(cum_block_lengths),  # always 2 state tokens
+            and_mask_function=blockwise_bidirectional_mask(block_boundaries),
         )
-        bidirectional_mask[0, 0, 0, -50:] = torch.finfo(action_embeds.dtype).min
 
         action_embeds = action_embeds / torch.tensor(
             self.config.dit_config.hidden_size**0.5, dtype=action_embeds.dtype
