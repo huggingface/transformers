@@ -132,6 +132,7 @@ class LwDetrImageLoss(nn.Module):
 
         pos_ind = list(idx)
         pos_ind.append(target_classes_o)
+        pos_ind = tuple(pos_ind)
 
         t = prob[pos_ind].pow(alpha) * pos_ious.pow(1 - alpha)
         t = torch.clamp(t, 0.01).detach()
