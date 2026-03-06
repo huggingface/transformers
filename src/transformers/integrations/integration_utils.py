@@ -207,6 +207,12 @@ def is_swanlab_available():
     return importlib.util.find_spec("swanlab") is not None
 
 
+def is_kubeflow_available():
+    if os.getenv("DISABLE_KUBEFLOW_INTEGRATION", "FALSE").upper() == "TRUE":
+        return False
+    return os.getenv("KUBEFLOW_TRAINER_STATUS_URL") is not None
+
+
 def hp_params(trial):
     if is_optuna_available():
         import optuna
@@ -535,6 +541,8 @@ def get_available_reporting_integrations():
         integrations.append("swanlab")
     if is_trackio_available():
         integrations.append("trackio")
+    if is_kubeflow_available():
+        integrations.append("kubeflow")
     return integrations
 
 
@@ -2354,6 +2362,102 @@ class SwanLabCallback(TrainerCallback):
             self._swanlab.log(metrics)
 
 
+class KubeflowCallback(TrainerCallback):
+    """
+    A [`TrainerCallback`] that reports training progress to [Kubeflow Trainer](https://github.com/kubeflow/trainer).
+    Can be disabled by setting environment variable `DISABLE_KUBEFLOW_INTEGRATION = TRUE`.
+    """
+
+    def __init__(self):
+        if not is_kubeflow_available():
+            raise RuntimeError(
+                "KubeflowCallback requires KUBEFLOW_TRAINER_STATUS_URL environment variable to be set. "
+                "This is automatically set when running inside a Kubeflow TrainJob with TrainJobProgress enabled."
+            )
+
+        self._initialized = False
+        self._update_status = None
+        self._metrics = {}
+        self._start_time = None
+
+        try:
+            from kubeflow.trainer.progress import update_runtime_status
+
+            self._update_status = update_runtime_status
+        except ImportError:
+            raise RuntimeError(
+                "KubeflowCallback requires kubeflow-sdk to be installed. Run `pip install kubeflow-sdk`."
+            )
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        if not state.is_world_process_zero:
+            return
+
+        import time
+
+        self._start_time = time.time()
+        self._metrics = {}
+        self._initialized = True
+
+        self._update_status(
+            progress_percent=0,
+            metrics={"total_steps": str(state.max_steps)} if state.max_steps else None,
+            force=True,
+        )
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if not self._initialized or logs is None:
+            return
+
+        for key, value in logs.items():
+            if isinstance(value, (int, float)):
+                self._metrics[key] = value
+
+    def on_step_end(self, args, state, control, **kwargs):
+        if not self._initialized:
+            return
+
+        if not state.max_steps or state.max_steps <= 0:
+            return
+
+        import time
+
+        progress = int((state.global_step / state.max_steps) * 100)
+        progress = min(progress, 99)
+
+        eta_seconds = None
+        if self._start_time and state.global_step > 0:
+            elapsed = time.time() - self._start_time
+            avg_time_per_step = elapsed / state.global_step
+            remaining_steps = state.max_steps - state.global_step
+            eta_seconds = int(avg_time_per_step * remaining_steps)
+
+        metrics = {
+            **{k: str(v) for k, v in self._metrics.items()},
+            "current_step": str(state.global_step),
+            "total_steps": str(state.max_steps),
+        }
+        if state.epoch is not None:
+            metrics["current_epoch"] = str(round(state.epoch, 2))
+
+        self._update_status(
+            progress_percent=progress,
+            estimated_time_remaining=eta_seconds,
+            metrics=metrics,
+        )
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if not self._initialized:
+            return
+
+        self._update_status(
+            progress_percent=100,
+            estimated_time_remaining=0,
+            metrics={k: str(v) for k, v in self._metrics.items()},
+            force=True,
+        )
+
+
 INTEGRATION_TO_CALLBACK = {
     "azure_ml": AzureMLCallback,
     "comet_ml": CometCallback,
@@ -2368,6 +2472,7 @@ INTEGRATION_TO_CALLBACK = {
     "flyte": FlyteCallback,
     "dvclive": DVCLiveCallback,
     "swanlab": SwanLabCallback,
+    "kubeflow": KubeflowCallback,
 }
 
 
