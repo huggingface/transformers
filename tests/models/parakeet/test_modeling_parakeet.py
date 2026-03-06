@@ -416,13 +416,14 @@ class ParakeetForTDTModelTester:
         parent,
         encoder_kwargs=None,
         is_training=True,
-        vocab_size=128,
+        vocab_size=129,
         decoder_hidden_size=64,
         num_decoder_layers=1,
         durations=None,
         hidden_act="relu",
         max_symbols_per_step=10,
-        pad_token_id=128,
+        pad_token_id=2,
+        blank_token_id=128,
     ):
         if encoder_kwargs is None:
             encoder_kwargs = {}
@@ -445,6 +446,7 @@ class ParakeetForTDTModelTester:
         self.hidden_act = hidden_act
         self.max_symbols_per_step = max_symbols_per_step
         self.pad_token_id = pad_token_id
+        self.blank_token_id = blank_token_id
 
     def prepare_config_and_inputs(self):
         _, input_features, attention_mask = self.encoder_model_tester.prepare_config_and_inputs()
@@ -461,6 +463,7 @@ class ParakeetForTDTModelTester:
             max_symbols_per_step=self.max_symbols_per_step,
             encoder_config=self.encoder_model_tester.get_config().to_dict(),
             pad_token_id=self.pad_token_id,
+            blank_token_id=self.blank_token_id,
         )
 
     def create_and_check_model(self, config, input_features, attention_mask):

@@ -238,7 +238,7 @@ class ParakeetTDTConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 8192):
+        vocab_size (`int`, *optional*, defaults to 8193):
             Vocabulary size of the model.
         decoder_hidden_size (`int`, *optional*, defaults to 640):
             Hidden size of the LSTM prediction network and joint network.
@@ -255,8 +255,10 @@ class ParakeetTDTConfig(PreTrainedConfig):
             Maximum number of symbols to emit per encoder time step during greedy decoding.
         encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
             The config object or dictionary of the encoder.
-        pad_token_id (`int`, *optional*, defaults to 8192):
-            Padding token id. Also used as blank token id for TDT decoding.
+        pad_token_id (`int`, *optional*, defaults to 2):
+            Padding token id.
+        blank_token_id (`int`, *optional*, defaults to 8192):
+            Blank token id. Different from `pad_token_id` for TDT.
 
     Example:
         ```python
@@ -278,14 +280,15 @@ class ParakeetTDTConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=8192,
+        vocab_size=8193,
         decoder_hidden_size=640,
         num_decoder_layers=1,
         durations=[0, 1, 2, 3, 4],
         hidden_act="relu",
         max_symbols_per_step=10,
         encoder_config: dict | ParakeetEncoderConfig = None,
-        pad_token_id=8192,
+        pad_token_id=2,
+        blank_token_id=8192,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -303,6 +306,7 @@ class ParakeetTDTConfig(PreTrainedConfig):
             self.encoder_config = encoder_config
 
         self.initializer_range = self.encoder_config.initializer_range
+        self.blank_token_id = blank_token_id
         self.pad_token_id = pad_token_id
 
         super().__init__(**kwargs)

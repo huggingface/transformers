@@ -141,15 +141,25 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str
     return model_files
 
 
-def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=None):
+def write_processor(nemo_config: dict, model_files, output_dir, model_type, push_to_repo_id=None):
     tokenizer_converted = ParakeetConverter(model_files["tokenizer_model_file"]).converted()
     tokenizer_converted_fast = ParakeetTokenizer(
         tokenizer_object=tokenizer_converted,
         clean_up_tokenization_spaces=False,
     )
-    tokenizer_converted_fast.add_tokens(
-        [AddedToken("<unk>", normalized=False, special=True), AddedToken("<pad>", normalized=False, special=True)]
-    )
+
+    if tokenizer_converted_fast.convert_tokens_to_ids("<unk>") is None:
+        # Normally CTC and TDT already have
+        tokenizer_converted_fast.add_tokens([AddedToken("<unk>", normalized=False, special=True)])
+        print(f"Added <unk> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<unk>')}")
+    if tokenizer_converted_fast.convert_tokens_to_ids("<pad>") is None:
+        # Normally CTC doesn't have while TDT has at token id = 2
+        tokenizer_converted_fast.add_tokens([AddedToken("<pad>", normalized=False, special=True)])
+        print(f"Added <pad> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<pad>')}")
+    if model_type == "tdt":
+        # TDT needs a separate blank token
+        tokenizer_converted_fast.add_tokens([AddedToken("<blank>", normalized=False, special=True)])
+        print(f"Added <blank> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<blank>')}")
     tokenizer_converted_fast.add_special_tokens(
         {
             "pad_token": AddedToken("<pad>", normalized=False, special=True),
@@ -186,7 +196,6 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
             raise ValueError(f"Key {key} not found in feature_extractor_keys_mapping")
 
     feature_extractor = ParakeetFeatureExtractor(**converted_feature_extractor_config)
-
     processor = ParakeetProcessor(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer_converted_fast,
@@ -290,19 +299,19 @@ def write_ctc_model(encoder_config, converted_state_dict, output_dir, push_to_re
 
 def convert_tdt_config(nemo_config, encoder_config):
     """Convert NeMo TDT config to HF TDT config."""
-    decoder_config = nemo_config.get("decoder", {})
-    decoding_config = nemo_config.get("decoding", {})
-
-    labels = nemo_config.get("labels", [])
-    vocab_size = len(labels) if labels else decoder_config.get("vocab_size", 1024)
+    decoder_config = nemo_config["decoder"]
+    decoding_config = nemo_config["decoding"]
+    labels = nemo_config["labels"]
+    blank_token_id = len(labels)
+    vocab_size = len(labels) + 1  # +1 for blank token, which is added to tokenizer
 
     prednet = decoder_config.get("prednet", {})
     decoder_hidden_size = prednet.get("pred_hidden", 640)
     num_decoder_layers = prednet.get("pred_rnn_layers", 2)
-
     durations = decoding_config.get("durations", [0, 1, 2, 3, 4])
     print(
-        f"TDT config: vocab_size={vocab_size}, decoder_hidden={decoder_hidden_size}, "
+        f"TDT config: vocab_size={vocab_size} (including blank token), "
+        f"decoder_hidden={decoder_hidden_size}, "
         f"decoder_layers={num_decoder_layers}, durations={durations}, "
     )
 
@@ -314,7 +323,8 @@ def convert_tdt_config(nemo_config, encoder_config):
         hidden_act="relu",
         max_symbols_per_step=10,
         encoder_config=encoder_config.to_dict(),
-        pad_token_id=vocab_size,
+        pad_token_id=labels.index("<pad>"),
+        blank_token_id=blank_token_id,  # blank token is different from pad token for TDT
     )
 
 
@@ -330,18 +340,17 @@ def load_and_convert_tdt_state_dict(model_files, vocab_size):
             print(f"Skipping preprocessing weight: {key}")
             continue
 
-        # Handle combined output head split
         if key == "joint.joint_net.2.weight":
-            token_weight = value[: vocab_size + 1, :]
-            duration_weight = value[vocab_size + 1 :, :]
+            token_weight = value[:vocab_size, :]
+            duration_weight = value[vocab_size:, :]
             converted_state_dict["joint.token_head.weight"] = token_weight
             converted_state_dict["joint.duration_head.weight"] = duration_weight
             print(f"Split combined weight: token_head {token_weight.shape}, duration_head {duration_weight.shape}")
             continue
 
         if key == "joint.joint_net.2.bias":
-            token_bias = value[: vocab_size + 1]
-            duration_bias = value[vocab_size + 1 :]
+            token_bias = value[:vocab_size]
+            duration_bias = value[vocab_size:]
             converted_state_dict["joint.token_head.bias"] = token_bias
             converted_state_dict["joint.duration_head.bias"] = duration_bias
             print(f"Split combined bias: token_head {token_bias.shape}, duration_head {duration_bias.shape}")
@@ -416,7 +425,7 @@ def main(
     model_files = extract_nemo_archive(filepath, os.path.dirname(filepath))
     nemo_config = yaml.load(open(model_files["model_config"], "r"), Loader=yaml.FullLoader)
 
-    write_processor(nemo_config, model_files, output_dir, push_to_repo_id)
+    write_processor(nemo_config, model_files, output_dir, model_type, push_to_repo_id)
     write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_id)
 
 

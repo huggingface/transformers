@@ -604,8 +604,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
             )
             input_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
 
-            # assuming that padded tokens are filled with -100
-            # when not being attended to
+            # assuming that padded tokens are filled with pad_token_id when not being attended to
             labels_mask = labels != self.config.pad_token_id
             target_lengths = labels_mask.sum(-1)
             flattened_targets = labels.masked_select(labels_mask)
@@ -692,7 +691,7 @@ class ParakeetTDTDecoder(nn.Module):
     def __init__(self, config: ParakeetTDTConfig):
         super().__init__()
         self.config = config
-        self.embedding = nn.Embedding(config.vocab_size + 1, config.decoder_hidden_size)
+        self.embedding = nn.Embedding(config.vocab_size, config.decoder_hidden_size)
         self.lstm = nn.LSTM(
             input_size=config.decoder_hidden_size,
             hidden_size=config.decoder_hidden_size,
@@ -868,7 +867,7 @@ class ParakeetTDTJointNetwork(nn.Module):
         super().__init__()
         self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.decoder_hidden_size)
         self.activation = ACT2FN[config.hidden_act]
-        self.token_head = nn.Linear(config.decoder_hidden_size, config.vocab_size + 1)
+        self.token_head = nn.Linear(config.decoder_hidden_size, config.vocab_size)
         self.duration_head = nn.Linear(config.decoder_hidden_size, len(config.durations))
 
     def forward(
@@ -946,30 +945,18 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             )
             encoder_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
 
-            labels_mask = labels != -100
-            target_lengths = labels_mask.sum(-1)
+            # Prepare labels for TDT loss
+            target_lengths = (labels != self.config.pad_token_id).sum(-1)
 
-            labels = labels.clone()
-            labels[labels == -100] = self.config.pad_token_id
-
-            # Prepare decoder input: prepend blank token to labels
+            # Get joint decoder outputs
             blank_tokens = torch.full(
-                (labels.shape[0], 1), self.config.pad_token_id, dtype=labels.dtype, device=labels.device
+                (labels.shape[0], 1), self.config.blank_token_id, dtype=labels.dtype, device=labels.device
             )
             decoder_input = torch.cat([blank_tokens, labels], dim=1)
-
-            # Run decoder on full label sequence: (batch, U+1, decoder_hidden_size)
             decoder_output, _, _ = self.decoder(decoder_input)
-
-            max_encoder_length = encoder_lengths.max().item()
-            encoder_hidden_states_trimmed = encoder_hidden_states[:, :max_encoder_length]
-
-            # Compute joint output for all (T, U+1) pairs via broadcasting
-            # encoder: (batch, T, 1, encoder_hidden) -> projected to (batch, T, 1, decoder_hidden_size)
-            # decoder: (batch, 1, U+1, decoder_hidden_size)
             token_logits, duration_logits = self.joint(
                 decoder_output=decoder_output.unsqueeze(1),
-                encoder_output=encoder_hidden_states_trimmed.unsqueeze(2),
+                encoder_output=encoder_hidden_states.unsqueeze(2),
             )
 
             loss = tdt_loss(
@@ -978,7 +965,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 targets=labels.to(token_logits.device).int(),
                 logit_lengths=encoder_lengths.to(token_logits.device).int(),
                 target_lengths=target_lengths.to(token_logits.device).int(),
-                blank=self.config.pad_token_id,
+                blank=self.config.blank_token_id,
                 durations=self.config.durations,
                 reduction="mean",
             )
@@ -1055,7 +1042,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
         # Initialization
         hidden_state, cell_state = None, None
-        prev_tokens = torch.full((batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=device)
+        prev_tokens = torch.full((batch_size, 1), self.config.blank_token_id, dtype=torch.long, device=device)
         decoder_output, hidden_state, cell_state = self.decoder(prev_tokens, hidden_state, cell_state)
         decoder_output = decoder_output.to(device)
         hidden_state = hidden_state.to(device)
@@ -1079,14 +1066,14 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
         # separately call encoder projection to avoid redundant computation inside loop
         projected_encoder_output = self.joint.encoder_projector(encoder_hidden_states).to(device)
-        
+
         while active_mask.any():
             active_mask_prev.copy_(active_mask)
             safe_time_indices = torch.clamp(time_indices, max=sequence_length - 1)
-            projected_encoder_frames = projected_encoder_output[batch_indices, safe_time_indices].unsqueeze(1) 
+            projected_encoder_frames = projected_encoder_output[batch_indices, safe_time_indices].unsqueeze(1)
 
             token_logits, duration_logits = self.joint(
-                decoder_output, 
+                decoder_output,
                 projected_encoder_output=projected_encoder_frames,
             )
             token_logits = token_logits.squeeze(1).to(device)
@@ -1096,7 +1083,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             durations = duration_logits.argmax(dim=-1)
 
             # Force blank duration >= 1 to guarantee forward progress
-            blank_mask = active_mask_prev & (tokens == self.config.pad_token_id)
+            blank_mask = active_mask_prev & (tokens == self.config.blank_token_id)
             durations = durations.masked_fill(blank_mask & (durations == 0), 1)
 
             # Save pre-advance position for timestamp recording
@@ -1125,7 +1112,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 tokens = torch.where(advance_mask, more_tokens, tokens)
                 durations = torch.where(advance_mask, more_durations, durations)
 
-                blank_mask = tokens == self.config.pad_token_id
+                blank_mask = tokens == self.config.blank_token_id
                 durations = durations.masked_fill(blank_mask & (durations == 0), 1)
 
                 time_indices = torch.where(advance_mask, time_indices + durations, time_indices)
@@ -1134,7 +1121,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 advance_mask = active_mask & blank_mask
 
             # Record results for non-blank tokens found
-            emit_mask = active_mask_prev & (tokens != self.config.pad_token_id)
+            emit_mask = active_mask_prev & (tokens != self.config.blank_token_id)
             emit_indices = token_counts[emit_mask]
             all_tokens_tensor[emit_mask, emit_indices] = tokens[emit_mask]
             if return_timestamps:

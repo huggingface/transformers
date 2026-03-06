@@ -83,9 +83,7 @@ class ParakeetProcessor(ProcessorMixin):
         if text is None:
             return inputs
         else:
-            labels = encodings["input_ids"]
-            labels[labels == self.tokenizer.pad_token_id] = -100
-            inputs["labels"] = labels
+            inputs["labels"] = encodings["input_ids"]
             return inputs
 
     @property
@@ -115,9 +113,10 @@ class ParakeetProcessor(ProcessorMixin):
             )
             proc_timestamps = []
             for batch_ids, timestamps, durations in zip(token_ids, token_timestamps, token_durations):
-                # Original NeMo: https://github.com/NVIDIA-NeMo/NeMo/blob/1692a8fb97e1aadc883cfadd2a57c4e8a1b793aa/nemo/collections/asr/parts/submodules/rnnt_decoding.py#L993
+                # See `compute_rnnt_timestamps` in NeMo: https://github.com/NVIDIA-NeMo/NeMo/blob/1692a8fb97e1aadc883cfadd2a57c4e8a1b793aa/nemo/collections/asr/parts/submodules/rnnt_decoding.py#L993
+                # Filter padding (unwritten positions in `all_tokens_tensor` in `generate`)
                 non_blank_indices = [
-                    i for i, token_id in enumerate(batch_ids) if token_id != self.tokenizer.vocab_size
+                    i for i, token_id in enumerate(batch_ids) if token_id != self.tokenizer.pad_token_id
                 ]
                 non_blank_ids = [batch_ids[i] for i in non_blank_indices]
                 decoded_tokens = [self.tokenizer.decode([token_id]) for token_id in non_blank_ids]
