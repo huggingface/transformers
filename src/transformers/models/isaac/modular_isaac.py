@@ -1119,13 +1119,13 @@ class IsaacModel(Qwen3PreTrainedModel):
         position_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor,
         inputs_embeds: torch.Tensor,
-        cache_position: torch.Tensor,
+        past_seen_tokens: int = 0,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Prepare multimodal RoPE positions and carry forward per-batch offsets.
 
         Unlike vanilla 1D RoPE, Isaac builds 3-axis indices for text and vision tokens.
-        If callers do not supply positions, we synthesize them from `cache_position` and
-        use `attention_mask` to strip left padding so pad tokens never consume RoPE slots.
+        If callers do not supply positions, we synthesize them from `attention_mask`
+        and use `past_seen_tokens` to decide whether to reuse cached offsets.
         The returned `rope_deltas` capture any custom offset (i.e., prefill length) and
         are reused across generation steps so newly decoded tokens keep counting forward
         after the cached prefix."""
@@ -1134,22 +1134,23 @@ class IsaacModel(Qwen3PreTrainedModel):
         batch_size, seq_len = inputs_embeds.shape[:2]
 
         if position_ids is None:
-            cp = cache_position.to(device=device, dtype=torch.long)
-            if cp.ndim == 1:
-                cp = cp.view(1, -1).expand(batch_size or 1, -1)
+            attn = attention_mask.to(device=device, dtype=torch.long)
+            rope_position = attn.cumsum(dim=-1) - 1
+            rope_position = rope_position.masked_fill(attn == 0, 0)
+            rope_position = rope_position[:, -seq_len:]
 
-            is_new_prefill = cp[:, :1].eq(0).all(dim=1, keepdim=True)
-            if self.rope_deltas is None:
+            if self.rope_deltas is None or past_seen_tokens == 0:
                 base_delta = torch.zeros((batch_size, 1), device=device, dtype=torch.long)
             else:
                 previous_delta = torch.as_tensor(self.rope_deltas, device=device, dtype=torch.long).reshape(-1, 1)
-                previous_delta = torch.broadcast_to(previous_delta, (batch_size, 1))
-                base_delta = torch.where(is_new_prefill, torch.zeros_like(previous_delta), previous_delta)
+                if previous_delta.shape[0] != batch_size:
+                    if batch_size % previous_delta.shape[0] == 0:
+                        previous_delta = previous_delta.repeat_interleave(batch_size // previous_delta.shape[0], dim=0)
+                    else:
+                        previous_delta = previous_delta[:1].expand(batch_size, -1)
+                base_delta = previous_delta
 
-            mask_delta = attention_mask.to(device=device, dtype=torch.long).sum(1, keepdim=True) - attention_mask.size(
-                1
-            )
-            rope_position = cp + base_delta + mask_delta
+            rope_position = rope_position + base_delta
             pos_3d = rope_position.unsqueeze(-1).expand(-1, -1, 3)
             return pos_3d, base_delta
 
@@ -1255,8 +1256,8 @@ class IsaacModel(Qwen3PreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config.get_text_config())
 
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_len, device=device)
 
         if attention_mask is None:
@@ -1266,7 +1267,7 @@ class IsaacModel(Qwen3PreTrainedModel):
             position_ids=position_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
+            past_seen_tokens=past_seen_tokens,
         )
         self.rope_deltas = rope_deltas
 
@@ -1341,7 +1342,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -1374,7 +1374,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = outputs[0]
@@ -1404,7 +1403,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         vision_token_offsets: torch.LongTensor | None = None,
         vision_token_lengths: torch.LongTensor | None = None,
         vision_image_attention_mask: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         is_first_iteration=False,
         use_cache=True,
@@ -1415,7 +1413,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=None,
             is_first_iteration=is_first_iteration,
             use_cache=use_cache,
