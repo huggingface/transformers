@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING
 
 from packaging import version
 
+from transformers.utils.import_utils import get_torch_version, is_torch_greater_or_equal
+
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name, should_convert_module
 
@@ -31,6 +33,7 @@ from ..utils import is_torch_available, is_torchao_available, logging
 
 
 MIN_TORCHAO_VERSION = "0.15.0"
+MIN_TORCH_VERSION = "2.5.0"
 
 
 if is_torch_available():
@@ -130,10 +133,10 @@ class TorchAoHfQuantizer(HfQuantizer):
         if self.pre_quantized:
             weights_only = kwargs.get("weights_only")
             if weights_only:
-                torch_version = version.parse(metadata.version("torch"))
-                if torch_version < version.parse("2.5.0"):
+                if not is_torch_greater_or_equal(MIN_TORCH_VERSION):
                     raise RuntimeError(
-                        f"In order to use torchao pre-quantized model, you need to have torch>=2.5.0. However, the current version is {torch_version}."
+                        f"In order to use torchao pre-quantized model, you need to have torch>={MIN_TORCH_VERSION}. "
+                        f"However, the current version is {get_torch_version()}."
                         f" You can also set with `weights_only=False` in `from_pretrained` if you don't want to update torch"
                     )
 
