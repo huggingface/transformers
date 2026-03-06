@@ -1,3 +1,17 @@
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import math
 from dataclasses import dataclass
 from typing import Optional
@@ -11,25 +25,15 @@ import torchvision.transforms.v2.functional as tvF
 from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor
 from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_transforms import flip_channel_order, resize, to_channel_dimension_format
 from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
     SizeDict,
-    infer_channel_dimension_format,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
 )
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     ModelOutput,
-    filter_out_non_signature_kwargs,
     is_cv2_available,
     logging,
 )
@@ -504,251 +508,19 @@ def process(
     return boxes, scores
 
 
-class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
+class PPOCRV5ServerDetImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
-    Image Processor for the PPOCRV5 Server Det text detection model.
-
-    Args:
-        do_resize (bool): Whether to resize input images.
-        size (dict[str, int]): Default target size for resizing (height, width).
-        resample (PILImageResampling): Resampling mode for image resizing.
-        do_rescale (bool): Whether to rescale pixel values from [0, 255] to [0, 1].
-        rescale_factor (Union[int, float]): Factor used for pixel value rescaling (1/255 by default).
-        do_normalize (bool): Whether to normalize images using mean and standard deviation.
-        image_mean (Union[float, List[float]]): Mean values for image normalization (BGR order, compatible with model).
-        image_std (Union[float, List[float]]): Standard deviation values for image normalization (BGR order).
-        limit_side_len (int): Maximum/minimum side length for image resizing (depending on `limit_type`).
-        limit_type (str): Resizing strategy ("max", "min", or "resize_long").
-        max_side_limit (int): Hard maximum limit for the longest image side to prevent excessive memory usage.
+    limit_side_len (`int`, *optional*, defaults to `960`):
+        todo
+    limit_type (`str`, *optional*, defaults to `max`):
+        todo
+    max_side_limit (`int`, *optional* defaults to `4000`):
+        todo
     """
 
-    model_input_names = ["pixel_values"]
-
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | None = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: int | float | None = None,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        limit_side_len: int = 960,
-        limit_type: str = "max",
-        max_side_limit: int = 4000,
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-        size = size if size is not None else {"height": 960, "width": 960}
-
-        self.limit_side_len = limit_side_len
-        self.limit_type = limit_type
-        self.max_side_limit = max_side_limit
-
-        self.do_resize = do_resize
-        self.size = size
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.resample = resample
-
-    @filter_out_non_signature_kwargs()
-    def preprocess(
-        self,
-        images: ImageInput,
-        limit_side_len: int = 960,
-        limit_type: str = "max",
-        max_side_limit: int = 4000,
-        size: dict[str, int] | None = None,
-        do_resize: bool | None = None,
-        resample: PILImageResampling | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: int | float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        return_tensors: TensorType | str | None = None,
-        data_format: str | ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> BatchFeature:
-        size = self.size if size is None else size
-        limit_side_len = self.limit_side_len if limit_side_len is None else limit_side_len
-        limit_type = self.limit_type if limit_type is None else limit_type
-        max_side_limit = max_side_limit if max_side_limit is not None else self.max_side_limit
-        do_resize = self.do_resize if do_resize is None else do_resize
-        resample = self.resample if resample is None else resample
-        do_rescale = self.do_rescale if do_rescale is None else do_rescale
-        rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
-        do_normalize = self.do_normalize if do_normalize is None else do_normalize
-        image_mean = self.image_mean if image_mean is None else image_mean
-        image_std = self.image_std if image_std is None else image_std
-
-        images = make_flat_list_of_images(images)
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            size=size,
-            do_resize=do_resize,
-            resample=resample,
-        )
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        # All transformations expect numpy arrays
-        images = [to_numpy_array(image) for image in images]
-
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        # transformations
-        resize_images, target_sizes = [], []
-        if do_resize:
-            for image in images:
-                size, shape = self.get_image_size(image, self.limit_side_len, self.limit_type, max_side_limit)
-                try:
-                    image = resize(
-                        image,
-                        size=(size["height"], size["width"]),
-                        resample=resample,
-                        input_data_format=input_data_format,
-                    )
-                except Exception as e:
-                    print(size)
-                    raise RuntimeError(f"Failed to resize image: {e}") from e
-
-                resize_images.append(image)
-                target_sizes.append(shape)
-            images = resize_images
-
-        if do_rescale:
-            images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
-
-        if do_normalize:
-            images = [
-                self.normalize(image, image_mean, image_std, input_data_format=input_data_format) for image in images
-            ]
-        # flip color channels from RGB to BGR
-        images = [flip_channel_order(image, input_data_format=input_data_format) for image in images]
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        encoded_inputs = BatchFeature(
-            data={"pixel_values": images, "target_sizes": target_sizes}, tensor_type=return_tensors
-        )
-
-        return encoded_inputs
-
-    def post_process_object_detection(
-        self,
-        preds,
-        threshold: float = 0.3,
-        target_sizes: list[tuple[int, int]] | torch.Tensor | None = None,
-        box_thresh: float = 0.6,
-        max_candidates: int = 1000,
-        min_size: int = 3,
-        unclip_ratio: float = 1.5,
-    ):
-        """
-        Converts model outputs into detected text boxes.
-
-        Args:
-            preds (torch.Tensor): Model outputs.
-            target_sizes (TensorType or list[tuple]): Original image sizes.
-            threshold (float): Binarization threshold.
-            box_thresh (float): Box score threshold.
-            max_candidates (int): Maximum number of boxes.
-            min_size (int): Minimum box size.
-            unclip_ratio (float): Expansion ratio.
-
-        Returns:
-            list[dict]: List of detection results.
-        """
-
-        results = []
-        for pred, size in zip(preds.logits, target_sizes):
-            box, score = process(
-                pred=pred[0, :, :].cpu().detach().numpy(),
-                size=size.cpu().detach().numpy(),
-                threshold=threshold,
-                box_thresh=box_thresh,
-                unclip_ratio=unclip_ratio,
-                min_size=min_size,
-                max_candidates=max_candidates,
-            )
-            results.append({"scores": score, "boxes": box})
-        return results
-
-    def get_image_size(
-        self,
-        image: np.ndarray,
-        limit_side_len: int,
-        limit_type: str,
-        max_side_limit: int = 4000,
-    ) -> tuple[dict, np.ndarray]:
-        """
-        Computes the target size for resizing an image while preserving aspect ratio.
-
-        Args:
-            image (torch.Tensor): Input image.
-            limit_side_len (int): Maximum or minimum side length.
-            limit_type (str): Resizing strategy: "max", "min", or "resize_long".
-            max_side_limit (int): Maximum allowed side length.
-
-        Returns:
-            tuple:
-                - SizeDict: Target size.
-                - torch.Tensor: Original size.
-        """
-        limit_side_len = limit_side_len or self.limit_side_len
-        limit_type = limit_type or self.limit_type
-        height, width, c = image.shape
-
-        if limit_type == "max":
-            if max(height, width) > limit_side_len:
-                if height > width:
-                    ratio = float(limit_side_len) / height
-                else:
-                    ratio = float(limit_side_len) / width
-            else:
-                ratio = 1.0
-        elif limit_type == "min":
-            if min(height, width) < limit_side_len:
-                if height < width:
-                    ratio = float(limit_side_len) / height
-                else:
-                    ratio = float(limit_side_len) / width
-            else:
-                ratio = 1.0
-        elif limit_type == "resize_long":
-            ratio = float(limit_side_len) / max(height, width)
-        else:
-            raise Exception("not support limit type, image ")
-        resize_height = int(height * ratio)
-        resize_width = int(width * ratio)
-
-        if max(resize_height, resize_width) > max_side_limit:
-            ratio = float(max_side_limit) / max(resize_height, resize_width)
-            resize_height, resize_width = int(resize_height * ratio), int(resize_width * ratio)
-
-        resize_height = max(int(round(resize_height / 32) * 32), 32)
-        resize_width = max(int(round(resize_width / 32) * 32), 32)
-
-        if resize_height == height and resize_width == width:
-            return {"height": resize_height, "width": resize_width}, np.array([height, width])
-
-        if int(resize_width) <= 0 or int(resize_height) <= 0:
-            return None, (None, None)
-
-        return {"height": resize_height, "width": resize_width}, np.array([height, width])
+    limit_side_len = 960
+    limit_type = "max"
+    max_side_limit = 4000
 
 
 class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
@@ -767,8 +539,9 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     limit_side_len = 960
     limit_type = "max"
     max_side_limit = 4000
+    valid_kwargs = PPOCRV5ServerDetImageProcessorKwargs
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Unpack[PPOCRV5ServerDetImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
     def _preprocess(
@@ -1668,7 +1441,6 @@ class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
 
 __all__ = [
     "PPOCRV5ServerDetForObjectDetection",
-    "PPOCRV5ServerDetImageProcessor",
     "PPOCRV5ServerDetImageProcessorFast",
     "PPOCRV5ServerDetConfig",
     "PPOCRV5ServerDetModel",

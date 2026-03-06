@@ -4,6 +4,20 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pp_ocrv5_server_det.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import math
 from typing import Optional
 
@@ -14,8 +28,10 @@ import torchvision.transforms.v2.functional as tvF
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import SizeDict
+from ...processing_utils import Unpack
 from ...utils import is_cv2_available
 from ...utils.generic import TensorType
+from .image_processing_pp_ocrv5_server_det import PPOCRV5ServerDetImageProcessorKwargs
 
 
 if is_cv2_available():
@@ -403,8 +419,9 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     limit_side_len = 960
     limit_type = "max"
     max_side_limit = 4000
+    valid_kwargs = PPOCRV5ServerDetImageProcessorKwargs
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Unpack[PPOCRV5ServerDetImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
     def _preprocess(
