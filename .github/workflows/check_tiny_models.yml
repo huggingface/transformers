@@ -36,6 +36,10 @@ jobs:
           sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng cmake
           pip install --upgrade pip
           python -m pip install -U .[dev]
+          # For `FastSpeech2ConformerConfig` and `FastSpeech2ConformerWithHifiGanConfig`
+          python -m pip install g2p-en
+          # For `Pop2PianoConfig`
+          python -m pip install essentia==2.1b6.dev1034
 
       - name: Create all tiny models (locally)
         run: |

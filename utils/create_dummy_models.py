@@ -135,8 +135,15 @@ config_class_to_model_tester_map = {
     "Gemma3nConfig": "Gemma3nVision2TextModelTester",
     "Gemma3Config": "Gemma3Vision2TextModelTester",
     "VideoLlama3Config": "VideoLlama3VisionText2TextModelTester",
+    "JanusConfig": "JanusVisionText2TextModelTester",
+    "Emu3Config": "Emu3Vision2TextModelTester",
+    # Need `torchcodec` and `ffmpeg` --> fixed now
+    # Note that: `ClvpModel` and `ClvpForCausalLM` is to `ClvpDecoderConfig`
+    # Also: in auto map: only ("clvp", "ClvpModelForConditionalGeneration")
+    "ClvpConfig": "ClvpModelForConditionalGenerationTester",
+    "BarkConfig": "BarkModelTester",
+    "FastSpeech2ConformerWithHifiGanConfig": "FastSpeech2ConformerWithHifiGanTester",
 }
-
 
 def get_processor_types_from_config_class(config_class, allowed_mappings=None):
     """Return a tuple of processors for `config_class`.
@@ -528,7 +535,16 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     elif hasattr(model_tester, "prepare_config_and_inputs"):
         # `PoolFormer` has no `get_config` defined. Furthermore, it's better to use `prepare_config_and_inputs` even if
         # `get_config` is defined, since there might be some extra changes in `prepare_config_and_inputs`.
-        config = model_tester.prepare_config_and_inputs()[0]
+        # breakpoint()
+        # We don't really need to call `prepare_config_and_inputs` which might require more dependencies
+        if hasattr(model_tester, "get_config"):
+            try:
+                config = model_tester.prepare_config_and_inputs()[0]
+            except Exception as e:
+                config = model_tester.get_config()
+        else:
+            config = model_tester.prepare_config_and_inputs()[0]
+
     elif hasattr(model_tester, "get_config"):
         config = model_tester.get_config()
     else:
@@ -579,7 +595,16 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             elif hasattr(model_tester, "prepare_config_and_inputs"):
                 # `PoolFormer` has no `get_config` defined. Furthermore, it's better to use `prepare_config_and_inputs` even if
                 # `get_config` is defined, since there might be some extra changes in `prepare_config_and_inputs`.
-                config = model_tester.prepare_config_and_inputs()[0]
+
+                # We don't really need to call `prepare_config_and_inputs` which might require more dependencies
+                if hasattr(model_tester, "get_config"):
+                    try:
+                        config = model_tester.prepare_config_and_inputs()[0]
+                    except Exception as e:
+                        config = model_tester.get_config()
+                else:
+                    config = model_tester.prepare_config_and_inputs()[0]
+
             elif hasattr(model_tester, "get_config"):
                 config = model_tester.get_config()
             else:
@@ -1423,6 +1448,7 @@ def build(config_class, models_to_create, output_dir):
             # TODO: Some model_type will include multiple `pytorch_arch` but they might actually have different `self.config_class`
             #   (e.g. Qwen3_5Config from qwen3_5, and `Qwen3_5ForCausalLM`
             #   Let's first try to get the component maybe
+            # breakpoint()
             if pytorch_arch.config_class != config_class:
                 used_tiny_config = _get_exact_config(tiny_config, pytorch_arch.config_class)
 
@@ -1783,26 +1809,39 @@ if __name__ == "__main__":
     )
 
 
-# EdgeTamVideoConfig: no model tester!
 # FastSpeech2ConformerConfig --> needs `pip install g2p-en`
 # FastSpeech2ConformerTokenizer vs AutTokenizer --> the later can't load from `espnet/fastspeech2_conformer` ??
+
+
+
+
 # "Pop2PianoConfig" Require `pip install essentia==2.1b6.dev1034`
 # NemotronConfig ==> can't convert fast tokenizer because `Exception: Unk token `<unk>` not found in the vocabulary`
 
 
 # track but get large model:
-# BarkConfig, ClvpConfig, Emu3Config, JanusConfig
+# BarkConfig, ClvpConfig,
+#
+# Emu3Config,
+#
+# JanusConfig
 
 
 
-# PeAudioVideoConfig : Only deal with PeAudioVideoEncoderConfig and PeAudioVideoEncoder
-
+# EdgeTamVideoConfig: no model tester!
+# PeAudioVideoConfig : Only deal with PeAudioVideoEncoderConfig and PeAudioVideoEncoder, no model tester
 # Qwen3OmniMoeConfig: Only deal with Qwen3OmniMoeThinkerConfig and Qwen3OmniMoeThinkerForConditionalGeneration
 # Qwen2_5OmniConfig: Only deal with Qwen2_5OmniThinkerConfig and Qwen2_5OmniThinkerForConditionalGenerationTester
 
 
+
+
+
 # Qwen3_5Config: Deal with both `Qwen3_5TextConfig` and `Qwen3_5Config` but only get the first
 # Qwen3_5MoeConfig: Deal with both `Qwen3_5MoeTextConfig` and `Qwen3_5MoeConfig`
+
+
+
 
 # InstructBlipConfig: deal 4 types
 # InstructBlipVideoConfig: deal 4 types
