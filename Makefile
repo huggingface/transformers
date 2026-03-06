@@ -88,16 +88,16 @@ benchmark:
 	python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=diff backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
 
 codex:
-	cp .ai/AGENTS.md AGENTS.md
+	ln -snf .ai/AGENTS.md AGENTS.md
+	mkdir -p .agents
 	rm -rf .agents/skills
-	mkdir -p .agents/skills
-	find .ai/skills -mindepth 1 -maxdepth 1 -type d -exec cp -R {} .agents/skills/ \;
+	ln -snf ../.ai/skills .agents/skills
 
 claude:
-	cp .ai/AGENTS.md CLAUDE.md
+	ln -snf .ai/AGENTS.md CLAUDE.md
+	mkdir -p .claude
 	rm -rf .claude/skills
-	mkdir -p .claude/skills
-	find .ai/skills -mindepth 1 -maxdepth 1 -type d -exec cp -R {} .claude/skills/ \;
+	ln -snf ../.ai/skills .claude/skills
 
 clean-ai:
 	rm -f AGENTS.md CLAUDE.md

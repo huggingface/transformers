@@ -242,36 +242,19 @@ For more details about how to generate, build, and write the documentation, take
 
 ## Coding with AI agents
 
-This repository supports two local agent setups, generated from a single source of truth in `.ai/`.
+This repository keeps AI-agent configuration in `.ai/` and exposes local agent files via symlinks.
 
-- Source files you should edit:
-  - `.ai/AGENTS.md`
-  - `.ai/skills/<skill_name>/...`
-- Generated artifacts (do not edit manually):
-  - `AGENTS.md`
-  - `CLAUDE.md`
-  - `.agents/skills/...`
-  - `.claude/skills/...`
-
-To configure the repository for each agent system:
+- Edit source files only: `.ai/AGENTS.md` and `.ai/skills/...`
+- Do not edit generated paths: `AGENTS.md`, `CLAUDE.md`, `.agents/skills`, `.claude/skills`
 
 ```bash
 make codex
-```
-
-- Recreates `AGENTS.md` from `.ai/AGENTS.md`
-- Recreates `.agents/skills/` from `.ai/skills/`
-- Leaves Claude files in place (`CLAUDE.md`, `.claude/skills/...`)
-
-```bash
 make claude
 ```
 
-- Recreates `CLAUDE.md` from `.ai/AGENTS.md`
-- Recreates `.claude/skills/` from `.ai/skills/`
-- Leaves Codex files in place (`AGENTS.md`, `.agents/skills/...`)
-
-Both targets are idempotent: re-running `make codex` or `make claude` will recreate generated files cleanly from `.ai/`, and both agent setups can coexist in the same checkout.
+- `make codex`: links `AGENTS.md -> .ai/AGENTS.md` and `.agents/skills -> ../.ai/skills`
+- `make claude`: links `CLAUDE.md -> .ai/AGENTS.md` and `.claude/skills -> ../.ai/skills`
+- `make clean-ai`: removes generated links
 
 ## Create a Pull Request
 
