@@ -26,7 +26,13 @@ from ...generation import (
     LogitsProcessorList,
     StoppingCriteriaList,
 )
-from ...generation.logits_process import LogitsProcessor
+from ...generation.logits_process import (
+    InfNanRemoveLogitsProcessor,
+    LogitsProcessor,
+    TemperatureLogitsWarper,
+    TopKLogitsWarper,
+    TopPLogitsWarper,
+)
 from ...generation.streamers import BaseStreamer
 from ...generation.utils import GenerateNonBeamOutput
 from ...utils import add_start_docstrings, logging
@@ -101,7 +107,7 @@ class HiggsAudioV2DelayPatternLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        scores = scores.reshape(-1, self.num_codebooks, self.codebook_size)
+        scores = scores.clone().reshape(-1, self.num_codebooks, self.codebook_size)
         batch_size = scores.shape[0]
 
         # we only look at the n-th last tokens to initialize the bos and eos delay patterns, where n is the delay pattern size
@@ -192,23 +198,47 @@ class HiggsAudioV2GenerationOutput(GenerateDecoderOnlyOutput):
 
 
 class HiggsAudioV2GenerationMixin(GenerationMixin):
-    def _get_logits_processor(self, *args, **kwargs):
-        if kwargs.get("logits_processor") is None:
-            logits_processor = LogitsProcessorList()
-        else:
-            logits_processor = kwargs.get("logits_processor")
+    # Logits processors that only operate on scores and are safe to apply per-codebook.
+    # Other processors (e.g. RepetitionPenaltyLogitsProcessor) use input_ids to index into
+    # scores and are incompatible with audio codebook logits.
+    _supported_logits_processor_types = (
+        TemperatureLogitsWarper,
+        TopKLogitsWarper,
+        TopPLogitsWarper,
+        InfNanRemoveLogitsProcessor,
+    )
 
-        logits_processor.append(
-            HiggsAudioV2DelayPatternLogitsProcessor(
-                delay_pattern=[el + 1 for el in range(self.config.num_codebooks)],
-                audio_bos_token_id=self.config.audio_bos_token_id,
-                audio_eos_token_id=self.config.audio_delay_token_id,
-                audio_stream_bos_id=self.config.audio_stream_bos_id,
-                audio_stream_eos_id=self.config.audio_stream_eos_id,
-                num_codebooks=self.config.num_codebooks,
-                codebook_size=self.config.codebook_size,
+    def _get_logits_processor(self, *args, **kwargs):
+        parent_processors = super()._get_logits_processor(*args, **kwargs)
+
+        unsupported = [p for p in parent_processors if not isinstance(p, self._supported_logits_processor_types)]
+        if unsupported:
+            unsupported_names = [type(p).__name__ for p in unsupported]
+            raise ValueError(
+                f"HiggsAudioV2 generates audio codebook logits, not text logits. "
+                f"The following logits processors are not compatible: {unsupported_names}. "
+                f"Only the following processors are supported: "
+                f"{[t.__name__ for t in self._supported_logits_processor_types]}."
             )
+
+        delay_pattern_processor = HiggsAudioV2DelayPatternLogitsProcessor(
+            delay_pattern=[el + 1 for el in range(self.config.num_codebooks)],
+            audio_bos_token_id=self.config.audio_bos_token_id,
+            audio_eos_token_id=self.config.audio_delay_token_id,
+            audio_stream_bos_id=self.config.audio_stream_bos_id,
+            audio_stream_eos_id=self.config.audio_stream_eos_id,
+            num_codebooks=self.config.num_codebooks,
+            codebook_size=self.config.codebook_size,
         )
+
+        # The delay pattern processor must run first: it reshapes scores from flat
+        # (batch_size, num_codebooks * codebook_size) to per-codebook (batch_size * num_codebooks, codebook_size).
+        # The sampling warpers (temperature, top_k, top_p) then correctly apply per-codebook.
+        # Without this ordering, top_k/top_p would filter across all codebooks combined,
+        # zeroing out entire codebooks and producing NaN after softmax.
+        logits_processor = LogitsProcessorList()
+        logits_processor.append(delay_pattern_processor)
+        logits_processor.extend(parent_processors)
         return logits_processor
 
     def _prepare_generation_config(
@@ -265,18 +295,20 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
             else self.__call__
         )
 
-        # Assisted generation completes the prefill stage in candidate generator so that
-        # we don't have several `prefill` calls in one generation loop. Skip `_prefill` for assistants
-        if not generation_config.is_assistant:
-            outputs = self._prefill(input_ids, generation_config, model_kwargs)
-            prefill_consumed = False
-        else:
-            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
-            prefill_consumed = True
+        prefill_consumed = False
+        outputs = self._prefill(
+            input_ids,
+            generation_config,
+            model_kwargs,
+            is_first_iteration=not generation_config.is_assistant,
+        )
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
-                model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+                next_sequence_length = 1 if model_kwargs["use_cache"] else None
+                model_inputs = self.prepare_inputs_for_generation(
+                    input_ids, next_sequence_length=next_sequence_length, **model_kwargs
+                )
                 with self._optimize_model_for_decode():
                     outputs = model_forward(**model_inputs, return_dict=True)
             prefill_consumed = True
@@ -292,7 +324,7 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
             # (the clone itself is always small)
             next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
 
-            # pre-process distribution
+            # pre-process distribution (delay pattern reshapes to per-codebook, then warpers apply per-codebook)
             next_token_scores = logits_processor(input_ids, next_token_logits)
 
             # ===========================

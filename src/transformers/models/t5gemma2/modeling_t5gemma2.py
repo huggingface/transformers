@@ -968,19 +968,6 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         return outputs
 
 
-def bidirectional_mask_function(attention_mask: torch.Tensor | None) -> Callable:
-    """
-    This creates bidirectional attention mask.
-    """
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        if attention_mask is None:
-            return torch.ones((), dtype=torch.bool)
-        return attention_mask[batch_idx, kv_idx].to(torch.bool)
-
-    return inner_mask
-
-
 class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
     config: T5Gemma2DecoderConfig
     _can_record_outputs = {
@@ -1048,6 +1035,9 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
+            # this masking function does nothing to masking but forces `allow_is_causal_skip` to be False
+            # as we always need a mask during decoding for merged attention.
+            dummy_and_mask_function = lambda *args: torch.tensor(True, dtype=torch.bool)  # noqa
             mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
@@ -1055,29 +1045,22 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
                 "cache_position": cache_position,
                 "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
                 "position_ids": position_ids,
+                "and_mask_function": dummy_and_mask_function,
             }
-            # this masking function did nothing to masking but forces `allow_is_causal_skip` to be False
-            # as we always need a mask during decoding for merged attention.
-            mask_kwargs["and_mask_function"] = lambda *args: torch.tensor(True, dtype=torch.bool)
             self_attn_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
         if not isinstance(cross_attn_mask_mapping := encoder_attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": encoder_hidden_states,
-                "attention_mask": encoder_attention_mask,
-                "cache_position": cache_position,
-                "past_key_values": None,
-                "position_ids": None,
-            }
             cross_attn_mask_mapping = {
-                "full_attention": create_causal_mask(
-                    **mask_kwargs,
-                    or_mask_function=bidirectional_mask_function(encoder_attention_mask),
-                ),
+                "full_attention": create_bidirectional_mask(
+                    config=self.config,
+                    inputs_embeds=inputs_embeds,
+                    attention_mask=encoder_attention_mask,
+                    encoder_hidden_states=encoder_hidden_states,
+                    and_mask_function=dummy_and_mask_function,
+                )
             }
 
         merged_attn_mask_mapping = {
