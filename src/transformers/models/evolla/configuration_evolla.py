@@ -196,7 +196,7 @@ class EvollaConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "EvollaModel"
+    model_type = "evolla"
     sub_configs = {"protein_encoder_config": SaProtConfig}
     default_theta = 500000.0
 
