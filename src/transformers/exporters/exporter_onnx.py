@@ -151,10 +151,14 @@ class OnnxExporter(DynamoExporter):
 
 @contextmanager
 def patch_torch_for_onnx_export():
-    # Patch torch.where to handle dtype mismatches between x and y when it's called during export
-    # Patch torch.unsqueeze to support complex tensors during export
-    # Patch torch.nn.functional.scaled_dot_product_attention to handle equal q/kv heads (MHA) when enable_gqa=True
-    # Patch torch.nn.RMSNorm.forward to bypass aten._fused_rms_norm (no ONNX op) when elementwise_affine=False
+    # ONNX export patcher context
+    # This context manager monkey-patches PyTorch ops that are unsupported or buggy in ONNX export.
+    # The following ops are patched with fallback implementations or workarounds:
+    #   - torch.unsqueeze: supports complex tensors
+    #   - torch.where / torch.Tensor.where: handles dtype mismatches
+    #   - torch.nn.RMSNorm.forward: bypasses aten._fused_rms_norm when elementwise_affine=False
+    #   - torch.nn.functional.scaled_dot_product_attention: handles equal q/kv heads (MHA) when enable_gqa=True
+    # These patches are only active during export and are reverted afterwards.
     original_torch_where = torch.where
     original_tensor_where = torch.Tensor.where
     original_torch_unsqueeze = torch.unsqueeze
@@ -202,8 +206,8 @@ def patch_torch_for_onnx_export():
     torch.Tensor.where = _tensor_where
     torch.unsqueeze = _unsqueeze
     torch.Tensor.unsqueeze = _unsqueeze
-    torch.nn.functional.scaled_dot_product_attention = _scaled_dot_product_attention
     torch.nn.RMSNorm.forward = _rms_norm_forward
+    torch.nn.functional.scaled_dot_product_attention = _scaled_dot_product_attention
 
     try:
         yield
@@ -212,5 +216,5 @@ def patch_torch_for_onnx_export():
         torch.Tensor.where = original_tensor_where
         torch.unsqueeze = original_torch_unsqueeze
         torch.Tensor.unsqueeze = original_tensor_unsqueeze
-        torch.nn.functional.scaled_dot_product_attention = original_scaled_dot_product_attention
         torch.nn.RMSNorm.forward = original_rms_norm_forward
+        torch.nn.functional.scaled_dot_product_attention = original_scaled_dot_product_attention
