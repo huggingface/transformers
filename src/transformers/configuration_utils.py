@@ -171,19 +171,19 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     _auto_class: ClassVar[str | None] = None
 
-    # Common attributes for all models which are not a `ClassVar`
+    # Attributes set for all models internally when saving
     model_type: ClassVar[str] = ""
-    transformers_version: str | None = None
+    transformers_version: ClassVar[str | None] = None
+    architectures: ClassVar[list[str] | None] = None
 
+    # Common attributes for all models
     output_hidden_states: bool | None = False
     return_dict: bool | None = True
     dtype: Union[str, "torch.dtype"] | None = None
-
     chunk_size_feed_forward: int = 0
     is_encoder_decoder: bool = False
 
     # Fine-tuning task arguments
-    architectures: list[str] | None = None
     id2label: dict[int, str] | dict[str, str] | None = None
     label2id: dict[str, int] | dict[str, str] | None = None
     problem_type: Literal["regression", "single_label_classification", "multi_label_classification"] | None = None

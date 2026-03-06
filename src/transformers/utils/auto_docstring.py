@@ -561,6 +561,55 @@ class ProcessorArgs:
 
 
 class ConfigArgs:
+    output_hidden_states = {
+        "description": """
+    Whether or not the model should return all hidden-states.
+    """,
+    }
+
+    chunk_size_feed_forward = {
+        "description": """
+    The `dtype` of the weights. This attribute can be used to initialize the model to a non-default `dtype`
+    (which is normally `float32`) and thus allow for optimal storage allocation. For example, if the saved
+    model is `float16`, ideally we want to load it back using the minimal amount of memory needed to load
+    `float16` weights.
+    """,
+    }
+
+    dtype = {
+        "description": """
+    The chunk size of all feed forward layers in the residual attention blocks. A chunk size of `0` means that
+    the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
+    sequence_length embeddings at a time. For more information on feed forward chunking, see [How does Feed
+    Forward Chunking work?](../glossary.html#feed-forward-chunking).
+    """,
+    }
+
+    id2label = {
+        "description": """
+    A map from index (for instance prediction index, or target index) to label.
+    """,
+    }
+
+    label2id = {
+        "description": """
+    A map from label to index for the model.
+    """,
+    }
+
+    problem_type = {
+        "description": """
+    Problem type for `XxxForSequenceClassification` models. Can be one of `"regression"`,
+            `"single_label_classification"` or `"multi_label_classification"`.
+    """,
+    }
+
+    tokenizer_class = {
+        "description": """
+    The class name of model's tokenizer.
+    """,
+    }
+
     vocab_size = {
         "description": """
     Vocabulary size of the model. Defines the number of different tokens that can be represented by the `input_ids`.

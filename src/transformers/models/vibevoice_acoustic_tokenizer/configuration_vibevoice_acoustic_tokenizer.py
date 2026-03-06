@@ -89,14 +89,56 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         return VibeVoiceAcousticTokenizerDecoderConfig(**config_dict)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
+    r"""
+    channels (`int`, *optional*, defaults to 1):
+        Number of input channels.
+    hidden_size (`int`, *optional*, defaults to 64):
+        Dimensionality of latent representations.
+    kernel_size (`int`, *optional*, defaults to 7):
+        Kernel size for convolutional layers.
+    num_filters (`int`, *optional*, defaults to 32):
+        Number of filters in initial convolutional layer, and doubles after each downsampling.
+    downsampling_ratios (`List[int]`, *optional*, defaults to `[2, 2, 4, 5, 5, 8]`):
+        Downsampling ratios for each layer.
+    depths (`List[int]`, *optional*, defaults to `[3, 3, 3, 3, 3, 3, 8]`):
+        Number of ConvNeXt blocks at each stage.
+    ffn_expansion (`int`, *optional*, defaults to 4):
+        Expansion factor for feed-forward networks.
+    vae_std (`float`, *optional*, defaults to 0.625):
+        Standard deviation used for VAE sampling after encoder.
+    """
+
     model_type = "vibevoice_acoustic_tokenizer_encoder"
     base_config_key = "encoder_config"
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 @auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 class VibeVoiceAcousticTokenizerDecoderConfig(VibeVoiceAcousticTokenizerConfig):
+    r"""
+    channels (`int`, *optional*, defaults to 1):
+        Number of input channels.
+    hidden_size (`int`, *optional*, defaults to 64):
+        Dimensionality of latent representations.
+    kernel_size (`int`, *optional*, defaults to 7):
+        Kernel size for convolutional layers.
+    num_filters (`int`, *optional*, defaults to 32):
+        Number of filters in initial convolutional layer, and doubles after each downsampling.
+    downsampling_ratios (`List[int]`, *optional*, defaults to `[2, 2, 4, 5, 5, 8]`):
+        Downsampling ratios for each layer.
+    depths (`List[int]`, *optional*, defaults to `[3, 3, 3, 3, 3, 3, 8]`):
+        Number of ConvNeXt blocks at each stage.
+    ffn_expansion (`int`, *optional*, defaults to 4):
+        Expansion factor for feed-forward networks.
+    vae_std (`float`, *optional*, defaults to 0.625):
+        Standard deviation used for VAE sampling after encoder.
+    """
+
     model_type = "vibevoice_acoustic_tokenizer_decoder"
     base_config_key = "decoder_config"
 

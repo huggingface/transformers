@@ -69,6 +69,20 @@ class BarkSubModelConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="suno/bark")
 class BarkSemanticConfig(BarkSubModelConfig):
     r"""
+    block_size (`int`, *optional*, defaults to 1024):
+        The maximum sequence length that this model might ever be used with. Typically set this to something large
+        just in case (e.g., 512 or 1024 or 2048).
+    input_vocab_size (`int`, *optional*, defaults to 10_048):
+        Vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented by the
+        `inputs_ids` passed when calling [`{model}`]. Defaults to 10_048 but should be carefully thought with
+        regards to the chosen sub-model.
+    output_vocab_size (`int`, *optional*, defaults to 10_048):
+        Output vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented
+        by the: `output_ids` when passing forward a [`{model}`]. Defaults to 10_048 but should be carefully thought
+        with regards to the chosen sub-model.
+    bias (`bool`, *optional*, defaults to `True`):
+        Whether or not to use bias in the linear layers and layer norm layers
+
     Example:
 
     ```python
@@ -91,6 +105,20 @@ class BarkSemanticConfig(BarkSubModelConfig):
 @auto_docstring(checkpoint="suno/bark")
 class BarkCoarseConfig(BarkSubModelConfig):
     r"""
+    block_size (`int`, *optional*, defaults to 1024):
+        The maximum sequence length that this model might ever be used with. Typically set this to something large
+        just in case (e.g., 512 or 1024 or 2048).
+    input_vocab_size (`int`, *optional*, defaults to 10_048):
+        Vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented by the
+        `inputs_ids` passed when calling [`{model}`]. Defaults to 10_048 but should be carefully thought with
+        regards to the chosen sub-model.
+    output_vocab_size (`int`, *optional*, defaults to 10_048):
+        Output vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented
+        by the: `output_ids` when passing forward a [`{model}`]. Defaults to 10_048 but should be carefully thought
+        with regards to the chosen sub-model.
+    bias (`bool`, *optional*, defaults to `True`):
+        Whether or not to use bias in the linear layers and layer norm layers
+
     Example:
 
     ```python
@@ -113,6 +141,19 @@ class BarkCoarseConfig(BarkSubModelConfig):
 @auto_docstring(checkpoint="suno/bark")
 class BarkFineConfig(BarkSubModelConfig):
     r"""
+    block_size (`int`, *optional*, defaults to 1024):
+        The maximum sequence length that this model might ever be used with. Typically set this to something large
+        just in case (e.g., 512 or 1024 or 2048).
+    input_vocab_size (`int`, *optional*, defaults to 10_048):
+        Vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented by the
+        `inputs_ids` passed when calling [`{model}`]. Defaults to 10_048 but should be carefully thought with
+        regards to the chosen sub-model.
+    output_vocab_size (`int`, *optional*, defaults to 10_048):
+        Output vocabulary size of a Bark sub-model. Defines the number of different tokens that can be represented
+        by the: `output_ids` when passing forward a [`{model}`]. Defaults to 10_048 but should be carefully thought
+        with regards to the chosen sub-model.
+    bias (`bool`, *optional*, defaults to `True`):
+        Whether or not to use bias in the linear layers and layer norm layers
     n_codes_total (`int`, *optional*, defaults to 8):
         The total number of audio codebooks predicted. Used in the fine acoustics sub-model.
     n_codes_given (`int`, *optional*, defaults to 1):
