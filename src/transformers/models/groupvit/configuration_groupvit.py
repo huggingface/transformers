@@ -24,9 +24,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")
 class GroupViTTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -63,9 +63,9 @@ class GroupViTTextConfig(PreTrainedConfig):
     eos_token_id: int | None = 49407
 
 
+@auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")
 class GroupViTVisionConfig(PreTrainedConfig):
     r"""
     depths (`list[int]`, *optional*, defaults to [6, 3, 3]):
@@ -124,13 +124,15 @@ class GroupViTVisionConfig(PreTrainedConfig):
             )
 
 
+@auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")
 class GroupViTConfig(PreTrainedConfig):
     r"""
     projection_intermediate_dim (`int`, *optional*, defaults to 4096):
         Dimensionality of intermediate layer of text and vision projection layers.
+    output_segmentation (`bool`, *optional*, defaults to False):
+        Whether or not to return the segmentation logits.
     """
 
     model_type = "groupvit"

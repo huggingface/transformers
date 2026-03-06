@@ -26,9 +26,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="Uminosachi/sam-hq")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -52,9 +52,9 @@ class SamHQPromptEncoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Uminosachi/sam-hq")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQVisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
@@ -118,9 +118,9 @@ class SamHQVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Uminosachi/sam-hq")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQMaskDecoderConfig(PreTrainedConfig):
     r"""
     vit_dim (`int`, *optional*, defaults to 768):
@@ -153,9 +153,9 @@ class SamHQMaskDecoderConfig(PreTrainedConfig):
     vit_dim: int = 768
 
 
+@auto_docstring(checkpoint="Uminosachi/sam-hq")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
 class SamHQConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `SamHQPromptEncoderConfig`], *optional*):

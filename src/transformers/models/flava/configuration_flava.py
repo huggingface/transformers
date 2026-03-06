@@ -25,9 +25,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="facebook/flava-full")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/flava-full")
 class FlavaImageConfig(PreTrainedConfig):
     r"""
     num_blocks_per_group (`int`, *optional*, defaults to 2):
@@ -72,9 +72,9 @@ class FlavaImageConfig(PreTrainedConfig):
     vocab_size: int = 8192
 
 
+@auto_docstring(checkpoint="facebook/flava-full")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/flava-full")
 class FlavaTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -111,9 +111,9 @@ class FlavaTextConfig(PreTrainedConfig):
     qkv_bias: bool = True
 
 
+@auto_docstring(checkpoint="facebook/flava-full")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/flava-full")
 class FlavaMultimodalConfig(PreTrainedConfig):
     r"""
     use_cls_token (`bool`, *optional*, defaults to `True`):
@@ -150,9 +150,9 @@ class FlavaMultimodalConfig(PreTrainedConfig):
     use_cls_token: bool = True
 
 
+@auto_docstring(checkpoint="facebook/flava-full")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/flava-full")
 class FlavaImageCodebookConfig(PreTrainedConfig):
     r"""
     num_groups (`int`, *optional*, defaults to 4):
@@ -187,9 +187,9 @@ class FlavaImageCodebookConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="facebook/flava-full")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/flava-full")
 class FlavaConfig(PreTrainedConfig):
     r"""
     image_config (`dict`, *optional*):

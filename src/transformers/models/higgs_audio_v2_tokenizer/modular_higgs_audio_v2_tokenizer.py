@@ -26,9 +26,9 @@ from ..xcodec.configuration_xcodec import XcodecConfig
 from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecModel, XcodecPreTrainedModel
 
 
+@auto_docstring(checkpoint="bosonai/higgs-audio-v2-tokenizer")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="bosonai/higgs-audio-v2-tokenizer")
 class HiggsAudioV2TokenizerConfig(XcodecConfig):
     r"""
         target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2]`):

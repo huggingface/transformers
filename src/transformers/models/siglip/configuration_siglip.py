@@ -24,9 +24,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/siglip-base-patch16-224")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/siglip-base-patch16-224")
 class SiglipTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -68,9 +68,9 @@ class SiglipTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="google/siglip-base-patch16-224")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/siglip-base-patch16-224")
 class SiglipVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -103,9 +103,9 @@ class SiglipVisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
 
 
+@auto_docstring(checkpoint="google/siglip-base-patch16-224")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/siglip-base-patch16-224")
 class SiglipConfig(PreTrainedConfig):
     r"""
     Example:

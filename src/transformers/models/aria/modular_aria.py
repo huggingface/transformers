@@ -97,9 +97,9 @@ def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
     return output
 
 
+@auto_docstring(checkpoint="rhymes-ai/Aria")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="rhymes-ai/Aria")
 class AriaTextConfig(LlamaConfig):
     r"""
     moe_num_experts (`int`, *optional*, defaults to 8):
@@ -129,9 +129,9 @@ class AriaTextConfig(LlamaConfig):
     pad_token_id: int | None = 2
 
 
+@auto_docstring(checkpoint="rhymes-ai/Aria")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="rhymes-ai/Aria")
 class AriaConfig(PreTrainedConfig):
     r"""
     projector_patch_to_query_dict (`dict`, *optional*):

@@ -49,9 +49,9 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="florence-community/Florence-2-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="florence-community/Florence-2-base")
 class Florence2VisionConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 12):
@@ -106,9 +106,9 @@ class Florence2VisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="florence-community/Florence-2-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="florence-community/Florence-2-base")
 class Florence2Config(PreTrainedConfig):
     r"""
     Example:

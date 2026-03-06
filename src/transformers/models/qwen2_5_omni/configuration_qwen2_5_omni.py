@@ -30,9 +30,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 class Qwen2_5OmniVisionEncoderConfig(PreTrainedConfig):
     r"""
     fullatt_block_indexes (`int`, *optional*, defaults to `[7, 15, 23, 31]`):
@@ -75,9 +75,9 @@ class Qwen2_5OmniVisionEncoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 class Qwen2_5OmniAudioEncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
@@ -122,9 +122,9 @@ class Qwen2_5OmniAudioEncoderConfig(PreTrainedConfig):
     output_dim: int = 3584
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 class Qwen2_5OmniTextConfig(PreTrainedConfig):
     r"""
     max_window_layers (`int`, *optional*, defaults to 28):
@@ -211,9 +211,9 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
     r"""
     position_id_per_seconds (`int`, *optional*, defaults to 25):
@@ -296,9 +296,9 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
     r"""
     tts_text_start_token_id (`int`, *optional*, defaults to 151860):
@@ -413,9 +413,9 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 class Qwen2_5OmniDiTConfig(PreTrainedConfig):
     r"""
     ff_mult (`int`, *optional*, defaults to 2):
@@ -479,9 +479,9 @@ class Qwen2_5OmniDiTConfig(PreTrainedConfig):
     enc_se_channels: int = 64
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 class Qwen2_5OmniBigVGANConfig(PreTrainedConfig):
     r"""
     mel_dim (`int`, *optional*, defaults to 80):
@@ -508,9 +508,9 @@ class Qwen2_5OmniBigVGANConfig(PreTrainedConfig):
     upsample_kernel_sizes: list[int] | tuple[int, ...] = (11, 7, 4, 4, 4, 4)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 class Qwen2_5OmniToken2WavConfig(PreTrainedConfig):
     r"""
     dit_config ([`DiT_Args`], *optional*):
@@ -571,9 +571,9 @@ class Qwen2_5OmniToken2WavConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 class Qwen2_5OmniConfig(PreTrainedConfig):
     """
     thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.

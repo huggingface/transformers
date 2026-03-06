@@ -23,9 +23,9 @@ from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
+@auto_docstring(checkpoint="facebook/musicgen-small")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/musicgen-small")
 class MusicgenDecoderConfig(PreTrainedConfig):
     r"""
     audio_channels (`int`, *optional*, defaults to 1
@@ -67,9 +67,9 @@ class MusicgenDecoderConfig(PreTrainedConfig):
             raise ValueError(f"Expected 1 (mono) or 2 (stereo) audio channels, got {self.audio_channels} channels.")
 
 
+@auto_docstring(checkpoint="facebook/musicgen-small")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/musicgen-small")
 class MusicgenConfig(PreTrainedConfig):
     r"""
     text_encoder (`Union[dict, `PretrainedConfig`]`):
@@ -129,7 +129,6 @@ class MusicgenConfig(PreTrainedConfig):
     text_encoder: dict | PreTrainedConfig = None
     audio_encoder: dict | PreTrainedConfig = None
     decoder: dict | PreTrainedConfig = None
-    tie_encoder_decoder: bool = False
     initializer_factor: float = 0.02
 
     def __post_init__(self, **kwargs):

@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="google/long-t5-local-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/long-t5-local-base")
 class LongT5Config(PreTrainedConfig):
     r"""
     d_ff (`int`, *optional*, defaults to 2048):

@@ -74,9 +74,9 @@ from ..t5gemma.modeling_t5gemma import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/t5gemma2_text-7b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/t5gemma2_text-7b")
 class T5Gemma2TextConfig(Gemma3TextConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -85,6 +85,8 @@ class T5Gemma2TextConfig(Gemma3TextConfig):
         Scaling factor when applying tanh softcapping on the logits.
     attn_logit_softcapping (`float`, *optional*):
         Scaling factor when applying tanh softcapping on the attention scores.
+    use_bidirectional_attention (`bool`, *optional*):
+        If True, the model will attend to all text tokens instead of using a causal mask.
     """
 
     model_type = "t5gemma2_text"
@@ -101,9 +103,9 @@ class T5Gemma2TextConfig(Gemma3TextConfig):
         PreTrainedConfig.__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="google/t5gemma2_text-7b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/t5gemma2_text-7b")
 class T5Gemma2EncoderConfig(Gemma3Config):
     model_type = "t5gemma2_encoder"
 
@@ -113,9 +115,9 @@ class T5Gemma2EncoderConfig(Gemma3Config):
     }
 
 
+@auto_docstring(checkpoint="google/t5gemma2_text-7b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/t5gemma2_text-7b")
 class T5Gemma2DecoderConfig(Gemma3TextConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -124,6 +126,8 @@ class T5Gemma2DecoderConfig(Gemma3TextConfig):
         Scaling factor when applying tanh softcapping on the logits.
     attn_logit_softcapping (`float`, *optional*):
         Scaling factor when applying tanh softcapping on the attention scores.
+    use_bidirectional_attention (`bool`, *optional*):
+        If True, the model will attend to all text tokens instead of using a causal mask.
     """
 
     model_type = "t5gemma2_decoder"
@@ -140,15 +144,18 @@ class T5Gemma2DecoderConfig(Gemma3TextConfig):
         PreTrainedConfig.__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="google/t5gemma2_text-7b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/t5gemma2_text-7b")
 class T5Gemma2Config(PreTrainedConfig):
     r"""
     encoder (`Union[T5Gemma2EncoderConfig, dict]`, optional, *optional*):
         Configuration for the encoder.
     decoder (`Union[T5Gemma2DecoderConfig, dict]`, optional, *optional*):
         Configuration for the decoder.
+    eoi_token_index (`int`, *optional*):
+        The end-of-image token index to wrap the image prompt. Will be same as
+        `self.encoder.eoi_token_index`
 
     ```python
     >>> from transformers import T5Gemma2Config, T5Gemma2Model

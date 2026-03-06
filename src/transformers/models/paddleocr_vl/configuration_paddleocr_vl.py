@@ -33,9 +33,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
 class PaddleOCRVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -70,9 +70,9 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
     spatial_merge_size: int = 2
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
 class PaddleOCRTextConfig(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):
@@ -139,9 +139,9 @@ class PaddleOCRTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
 class PaddleOCRVLConfig(PreTrainedConfig):
     r"""
     Example:

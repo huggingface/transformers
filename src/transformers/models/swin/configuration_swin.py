@@ -22,9 +22,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="microsoft/swin-tiny-patch4-window7-224")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/swin-tiny-patch4-window7-224")
 class SwinConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     depths (`list(int)`, *optional*, defaults to `[2, 2, 6, 2]`):

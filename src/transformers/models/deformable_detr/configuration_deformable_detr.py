@@ -23,9 +23,9 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
+@auto_docstring(checkpoint="SenseTime/deformable-detr")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="SenseTime/deformable-detr")
 class DeformableDetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 300):
@@ -54,6 +54,8 @@ class DeformableDetrConfig(PreTrainedConfig):
     with_box_refine (`bool`, *optional*, defaults to `False`):
         Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
         based on the predictions from the previous layer.
+    return_intermediate (`bool`, *optional*, defaults to True):
+        Whether to return the intermediate state or not
 
     Examples:
 

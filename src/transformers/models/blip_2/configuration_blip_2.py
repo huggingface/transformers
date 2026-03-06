@@ -26,9 +26,9 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="Salesforce/blip2-opt-2.7b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Salesforce/blip2-opt-2.7b")
 class Blip2VisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -62,9 +62,9 @@ class Blip2VisionConfig(PreTrainedConfig):
     qkv_bias: bool = True
 
 
+@auto_docstring(checkpoint="Salesforce/blip2-opt-2.7b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Salesforce/blip2-opt-2.7b")
 class Blip2QFormerConfig(PreTrainedConfig):
     r"""
     cross_attention_frequency (`int`, *optional*, defaults to 2):
@@ -106,9 +106,9 @@ class Blip2QFormerConfig(PreTrainedConfig):
     use_qformer_text_input: bool = False
 
 
+@auto_docstring(checkpoint="Salesforce/blip2-opt-2.7b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Salesforce/blip2-opt-2.7b")
 class Blip2Config(PreTrainedConfig):
     r"""
     qformer_config (`dict`, *optional*):

@@ -22,9 +22,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="RWKV/rwkv-4-169m-pile")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="RWKV/rwkv-4-169m-pile")
 class RwkvConfig(PreTrainedConfig):
     """
     context_length (`int`, *optional*, defaults to 1024):

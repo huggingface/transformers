@@ -24,9 +24,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/pix2struct-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/pix2struct-base")
 class Pix2StructTextConfig(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -85,9 +85,9 @@ class Pix2StructTextConfig(PreTrainedConfig):
     add_cross_attention: bool = False
 
 
+@auto_docstring(checkpoint="google/pix2struct-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/pix2struct-base")
 class Pix2StructVisionConfig(PreTrainedConfig):
     r"""
     dense_act_fn (`Union[Callable, str]`, *optional*, defaults to `"gelu_new"`):
@@ -141,9 +141,9 @@ class Pix2StructVisionConfig(PreTrainedConfig):
     relative_attention_max_distance: int = 128
 
 
+@auto_docstring(checkpoint="google/pix2struct-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/pix2struct-base")
 class Pix2StructConfig(PreTrainedConfig):
     r"""
     is_vqa (`bool`, *optional*, defaults to `False`):

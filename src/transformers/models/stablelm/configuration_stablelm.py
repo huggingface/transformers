@@ -22,9 +22,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="stabilityai/stablelm-3b-4e1t")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="stabilityai/stablelm-3b-4e1t")
 class StableLmConfig(PreTrainedConfig):
     r"""
     use_parallel_residual (`bool`, *optional*, defaults to `False`):

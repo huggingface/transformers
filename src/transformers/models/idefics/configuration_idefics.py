@@ -26,9 +26,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="HuggingFaceM4/idefics-9b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="HuggingFaceM4/idefics-9b")
 class IdeficsVisionConfig(PreTrainedConfig):
     model_type = "idefics_vision"
     attribute_map = {"hidden_size": "embed_dim"}
@@ -47,9 +47,9 @@ class IdeficsVisionConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
 
 
+@auto_docstring(checkpoint="HuggingFaceM4/idefics-9b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="HuggingFaceM4/idefics-9b")
 class IdeficsPerceiverConfig(PreTrainedConfig):
     r"""
     use_resampler (`bool`, *optional*, defaults to `False`):
@@ -76,9 +76,9 @@ class IdeficsPerceiverConfig(PreTrainedConfig):
     qk_layer_norms_perceiver: bool = False
 
 
+@auto_docstring(checkpoint="HuggingFaceM4/idefics-9b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="HuggingFaceM4/idefics-9b")
 class IdeficsConfig(PreTrainedConfig):
     r"""
     alpha_initializer (`str`, *optional*, defaults to `"zeros"`):

@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="naver-clova-ix/donut-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="naver-clova-ix/donut-base")
 class DonutSwinConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 7): Size of windows.

@@ -41,9 +41,9 @@ from ..janus.modeling_janus import JanusForConditionalGeneration, JanusModel, Ja
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="deepseek-community/deepseek-vl-1.3b-chat")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="deepseek-community/deepseek-vl-1.3b-chat")
 class DeepseekVLConfig(PreTrainedConfig):
     r"""
     Example:

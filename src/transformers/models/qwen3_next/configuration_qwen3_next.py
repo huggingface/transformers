@@ -22,9 +22,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-Next-80B-A3B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3-Next-80B-A3B-Instruct")
 class Qwen3NextConfig(PreTrainedConfig):
     r"""
     linear_conv_kernel_dim (`int`, *optional*, defaults to 4):

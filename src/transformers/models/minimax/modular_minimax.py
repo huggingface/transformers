@@ -53,9 +53,9 @@ from ..mixtral.modeling_mixtral import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-Text-01-hf")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="MiniMaxAI/MiniMax-Text-01-hf")
 class MiniMaxConfig(PreTrainedConfig):
     r"""
     block_size (`int`, *optional*, defaults to 256):

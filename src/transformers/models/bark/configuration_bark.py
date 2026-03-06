@@ -25,9 +25,9 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="suno/bark")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="suno/bark")
 class BarkSubModelConfig(PreTrainedConfig):
     r"""
     block_size (`int`, *optional*, defaults to 1024):
@@ -67,6 +67,8 @@ class BarkSubModelConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="suno/bark")
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 class BarkSemanticConfig(BarkSubModelConfig):
     r"""
     block_size (`int`, *optional*, defaults to 1024):
@@ -103,6 +105,8 @@ class BarkSemanticConfig(BarkSubModelConfig):
 
 
 @auto_docstring(checkpoint="suno/bark")
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 class BarkCoarseConfig(BarkSubModelConfig):
     r"""
     block_size (`int`, *optional*, defaults to 1024):
@@ -139,6 +143,8 @@ class BarkCoarseConfig(BarkSubModelConfig):
 
 
 @auto_docstring(checkpoint="suno/bark")
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 class BarkFineConfig(BarkSubModelConfig):
     r"""
     block_size (`int`, *optional*, defaults to 1024):
@@ -183,9 +189,9 @@ class BarkFineConfig(BarkSubModelConfig):
     n_codes_given: int = 1
 
 
+@auto_docstring(checkpoint="suno/bark")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="suno/bark")
 class BarkConfig(PreTrainedConfig):
     r"""
     semantic_config ([`BarkSemanticConfig`], *optional*):

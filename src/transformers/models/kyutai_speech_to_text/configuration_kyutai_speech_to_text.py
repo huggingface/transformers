@@ -26,9 +26,9 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="kyutai/stt-2.6b-en-trfs")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="kyutai/stt-2.6b-en-trfs")
 class KyutaiSpeechToTextConfig(PreTrainedConfig):
     r"""
     codebook_vocab_size (`int`, *optional*, defaults to 2049):

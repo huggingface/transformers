@@ -23,9 +23,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="facebook/wav2vec2-conformer-rel-pos-large")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/wav2vec2-conformer-rel-pos-large")
 class Wav2Vec2ConformerConfig(PreTrainedConfig):
     r"""
     num_codevectors_per_group (`int`, *optional*, defaults to 320):

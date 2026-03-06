@@ -25,9 +25,9 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="vidore/colpali-v1.2")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="vidore/colpali-v1.2")
 class ColPaliConfig(PreTrainedConfig):
     r"""
     Example:

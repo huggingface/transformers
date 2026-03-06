@@ -92,9 +92,9 @@ from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
     r"""
     temporal_merge_size (`int`, *optional*, defaults to 2):
@@ -120,9 +120,9 @@ class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
     temporal_patch_size = AttributeError()
 
 
+@auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):
@@ -137,6 +137,12 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
         The number of experts that are shared for all MoE forwards.
     moe_norm_min (`float`, *optional*, defaults to 1e-12):
         Minimum division value during routing normalization.
+    moe_layer_start_index (`int`, *optional*, defaults to 1):
+        The first index at which MoE layers start to appear.
+    moe_layer_end_index (`int`, *optional*, defaults to -1):
+        The last possible index for a MoE layer.
+    moe_layer_interval (`int`, *optional*, defaults to 1):
+        The intervals between MoE layers to appear.
     """
 
     model_type = "ernie4_5_vl_moe_text"
@@ -172,9 +178,9 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
 class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 101304):

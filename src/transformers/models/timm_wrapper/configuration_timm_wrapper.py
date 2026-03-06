@@ -27,9 +27,9 @@ if is_timm_available():
     from timm.data import ImageNetInfo, infer_imagenet_subset
 
 
+@auto_docstring(checkpoint="resnet50")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="resnet50")
 class TimmWrapperConfig(PreTrainedConfig):
     r"""
     architecture (`str`, *optional*, defaults to `"resnet50"`):

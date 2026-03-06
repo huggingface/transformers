@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="MCG-NJU/videomae-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="MCG-NJU/videomae-base")
 class VideoMAEConfig(PreTrainedConfig):
     r"""
     num_frames (`int`, *optional*, defaults to 16):

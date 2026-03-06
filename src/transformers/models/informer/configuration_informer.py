@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="huggingface/informer-tourism-monthly")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="huggingface/informer-tourism-monthly")
 class InformerConfig(PreTrainedConfig):
     r"""
     prediction_length (`int`):

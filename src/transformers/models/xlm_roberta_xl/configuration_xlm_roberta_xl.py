@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="FacebookAI/xlm-roberta-xl")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="FacebookAI/xlm-roberta-xl")
 class XLMRobertaXLConfig(PreTrainedConfig):
     r"""
     Examples:

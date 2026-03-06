@@ -23,9 +23,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="THUDM/glm-4-9b-chat")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="THUDM/glm-4-9b-chat")
 class GlmConfig(PreTrainedConfig):
     r"""
     Example:

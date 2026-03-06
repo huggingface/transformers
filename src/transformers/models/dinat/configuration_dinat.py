@@ -22,9 +22,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="shi-labs/dinat-mini-in1k-224")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="shi-labs/dinat-mini-in1k-224")
 class DinatConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     dilations (`list[list[int]]`, *optional*, defaults to `[[1, 8, 1], [1, 4, 1, 4], [1, 2, 1, 2, 1, 2], [1, 1, 1, 1, 1]]`):

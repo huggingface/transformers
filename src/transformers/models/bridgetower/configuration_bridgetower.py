@@ -24,9 +24,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="BridgeTower/bridgetower-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="BridgeTower/bridgetower-base")
 class BridgeTowerVisionConfig(PreTrainedConfig):
     r"""
     stop_gradient (`bool`, *optional*, defaults to `False`):
@@ -63,9 +63,9 @@ class BridgeTowerVisionConfig(PreTrainedConfig):
     remove_last_layer: bool = False
 
 
+@auto_docstring(checkpoint="BridgeTower/bridgetower-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="BridgeTower/bridgetower-base")
 class BridgeTowerTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -103,9 +103,9 @@ class BridgeTowerTextConfig(PreTrainedConfig):
     add_cross_attention: bool = False
 
 
+@auto_docstring(checkpoint="BridgeTower/bridgetower-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="BridgeTower/bridgetower-base")
 class BridgeTowerConfig(PreTrainedConfig):
     r"""
     share_cross_modal_transformer_layers (`bool`, *optional*, defaults to `True`):

@@ -31,9 +31,9 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="deepseek-community/deepseek-vl-1.3b-chat")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="deepseek-community/deepseek-vl-1.3b-chat")
 class DeepseekVLConfig(PreTrainedConfig):
     r"""
     Example:

@@ -26,9 +26,9 @@ if is_detectron2_available():
     import detectron2
 
 
+@auto_docstring(checkpoint="microsoft/layoutlmv2-base-uncased")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/layoutlmv2-base-uncased")
 class LayoutLMv2Config(PreTrainedConfig):
     r"""
     max_2d_position_embeddings (`int`, *optional*, defaults to 1024):

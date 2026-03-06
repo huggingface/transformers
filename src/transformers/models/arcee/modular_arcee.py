@@ -33,9 +33,9 @@ from ..nemotron.modeling_nemotron import NemotronMLP
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 class ArceeConfig(LlamaConfig):
     r"""
     ```python

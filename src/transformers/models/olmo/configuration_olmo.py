@@ -27,9 +27,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="allenai/OLMo-7B-hf")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="allenai/OLMo-7B-hf")
 class OlmoConfig(PreTrainedConfig):
     r"""
     clip_qkv (`float`, *optional*):

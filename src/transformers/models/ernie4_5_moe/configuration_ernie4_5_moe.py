@@ -22,9 +22,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="baidu/ERNIE-4.5-21B-A3B-PT")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="baidu/ERNIE-4.5-21B-A3B-PT")
 class Ernie4_5_MoeConfig(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):

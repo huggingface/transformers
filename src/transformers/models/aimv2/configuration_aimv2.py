@@ -29,9 +29,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 class Aimv2VisionConfig(PreTrainedConfig):
     r"""
     use_head (`str`, *optional*, defaults to `True`):
@@ -74,9 +74,9 @@ class Aimv2VisionConfig(PreTrainedConfig):
     is_native: bool = False
 
 
+@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 class Aimv2TextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -116,11 +116,14 @@ class Aimv2TextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 class Aimv2Config(PreTrainedConfig):
     r"""
+    max_logit_scale (`float`, *optional*, defaults to `100.0`):
+        The maximum logit scale to use
+
     Example:
 
     ```python

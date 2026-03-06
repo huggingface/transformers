@@ -29,9 +29,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 class MetaClip2TextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -80,9 +80,9 @@ class MetaClip2TextConfig(PreTrainedConfig):
             )
 
 
+@auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 class MetaClip2VisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -126,9 +126,9 @@ class MetaClip2VisionConfig(PreTrainedConfig):
             )
 
 
+@auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/metaclip-2-worldwide-huge-quickgelu")
 class MetaClip2Config(PreTrainedConfig):
     r"""
     Example:

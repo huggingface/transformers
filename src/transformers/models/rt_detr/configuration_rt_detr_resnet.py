@@ -22,9 +22,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="microsoft/resnet-50")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/resnet-50")
 class RTDetrResNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     depths (`list[int]`, *optional*, defaults to `[3, 4, 6, 3]`):

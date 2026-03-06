@@ -27,9 +27,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")
 class GraniteMoeSharedConfig(PreTrainedConfig):
     r"""
     embedding_multiplier (`float`, *optional*, defaults to 1.0): embedding multiplier
@@ -37,6 +37,7 @@ class GraniteMoeSharedConfig(PreTrainedConfig):
     residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier
     attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier
     shared_intermediate_size (`int`, *optional*, defaults to 1024): intermediate size for shared experts.
+    position_embedding_type (`str`, *optional*): Positional embedding type to be used; defaults to None. Allowed options: `[None, "rope"]`
 
     ```python
     >>> from transformers import GraniteMoeSharedModel, GraniteMoeSharedConfig

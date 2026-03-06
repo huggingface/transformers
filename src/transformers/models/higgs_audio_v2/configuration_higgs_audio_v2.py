@@ -29,9 +29,9 @@ from ...utils import auto_docstring
 from ...utils.type_validators import interval
 
 
+@auto_docstring(checkpoint="bosonai/higgs-audio-v2-generation-3B-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="bosonai/higgs-audio-v2-generation-3B-base")
 class HiggsAudioV2Config(PreTrainedConfig):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 128013):

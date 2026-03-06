@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="google/mobilebert-uncased")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/mobilebert-uncased")
 class MobileBertConfig(PreTrainedConfig):
     r"""
     embedding_size (`int`, *optional*, defaults to 128):

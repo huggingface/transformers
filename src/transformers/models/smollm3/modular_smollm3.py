@@ -42,9 +42,9 @@ from ..qwen2.modeling_qwen2 import Qwen2Model, Qwen2RotaryEmbedding
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="HuggingFaceTB/SmolLM3-3B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="HuggingFaceTB/SmolLM3-3B")
 class SmolLM3Config(PreTrainedConfig):
     r"""
     no_rope_layers (`List[int]`, *optional*):

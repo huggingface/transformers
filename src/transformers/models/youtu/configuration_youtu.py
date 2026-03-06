@@ -32,9 +32,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="tencent/Youtu-LLM-2B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="tencent/Youtu-LLM-2B")
 class YoutuConfig(PreTrainedConfig):
     r"""
     embedding_initializer_range (`float`, *optional*):

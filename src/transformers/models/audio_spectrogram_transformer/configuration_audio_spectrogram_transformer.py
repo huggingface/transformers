@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="MIT/ast-finetuned-audioset-10-10-0.4593")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="MIT/ast-finetuned-audioset-10-10-0.4593")
 class ASTConfig(PreTrainedConfig):
     r"""
     frequency_stride (`int`, *optional*, defaults to 10):

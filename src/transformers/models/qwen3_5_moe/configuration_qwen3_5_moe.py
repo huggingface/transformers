@@ -27,9 +27,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 class Qwen3_5MoeTextConfig(PreTrainedConfig):
     r"""
     linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
@@ -125,9 +125,9 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 class Qwen3_5MoeVisionConfig(PreTrainedConfig):
     r"""
     num_position_embeddings (`int`, *optional*, defaults to 2304):
@@ -155,9 +155,9 @@ class Qwen3_5MoeVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 class Qwen3_5MoeConfig(PreTrainedConfig):
     r"""
     Example:

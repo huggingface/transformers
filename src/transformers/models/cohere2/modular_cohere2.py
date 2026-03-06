@@ -47,9 +47,9 @@ from ..gemma2.modeling_gemma2 import Gemma2Model
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="CohereForAI/c4ai-command-r-v01")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="CohereForAI/c4ai-command-r-v01")
 class Cohere2Config(PreTrainedConfig):
     r"""
     logit_scale (`float`, *optional*, defaults to 0.0625):

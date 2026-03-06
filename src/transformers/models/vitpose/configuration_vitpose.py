@@ -23,9 +23,9 @@ from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
+@auto_docstring(checkpoint="usyd-community/vitpose-base-simple")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="usyd-community/vitpose-base-simple")
 class VitPoseConfig(PreTrainedConfig):
     r"""
     scale_factor (`int`, *optional*, defaults to 4):

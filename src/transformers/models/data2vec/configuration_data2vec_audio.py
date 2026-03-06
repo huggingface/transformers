@@ -22,9 +22,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="facebook/data2vec-audio-base-960h")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/data2vec-audio-base-960h")
 class Data2VecAudioConfig(PreTrainedConfig):
     r"""
     final_dropout (`float`, *optional*, defaults to 0.1):

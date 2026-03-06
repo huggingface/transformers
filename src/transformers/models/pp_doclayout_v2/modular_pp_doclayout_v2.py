@@ -58,9 +58,9 @@ from ..rt_detr.modeling_rt_detr import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV2_safetensors")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV2_safetensors")
 class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
     r"""
     has_relative_attention_bias (`bool`, *optional*, defaults to `True`):
@@ -135,9 +135,9 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
     gp_dropout_value: float = 0.0
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV2_safetensors")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV2_safetensors")
 class PPDocLayoutV2Config(PreTrainedConfig):
     r"""
     initializer_bias_prior_prob (`float`, *optional*):

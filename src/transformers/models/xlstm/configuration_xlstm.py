@@ -55,9 +55,9 @@ else:
     external_xlstm = False
 
 
+@auto_docstring(checkpoint="NX-AI/xLSTM-7b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="NX-AI/xLSTM-7b")
 class xLSTMConfig(PreTrainedConfig):
     """
     num_blocks (int, optional, *optional*, defaults to 32):

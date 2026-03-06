@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="bigscience/bloom")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="bigscience/bloom")
 class BloomConfig(PreTrainedConfig):
     r"""
     apply_residual_connection_post_layernorm (`bool`, *optional*, defaults to `False`):

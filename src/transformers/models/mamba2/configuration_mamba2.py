@@ -22,9 +22,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="state-spaces/mamba2-2.8b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="state-spaces/mamba2-2.8b")
 class Mamba2Config(PreTrainedConfig):
     """
     layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):

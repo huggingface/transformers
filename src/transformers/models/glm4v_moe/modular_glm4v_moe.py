@@ -56,9 +56,9 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="zai-org/GLM-4.5V")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="zai-org/GLM-4.5V")
 class Glm4vMoeTextConfig(Glm4MoeConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -111,9 +111,9 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         super().__post_init__(self, **kwargs)
 
 
+@auto_docstring(checkpoint="zai-org/GLM-4.5V")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="zai-org/GLM-4.5V")
 class Glm4vMoeConfig(Glm4vConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 151339):

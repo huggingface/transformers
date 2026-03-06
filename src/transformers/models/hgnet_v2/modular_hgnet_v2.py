@@ -37,9 +37,9 @@ from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetConvLayer
 
 # TODO: Modular conversion for resnet must be fixed as
 # it provides incorrect import for configuration like resnet_resnet
+@auto_docstring(checkpoint="ustc-community/dfine_x_coco")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="ustc-community/dfine_x_coco")
 class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
     """
     stem_channels (`list[int]`, *optional*, defaults to `[3, 32, 48]`):

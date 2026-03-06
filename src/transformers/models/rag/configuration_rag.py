@@ -22,9 +22,9 @@ from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
+@auto_docstring(checkpoint="")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="")
 class RagConfig(PreTrainedConfig):
     r"""
     title_sep (`str`, *optional*, defaults to  `" / "`):

@@ -24,9 +24,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="calp-hsat-fused")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="calp-hsat-fused")
 class ClapTextConfig(PreTrainedConfig):
     r"""
 
@@ -67,9 +67,9 @@ class ClapTextConfig(PreTrainedConfig):
     projection_hidden_act: str = "relu"
 
 
+@auto_docstring(checkpoint="calp-hsat-fused")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="calp-hsat-fused")
 class ClapAudioConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 8):
@@ -145,9 +145,9 @@ class ClapAudioConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
 
 
+@auto_docstring(checkpoint="calp-hsat-fused")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="calp-hsat-fused")
 class ClapConfig(PreTrainedConfig):
     r"""
     Example:

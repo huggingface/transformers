@@ -86,16 +86,16 @@ class Siglip2Tokenizer(GemmaTokenizer):
             backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), backend.normalizer])
 
 
+@auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 class Siglip2TextConfig(SiglipTextConfig):
     pass
 
 
+@auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 class Siglip2VisionConfig(SiglipVisionConfig):
     r"""
     num_patches (`int`, *optional*, defaults to 256):
@@ -123,9 +123,9 @@ class Siglip2VisionConfig(SiglipVisionConfig):
     image_size = AttributeError()
 
 
+@auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 class Siglip2Config(SiglipConfig):
     pass
 

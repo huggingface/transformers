@@ -22,9 +22,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="facebook/hiera-base-224")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/hiera-base-224")
 class HieraConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     layer_norm_init (`float`, *optional*, defaults to 1.0):

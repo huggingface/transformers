@@ -24,9 +24,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="OFA-Sys/chinese-clip-vit-base-patch16")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="OFA-Sys/chinese-clip-vit-base-patch16")
 class ChineseCLIPTextConfig(PreTrainedConfig):
     r"""
     type_vocab_size (`int`, *optional*, defaults to 2):
@@ -68,9 +68,9 @@ class ChineseCLIPTextConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = None
 
 
+@auto_docstring(checkpoint="OFA-Sys/chinese-clip-vit-base-patch16")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="OFA-Sys/chinese-clip-vit-base-patch16")
 class ChineseCLIPVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -105,9 +105,9 @@ class ChineseCLIPVisionConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
 
 
+@auto_docstring(checkpoint="OFA-Sys/chinese-clip-vit-base-patch16")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="OFA-Sys/chinese-clip-vit-base-patch16")
 class ChineseCLIPConfig(PreTrainedConfig):
     r"""
     Example:

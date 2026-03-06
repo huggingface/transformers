@@ -23,9 +23,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
 class MllamaVisionConfig(PreTrainedConfig):
     r"""
     num_global_layers (`int`, *optional*, defaults to 8):
@@ -98,9 +98,9 @@ class MllamaVisionConfig(PreTrainedConfig):
         return len(self.supported_aspect_ratios)
 
 
+@auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
 class MllamaTextConfig(PreTrainedConfig):
     r"""
     cross_attention_layers (`list[int]`, *optional*):
@@ -150,9 +150,9 @@ class MllamaTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
 class MllamaConfig(PreTrainedConfig):
     r"""
     Example:

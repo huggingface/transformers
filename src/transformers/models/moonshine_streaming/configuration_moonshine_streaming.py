@@ -23,9 +23,9 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING
 
 
+@auto_docstring(checkpoint="UsefulSensors/moonshine-streaming-tiny")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="UsefulSensors/moonshine-streaming-tiny")
 class MoonshineStreamingEncoderConfig(PreTrainedConfig):
     r"""
     sample_rate (`int`, *optional*, defaults to 16000):
@@ -79,9 +79,9 @@ class MoonshineStreamingEncoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="UsefulSensors/moonshine-streaming-tiny")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="UsefulSensors/moonshine-streaming-tiny")
 class MoonshineStreamingConfig(PreTrainedConfig):
     r"""
     pad_head_dim_to_multiple_of (`int`, *optional*):

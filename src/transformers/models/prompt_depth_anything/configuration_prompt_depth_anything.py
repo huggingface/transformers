@@ -27,9 +27,9 @@ from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
+@auto_docstring(checkpoint="LiheYoung/depth-anything-small-hf")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="LiheYoung/depth-anything-small-hf")
 class PromptDepthAnythingConfig(PreTrainedConfig):
     r"""
     reassemble_hidden_size (`int`, *optional*, defaults to 384):

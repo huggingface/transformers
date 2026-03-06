@@ -22,9 +22,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="google-bert/bert-base-uncased")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google-bert/bert-base-uncased")
 class BertConfig(PreTrainedConfig):
     r"""
     Examples:

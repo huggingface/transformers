@@ -79,9 +79,9 @@ class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     deepstack_features: list[torch.FloatTensor] | None = None
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
 class Qwen3VLVisionConfig(PreTrainedConfig):
     r"""
     num_position_embeddings (`int`, *optional*, defaults to 2304):
@@ -110,9 +110,9 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
 class Qwen3VLTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -159,9 +159,9 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
 class Qwen3VLConfig(PreTrainedConfig):
     r"""
     Example:

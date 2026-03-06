@@ -41,9 +41,9 @@ from .generation_higgs_audio_v2 import HiggsAudioV2GenerationMixin
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="bosonai/higgs-audio-v2-generation-3B-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="bosonai/higgs-audio-v2-generation-3B-base")
 class HiggsAudioV2Config(LlamaConfig):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 128013):

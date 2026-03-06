@@ -47,9 +47,9 @@ from ..mixtral.modeling_mixtral import (
 )
 
 
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-Text-01-hf")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="MiniMaxAI/MiniMax-Text-01-hf")
 class MiniMaxM2Config(PreTrainedConfig):
     r"""
     Example:

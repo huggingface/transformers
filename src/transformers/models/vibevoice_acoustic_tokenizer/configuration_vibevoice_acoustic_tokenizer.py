@@ -22,9 +22,9 @@ from ...configuration_utils import PretrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
     r"""
     channels (`int`, *optional*, defaults to 1):
@@ -89,9 +89,9 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         return VibeVoiceAcousticTokenizerDecoderConfig(**config_dict)
 
 
+@auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
     r"""
     channels (`int`, *optional*, defaults to 1):
@@ -116,9 +116,9 @@ class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
     base_config_key = "encoder_config"
 
 
+@auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 class VibeVoiceAcousticTokenizerDecoderConfig(VibeVoiceAcousticTokenizerConfig):
     r"""
     channels (`int`, *optional*, defaults to 1):

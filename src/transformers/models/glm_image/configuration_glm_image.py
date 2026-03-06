@@ -27,9 +27,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="zai-org/GLM-Image")
 class GlmImageVQVAEConfig(PreTrainedConfig):
     r"""
     num_embeddings (`int`, *optional*, defaults to 16384):
@@ -46,9 +46,9 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="zai-org/GLM-Image")
 class GlmImageVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
@@ -87,9 +87,9 @@ class GlmImageVisionConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-06
 
 
+@auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="zai-org/GLM-Image")
 class GlmImageTextConfig(PreTrainedConfig):
     r"""
     vision_vocab_size (`int`, *optional*, defaults to 16512):
@@ -155,9 +155,9 @@ class GlmImageTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="zai-org/GLM-Image")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="zai-org/GLM-Image")
 class GlmImageConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 16384):

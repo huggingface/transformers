@@ -25,9 +25,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="nari-labs/Dia-1.6B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="nari-labs/Dia-1.6B")
 class DiaEncoderConfig(PreTrainedConfig):
     model_type = "dia_encoder"
 
@@ -45,9 +45,9 @@ class DiaEncoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="nari-labs/Dia-1.6B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="nari-labs/Dia-1.6B")
 class DiaDecoderConfig(PreTrainedConfig):
     r"""
     cross_num_attention_heads (`int`, *optional*, defaults to 16):
@@ -86,9 +86,9 @@ class DiaDecoderConfig(PreTrainedConfig):
     bos_token_id: int | None = 1026
 
 
+@auto_docstring(checkpoint="nari-labs/Dia-1.6B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="nari-labs/Dia-1.6B")
 class DiaConfig(PreTrainedConfig):
     r"""
     delay_pattern (`list[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):

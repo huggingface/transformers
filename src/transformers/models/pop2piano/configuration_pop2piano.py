@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="sweetcocoa/pop2piano")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="sweetcocoa/pop2piano")
 class Pop2PianoConfig(PreTrainedConfig):
     r"""
     composer_vocab_size (`int`, *optional*, defaults to 21):

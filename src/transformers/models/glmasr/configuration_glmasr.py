@@ -21,9 +21,9 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="zai-org/GLM-ASR-Nano-2512")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="zai-org/GLM-ASR-Nano-2512")
 class GlmAsrEncoderConfig(PreTrainedConfig):
     r"""
     Example:
@@ -63,9 +63,9 @@ class GlmAsrEncoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="zai-org/GLM-ASR-Nano-2512")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="zai-org/GLM-ASR-Nano-2512")
 class GlmAsrConfig(PreTrainedConfig):
     r"""
     Example:

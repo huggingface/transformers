@@ -26,9 +26,9 @@ from ..auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="")
 class EncoderDecoderConfig(PreTrainedConfig):
     r"""
     Examples:

@@ -24,9 +24,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="CIDAS/clipseg-rd64")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="CIDAS/clipseg-rd64")
 class CLIPSegTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -63,9 +63,9 @@ class CLIPSegTextConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = 49407
 
 
+@auto_docstring(checkpoint="CIDAS/clipseg-rd64")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="CIDAS/clipseg-rd64")
 class CLIPSegVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -100,9 +100,9 @@ class CLIPSegVisionConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
 
 
+@auto_docstring(checkpoint="CIDAS/clipseg-rd64")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="CIDAS/clipseg-rd64")
 class CLIPSegConfig(PreTrainedConfig):
     r"""
     extract_layers (`list[int]`, *optional*, defaults to `[3, 6, 9]`):

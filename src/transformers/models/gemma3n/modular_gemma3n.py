@@ -63,9 +63,9 @@ from ..timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/gemma-3n-E4B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/gemma-3n-E4B")
 class Gemma3nTextConfig(Gemma3TextConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -93,6 +93,10 @@ class Gemma3nTextConfig(Gemma3TextConfig):
         The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
         explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
         sparse with a sparsity factor of 0.95 and the rest are dense.
+    attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
+        scaling factor when applying tanh softcapping on the attention scores.
+    use_bidirectional_attention (`bool`, *optional*):
+        If True, the model will attend to all text tokens instead of using a causal mask.
 
     ```python
     >>> from transformers import Gemma3nTextModel, Gemma3nTextConfig
@@ -203,9 +207,9 @@ class Gemma3nTextConfig(Gemma3TextConfig):
         return kwargs
 
 
+@auto_docstring(checkpoint="google/gemma-3n-E4B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/gemma-3n-E4B")
 class Gemma3nAudioConfig(PreTrainedConfig):
     r"""
     vocab_offset (`int`, *optional*, defaults to 262272):
@@ -304,9 +308,9 @@ class Gemma3nAudioConfig(PreTrainedConfig):
     )
 
 
+@auto_docstring(checkpoint="google/gemma-3n-E4B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/gemma-3n-E4B")
 class Gemma3nVisionConfig(TimmWrapperConfig):
     r"""
     architecture (`str`, *optional*, defaults to `"resnet50"`):
@@ -347,9 +351,9 @@ class Gemma3nVisionConfig(TimmWrapperConfig):
     model_args: dict | None = None
 
 
+@auto_docstring(checkpoint="google/gemma-3n-E4B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/gemma-3n-E4B")
 class Gemma3nConfig(PreTrainedConfig):
     r"""
     audio_soft_tokens_per_image (`int`, *optional*, defaults to 188):

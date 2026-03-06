@@ -23,9 +23,9 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
+@auto_docstring(checkpoint="IDEA-Research/dab_detr-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="IDEA-Research/dab_detr-base")
 class DabDetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 300):

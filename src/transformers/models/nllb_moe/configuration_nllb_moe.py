@@ -22,9 +22,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="facebook/nllb-moe-54b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/nllb-moe-54b")
 class NllbMoeConfig(PreTrainedConfig):
     r"""
     second_expert_policy ( `str`, *optional*, default to `"all"`):

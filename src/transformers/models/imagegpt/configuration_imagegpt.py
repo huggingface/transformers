@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="openai/imagegpt-small")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="openai/imagegpt-small")
 class ImageGPTConfig(PreTrainedConfig):
     r"""
     scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):

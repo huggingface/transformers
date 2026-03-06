@@ -27,9 +27,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="zai-org/GLM-5")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="zai-org/GLM-5")
 class GlmMoeDsaConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):

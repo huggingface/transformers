@@ -22,9 +22,9 @@ from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
+@auto_docstring(checkpoint="facebook/musicgen-melody")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/musicgen-melody")
 class MusicgenMelodyDecoderConfig(PreTrainedConfig):
     r"""
     audio_channels (`int`, *optional*, defaults to 1):
@@ -65,9 +65,9 @@ class MusicgenMelodyDecoderConfig(PreTrainedConfig):
             raise ValueError(f"Expected 1 (mono) or 2 (stereo) audio channels, got {self.audio_channels} channels.")
 
 
+@auto_docstring(checkpoint="facebook/musicgen-melody")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/musicgen-melody")
 class MusicgenMelodyConfig(PreTrainedConfig):
     r"""
     text_encoder (`Union[dict, `PretrainedConfig`]`):
@@ -129,7 +129,6 @@ class MusicgenMelodyConfig(PreTrainedConfig):
     text_encoder: dict | PreTrainedConfig = None
     audio_encoder: dict | PreTrainedConfig = None
     decoder: dict | PreTrainedConfig = None
-    tie_encoder_decoder: bool = False
     num_chroma: int = 12
     chroma_length: int = 235
     initializer_factor: float = 0.02

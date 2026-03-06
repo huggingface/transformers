@@ -22,9 +22,9 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 from ..timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 
 
+@auto_docstring(checkpoint="facebook/Perception-LM-1B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/Perception-LM-1B")
 class PerceptionLMConfig(PreTrainedConfig):
     r"""
     vision_use_cls_token (`bool`, *optional*, defaults to `True`):

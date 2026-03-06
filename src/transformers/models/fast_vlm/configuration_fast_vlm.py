@@ -28,9 +28,9 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="KamilaMila/FastVLM-7B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="KamilaMila/FastVLM-7B")
 class FastVlmConfig(PreTrainedConfig):
     r"""
     Example:

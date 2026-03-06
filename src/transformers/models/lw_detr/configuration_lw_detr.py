@@ -28,9 +28,9 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
+@auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
 class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     pretrain_image_size (`int`, *optional*, defaults to 224):
@@ -103,9 +103,9 @@ class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
             )
 
 
+@auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
 class LwDetrConfig(PreTrainedConfig):
     r"""
     projector_scale_factors (`list[float]`, *optional*, defaults to `[]`):

@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="google/bert_for_seq_generation_L-24_bbc_encoder")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/bert_for_seq_generation_L-24_bbc_encoder")
 class BertGenerationConfig(PreTrainedConfig):
     r"""
     Examples:

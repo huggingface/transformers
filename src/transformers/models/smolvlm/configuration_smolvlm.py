@@ -31,9 +31,9 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
 class SmolVLMVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -68,9 +68,9 @@ class SmolVLMVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
 class SmolVLMConfig(PreTrainedConfig):
     r"""
     scale_factor (`int`, *optional*, defaults to 2):

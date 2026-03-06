@@ -27,9 +27,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")
 class GraniteMoeConfig(PreTrainedConfig):
     r"""
         embedding_multiplier (`float`, *optional*, defaults to 1.0): embedding multiplier

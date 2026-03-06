@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="uw-madison/nystromformer-512")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="uw-madison/nystromformer-512")
 class NystromformerConfig(PreTrainedConfig):
     r"""
     segment_means_seq_len (`int`, *optional*, defaults to 64):

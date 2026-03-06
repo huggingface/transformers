@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="FacebookAI/xlm-mlm-en-2048")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="FacebookAI/xlm-mlm-en-2048")
 class XLMConfig(PreTrainedConfig):
     r"""
     gelu_activation (`bool`, *optional*, defaults to `True`):

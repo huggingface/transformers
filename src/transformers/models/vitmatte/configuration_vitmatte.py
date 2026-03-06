@@ -23,9 +23,9 @@ from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
+@auto_docstring(checkpoint="hustvl/vitmatte-small-composition-1k")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="hustvl/vitmatte-small-composition-1k")
 class VitMatteConfig(PreTrainedConfig):
     r"""
     batch_norm_eps (`float`, *optional*, defaults to 1e-05):

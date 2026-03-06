@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="pixtral-hf/pixtral-9b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="pixtral-hf/pixtral-9b")
 class PLBartConfig(PreTrainedConfig):
     r"""
     Example:

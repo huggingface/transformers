@@ -51,9 +51,9 @@ from ..timesfm.modeling_timesfm import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/timesfm-2.5-200m-transformers")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/timesfm-2.5-200m-transformers")
 class TimesFm2_5Config(TimesFmConfig):
     r"""
     patch_length (`int`, *optional*, defaults to 32):

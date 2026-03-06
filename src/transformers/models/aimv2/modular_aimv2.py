@@ -37,9 +37,9 @@ from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, Siglip
 from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipOutput
 
 
+@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 class Aimv2VisionConfig(SiglipVisionConfig):
     r"""
     use_head (`str`, *optional*, defaults to `True`):
@@ -79,9 +79,9 @@ class Aimv2VisionConfig(SiglipVisionConfig):
     layer_norm_eps = AttributeError()
 
 
+@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 class Aimv2TextConfig(SiglipTextConfig):
     vocab_size: int = 49408
     hidden_size: int = 768
@@ -99,9 +99,9 @@ class Aimv2TextConfig(SiglipTextConfig):
     layer_norm_eps = AttributeError()
 
 
+@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
 class Aimv2Config(SiglipConfig):
     r"""
     Example:

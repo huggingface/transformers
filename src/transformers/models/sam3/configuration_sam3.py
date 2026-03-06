@@ -24,9 +24,9 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam3")
 class Sam3ViTConfig(PreTrainedConfig):
     r"""
     rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -68,9 +68,9 @@ class Sam3ViTConfig(PreTrainedConfig):
             self.global_attn_indexes = [7, 15, 23, 31]
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam3")
 class Sam3VisionConfig(PreTrainedConfig):
     r"""
     fpn_hidden_size (`int`, *optional*, defaults to 256):
@@ -119,9 +119,9 @@ class Sam3VisionConfig(PreTrainedConfig):
         self.backbone_config.image_size = value
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam3")
 class Sam3GeometryEncoderConfig(PreTrainedConfig):
     r"""
     roi_size (`int`, *optional*, defaults to 7):
@@ -142,9 +142,9 @@ class Sam3GeometryEncoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam3")
 class Sam3DETREncoderConfig(PreTrainedConfig):
     r"""
     hidden_dropout (`float`, *optional*, defaults to 0.0):
@@ -164,9 +164,9 @@ class Sam3DETREncoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam3")
 class Sam3DETRDecoderConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 200):
@@ -187,9 +187,9 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam3")
 class Sam3MaskDecoderConfig(PreTrainedConfig):
     r"""
     num_upsampling_stages (`int`, *optional*, defaults to 3):
@@ -206,9 +206,9 @@ class Sam3MaskDecoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam3")
 class Sam3Config(PreTrainedConfig):
     r"""
     geometry_encoder_config (`dict` or `Sam3GeometryEncoderConfig`, *optional*):

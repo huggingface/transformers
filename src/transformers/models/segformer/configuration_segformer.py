@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="ByteDance-Seed/SeedOss-36B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="ByteDance-Seed/SeedOss-36B")
 class SegformerConfig(PreTrainedConfig):
     r"""
     num_encoder_blocks (`int`, *optional*, defaults to 4):
@@ -39,6 +39,8 @@ class SegformerConfig(PreTrainedConfig):
     mlp_ratios (`list[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
         Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
         encoder blocks.
+    reshape_last_stage (`bool`, *optional*, defaults to True):
+        Whether to reshape the last stage outputs
 
     Example:
 

@@ -29,9 +29,9 @@ ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
+@auto_docstring(checkpoint="Intel/zoedepth-nyu")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Intel/zoedepth-nyu")
 class ZoeDepthConfig(PreTrainedConfig):
     r"""
     batch_norm_eps (`float`, *optional*, defaults to 1e-05):

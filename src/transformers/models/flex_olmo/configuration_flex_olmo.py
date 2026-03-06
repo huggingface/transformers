@@ -28,9 +28,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="allenai/FlexOlmo-7x7B-1T")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="allenai/FlexOlmo-7x7B-1T")
 class FlexOlmoConfig(PreTrainedConfig):
     r"""
     Example:

@@ -102,9 +102,9 @@ class DbrxFFNConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="transformers-community/dbrx-instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="transformers-community/dbrx-instruct")
 class DbrxConfig(PreTrainedConfig):
     r"""
     max_seq_len (`int`, *optional*, defaults to 2048):

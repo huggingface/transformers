@@ -23,9 +23,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="Zyphra/Zamba2-2.7B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Zyphra/Zamba2-2.7B")
 class Zamba2Config(PreTrainedConfig):
     r"""
     mamba_ngroups (`int`, *optional*, defaults to 1):

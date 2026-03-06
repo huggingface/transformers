@@ -23,9 +23,9 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
+@auto_docstring(checkpoint="microsoft/table-transformer-detection")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/table-transformer-detection")
 class TableTransformerConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 100):

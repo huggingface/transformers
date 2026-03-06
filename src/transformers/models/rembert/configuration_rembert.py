@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="google/rembert")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/rembert")
 class RemBertConfig(PreTrainedConfig):
     r"""
     input_embedding_size (`int`, *optional*, defaults to 256):

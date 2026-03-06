@@ -25,9 +25,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="kajuma/DiffLlama-0.3B-handcut")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="kajuma/DiffLlama-0.3B-handcut")
 class DiffLlamaConfig(PreTrainedConfig):
     r"""
     lambda_std_dev (`float`, *optional*, defaults to 0.1):

@@ -25,9 +25,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="susnato/clvp_dev")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="susnato/clvp_dev")
 class ClvpEncoderConfig(PreTrainedConfig):
     r"""
     use_rotary_embedding (`bool`, *optional*, defaults to `True`):
@@ -99,9 +99,9 @@ class ClvpEncoderConfig(PreTrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@auto_docstring(checkpoint="susnato/clvp_dev")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="susnato/clvp_dev")
 class ClvpDecoderConfig(PreTrainedConfig):
     r"""
     resid_pdrop (`float`, *optional*, defaults to 0.1):
@@ -186,9 +186,9 @@ class ClvpDecoderConfig(PreTrainedConfig):
     add_cross_attention: bool = False
 
 
+@auto_docstring(checkpoint="susnato/clvp_dev")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="susnato/clvp_dev")
 class ClvpConfig(PreTrainedConfig):
     r"""
     speech_config (`dict`, *optional*):

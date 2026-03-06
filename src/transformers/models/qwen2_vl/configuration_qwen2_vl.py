@@ -23,9 +23,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="Qwen2-VL-7B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen2-VL-7B-Instruct")
 class Qwen2VLVisionConfig(PreTrainedConfig):
     model_type = "qwen2_vl"
     base_config_key = "vision_config"
@@ -43,9 +43,9 @@ class Qwen2VLVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="Qwen2-VL-7B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen2-VL-7B-Instruct")
 class Qwen2VLTextConfig(PreTrainedConfig):
     r"""
     max_window_layers (`int`, *optional*, defaults to 80):
@@ -137,9 +137,9 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         return kwargs
 
 
+@auto_docstring(checkpoint="Qwen2-VL-7B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen2-VL-7B-Instruct")
 class Qwen2VLConfig(PreTrainedConfig):
     r"""
     Example:

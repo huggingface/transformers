@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="apple/mobilevitv2-1.0")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="apple/mobilevitv2-1.0")
 class MobileViTV2Config(PreTrainedConfig):
     r"""
     aspp_out_channels (`int`, *optional*, defaults to 512):

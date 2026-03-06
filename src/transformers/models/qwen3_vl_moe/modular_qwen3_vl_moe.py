@@ -55,9 +55,9 @@ from ..qwen3_vl.modeling_qwen3_vl import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -125,16 +125,16 @@ class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
         self.sliding_window = None
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 class Qwen3VLMoeVisionConfig(Qwen3VLVisionConfig):
     pass
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 class Qwen3VLMoeConfig(Qwen3VLConfig):
     r"""
     Example:

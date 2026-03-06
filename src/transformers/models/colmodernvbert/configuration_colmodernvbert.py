@@ -30,9 +30,9 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="ModernVBERT/colmodernvbert-merged")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="ModernVBERT/colmodernvbert-merged")
 class ColModernVBertConfig(PreTrainedConfig):
     r"""
     Example:

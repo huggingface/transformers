@@ -44,9 +44,9 @@ from ..nemotron.modeling_nemotron import NemotronMLP
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="swiss-ai/Apertus-8B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="swiss-ai/Apertus-8B")
 class ApertusConfig(PreTrainedConfig):
     r"""
     ```python

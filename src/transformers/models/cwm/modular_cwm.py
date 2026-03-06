@@ -36,9 +36,9 @@ from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2RotaryEmbedding
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="facebook/cwm")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/cwm")
 class CwmConfig(LlamaConfig):
     model_type = "cwm"
     default_theta = 1_000_000.0

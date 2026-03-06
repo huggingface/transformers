@@ -23,9 +23,9 @@ from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
+@auto_docstring(checkpoint="kmhf/hf-moshiko")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="kmhf/hf-moshiko")
 class MoshiDepthConfig(PreTrainedConfig):
     r"""
     input_size (`int`, *optional*, defaults to 4096):
@@ -91,11 +91,15 @@ class MoshiDepthConfig(PreTrainedConfig):
             raise ValueError(f"`ffn_dim={self.ffn_dim}` must be even.")
 
 
+@auto_docstring(checkpoint="kmhf/hf-moshiko")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="kmhf/hf-moshiko")
 class MoshiConfig(PreTrainedConfig):
     """
+    depth_decoder_config (`PreTrainedConfig | dict`, *optional*):
+        Configuration for the depth decoder.
+    audio_encoder_config (`PreTrainedConfig | dict`, *optional*):
+        Configuration for the audio encoder.
     audio_vocab_size (`int`, *optional*):
         Vocabulary size of the audio part of model. Defines the number of different tokens that can be
         represented by the `audio_codes` passed when calling the Moshi models.

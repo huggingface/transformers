@@ -21,9 +21,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="karpathy/nanochat-d32")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="karpathy/nanochat-d32")
 class NanoChatConfig(PretrainedConfig):
     r"""
     Example:

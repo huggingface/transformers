@@ -27,9 +27,9 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamVideoPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -52,9 +52,9 @@ class EdgeTamVideoPromptEncoderConfig(PreTrainedConfig):
     scale: int = 1
 
 
+@auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamVideoMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -91,9 +91,9 @@ class EdgeTamVideoMaskDecoderConfig(PreTrainedConfig):
     dynamic_multimask_stability_thresh: float = 0.98
 
 
+@auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamVideoConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamVideoPromptEncoderConfig`], *optional*):

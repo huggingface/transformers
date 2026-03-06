@@ -21,9 +21,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="LiquidAI/LFM2-1.2B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="LiquidAI/LFM2-1.2B")
 class Lfm2Config(PreTrainedConfig):
     r"""
     conv_bias (`bool`, *optional*, defaults to `False`):

@@ -27,9 +27,9 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamVisionConfig(PreTrainedConfig):
     r"""
     backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
@@ -89,9 +89,9 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -114,9 +114,9 @@ class EdgeTamPromptEncoderConfig(PreTrainedConfig):
     scale: int = 1
 
 
+@auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -153,9 +153,9 @@ class EdgeTamMaskDecoderConfig(PreTrainedConfig):
     dynamic_multimask_stability_thresh: float = 0.98
 
 
+@auto_docstring(checkpoint="facebook/EdgeTAM")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):

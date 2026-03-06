@@ -54,9 +54,9 @@ from ..sam2_video.modeling_sam2_video import (
 from ..sam2_video.processing_sam2_video import Sam2VideoProcessor
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -77,16 +77,16 @@ class Sam3TrackerVideoProcessor(Sam2VideoProcessor):
     pass
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerVideoMaskDecoderConfig(Sam2VideoMaskDecoderConfig):
     pass
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam3")
 class Sam3TrackerVideoConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `Sam3TrackerVideoPromptEncoderConfig`], *optional*):

@@ -49,9 +49,9 @@ from ..vit.configuration_vit import ViTConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="tue-mps/coco_panoptic_eomt_large_640")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="tue-mps/coco_panoptic_eomt_large_640")
 class EomtConfig(ViTConfig):
     r"""
     num_upscale_blocks (`int`, *optional*, defaults to 2):

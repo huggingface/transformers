@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="openbmb/cpm-ant-10b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="openbmb/cpm-ant-10b")
 class CpmAntConfig(PreTrainedConfig):
     r"""
     position_bias_num_buckets (`int`, *optional*, defaults to 512):

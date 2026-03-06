@@ -33,9 +33,9 @@ from ..dinov2.modeling_dinov2 import (
 from ..vit.modeling_vit import ViTAttention, ViTPatchEmbeddings, ViTPreTrainedModel
 
 
+@auto_docstring(checkpoint="facebook/pixio-huge")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/pixio-huge")
 class PixioConfig(Dinov2Config):
     r"""
     n_cls_tokens (`int`, *optional*, defaults to 8):

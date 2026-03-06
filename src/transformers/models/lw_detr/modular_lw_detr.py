@@ -53,9 +53,9 @@ from ..vitdet.modeling_vitdet import (
 )
 
 
+@auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
 class LwDetrViTConfig(VitDetConfig):
     r"""
     pretrain_image_size (`int`, *optional*, defaults to 224):
@@ -112,9 +112,9 @@ class LwDetrViTConfig(VitDetConfig):
             )
 
 
+@auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
 class LwDetrConfig(PreTrainedConfig):
     r"""
     projector_scale_factors (`list[float]`, *optional*, defaults to `[]`):

@@ -22,9 +22,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="mixtralai/Mixtral-8x7B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="mixtralai/Mixtral-8x7B")
 class MixtralConfig(PreTrainedConfig):
     r"""
     Example:

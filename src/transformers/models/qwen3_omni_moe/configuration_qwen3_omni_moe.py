@@ -30,9 +30,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
 class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     r"""
     downsample_hidden_size ( `int`, *optional*, defaults to `480`): Hidden size in donwsampling layer
@@ -67,9 +67,9 @@ class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     downsample_hidden_size: int = 480
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     r"""
     num_position_embeddings (`int`, *optional*, defaults to 2304):
@@ -98,9 +98,9 @@ class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -179,9 +179,9 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
     r"""
     position_id_per_seconds (`int`, *optional*, defaults to 25):
@@ -247,9 +247,9 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3OmniMoeTalkerCodePredictor-8B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3OmniMoeTalkerCodePredictor-8B")
 class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
     r"""
     max_window_layers (`int`, *optional*, defaults to 28):
@@ -319,9 +319,9 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -405,9 +405,9 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     r"""
     code_predictor_config (`dict`, *optional*):
@@ -499,9 +499,9 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     r"""
     num_quantizers (`int`, *optional*, defaults to 16):
@@ -556,9 +556,9 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         return ["sliding_attention"] * self.num_hidden_layers
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Qwen/Qwen3-15B-A2B")
 class Qwen3OmniMoeConfig(PreTrainedConfig):
     r"""
     thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.

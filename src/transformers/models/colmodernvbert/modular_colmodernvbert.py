@@ -36,9 +36,9 @@ from ..idefics3.processing_idefics3 import Idefics3Processor, Idefics3ProcessorK
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="ModernVBERT/colmodernvbert-merged")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="ModernVBERT/colmodernvbert-merged")
 class ColModernVBertConfig(ColQwen2Config):
     r"""
     Example:

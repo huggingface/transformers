@@ -22,9 +22,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="nghuyong/ernie-3.0-base-zh")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="nghuyong/ernie-3.0-base-zh")
 class ErnieConfig(PreTrainedConfig):
     r"""
     task_type_vocab_size (`int`, *optional*, defaults to 3):

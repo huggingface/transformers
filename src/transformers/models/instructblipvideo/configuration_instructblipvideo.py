@@ -32,9 +32,9 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 class InstructBlipVideoVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -68,9 +68,9 @@ class InstructBlipVideoVisionConfig(PreTrainedConfig):
     qkv_bias: bool = True
 
 
+@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 class InstructBlipVideoQFormerConfig(PreTrainedConfig):
     r"""
     cross_attention_frequency (`int`, *optional*, defaults to 2):
@@ -111,9 +111,9 @@ class InstructBlipVideoQFormerConfig(PreTrainedConfig):
     encoder_hidden_size: int = 1408
 
 
+@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Salesforce/instruct-blip-flan-t5")
 class InstructBlipVideoConfig(PreTrainedConfig):
     r"""
     qformer_config (`dict`, *optional*):

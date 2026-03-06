@@ -21,9 +21,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="rednote-hilab/dots.llm1.base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="rednote-hilab/dots.llm1.base")
 class Dots1Config(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):

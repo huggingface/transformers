@@ -42,9 +42,9 @@ from ..qwen3.modeling_qwen3 import Qwen3MLP
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="tencent/Youtu-LLM-2B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="tencent/Youtu-LLM-2B")
 class YoutuConfig(DeepseekV3Config):
     r"""
     embedding_initializer_range (`float`, *optional*):

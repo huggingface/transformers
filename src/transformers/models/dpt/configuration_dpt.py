@@ -23,9 +23,9 @@ from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
+@auto_docstring(checkpoint="Intel/dpt-large")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="Intel/dpt-large")
 class DPTConfig(PreTrainedConfig):
     r"""
     is_hybrid (`bool`, *optional*, defaults to `False`):

@@ -26,9 +26,9 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="facebook/sam2_video.1-hiera-tiny")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam2_video.1-hiera-tiny")
 class Sam2VideoPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -51,9 +51,9 @@ class Sam2VideoPromptEncoderConfig(PreTrainedConfig):
     scale: int = 1
 
 
+@auto_docstring(checkpoint="facebook/sam2_video.1-hiera-tiny")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam2_video.1-hiera-tiny")
 class Sam2VideoMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -90,9 +90,9 @@ class Sam2VideoMaskDecoderConfig(PreTrainedConfig):
     dynamic_multimask_stability_thresh: float = 0.98
 
 
+@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 class Sam2VideoConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `Sam2PromptEncoderConfig`], *optional*):

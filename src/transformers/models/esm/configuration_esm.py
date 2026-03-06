@@ -156,9 +156,9 @@ class EsmFoldConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="facebook/esm-1b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/esm-1b")
 class EsmConfig(PreTrainedConfig):
     r"""
     is_folding_model (`bool`, defaults to `False`):

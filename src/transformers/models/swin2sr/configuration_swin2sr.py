@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="caidas/swin2sr-classicalsr-x2-64")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="caidas/swin2sr-classicalsr-x2-64")
 class Swin2SRConfig(PreTrainedConfig):
     r"""
     num_channels_out (`int`, *optional*, defaults to `num_channels`):

@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="google/fnet-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/fnet-base")
 class FNetConfig(PreTrainedConfig):
     r"""
     use_tpu_fourier_optimizations (`bool`, *optional*, defaults to `False`):

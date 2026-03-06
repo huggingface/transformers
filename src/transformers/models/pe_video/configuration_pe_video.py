@@ -23,9 +23,9 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 from ..timm_wrapper import TimmWrapperConfig
 
 
+@auto_docstring(checkpoint="facebook/pe-av-large")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/pe-av-large")
 class PeVideoEncoderConfig(PreTrainedConfig):
     r"""
     Example:
@@ -88,9 +88,9 @@ class PeVideoEncoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="facebook/pe-av-large")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/pe-av-large")
 class PeVideoConfig(PretrainedConfig):
     r"""
     video_config (`dict` or `PreTrainedConfig`, *optional*):

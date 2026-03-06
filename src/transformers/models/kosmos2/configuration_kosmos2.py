@@ -24,9 +24,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="microsoft/kosmos-2-patch14-224")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/kosmos-2-patch14-224")
 class Kosmos2TextConfig(PreTrainedConfig):
     r"""
     activation_dropout (`float`, *optional*, defaults to 0.0):
@@ -63,9 +63,9 @@ class Kosmos2TextConfig(PreTrainedConfig):
     add_cross_attention: bool = False
 
 
+@auto_docstring(checkpoint="microsoft/kosmos-2-patch14-224")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/kosmos-2-patch14-224")
 class Kosmos2VisionConfig(PreTrainedConfig):
     model_type = "kosmos_2_vision_model"
     base_config_key = "vision_config"
@@ -84,9 +84,9 @@ class Kosmos2VisionConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
 
 
+@auto_docstring(checkpoint="microsoft/kosmos-2-patch14-224")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/kosmos-2-patch14-224")
 class Kosmos2Config(PreTrainedConfig):
     r"""
     latent_query_num (`int`, *optional*, defaults to 64):

@@ -22,9 +22,9 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 class Sam2HieraDetConfig(PreTrainedConfig):
     r"""
     patch_kernel_size (`list[int]`, *optional*, defaults to `[7, 7]`):
@@ -101,9 +101,9 @@ class Sam2HieraDetConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 class Sam2VisionConfig(PreTrainedConfig):
     r"""
     backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):
@@ -161,9 +161,9 @@ class Sam2VisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 class Sam2PromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -186,9 +186,9 @@ class Sam2PromptEncoderConfig(PreTrainedConfig):
     scale: int = 1
 
 
+@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 class Sam2MaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -225,9 +225,9 @@ class Sam2MaskDecoderConfig(PreTrainedConfig):
     dynamic_multimask_stability_thresh: float = 0.98
 
 
+@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
 class Sam2Config(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `Sam2PromptEncoderConfig`], *optional*):

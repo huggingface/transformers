@@ -24,9 +24,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="kakaobrain/align-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="kakaobrain/align-base")
 class AlignTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -64,9 +64,9 @@ class AlignTextConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = None
 
 
+@auto_docstring(checkpoint="kakaobrain/align-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="kakaobrain/align-base")
 class AlignVisionConfig(PreTrainedConfig):
     r"""
     width_coefficient (`float`, *optional*, defaults to 2.0):
@@ -158,9 +158,9 @@ class AlignVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="kakaobrain/align-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="kakaobrain/align-base")
 class AlignConfig(PreTrainedConfig):
     r"""
     temperature_init_value (`float`, *optional*, defaults to 1.0):

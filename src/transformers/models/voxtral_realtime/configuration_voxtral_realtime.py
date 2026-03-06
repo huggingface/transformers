@@ -28,9 +28,9 @@ class VoxtralRealtimeTextConfig(MistralConfig):
     model_type = "voxtral_realtime_text"
 
 
+@auto_docstring(checkpoint="mistralai/Voxtral-Mini-4B-Realtime-2602")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="mistralai/Voxtral-Mini-4B-Realtime-2602")
 class VoxtralRealtimeEncoderConfig(PreTrainedConfig):
     r"""
     Example:
@@ -80,9 +80,9 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="mistralai/Voxtral-Mini-4B-Realtime-2602")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="mistralai/Voxtral-Mini-4B-Realtime-2602")
 class VoxtralRealtimeConfig(PreTrainedConfig):
     r"""
     audio_length_per_tok (`int`, *optional*, defaults to 8):

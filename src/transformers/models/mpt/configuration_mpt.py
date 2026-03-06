@@ -22,9 +22,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="mosaicml/mpt-7b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="mosaicml/mpt-7b")
 class MptAttentionConfig(PreTrainedConfig):
     """
     attn_type (`str`, *optional*, defaults to `"multihead_attention"`):
@@ -68,9 +68,9 @@ class MptAttentionConfig(PreTrainedConfig):
     alibi_bias_max: int = 8
 
 
+@auto_docstring(checkpoint="mosaicml/mpt-7b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="mosaicml/mpt-7b")
 class MptConfig(PreTrainedConfig):
     """
     expansion_ratio (`int`, *optional*, defaults to 4):

@@ -20,9 +20,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="zju-community/efficientloftr")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="zju-community/efficientloftr")
 class EfficientLoFTRConfig(PreTrainedConfig):
     r"""
     stage_num_blocks (`List`, *optional*, defaults to [1, 2, 4, 14]):

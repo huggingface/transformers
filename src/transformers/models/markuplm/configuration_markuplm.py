@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="microsoft/markuplm-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/markuplm-base")
 class MarkupLMConfig(PreTrainedConfig):
     r"""
     max_tree_id_unit_embeddings (`int`, *optional*, defaults to 1024):

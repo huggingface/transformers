@@ -25,9 +25,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="westlake-repl/Evolla-10B-hf")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="westlake-repl/Evolla-10B-hf")
 class SaProtConfig(PreTrainedConfig):
     r"""
     mask_token_id (`int`, *optional*, defaults to 4):
@@ -58,9 +58,9 @@ class SaProtConfig(PreTrainedConfig):
     add_cross_attention: bool = False
 
 
+@auto_docstring(checkpoint="westlake-repl/Evolla-10B-hf")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="westlake-repl/Evolla-10B-hf")
 class EvollaConfig(PreTrainedConfig):
     r"""
     protein_encoder_config (`dict`, *optional*):

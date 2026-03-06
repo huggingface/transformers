@@ -39,9 +39,9 @@ from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="facebook/dinov2-with-registers-base")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/dinov2-with-registers-base")
 class Dinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):

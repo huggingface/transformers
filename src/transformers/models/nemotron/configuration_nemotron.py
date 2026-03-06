@@ -23,9 +23,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="nvidia/nemotron-3-8b-base-4k-hf")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="nvidia/nemotron-3-8b-base-4k-hf")
 class NemotronConfig(PreTrainedConfig):
     r"""
     Example:

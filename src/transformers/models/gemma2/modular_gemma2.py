@@ -53,9 +53,9 @@ from ..gemma.modeling_gemma import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="google/gemma2-7b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="google/gemma2-7b")
 class Gemma2Config(PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):

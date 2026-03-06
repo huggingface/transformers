@@ -28,9 +28,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
 class Phi4MultimodalVisionConfig(PreTrainedConfig):
     r"""
     crop_size (`int`, *optional*, defaults to 448):
@@ -65,9 +65,9 @@ class Phi4MultimodalVisionConfig(PreTrainedConfig):
     feature_layer: int = -2
 
 
+@auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
 class Phi4MultimodalAudioConfig(PreTrainedConfig):
     r"""
     num_blocks (`int`, *optional*, defaults to 24):
@@ -158,9 +158,9 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
             raise ValueError("`time_reduction` should be a multiple of 2!")
 
 
+@auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
 class Phi4MultimodalConfig(PreTrainedConfig):
     r"""
     original_max_position_embeddings (`int`, *optional*, defaults to 4096):

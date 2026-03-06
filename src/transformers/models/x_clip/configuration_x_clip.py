@@ -24,9 +24,9 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 class XCLIPTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -63,9 +63,9 @@ class XCLIPTextConfig(PreTrainedConfig):
     eos_token_id: int | None = 2
 
 
+@auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 class XCLIPVisionConfig(PreTrainedConfig):
     r"""
     num_frames (`int`, *optional*, defaults to 8):
@@ -118,9 +118,9 @@ class XCLIPVisionConfig(PreTrainedConfig):
     drop_path_rate: float = 0.0
 
 
+@auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="microsoft/xclip-base-patch32")
 class XCLIPConfig(PreTrainedConfig):
     r"""
     prompt_layers (`int`, *optional*, defaults to 2):

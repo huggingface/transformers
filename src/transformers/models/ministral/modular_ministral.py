@@ -42,9 +42,9 @@ from ..qwen2.modeling_qwen2 import (
 )
 
 
+@auto_docstring(checkpoint="mistralai/Ministral-8B-Instruct-2410")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="mistralai/Ministral-8B-Instruct-2410")
 class MinistralConfig(MistralConfig):
     r"""
     Example:

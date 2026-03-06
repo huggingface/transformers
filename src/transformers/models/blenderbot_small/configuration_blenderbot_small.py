@@ -21,9 +21,9 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="facebook/blenderbot_small-90M")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="facebook/blenderbot_small-90M")
 class BlenderbotSmallConfig(PreTrainedConfig):
     r"""
     Example:

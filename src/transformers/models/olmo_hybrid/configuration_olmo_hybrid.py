@@ -28,9 +28,9 @@ from ...utils import auto_docstring
 from ...utils.type_validators import interval
 
 
+@auto_docstring(checkpoint="allenai/Olmo-Hybrid-7B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="allenai/Olmo-Hybrid-7B")
 class OlmoHybridConfig(PreTrainedConfig):
     r"""
     linear_num_key_heads (`int`, *optional*):

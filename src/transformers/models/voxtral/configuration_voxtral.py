@@ -21,9 +21,9 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="mistralai/Voxtral-Mini-3B-2507")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="mistralai/Voxtral-Mini-3B-2507")
 class VoxtralEncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
@@ -72,9 +72,9 @@ class VoxtralEncoderConfig(PreTrainedConfig):
     activation_dropout: float | int = 0.0
 
 
+@auto_docstring(checkpoint="mistralai/Voxtral-Mini-3B-2507")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="mistralai/Voxtral-Mini-3B-2507")
 class VoxtralConfig(PreTrainedConfig):
     r"""
     Example:

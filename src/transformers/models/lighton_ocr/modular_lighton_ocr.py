@@ -42,9 +42,9 @@ from ..mistral3.modeling_mistral3 import (
 from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 
 
+@auto_docstring(checkpoint="lightonocr-hf/lightonocr-9b")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="lightonocr-hf/lightonocr-9b")
 class LightOnOcrConfig(PretrainedConfig):
     r"""
     Example:

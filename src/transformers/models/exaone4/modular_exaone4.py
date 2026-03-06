@@ -55,9 +55,9 @@ _CHECKPOINT_FOR_DOC = "LGAI-EXAONE/EXAONE-4.0-32B"
 _CONFIG_FOR_DOC = "Exaone4Config"
 
 
+@auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.0-32B")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.0-32B")
 class Exaone4Config(PreTrainedConfig):
     r"""
     sliding_window_pattern (`str`, *optional*):

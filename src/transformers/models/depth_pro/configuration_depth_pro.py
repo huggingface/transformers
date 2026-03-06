@@ -26,9 +26,9 @@ from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="apple/DepthPro")
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-@auto_docstring(checkpoint="apple/DepthPro")
 class DepthProConfig(PreTrainedConfig):
     r"""
     fusion_hidden_size (`int`, *optional*, defaults to 256):

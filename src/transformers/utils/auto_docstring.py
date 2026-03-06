@@ -2579,6 +2579,7 @@ class ClassAttrs:
 
 
 ARGS_TO_IGNORE = {"self", "kwargs", "args", "deprecated_arguments"}
+ARGS_TO_RENAME = {"_out_features": "out_features", "_out_indices": "out_indices"}
 
 
 def get_indent_level(func):
@@ -3289,6 +3290,8 @@ def _process_regular_parameters(
             or param.kind == inspect.Parameter.VAR_KEYWORD
         ):
             continue
+
+        param_name = ARGS_TO_RENAME.get(param_name, param_name)
 
         # Process parameter type and optional status
         param_type, optional = _process_parameter_type(param)
