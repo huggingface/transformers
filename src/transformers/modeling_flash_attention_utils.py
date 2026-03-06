@@ -72,6 +72,10 @@ _hf_api_to_flash_mapping = {
     "dropout": "dropout_p",
     "sliding_window": "window_size",
 }
+# alternative names within the different flash attention APIs, e.g. for attention sinks
+_flash_api_alternative_names = {
+    "s_aux": "learnable_sink"
+}
 
 
 def _lazy_imports(
@@ -155,6 +159,9 @@ def _lazy_define_process_function(flash_function):
     for param in process_parameters:
         fa_param = _hf_api_to_flash_mapping.get(param, param)
         supports_mapping[fa_param] = fa_param in flash_parameters
+
+        if (fa_alternative_name := _flash_api_alternative_names.get(param, param)) != fa_param:
+            supports_mapping[fa_alternative_name] = fa_alternative_name in flash_parameters
 
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
@@ -570,9 +577,11 @@ def _process_flash_attention_kwargs(
     if supports_mapping["softcap"] and softcap is not None:
         flash_kwargs["softcap"] = softcap
 
-    # Only within kernel implementation atm
-    if supports_mapping["s_aux"] and s_aux is not None:
-        flash_kwargs["s_aux"] = s_aux
+    if ((legacy_sink_param := supports_mapping["s_aux"]) or supports_mapping["learnable_sink"]) and s_aux is not None:
+        if legacy_sink_param:
+            flash_kwargs["s_aux"] = s_aux  # e.g. FA3 (vllm)
+        else:
+            flash_kwargs["learnable_sink"] = s_aux  # FA4
 
     # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
     # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
@@ -682,15 +691,13 @@ def _flash_attention_forward(
         if "mps" in str(q.device):
             cu_seq_lens_k = cu_seq_lens_k.clone()
 
-        # Newer fa versions no longer accept `max_seqlen_(q|k)`
-        final_flash_kwargs = flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
         out_unpad = flash_varlen_fn(
             q,
             k,
             v,
             cu_seqlens_q=cu_seq_lens_q,
             cu_seqlens_k=cu_seq_lens_k,
-            **final_flash_kwargs,
+            **flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
         )
         if isinstance(out_unpad, tuple):
             out_unpad = out_unpad[0]
@@ -713,15 +720,13 @@ def _flash_attention_forward(
         if "mps" in str(q.device):
             cu_seq_lens_k = cu_seq_lens_k.clone()
 
-        # Newer fa versions no longer accept `max_seqlen_(q|k)`
-        final_flash_kwargs = flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
         out = flash_varlen_fn(
             q,
             k,
             v,
             cu_seqlens_q=cu_seq_lens_q,
             cu_seqlens_k=cu_seq_lens_k,
-            **final_flash_kwargs,
+            **flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
         )
         if isinstance(out, tuple):
             out = out[0]
@@ -730,8 +735,7 @@ def _flash_attention_forward(
 
     # No padding
     else:
-        final_flash_kwargs = flash_kwargs()
-        out = flash_fn(query_states, key_states, value_states, **final_flash_kwargs)
+        out = flash_fn(query_states, key_states, value_states, **flash_kwargs())
         if isinstance(out, tuple):
             out = out[0]
 

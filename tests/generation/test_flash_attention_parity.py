@@ -112,7 +112,6 @@ class FlashAttentionParityTest(unittest.TestCase):
         logprobs = {}
         outputs = defaultdict(list)
         with torch.no_grad():
-
             def generate(model, version, outputs, logits, logprobs):
                 model.set_attn_implementation(f"flash_attention_{version}")
                 output = model.generate(
@@ -132,15 +131,20 @@ class FlashAttentionParityTest(unittest.TestCase):
         # 3. Correctness check
         # 3a. Logits
         # FA2 as base to compare against
-        # logits_1 = logits[2]
+        logits_1 = logits[2]
         logprobs_1 = logprobs[2]
         max_logprob_diffs = []
         for version in range(1, len(flash_attn_versions)):
-            # TODO: logits significantly differ between FA2 and FA4
-            # logits_x = logits[flash_attn_versions[version]]
-            # torch.testing.assert_close(logits_1, logits_x, atol=1e-3, rtol=1e-3)
+            logits_x = logits[flash_attn_versions[version]]
             logprobs_x = logprobs[flash_attn_versions[version]]
             max_logprob_diffs.append(torch.max(torch.abs(logprobs_1 - logprobs_x)).item())
+
+            # Only 80% need to pass the tolerance (big model with several steps)
+            atol, fraction = 4e-2, 0.8
+            logits_ok = (torch.abs(logits_1 - logits_x) <= atol).float().mean().item()
+            assert logits_ok >= fraction, (
+                f"FA{flash_attn_versions[version]} logits pass fraction {logits_ok:.6f} < {fraction:.6f}"
+            )
 
         # 3b. Generated text
         # FA2 as base to compare against
