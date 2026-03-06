@@ -23,9 +23,7 @@ from typing import Any
 
 from huggingface_hub.dataclasses import strict
 
-from ...utils import logging
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 from ..siglip import SiglipVisionConfig
 

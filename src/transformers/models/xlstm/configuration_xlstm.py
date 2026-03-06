@@ -19,8 +19,7 @@ from dataclasses import dataclass
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import is_xlstm_available
-from ...utils import auto_docstring, is_xlstm_available, logging
+from ...utils import auto_docstring, is_xlstm_available
 
 
 if is_xlstm_available():
@@ -54,7 +53,6 @@ else:
         return int(((x + multiple_of - 1) // multiple_of) * multiple_of)
 
     external_xlstm = False
-
 
 
 @strict(accept_kwargs=True)

@@ -30,7 +30,6 @@ from ..dinov2.modeling_dinov2 import (
 from ..vit.modeling_vit import ViTAttention, ViTPatchEmbeddings, ViTPreTrainedModel
 
 
-
 @auto_docstring(checkpoint="facebook/pixio-huge")
 class PixioConfig(Dinov2Config):
     r"""

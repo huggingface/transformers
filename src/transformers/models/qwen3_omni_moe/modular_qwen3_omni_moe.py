@@ -274,6 +274,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
     num_code_groups (`int`, *optional*, defaults to 32):
         Number of codebook groups used in the predicted acoustic token sequence, corresponding to multi-codebook VQ representation.
     """
+
     vocab_size: int = 2048
     hidden_size: int = 1024
     intermediate_size: int = 3072

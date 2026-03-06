@@ -19,10 +19,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ..auto.configuration_auto import AutoConfig
-
-
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 

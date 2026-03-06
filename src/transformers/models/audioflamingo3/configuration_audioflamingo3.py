@@ -14,19 +14,18 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from ...utils import auto_docstring, logging
 
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-class AudioFlamingo3EncoderConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="nvidia/audio-flamingo-3-hf")
-class AudioFlamingo3EncoderConfig(PretrainedConfig):
+class AudioFlamingo3EncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
         The maximum sequence length of log-mel filter-bank features that this model might ever be used with.

@@ -15,12 +15,11 @@
 
 from dataclasses import dataclass
 from typing import Literal
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
 
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
 @strict(accept_kwargs=True)
@@ -67,6 +66,7 @@ class MptAttentionConfig(PreTrainedConfig):
     attn_uses_sequence_id: bool = False
     alibi: bool = True
     alibi_bias_max: int = 8
+
 
 @strict(accept_kwargs=True)
 @dataclass(repr=False)

@@ -31,6 +31,7 @@ logger = logging.get_logger(__name__)
 class DiaEncoderConfig(PreTrainedConfig):
     model_type = "dia_encoder"
 
+
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
 class DiaDecoderConfig(PreTrainedConfig):
     r"""

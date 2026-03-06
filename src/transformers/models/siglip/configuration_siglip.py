@@ -103,12 +103,9 @@ class SiglipVisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
 
 
-<<<<<<< HEAD
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-=======
 @auto_docstring(checkpoint="google/siglip-base-patch16-224")
->>>>>>> upstream/main
 class SiglipConfig(PreTrainedConfig):
     r"""
     Example:

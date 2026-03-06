@@ -14,13 +14,11 @@
 """LayoutLMv2 model configuration"""
 
 from dataclasses import dataclass
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, is_detectron2_available, logging
 
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import is_detectron2_available
+from ...utils import auto_docstring, is_detectron2_available
 
 
 # soft dependency

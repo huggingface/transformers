@@ -19,13 +19,12 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...utils import auto_docstring
 
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 from ...utils.type_validators import interval
 
 

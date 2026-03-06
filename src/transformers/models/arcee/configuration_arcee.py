@@ -21,6 +21,7 @@
 from dataclasses import dataclass
 
 from huggingface_hub.dataclasses import strict
+
 from transformers.utils import auto_docstring
 
 from ...configuration_utils import PreTrainedConfig

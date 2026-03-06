@@ -14,12 +14,11 @@
 """Audio Spectogram Transformer (AST) model configuration"""
 
 from dataclasses import dataclass
-from typing import Any
 
 from huggingface_hub.dataclasses import strict
 
-from ...utils import auto_docstring, logging
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
 @strict(accept_kwargs=True)

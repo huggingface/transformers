@@ -25,8 +25,6 @@ from typing import Any
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import is_timm_available, logging, requires_backends
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, is_timm_available, logging, requires_backends
 
 

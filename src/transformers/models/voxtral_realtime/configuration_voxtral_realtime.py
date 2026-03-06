@@ -18,7 +18,6 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..mistral.configuration_mistral import MistralConfig

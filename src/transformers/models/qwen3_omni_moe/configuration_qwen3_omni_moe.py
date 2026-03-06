@@ -245,6 +245,7 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
 @auto_docstring(checkpoint="Qwen/Qwen3OmniMoeTalkerCodePredictor-8B")

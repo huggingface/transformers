@@ -177,6 +177,7 @@ class FlavaImageCodebookConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```
     """
+
     num_groups: int = 4
     input_channels: int = 3
     num_blocks_per_group: int = 2

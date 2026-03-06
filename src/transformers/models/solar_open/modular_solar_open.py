@@ -15,8 +15,6 @@
 
 from torch import nn
 
-from ...utils import logging
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (

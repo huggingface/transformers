@@ -19,8 +19,8 @@ from typing import Union
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils.type_validators import interval, is_divisible_by
 from ...utils import auto_docstring, logging
+from ...utils.type_validators import interval, is_divisible_by
 
 
 logger = logging.get_logger(__name__)

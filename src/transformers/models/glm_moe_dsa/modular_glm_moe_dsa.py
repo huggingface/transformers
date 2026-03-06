@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
-from huggingface_hub.dataclasses import strict
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
@@ -34,7 +34,6 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
 )
-from ..glm4_moe_lite.configuration_glm4_moe_lite import Glm4MoeLiteConfig
 from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     Glm4MoeLiteDecoderLayer,
     eager_attention_forward,
@@ -73,6 +72,7 @@ def apply_rotary_pos_emb(
     # This matches llama's apply_rotary_pos_emb logic.
     x_rotated = (x * cos) + (rotate_half(x) * sin)
     return x_rotated
+
 
 @strict(accept_kwargs=True)
 @dataclass(repr=False)

@@ -14,14 +14,12 @@
 """VitPose backbone configuration"""
 
 from dataclasses import dataclass
-from ...backbone_utils import BackboneConfigMixin
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
 
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
 @strict(accept_kwargs=True)

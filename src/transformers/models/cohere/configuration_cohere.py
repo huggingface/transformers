@@ -19,13 +19,12 @@
 """Cohere model configuration"""
 
 from dataclasses import dataclass
-from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
 
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
 @strict(accept_kwargs=True)

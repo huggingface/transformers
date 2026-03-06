@@ -14,12 +14,11 @@
 """PatchTST model configuration"""
 
 from dataclasses import dataclass
-from transformers.configuration_utils import PreTrainedConfig
-from transformers.utils import auto_docstring, logging
 
 from huggingface_hub.dataclasses import strict
 
 from transformers.configuration_utils import PreTrainedConfig
+from transformers.utils import auto_docstring
 
 
 @strict(accept_kwargs=True)
