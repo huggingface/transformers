@@ -5,14 +5,14 @@
 #                          modular_pp_lcnet.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...utils.output_capturing import capture_outputs
 from .configuration_pp_lcnet import PPLCNetConfig
 
 
@@ -193,7 +193,7 @@ class PPLCNetSEModule(nn.Module):
         return hidden_state
 
 
-def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
+def make_divisible(value: int, divisor: int = 8, min_value: int | None = None) -> int:
     """
     Ensure that all layers have a channel count that is divisible by `divisor`.
     """
@@ -244,11 +244,15 @@ class PPLCNetModelOutput(ModelOutput):
         hidden_states (Optional[Tuple[FloatTensor, ...]]): Tuple of hidden states at each layer. Defaults to None.
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    logits: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class PPLCNetPreTrainedModel(PreTrainedModel):
     """
     An abstract base class for PP-LCNet models that inherits from Hugging Face PreTrainedModel.
@@ -268,18 +272,16 @@ class PPLCNetPreTrainedModel(PreTrainedModel):
             nn.init.kaiming_normal_(module.convolution.weight)
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class PPLCNetModel(PPLCNetPreTrainedModel):
     """
     PP-LCNet base model: lightweight CNN backbone for image classification tasks.
     """
 
     def __init__(self, config: PPLCNetConfig):
-        """
-        Initialize the PPLCNetModel with given configuration.
-
-        Args:
-            config (PPLCNetConfig): Configuration class for PP-LCNet.
-        """
         super().__init__(config)
 
         if config.stride_list is None:
@@ -331,38 +333,28 @@ class PPLCNetModel(PPLCNetPreTrainedModel):
 
         self.post_init()
 
+    @capture_outputs
+    @can_return_tuple
     def forward(
         self,
         hidden_state: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], PPLCNetModelOutput]:
+    ) -> tuple[torch.FloatTensor] | PPLCNetModelOutput:
         """
         Forward propagation of PP-LCNet base model.
 
         Args:
             hidden_state (FloatTensor): Input image tensor with shape [B, 3, H, W].
-            output_hidden_states (Optional[bool]): Whether to return hidden states at each layer. Defaults to None.
-            return_dict (Optional[bool]): Whether to return output as a dataclass. Defaults to None.
 
         Returns:
             Union[tuple[FloatTensor], PPLCNetModelOutput]: Model outputs.
         """
-        hidden_states = () if output_hidden_states else None
-
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
         hidden_state = self.convolution(hidden_state)
 
         for block in self.blocks:
-            if output_hidden_states:
-                hidden_states = hidden_states + (hidden_state,)
             hidden_state = block(hidden_state)
 
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-        last_hidden_state = hidden_states
+        last_hidden_state = hidden_state
 
         hidden_state = self.avg_pool(hidden_state)
         if self.last_convolution is not None:
@@ -374,17 +366,9 @@ class PPLCNetModel(PPLCNetPreTrainedModel):
 
         hidden_state = self.out_activation(hidden_state)
 
-        if not return_dict:
-            output = (last_hidden_state,)
-            if output_hidden_states:
-                output += (hidden_states,)
-            output += (hidden_state,)
-            return output
-
         return PPLCNetModelOutput(
             logits=hidden_state,
             last_hidden_state=last_hidden_state,
-            hidden_states=hidden_states if output_hidden_states else None,
         )
 
 
@@ -399,10 +383,14 @@ class PPLCNetForImageClassificationOutput(BaseModelOutputWithNoAttention):
         hidden_states (Optional[Tuple[FloatTensor, ...]]): Tuple of hidden states at each layer. Defaults to None.
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    shape: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor | None = None
+    shape: torch.FloatTensor | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
     """
     PP-LCNet model for image classification tasks.
@@ -412,56 +400,33 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
 
     def __init__(self, config: PPLCNetConfig):
-        """
-        Initialize the PPLCNetForImageClassification model.
-
-        Args:
-            config (PPLCNetConfig): Configuration class for PP-LCNet.
-        """
         super().__init__(config)
         self.model = PPLCNetModel(config)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[list[dict]] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], PPLCNetForImageClassificationOutput]:
+    ) -> tuple[torch.FloatTensor] | PPLCNetForImageClassificationOutput:
         """
         Forward propagation of PP-LCNet image classification model.
 
         Args:
             pixel_values (FloatTensor): Input image tensor with shape [B, 3, H, W].
             labels (Optional[List[Dict[str, Any]]]): Ground truth labels for loss calculation. Defaults to None.
-            output_hidden_states (Optional[bool]): Whether to return hidden states at each layer. Defaults to None.
-            return_dict (Optional[bool]): Whether to return output as a dataclass. Defaults to None.
 
         Returns:
             Union[tuple[FloatTensor], PPLCNetForImageClassificationOutput]: Classification outputs.
         """
 
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        outputs = self.model(pixel_values)
 
-        outputs = self.model(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        if not return_dict:
-            output = (outputs[0],)
-            if output_hidden_states:
-                output += (outputs[1], outputs[2])
-            else:
-                output += (outputs[1],)
-
-            return output
         return PPLCNetForImageClassificationOutput(
             logits=outputs.logits,
             last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
         )
 
 

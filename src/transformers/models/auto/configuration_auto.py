@@ -354,12 +354,9 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("plbart", "PLBartConfig"),
         ("poolformer", "PoolFormerConfig"),
         ("pop2piano", "Pop2PianoConfig"),
-<<<<<<< HEAD
         ("pp_lcnet", "PPLCNetConfig"),
-=======
         ("pp_doclayout_v2", "PPDocLayoutV2Config"),
         ("pp_doclayout_v3", "PPDocLayoutV3Config"),
->>>>>>> official/main
         ("prompt_depth_anything", "PromptDepthAnythingConfig"),
         ("prophetnet", "ProphetNetConfig"),
         ("pvt", "PvtConfig"),
