@@ -31,6 +31,8 @@ from ..core_model_loading import (
     Transpose,
     WeightConverter,
     WeightRenaming,
+    dot_natural_key,
+    rename_source_key,
 )
 from ..utils import (
     CONFIG_NAME,
@@ -213,11 +215,12 @@ class PermuteDims(ConversionOps):
         return f"{self.__class__.__name__}(dims={self.dims})"
 
 
-def _build_peft_weight_mapping(
+def build_peft_weight_mapping(
     weight_conversions: list[WeightConverter | WeightRenaming] | None, adapter_name: str, peft_config=None
 ) -> list[WeightConverter | WeightRenaming]:
     # We iterate over all the operations of the original model and simply edit them to apply to the PEFT adapter when
     # appropriate.
+    # Note: This function is used in PEFT, changing it requires coordination.
     if not weight_conversions:
         return []
 
@@ -332,6 +335,7 @@ def _build_peft_weight_mapping(
 # The main reason we have to explicit this is because the conversion mapping
 # has the full layer name, while the config do not. We coould regex match but
 # this is more explicit and less error prone.
+# Note: this is used in PEFT, changing it requires coordiation.
 _MOE_TARGET_MODULE_MAPPING: dict[str, dict[str, str]] = {
     "mixtral": {
         "gate": "gate.weight",
@@ -347,6 +351,7 @@ _MOE_TARGET_MODULE_MAPPING: dict[str, dict[str, str]] = {
     },
 }
 
+# Note: this is used in PEFT, changing it requires coordiation.
 _MOE_FUSED_TARGETS: dict[str, dict[str, set[str]]] = {
     # use lists for dict values to ensure stable order
     "mixtral": {"gate_up_proj": ["w1", "w3"]},
@@ -559,7 +564,7 @@ class PeftAdapterMixin:
         if hasattr(peft_config, "inference_mode"):
             peft_config.inference_mode = not is_trainable
 
-        peft_weight_conversions = _build_peft_weight_mapping(weight_conversions, adapter_name, peft_config=peft_config)
+        peft_weight_conversions = build_peft_weight_mapping(weight_conversions, adapter_name, peft_config=peft_config)
 
         patch_moe_parameter_targeting(model=self, peft_config=peft_config)
 
@@ -1092,3 +1097,55 @@ def convert_peft_config_for_transformers(peft_config, model: torch.nn.Module, co
         peft_config = _convert_peft_config_moe(peft_config, model_type)
 
     return peft_config
+
+
+def apply_peft_weight_mapping_to_state_dict(
+    model: torch.nn.Module,
+    state_dict: dict[str, torch.Tensor],
+    weight_mapping: list[WeightConverter | WeightRenaming],
+) -> dict[str, torch.Tensor]:
+    """
+    Function that exposes the weight conversion to the state dict. This is required to be called within PEFT to apply
+    weight conversion there without having to duplicate the whole weight conversion logic.
+    """
+    renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
+    converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
+    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+
+    param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
+
+    # 1) Rebuild the same "collect by target key + source pattern" structure used by core model loading.
+    # We need this because some conversions are many-to-one (e.g. w1/w3 -> gate_up_proj) and must see all inputs.
+    for original_key, tensor in sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0])):
+        renamed_key, source_pattern = rename_source_key(
+            original_key,
+            renamings,
+            converters,
+            prefix=None,
+            meta_state_dict=None,
+        )
+
+        if source_pattern is not None:
+            # Each destination key needs its own converter instance because converters keep internal collected state.
+            new_converter = copy.deepcopy(pattern_to_converter[source_pattern])
+            mapping = param_name_to_load.setdefault(renamed_key, new_converter)
+        else:
+            mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
+            source_pattern = original_key
+
+        mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
+
+    converted_state_dict = {}
+    # 2) Materialize conversion ops (merge/concat/block-diag/permute/...) and emit final tensors.
+    for first_param_name, mapping in param_name_to_load.items():
+        realized_value = mapping.convert(
+            first_param_name,
+            model=model,
+            config=model.config,
+            hf_quantizer=None,
+            loading_info=None,
+        )
+        for target_name, param in realized_value.items():
+            converted_state_dict[target_name] = param[0] if isinstance(param, list) else param
+
+    return converted_state_dict
