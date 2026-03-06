@@ -4129,7 +4129,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
     indent_level = get_indent_level(cls)
     model_name_lowercase = get_model_name(cls)
     model_name_title = " ".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
-    model_base_class = f"{model_name_title.title()}Model" if model_name_lowercase else None
+    model_base_class = f"{model_name_title.title()}Model" if model_name_title is not None else None
     if model_name_lowercase is not None:
         try:
             model_base_class = getattr(

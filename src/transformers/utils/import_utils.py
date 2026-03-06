@@ -475,10 +475,10 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
         try:
             import torch_neuronx  # noqa: F401
 
-            # Will raise a RuntimeError if no Neuron is found
-            _ = torch.neuron.device_count()
-            return torch.neuron.is_available()
-        except RuntimeError:
+            # Will raise a RuntimeError if no Neuron is found, or AttributeError if torch.neuron is not available
+            _ = getattr(torch, "neuron").device_count()
+            return getattr(torch, "neuron").is_available()
+        except (AttributeError, RuntimeError):
             return False
 
     return hasattr(torch, "neuron") and torch.neuron.is_available()
@@ -505,7 +505,7 @@ def is_torch_bf16_gpu_available() -> bool:
     if is_torch_musa_available():
         return torch.musa.is_bf16_supported() if hasattr(torch, "musa") else False
     if is_torch_neuron_available():
-        return torch.neuron.is_bf16_supported()
+        return getattr(torch, "neuron").is_bf16_supported()
     return False
 
 
