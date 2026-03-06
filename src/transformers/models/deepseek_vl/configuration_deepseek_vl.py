@@ -20,33 +20,16 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="deepseek-community/deepseek-vl-1.3b-chat")
 class DeepseekVLConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DeepseekVLModel`]. It is used to instantiate a
-    DeepseekVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the DeepseekVL
-    [deepseek-community/deepseek-vl-1.3b-chat](https://huggingface.co/deepseek-community/deepseek-vl-1.3b-chat) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SiglipVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 100015):
-            The index representing image tokens in the model's token vocabulary.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
-
     Example:
 
     ```python

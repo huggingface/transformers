@@ -15,55 +15,20 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="EleutherAI/gpt-neox-japanese-2.7b")
 class GPTNeoXJapaneseConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GPTNeoXModelJapanese`]. It is used to instantiate
-    a GPTNeoX model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GPTNeoXJapanese
-    [abeja/gpt-neox-japanese-2.7b](https://huggingface.co/abeja/gpt-neox-japanese-2.7b) architecture.
+    intermediate_multiple_size (`int`, *optional*, defaults to 4):
+        Dimension of the "intermediate" layer in the Transformer encoder is calculated by hidden_size *
+        intermediate_multiple_size.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information. Default configs is set as 2.7B model
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the GPTNeoXJapanese model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`GPTNeoXJapanese`].
-        hidden_size (`int`, *optional*, defaults to 2560):
-            Dimension of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_multiple_size (`int`, *optional*, defaults to 4):
-            Dimension of the "intermediate" layer in the Transformer encoder is calculated by hidden_size *
-            intermediate_multiple_size.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention.
-        hidden_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the hidden layer.
-        Example:
+    Example:
 
     ```python
     >>> from transformers import GPTNeoXJapaneseConfig, GPTNeoXJapaneseModel

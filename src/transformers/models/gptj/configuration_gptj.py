@@ -14,52 +14,17 @@
 """GPT-J model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="EleutherAI/gpt-j-6B")
 class GPTJConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GPTJModel`]. It is used to instantiate a GPT-J
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the GPT-J
-    [EleutherAI/gpt-j-6B](https://huggingface.co/EleutherAI/gpt-j-6B) architecture. Configuration objects inherit from
-    [`PreTrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PreTrainedConfig`]
-    for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 50400):
-            Vocabulary size of the GPT-J model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GPTJModel`].
-        n_positions (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        n_embd (`int`, *optional*, defaults to 4096):
-            Dimensionality of the embeddings and hidden states.
-        n_layer (`int`, *optional*, defaults to 28):
-            Number of hidden layers in the Transformer encoder.
-        n_head (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        rotary_dim (`int`, *optional*, defaults to 64):
-            Number of dimensions in the embedding that Rotary Position Embedding is applied to.
-        n_inner (`int`, *optional*, defaults to None):
-            Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
-        activation_function (`str`, *optional*, defaults to `"gelu_new"`):
-            Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
-        resid_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        embd_pdrop (`int`, *optional*, defaults to 0.1):
-            The dropout ratio for the embeddings.
-        attn_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
-            The epsilon to use in the layer normalization layers.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
+    rotary_dim (`int`, *optional*, defaults to 64):
+        Number of dimensions in the embedding that Rotary Position Embedding is applied to.
 
     Example:
 
