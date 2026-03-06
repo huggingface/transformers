@@ -226,7 +226,7 @@ def _build_peft_weight_mapping(
             new_weight_conversions.append(orig_conversion)
             continue
 
-        if orig_conversion.target_patterns == ["mlp.experts.gate_up_proj"]:
+        if len(orig_conversion.target_patterns) == 1 and orig_conversion.target_patterns[0].endswith("gate_up_proj"):
             # gate_up_proj requires both merging the experts and concatenating for the fusion of w1 and w3
             for lora in ("lora_A", "lora_B"):  # TODO: lora_embedding_A and lora_embedding_B
                 # deal with operations
@@ -262,11 +262,11 @@ def _build_peft_weight_mapping(
                     target_patterns=new_target_patterns,
                     distributed_operation=orig_conversion.distributed_operation,
                     quantization_operation=orig_conversion.quantization_operation,
-                    operations=new_weight_conversions,
+                    operations=peft_weight_operations,
                 )
                 new_weight_conversions.append(new_conversion)
 
-        elif orig_conversion.target_patterns == ["mlp.experts.down_proj"]:
+        elif len(orig_conversion.target_patterns) == 1 and orig_conversion.target_patterns[0].endswith("down_proj"):
             # down_proj only requires merging of experts
             for lora in ("lora_A", "lora_B"):  # TODO: lora_embedding_A and lora_embedding_B
                 peft_weight_operations = []
@@ -301,7 +301,7 @@ def _build_peft_weight_mapping(
                     target_patterns=new_target_patterns,
                     distributed_operation=orig_conversion.distributed_operation,
                     quantization_operation=orig_conversion.quantization_operation,
-                    operations=new_weight_conversions,
+                    operations=peft_weight_operations,
                 )
                 new_weight_conversions.append(new_conversion)
 
@@ -954,7 +954,14 @@ def maybe_load_adapters(
     if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
         with open(_adapter_model_path, "r", encoding="utf-8") as f:
             _adapter_model_path = pretrained_model_name_or_path
-            pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
+            # Only override the model name/path if the current value doesn't point to a
+            # complete model with an embedded adapter so that local models with embedded
+            # adapters will load from the local base model rather than pull the base
+            # model named in the adapter's config from the hub.
+            if not os.path.exists(pretrained_model_name_or_path) or not os.path.exists(
+                os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
+            ):
+                pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
 
     return _adapter_model_path, pretrained_model_name_or_path, adapter_kwargs
 
