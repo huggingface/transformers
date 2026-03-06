@@ -1,11 +1,25 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import copy
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
 from ..utils.export_config import OnnxConfig
 from ..utils.import_utils import is_torch_available
 from .exporter_dynamo import DynamoExporter
-from .patch_utils import patch_torch_for_onnx_export
 from .utils import get_inputs_outputs_names, prepare_for_export
 
 
@@ -78,9 +92,6 @@ ONNX_EXTREMELY_INACCURATE_MODEL_TYPES: set[str] = {
 }
 
 
-ONNX_DISABLED_OPTIMIZATION_MODEL_TYPES: set[str] = {}
-
-
 class OnnxExporter(DynamoExporter):
     export_config: OnnxConfig
 
@@ -106,13 +117,6 @@ class OnnxExporter(DynamoExporter):
                 f"Exporting a model of type '{model.config.model_type}' results in an ONNX model with extremely inaccurate outputs."
             )
 
-        optimize = self.export_config.optimize
-        if model.config.model_type in ONNX_DISABLED_OPTIMIZATION_MODEL_TYPES and optimize:
-            logger.warning(
-                f"Disabling optimization for model type '{model.config.model_type}' as it results in an invalid ONNX model."
-            )
-            optimize = False
-
         # we use a copy to avoid side effects
         inputs = copy.deepcopy(sample_inputs)
         model, inputs, outputs = prepare_for_export(model, inputs)
@@ -130,7 +134,7 @@ class OnnxExporter(DynamoExporter):
                 opset_version=self.export_config.opset_version,
                 external_data=self.export_config.external_data,
                 export_params=self.export_config.export_params,
-                optimize=optimize,
+                optimize=self.export_config.optimize,
             )
 
         # Verify that the exported model has the expected output names
@@ -143,3 +147,70 @@ class OnnxExporter(DynamoExporter):
             )
 
         return onnx_program
+
+
+@contextmanager
+def patch_torch_for_onnx_export():
+    # Patch torch.where to handle dtype mismatches between x and y when it's called during export
+    # Patch torch.unsqueeze to support complex tensors during export
+    # Patch torch.nn.functional.scaled_dot_product_attention to handle equal q/kv heads (MHA) when enable_gqa=True
+    # Patch torch.nn.RMSNorm.forward to bypass aten._fused_rms_norm (no ONNX op) when elementwise_affine=False
+    original_torch_where = torch.where
+    original_tensor_where = torch.Tensor.where
+    original_torch_unsqueeze = torch.unsqueeze
+    original_tensor_unsqueeze = torch.Tensor.unsqueeze
+    original_scaled_dot_product_attention = torch.nn.functional.scaled_dot_product_attention
+    original_rms_norm_forward = torch.nn.RMSNorm.forward
+
+    def _torch_where(condition, x=None, y=None):
+        if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor) and x.dtype != y.dtype:
+            y = y.to(x.dtype)
+        elif isinstance(x, torch.Tensor) and isinstance(y, (int, float, bool)):
+            y = torch.tensor(y, dtype=x.dtype, device=x.device)
+        elif isinstance(y, torch.Tensor) and isinstance(x, (int, float, bool)):
+            x = torch.tensor(x, dtype=y.dtype, device=y.device)
+        if x is None and y is None:
+            return original_torch_where(condition)
+        elif y is None:
+            return original_torch_where(condition, x)
+        else:
+            return original_torch_where(condition, x, y)
+
+    def _tensor_where(self, condition, other):
+        return _torch_where(condition, self, other)
+
+    def _unsqueeze(self_or_input, dim):
+        if torch.is_complex(self_or_input):
+            real = original_torch_unsqueeze(self_or_input.real, dim)
+            imag = original_torch_unsqueeze(self_or_input.imag, dim)
+            return torch.complex(real, imag)
+        else:
+            return original_torch_unsqueeze(self_or_input, dim)
+
+    def _rms_norm_forward(self, x):
+        if not self.elementwise_affine:
+            variance = x.to(torch.float32).pow(2).mean(-1, keepdim=True)
+            return (x * torch.rsqrt(variance + self.eps)).to(x.dtype)
+        return original_rms_norm_forward(self, x)
+
+    def _scaled_dot_product_attention(query, key, *args, enable_gqa: bool = False, **kwargs):
+        if enable_gqa and query.shape[1] == key.shape[1]:
+            enable_gqa = False
+        return original_scaled_dot_product_attention(query, key, *args, enable_gqa=enable_gqa, **kwargs)
+
+    torch.where = _torch_where
+    torch.Tensor.where = _tensor_where
+    torch.unsqueeze = _unsqueeze
+    torch.Tensor.unsqueeze = _unsqueeze
+    torch.nn.functional.scaled_dot_product_attention = _scaled_dot_product_attention
+    torch.nn.RMSNorm.forward = _rms_norm_forward
+
+    try:
+        yield
+    finally:
+        torch.where = original_torch_where
+        torch.Tensor.where = original_tensor_where
+        torch.unsqueeze = original_torch_unsqueeze
+        torch.Tensor.unsqueeze = original_tensor_unsqueeze
+        torch.nn.functional.scaled_dot_product_attention = original_scaled_dot_product_attention
+        torch.nn.RMSNorm.forward = original_rms_norm_forward

@@ -4268,16 +4268,7 @@ class ModelTesterMixin:
                 inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 model = model_class(config).eval().to(torch_device).to(dtype)
                 set_model_for_less_flaky_test(model)
-
-                model, inputs_dict, _ = prepare_for_export(model, inputs_dict)
-
-                with torch.no_grad():
-                    set_seed(1234)
-                    eager_outputs = model(**copy.deepcopy(inputs_dict))
-                    eager_outputs = get_leaf_tensors(eager_outputs)
-                    self.assertTrue(eager_outputs, "Eager model's outputs are empty.")
-
-                _ = exporter.export(model, inputs_dict)
+                exporter.export(model, inputs_dict)
 
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):

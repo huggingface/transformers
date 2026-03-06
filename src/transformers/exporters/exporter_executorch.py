@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 # Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
@@ -48,8 +47,6 @@ class ExecutorchExporter(DynamoExporter):
             The exported model in ExecuTorch format.
         """
 
-        exported_program: ExportedProgram = super().export(model, sample_inputs)
-
         if self.export_config.backend == "xnnpack":
             from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
 
@@ -63,6 +60,7 @@ class ExecutorchExporter(DynamoExporter):
         else:
             raise ValueError(f"Unsupported backend {self.export_config.backend} for ExecuTorch export")
 
+        exported_program: ExportedProgram = super().export(model, sample_inputs)
         executorch_programs_manager: ExecutorchProgramManager = to_edge_transform_and_lower(
             exported_program, partitioner=partitioner
         ).to_executorch()
