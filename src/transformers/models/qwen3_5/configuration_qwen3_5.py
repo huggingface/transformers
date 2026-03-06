@@ -19,79 +19,22 @@
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 class Qwen3_5TextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3_5TextModel`]. It is used to instantiate a
-    Qwen3_5 model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of
-    Qwen3.5-9B-Instruct [Qwen/Qwen3.5-9B-Instruct](https://huggingface.co/Qwen/Qwen3.5-9B-Instruct).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 248320):
-            Vocabulary size of the model. Defines the number of different tokens that can be represented by the
-            `inputs_ids`.
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 12288):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 4):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
-        hidden_act (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        head_dim (`int`, *optional*, defaults to 256):
-            Projection weights dimension in multi-head attention.
-        linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
-            Kernel size of the convolution used in linear attention layers.
-        linear_key_head_dim (`int`, *optional*, defaults to 128):
-            Dimension of each key head in linear attention.
-        linear_value_head_dim (`int`, *optional*, defaults to 128):
-            Dimension of each value head in linear attention.
-        linear_num_key_heads (`int`, *optional*, defaults to 16):
-            Number of key heads used in linear attention layers.
-        linear_num_value_heads (`int`, *optional*, defaults to 32):
-            Number of value heads used in linear attention layers.
-        layer_types (`list[str]`, *optional*):
-            Types of each layer (attention or linear).
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        bos_token_id (`int`, *optional*):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*):
-            End of stream token id.
+    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
+        Kernel size of the convolution used in linear attention layers.
+    linear_key_head_dim (`int`, *optional*, defaults to 128):
+        Dimension of each key head in linear attention.
+    linear_value_head_dim (`int`, *optional*, defaults to 128):
+        Dimension of each value head in linear attention.
+    linear_num_key_heads (`int`, *optional*, defaults to 16):
+        Number of key heads used in linear attention layers.
+    linear_num_value_heads (`int`, *optional*, defaults to 32):
+        Number of value heads used in linear attention layers.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -197,7 +140,17 @@ class Qwen3_5TextConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 class Qwen3_5VisionConfig(PreTrainedConfig):
+    r"""
+    num_position_embeddings (`int`, *optional*, defaults to 2304):
+        The maximum sequence length that this model might ever be used with
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[8, 16, 24]`):
+        Indexed of layers for deepstack embeddings.
+    """
+
     model_type = "qwen3_5"
     base_config_key = "vision_config"
 
@@ -233,32 +186,10 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
+@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
 class Qwen3_5Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen3_5Model`]. It is used to instantiate a
-    Qwen3.5 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
-    Qwen3.5-9B-Instruct [Qwen/Qwen3.5-9B-Instruct](https://huggingface.co/Qwen/Qwen3.5-9B-Instruct).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Qwen3_5TextConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Qwen3_5VisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 248056):
-            The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 248057):
-            The video token index to encode the image prompt.
-        vision_start_token_id (`int`, *optional*, defaults to 248053):
-            The start token index to encode the image prompt.
-        vision_end_token_id (`int`, *optional*, defaults to 248054):
-            The end token index to encode the image prompt.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie the word embeddings.
+    Example:
 
     ```python
     >>> from transformers import Qwen3_5ForConditionalGeneration, Qwen3_5Config

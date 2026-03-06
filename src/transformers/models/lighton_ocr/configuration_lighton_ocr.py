@@ -20,30 +20,13 @@
 from typing import Any
 
 from ...configuration_utils import PretrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="lightonocr-hf/lightonocr-9b")
 class LightOnOcrConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LightOnOcrForConditionalGeneration`]. It is used to instantiate a
-    LightOnOcr model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information. Instantiating a configuration with the defaults will yield
-    a similar configuration to that of the LightOnOcr [lightonocr-hf/lightonocr-9b](https://huggingface.co/lightonocr-hf/lightonocr-9b) architecture.
-
-    Args:
-        spatial_merge_size (`int`, *optional*, defaults to 2):
-            The size of spatial merging for image patches.
-        image_token_id (`int`, *optional*, defaults to 151655):
-            The id of the image token in the vocabulary.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
-        vision_config (`dict` or `LightOnOcrVisionConfig`, *optional*):
-            Custom vision configuration or dictionary with vision configuration values.
-        text_config (`dict` or `LightOnOcrTextConfig`, *optional*):
-            Custom text configuration or dictionary with text configuration values.
-
     Example:
 
     ```python

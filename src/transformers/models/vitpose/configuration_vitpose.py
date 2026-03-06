@@ -15,33 +15,20 @@
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="usyd-community/vitpose-base-simple")
 class VitPoseConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VitPoseForPoseEstimation`]. It is used to instantiate a
-    VitPose model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the VitPose
-    [usyd-community/vitpose-base-simple](https://huggingface.co/usyd-community/vitpose-base-simple) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `VitPoseBackboneConfig()`):
-            The configuration of the backbone model. Currently, only `backbone_config` with `vitpose_backbone` as `model_type` is supported.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        scale_factor (`int`, *optional*, defaults to 4):
-            Factor to upscale the feature maps coming from the ViT backbone.
-        use_simple_decoder (`bool`, *optional*, defaults to `True`):
-            Whether to use a `VitPoseSimpleDecoder` to decode the feature maps from the backbone into heatmaps. Otherwise it uses `VitPoseClassicDecoder`.
-
+    scale_factor (`int`, *optional*, defaults to 4):
+        Factor to upscale the feature maps coming from the ViT backbone.
+    use_simple_decoder (`bool`, *optional*, defaults to `True`):
+        Whether to use a `VitPoseSimpleDecoder` to decode the feature maps from the backbone into heatmaps. Otherwise it uses `VitPoseClassicDecoder`.
 
     Example:
 

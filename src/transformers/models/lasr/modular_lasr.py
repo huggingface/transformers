@@ -147,65 +147,27 @@ class LasrProcessor(ParakeetProcessor):
     pass
 
 
+@auto_docstring(checkpoint="TODO")
 class LasrEncoderConfig(ParakeetEncoderConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LasrEncoder`]. It is used to instantiate a
-    `LasrEncoder` model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-            hidden_size (`int`, *optional*, defaults to 512):
-                Dimension of the layers and the hidden states.
-            num_hidden_layers (`int`, *optional*, defaults to 17):
-                Number of hidden layers in the Transformer encoder.
-            num_attention_heads (`int`, *optional*, defaults to 8):
-                Number of attention heads for each attention layer in the Transformer encoder.
-            intermediate_size (`int`, *optional*, defaults to 2048):
-                Dimension of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-                The non-linear activation function (function or string) in the encoder and pooler.
-            attention_bias (`bool`, *optional*, defaults to `False`):
-                Whether to use bias in the attention layers.
-            convolution_bias (`bool`, *optional*, defaults to `False`):
-                Whether to use bias in convolutions of the conformer's convolution module.
-            conv_kernel_size (`int`, *optional*, defaults to 32):
-                The kernel size of the convolution layers in the Conformer block.
-            subsampling_conv_channels (`int`, *optional*, defaults to 256):
-                The number of channels in the subsampling convolution layers.
-            subsampling_conv_kernel_size (`int`, *optional*, defaults to 5):
-                The kernel size of the subsampling convolution layers.
-            subsampling_conv_stride (`int`, *optional*, defaults to 2):
-                The stride of the subsampling convolution layers.
-            num_mel_bins (`int`, *optional*, defaults to 128):
-                Number of mel features.
-            dropout (`float`, *optional*, defaults to 0.1):
-                The dropout ratio for all fully connected layers in the embeddings, encoder, and pooler.
-            dropout_positions (`float`, *optional*, defaults to 0.0):
-                The dropout ratio for the positions in the input sequence.
-            layerdrop (`float`, *optional*, defaults to 0.1):
-                The dropout ratio for the layers in the encoder.
-            activation_dropout (`float`, *optional*, defaults to 0.1):
-                The dropout ratio for activations inside the fully connected layer.
-            attention_dropout (`float`, *optional*, defaults to 0.1):
-                The dropout ratio for the attention layers.
-            max_position_embeddings (`int`, *optional*, defaults to 10000):
-                The maximum sequence length that this model might ever be used with.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-                The epsilon used by the layer normalization layers.
-            feed_forward_residual_weights (`tuple[float, float]`, *optional*, defaults to `[1.5, 0.5]`):
-                The residual weights for the feed forward layers.
-            conv_residual_weights (`tuple[float, float]`, *optional*, defaults to `[2.0, 1.0]`):
-                The residual weights for the convolution layers.
-            batch_norm_momentum (`float`, *optional*, defaults to 0.01):
-                The momentum for the batch normalization layers.
-            rope_parameters (`RopeParameters`, *optional*):
-                Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-                a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-                with longer `max_position_embeddings`.
+    convolution_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in convolutions of the conformer's convolution module.
+    conv_kernel_size (`int`, *optional*, defaults to 32):
+        The kernel size of the convolution layers in the Conformer block.
+    subsampling_conv_channels (`int`, *optional*, defaults to 256):
+        The number of channels in the subsampling convolution layers.
+    subsampling_conv_kernel_size (`int`, *optional*, defaults to 5):
+        The kernel size of the subsampling convolution layers.
+    subsampling_conv_stride (`int`, *optional*, defaults to 2):
+        The stride of the subsampling convolution layers.
+    dropout_positions (`float`, *optional*, defaults to 0.0):
+        The dropout ratio for the positions in the input sequence.
+    feed_forward_residual_weights (`tuple[float, float]`, *optional*, defaults to `[1.5, 0.5]`):
+        The residual weights for the feed forward layers.
+    conv_residual_weights (`tuple[float, float]`, *optional*, defaults to `[2.0, 1.0]`):
+        The residual weights for the convolution layers.
+    batch_norm_momentum (`float`, *optional*, defaults to 0.01):
+        The momentum for the batch normalization layers
 
     Example:
         ```python
@@ -286,26 +248,17 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
         del self.scale_input
 
 
+@auto_docstring(checkpoint="TODO")
 class LasrCTCConfig(ParakeetCTCConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LasrForCTC`]. It is used to instantiate a
-    Lasr CTC model according to the specified arguments, defining the model architecture.
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-    Args:
-            vocab_size (`int`, *optional*, defaults to 512):
-                Vocabulary size of the model.
-            ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
-                Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-                instance of [`LasrForCTC`].
-            ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
-                Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
-                occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-                of [`LasrForCTC`].
-            encoder_config (`Union[dict, LasrEncoderConfig]`, *optional*):
-                The config object or dictionary of the encoder.
-            pad_token_id (`int`, *optional*, defaults to 0):
-                Padding token id. Also used as blank token id.
+        ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
+            Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
+            instance of [`LasrForCTC`].
+        ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
+            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+            of [`LasrForCTC`].
+
     Example:
         ```python
         >>> from transformers import LasrForCTC, LasrCTCConfig
