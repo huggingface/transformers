@@ -233,7 +233,7 @@ class PeAudioModel(PeAudioPreTrainedModel):
         loss = None
         if return_loss:
             labels = torch.eye(logits_audio_text.shape[0], device=logits_audio_text.device)
-            loss = -F.logsigmoid(labels * logits_audio_text).sum() / logits_audio_text.shape[0]
+            loss = -F.logsigmoid(labels * logits_audio_text).mean()
 
         return PeAudioOutput(
             logits_audio_text=logits_audio_text,
@@ -287,7 +287,7 @@ class PeAudioFrameLevelModel(PeAudioModel):
         loss = None
         if return_loss:
             labels = torch.eye(logits_audio_text.shape[0], device=logits_audio_text.device)
-            loss = -F.logsigmoid(labels * logits_audio_text).sum() / logits_audio_text.shape[0]
+            loss = -F.logsigmoid(labels * logits_audio_text).mean()
 
         return PeAudioOutput(
             logits_audio_text=logits_audio_text,

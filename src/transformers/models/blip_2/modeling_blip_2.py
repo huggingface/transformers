@@ -1360,7 +1360,9 @@ class Blip2Model(Blip2PreTrainedModel):
 
         return Blip2ForConditionalGenerationModelOutput(
             loss=loss,
-            logits=logits,
+            logits=logits.clone()
+            if logits is not None
+            else None,  # break ONNX alias with language_model_outputs.logits
             vision_outputs=vision_outputs,
             qformer_outputs=query_outputs,
             language_model_outputs=outputs,
@@ -1831,7 +1833,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
         return Blip2ForConditionalGenerationModelOutput(
             loss=loss,
-            logits=logits,
+            logits=logits.clone()
+            if logits is not None
+            else None,  # break ONNX alias with language_model_outputs.logits
             vision_outputs=vision_outputs,
             qformer_outputs=qformer_outputs,
             language_model_outputs=outputs,

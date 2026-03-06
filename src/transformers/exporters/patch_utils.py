@@ -28,11 +28,14 @@ if is_torch_available():
 # TODO: There should be some operator registration mechanism in torch.onnx to avoid this kind of monkey patching
 # Patch torch.where to handle dtype mismatches between x and y when it's called during export
 # Patch torch.unsqueeze to support complex tensors during export
+# Patch torch.nn.functional.scaled_dot_product_attention to handle equal q/kv heads (MHA) when enable_gqa=True
+
 
 original_torch_where = torch.where
 original_tensor_where = torch.Tensor.where
 original_torch_unsqueeze = torch.unsqueeze
 original_tensor_unsqueeze = torch.Tensor.unsqueeze
+original_scaled_dot_product_attention = torch.nn.functional.scaled_dot_product_attention
 
 
 def patched_torch_where(condition, x=None, y=None):
@@ -64,6 +67,15 @@ def patched_unsqueeze(self_or_input, dim):
         return original_torch_unsqueeze(self_or_input, dim)
 
 
+def patched_scaled_dot_product_attention(query, key, *args, enable_gqa: bool = False, **kwargs):
+    # When enable_gqa=True but q_num_heads == kv_num_heads, it is standard MHA, not GQA.
+    # The upstream ONNX SDPA function incorrectly asserts q_num_heads > kv_num_heads when
+    # enable_gqa=True, which fails for MHA models. Treat equal heads as MHA (enable_gqa=False).
+    if enable_gqa and query.shape[1] == key.shape[1]:
+        enable_gqa = False
+    return original_scaled_dot_product_attention(query, key, *args, enable_gqa=enable_gqa, **kwargs)
+
+
 @contextmanager
 def patch_torch_for_onnx_export():
     torch.where = patched_torch_where
@@ -71,6 +83,8 @@ def patch_torch_for_onnx_export():
 
     torch.unsqueeze = patched_unsqueeze
     torch.Tensor.unsqueeze = patched_unsqueeze
+
+    torch.nn.functional.scaled_dot_product_attention = patched_scaled_dot_product_attention
 
     try:
         yield
@@ -80,3 +94,5 @@ def patch_torch_for_onnx_export():
 
         torch.unsqueeze = original_torch_unsqueeze
         torch.Tensor.unsqueeze = original_tensor_unsqueeze
+
+        torch.nn.functional.scaled_dot_product_attention = original_scaled_dot_product_attention

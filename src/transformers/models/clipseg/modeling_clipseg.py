@@ -1344,7 +1344,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
 
         return CLIPSegImageSegmentationOutput(
             loss=loss,
-            logits=logits,
+            logits=logits.clone(),  # break ONNX output alias with decoder_output.logits
             conditional_embeddings=conditional_embeddings,
             pooled_output=pooled_output,
             vision_model_output=vision_outputs,

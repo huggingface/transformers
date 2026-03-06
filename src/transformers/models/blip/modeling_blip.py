@@ -861,7 +861,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
         return BlipForConditionalGenerationModelOutput(
             loss=outputs.loss,
             logits=outputs.logits,
-            image_embeds=image_embeds,
+            image_embeds=image_embeds.clone(),  # break ONNX output alias with last_hidden_state
             last_hidden_state=vision_outputs.last_hidden_state,
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
@@ -1074,7 +1074,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
 
         return BlipTextVisionModelOutput(
             loss=decoder_loss,
-            image_embeds=image_embeds,
+            image_embeds=image_embeds.clone(),  # break ONNX output alias with last_hidden_state
             last_hidden_state=vision_outputs.last_hidden_state,
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,

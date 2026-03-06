@@ -2309,7 +2309,7 @@ def _generate_speech(
     if not return_output_lengths:
         spectrogram = spectrograms[0] if bsz == 1 else torch.nn.utils.rnn.pad_sequence(spectrograms, batch_first=True)
         if vocoder is not None:
-            outputs = vocoder(spectrogram)
+            outputs = vocoder(spectrogram).last_hidden_state
         else:
             outputs = spectrogram
         if output_cross_attentions:
@@ -2330,7 +2330,7 @@ def _generate_speech(
         else:
             waveforms = []
             spectrograms = torch.nn.utils.rnn.pad_sequence(spectrograms, batch_first=True)
-            waveforms = vocoder(spectrograms)
+            waveforms = vocoder(spectrograms).last_hidden_state
             waveform_lengths = [int(waveforms.size(1) / max(spectrogram_lengths)) * i for i in spectrogram_lengths]
             outputs = (waveforms, waveform_lengths)
         if output_cross_attentions:
@@ -3110,7 +3110,7 @@ class SpeechT5HifiGan(PreTrainedModel):
             # remove seq-len dim since this collapses to 1
             waveform = hidden_states.squeeze(1)
 
-        return waveform
+        return BaseModelOutput(last_hidden_state=waveform)
 
 
 __all__ = [

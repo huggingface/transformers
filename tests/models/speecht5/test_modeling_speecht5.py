@@ -1637,7 +1637,7 @@ class SpeechT5HifiGanTester:
     def create_and_check_model(self, config, input_values):
         model = SpeechT5HifiGan(config=config).to(torch_device).eval()
         result = model(input_values)
-        self.parent.assertEqual(result.shape, (self.seq_length * 256,))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.seq_length * 256,))
 
     def prepare_config_and_inputs_for_common(self):
         config, input_values = self.prepare_config_and_inputs()
@@ -1720,7 +1720,9 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
                 batched_outputs = model(batched_inputs.to(torch_device))
 
             self.assertEqual(
-                batched_inputs.shape[0], batched_outputs.shape[0], msg="Got different batch dims for input and output"
+                batched_inputs.shape[0],
+                batched_outputs.last_hidden_state.shape[0],
+                msg="Got different batch dims for input and output",
             )
 
     def test_unbatched_inputs_outputs(self):
@@ -1733,4 +1735,4 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
 
             with torch.no_grad():
                 outputs = model(inputs["spectrogram"].to(torch_device))
-            self.assertTrue(outputs.dim() == 1, msg="Got un-batched inputs but batched output")
+            self.assertTrue(outputs.last_hidden_state.dim() == 1, msg="Got un-batched inputs but batched output")

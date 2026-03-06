@@ -1425,7 +1425,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
             raise ValueError(f"input shape {pixel_values.shape} is not 4d")
         if pixel_values.shape[1] != self.input_channels:
             raise ValueError(f"input has {pixel_values.shape[1]} channels but model built for {self.input_channels}")
-        return self.blocks(pixel_values)
+        return BaseModelOutput(last_hidden_state=self.blocks(pixel_values))
 
 
 class FlavaPredictionHeadTransform(nn.Module):

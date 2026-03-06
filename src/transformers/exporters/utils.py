@@ -16,7 +16,8 @@ import copy
 import inspect
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from ..cache_utils import Cache, DynamicCache
+from ..cache_utils import Cache
+from ..generation.utils import ALL_CACHE_NAMES
 from ..utils.import_utils import is_torch_available
 from ..utils.logging import get_logger
 
@@ -252,20 +253,51 @@ def prepare_for_export(
     with torch.no_grad():
         outputs = model(**copy.deepcopy(inputs))
 
+    # Inject the prefill KV cache into inputs and widen the attention mask to cover all cached
+    # positions, mirroring what the generation loop does between prefill and first decode step.
+    # We delegate to _update_model_kwargs_for_generation so any upstream changes stay in sync,
+    # but we must tell it how many tokens were just cached (num_new_tokens = prefill length) so
+    # it widens the attention mask by the right amount.
+    #
+    # One subtlety: unlike in the generation loop, here we keep input_ids at the full prefill
+    # length rather than slicing it to 1 token, so position_ids / cache_position / token_type_ids
+    # must NOT be extended. We temporarily remove them, call the method, then restore them.
+    is_encoder_decoder = getattr(model.config, "is_encoder_decoder", False)
+    cache_in_inputs = next((inputs[n] for n in ALL_CACHE_NAMES if inputs.get(n) is not None), None)
+    cache_in_outputs = next((outputs[n] for n in ALL_CACHE_NAMES if outputs.get(n) is not None), None)
+    seq_len_tied_keys = (
+        "cache_position",
+        "token_type_ids",
+        "decoder_position_ids" if is_encoder_decoder else "position_ids",
+    )
     if (
-        getattr(model.config, "use_cache", False)
-        and not getattr(model.config, "is_encoder_decoder", False)
-        and isinstance(outputs.get("past_key_values"), DynamicCache)
-        and "past_key_values" in inspect.signature(model.forward).parameters
-        and "past_key_values" not in inputs
+        cache_in_inputs is None
+        and cache_in_outputs is not None
+        and getattr(model.config, "use_cache", False)
+        and hasattr(model, "_update_model_kwargs_for_generation")
     ):
-        inputs["past_key_values"] = outputs["past_key_values"]
-        if model.config.model_type not in {"qwen2_vl", "qwen2_5_vl"}:
-            dtype = inputs["input_ids"].dtype
-            device = inputs["input_ids"].device
-            batch_size, seq_len = inputs["input_ids"].shape[:2]
-            pkv_len = inputs["past_key_values"].get_seq_length()
-            inputs["attention_mask"] = torch.ones((batch_size, seq_len + pkv_len), device=device, dtype=dtype)
+        if isinstance(cache_in_outputs, Cache):
+            num_new_tokens = cache_in_outputs.get_seq_length()
+        elif isinstance(cache_in_outputs, (list, tuple)) and isinstance(cache_in_outputs[0], (list, tuple)):
+            num_new_tokens = cache_in_outputs[0][0].shape[2]  # legacy tuple-of-tuples
+        else:
+            logger.warning(
+                f"Unexpected cache structure in model outputs: {type(cache_in_outputs)}. "
+                "Expected a Cache or a tuple of tuples of tensors. Skipping cache injection into inputs."
+            )
+            num_new_tokens = None
+
+        if num_new_tokens is not None:
+            saved = {k: inputs.pop(k) for k in seq_len_tied_keys if k in inputs}
+            inputs = (
+                model._update_model_kwargs_for_generation(
+                    outputs,
+                    inputs,
+                    is_encoder_decoder=is_encoder_decoder,
+                    num_new_tokens=num_new_tokens,
+                )
+                | saved
+            )
 
     return model, inputs, outputs
 
@@ -284,18 +316,18 @@ def _auto_dynamic_shape(tensor: torch.Tensor) -> dict[int, torch.export.Dim]:
     return dict.fromkeys(range(len(tensor.shape)), torch.export.Dim.AUTO)
 
 
-def get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str, dict[int, torch.export.Dim]]:
+def get_auto_dynamic_shapes(inputs: dict[str, Any]) -> dict[str, Any]:
     """
-    Utility function to automatically generate dynamic shapes for all tensor inputs and DynamicCache inputs.
+    Utility function to automatically generate dynamic shapes for all tensor inputs and cache inputs.
     Args:
-        inputs (`dict[str, torch.Tensor | Cache]`):
+        inputs (`dict[str, Any]`):
             A dictionary of model inputs.
     Returns:
-        `dict[str, dict[int, torch.export.Dim]]`: A dictionary mapping input names to their dynamic shapes.
+        `dict[str, Any]`: A dictionary mapping input names to their dynamic shapes.
     """
     dynamic_shapes = {}
     for name, input in inputs.items():
-        if isinstance(input, DynamicCache):
+        if isinstance(input, Cache):
             dynamic_shapes[name] = [
                 [_auto_dynamic_shape(layer.keys) for layer in input.layers],
                 [_auto_dynamic_shape(layer.values) for layer in input.layers],
@@ -308,10 +340,15 @@ def get_auto_dynamic_shapes(inputs: dict[str, torch.Tensor | Cache]) -> dict[str
             dynamic_shapes[name] = get_auto_dynamic_shapes(input)
         elif isinstance(input, (list, tuple, set)):
             dynamic_shapes[name] = type(input)(get_auto_dynamic_shapes(dict(enumerate(input))).values())
+        elif hasattr(input, "__dict__"):
+            dynamic_shapes[name] = get_auto_dynamic_shapes(
+                {k: v for k, v in vars(input).items() if not k.startswith("_")}
+            )
         else:
             raise ValueError(
                 f"Input '{name}' is of unsupported type '{type(input)}'. "
-                "Only torch.Tensor, DynamicCache, int, float, bool, str, dict, list, tuple, and set are supported."
+                "Only torch.Tensor, Cache, int, float, bool, str, dict, list, tuple, set, "
+                "and objects with a __dict__ (e.g. custom cache classes) are supported."
             )
 
     return dynamic_shapes

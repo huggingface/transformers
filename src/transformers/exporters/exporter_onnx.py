@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 from ..utils import logging
 from ..utils.export_config import OnnxConfig
 from ..utils.import_utils import is_torch_available
-from .exporter_dynamo import DYNAMO_UNSUPPORTED_MODEL_TYPES, DynamoExporter
+from .exporter_dynamo import DynamoExporter
 from .patch_utils import patch_torch_for_onnx_export
 from .utils import get_inputs_outputs_names, prepare_for_export
 
@@ -21,97 +21,27 @@ logger = logging.get_logger(__file__)
 
 
 ONNX_UNSUPPORTED_MODEL_TYPES: set[str] = {
-    *DYNAMO_UNSUPPORTED_MODEL_TYPES,
-    # Known issues during ONNX export
-    "flava_image_codebook",  # the onnx model returns nothing
-    "hifigan",  # the onnx model returns nothing
-    "kosmos-2",  # export fails due to advanced tensor slicing / indexing
-    "kosmos-2.5",  # export fails due to advanced tensor slicing / indexing
-    "vits",  # export fails due to advanced tensor slicing / indexing
-    "aria",
-    "autoformer",
-    "bamba",
-    "bros",
-    "chameleon",
-    "clvp",
-    "data2vec-audio",
-    "efficientloftr",
-    "eomt",
-    "falcon_h1",
-    "flava",
-    "granite_speech",
-    "granitemoe",
-    "granitemoehybrid",
-    "granitemoeshared",
-    "grounding-dino",
-    "hubert",
-    "idefics2",
-    "idefics3",
-    "informer",
-    "janus",
-    "jetmoe",
-    "longformer",
-    "longt5",
-    "mamba2",
-    "maskformer-swin",
-    "mimi",
-    "mlcd_vision_model",
-    "mm-grounding-dino",
-    "nemotron",
-    "patchtsmixer",
-    "perceiver",
-    "prophetnet",
-    "qwen3_next",
-    "sew",
-    "sew-d",
-    "smolvlm",
-    "speech_to_text",
-    "speecht5",
-    "splinter",
-    "swin2sr",
-    "tapas",
-    "time_series_transformer",
-    "timm_backbone",
-    "unispeech",
-    "unispeech-sat",
-    "videomae",
-    "wav2vec2",
-    "wav2vec2-bert",
-    "wav2vec2-conformer",
-    "wavlm",
-    "zamba2",
-}
-
-# The following are models that can be exported but their outputs
-# are extremely inaccurate compared to the original model.
-ONNX_EXTREMELY_INACCURATE_MODEL_TYPES: set[str] = {
-    "audioflamingo3",
-    "bit",
-    "blt",
-    "clvp",
-    "clvp_encoder",
-    "clvp_decoder",
-    "d_fine",
-    "flaubert",
-    "janus_vqgan",
-    "parakeet_ctc",
-    "parakeet_encoder",
-    "patchtst",
-    "rt_detr",
-    "rt_detr_v2",
-    "siglip2_vision_model",
-    "superglue",
-    "vit_mae",
-    "voxtral",
-    "xlm",
+    # --- FX graph / torch.export failures ---
+    "bigbird_pegasus",  # CUDA device-side assert triggered during export
+    "doge",  # FX decomposition failure (InsertTypePromotion pass fails at step 2/3)
+    "wavlm",  # FX graph decomposition failure (non-contiguous tensor view in attention reshape)
+    # --- SDPA: 5D tensors not supported ---
+    "granite_speech",  # SDPA only supports 4D tensors; model uses 5D attention (grouped convolution)
+    # --- SDPA: attention mechanism not supported ---
+    "falcon_mamba",  # does not support SDPA attention during FX export
+    # --- ONNX Runtime runtime / graph errors ---
+    "fine_acoustics",  # BarkFineModel: attention_mask exported as rank-3 but ORT expects rank-2
+    "dia",  # Squeeze dimension error in ONNX Runtime (node_squeeze: dim must be 1 not 7)
+    "flava",  # ForPreTraining: Where node provider type not set in ORT; FlavaModel: optimization renames outputs
+    "higgs_audio_v2",  # Where node condition cannot broadcast (shape mismatch {3,14,1} vs {20,32})
+    "mllama",  # cross-attention q/kv size mismatch in test inputs (tensor a 1808 vs tensor b 904)
 }
 
 
 ONNX_DISABLED_OPTIMIZATION_MODEL_TYPES: set[str] = {
-    "conditional_detr",  # optimization breaks the model (missing outputs)
-    "fuyu",  # optimization breaks the model (missing outputs)
-    "helium",  # nan outputs after optimization
-    "t5gemma",  # optimization breaks the model (duplicate outputs)
+    # Optimization renames past_key_values outputs
+    "gemma3n_text",  # optimization renames past_key_values outputs (shared_layers instead of layers)
+    "moshi",  # optimization renames past_key_values outputs (depth_ prefix added to layer names)
 }
 
 
@@ -133,11 +63,6 @@ class OnnxExporter(DynamoExporter):
         if model.config.model_type in ONNX_UNSUPPORTED_MODEL_TYPES:
             raise NotImplementedError(
                 f"{self.__class__.__name__} is not supported for model type '{model.config.model_type}'."
-            )
-
-        if model.config.model_type in ONNX_EXTREMELY_INACCURATE_MODEL_TYPES:
-            raise NotImplementedError(
-                f"Exporting a model of type '{model.config.model_type}' results in an ONNX model with extremely inaccurate outputs."
             )
 
         optimize = self.export_config.optimize

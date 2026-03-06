@@ -1366,7 +1366,9 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
 
         return InstructBlipVideoForConditionalGenerationModelOutput(
             loss=loss,
-            logits=logits,
+            logits=logits.clone()
+            if logits is not None
+            else None,  # break ONNX alias with language_model_outputs.logits
             vision_outputs=vision_outputs,
             qformer_outputs=qformer_outputs,
             language_model_outputs=outputs,
