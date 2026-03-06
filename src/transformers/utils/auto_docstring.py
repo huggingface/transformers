@@ -1679,6 +1679,8 @@ class ConfigArgs:
     }
 
     mamba_d_state = state_size
+    mamba_num_heads = mamba_n_heads
+    mamba_head_dim = mamba_d_head
     num_input_channels = num_channels
     audio_channels = num_channels
     input_channels = num_channels
@@ -1733,6 +1735,7 @@ class ConfigArgs:
     n_head = num_attention_heads
     hidden_activation = hidden_act
     activation = hidden_act
+    mlp_hidden_act = hidden_act
     d_head = head_dim
     d_inner = intermediate_size
     dim_head = head_dim
