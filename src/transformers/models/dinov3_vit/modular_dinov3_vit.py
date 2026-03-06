@@ -298,7 +298,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = DINOv3ViTAttention(config)
-        self.scale1 = DINOv3ViTLayerScale(config)
+        self.layer_scale1 = DINOv3ViTLayerScale(config)
         self.drop_path = DINOv3ViTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -307,7 +307,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
             self.mlp = DINOv3ViTGatedMLP(config)
         else:
             self.mlp = DINOv3ViTMLP(config)
-        self.scale2 = DINOv3ViTLayerScale(config)
+        self.layer_scale2 = DINOv3ViTLayerScale(config)
 
     def forward(
         self,
@@ -323,14 +323,14 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        hidden_states = self.scale1(hidden_states)
+        hidden_states = self.layer_scale1(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
 
         # MLP with residual connection
         residual = hidden_states
         hidden_states = self.norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.scale2(hidden_states)
+        hidden_states = self.layer_scale2(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
 
         return hidden_states

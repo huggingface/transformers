@@ -69,7 +69,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
 def _build_checkpoint_conversion_mapping():
     mapping = {
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
-        "dinov3_vit": [WeightRenaming(r"layer_scale", r"scale"), WeightRenaming(r"(?<!model\.)layer", r"model.layer")],
+        "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
         "timesfm2_5": [
             WeightRenaming("ff0", "fc1"),
             WeightRenaming("ff1", "fc2"),
