@@ -19,83 +19,19 @@
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="zai-org/GLM-4.5V")
 class Glm4vMoeTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
-    GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of
-    GLM-4.5V [zai-org/GLM-4.5V](https://huggingface.co/zai-org/GLM-4.5V).
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
+    first_k_dense_replace (`int`, *optional*, defaults to 1):
+        Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
+                                                                \--k dense layers--/
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 151424):
-            Vocabulary size of the Glm4vMoe model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Glm4vMoeModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 10944):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 46):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 96):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 65536):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, defaults to `True`, *optional*, defaults to `True`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        moe_intermediate_size (`int`, *optional*, defaults to 1408):
-            Intermediate size of the routed expert.
-        num_experts_per_tok (`int`, *optional*, defaults to 8):
-            number of experts per token.
-        n_shared_experts (`int`, *optional*, defaults to 1):
-            Number of shared experts.
-        n_routed_experts (`int`, *optional*, defaults to 128):
-            Number of routed experts.
-        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
-            Scaling factor or routed experts.
-        n_group (`int`, *optional*, defaults to 1):
-            Number of groups for routed experts.
-        topk_group (`int`, *optional*, defaults to 1):
-            Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
-        first_k_dense_replace (`int`, *optional*, defaults to 1):
-            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
-                                                                    \--k dense layers--/
-        norm_topk_prob (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the topk probabilities.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        eos_token_id (`int`, *optional*):
-            End of stream token id.
-        bos_token_id (`int`, *optional*):
-            Beginning of stream token id.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.0001):
-            The aux loss factor for the loss.
+    Example:
 
     ```python
     >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig
@@ -197,43 +133,12 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
         super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
 
+@auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
 class Glm4vMoeVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Glm4vMoeVisionModel`]. It is used to instantiate an Glm4vMoeVisionModel
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
-    a similar configuration to that of
-    GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
+    out_hidden_size (`int`, *optional*, defaults to 4096):
+        The output hidden size of the vision model.
 
-    Args:
-            depth (`int`, *optional*, defaults to 24):
-                Number of layers (depth) in the model.
-            hidden_size (`int`, *optional*, defaults to 1536):
-                Dimensionality of the encoder layers and the pooler layer.
-            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-                The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-                `"relu"`, `"selu"` and `"gelu_new"` are supported.
-            attention_bias (`bool`, *optional*, defaults to `False`):
-                Whether to add a bias to the queries, keys and values.
-            attention_dropout (`float`, *optional*, defaults to 0.0):
-                Dropout probability for attention weights.
-            num_heads (`<fill_type>`, *optional*, defaults to 12): <fill_docstring>
-            in_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-            image_size (`int` or `list[int]`, *optional*, defaults to 336):
-                The size (resolution) of each image.
-            patch_size (`int`, *optional*, defaults to 14):
-                The size (resolution) of each patch.
-            rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-                The epsilon used by the rms normalization layers.
-            spatial_merge_size (`int`, *optional*, defaults to 2):
-                The size used for merging spatial dimensions.
-            temporal_patch_size (`int`, *optional*, defaults to 2):
-                The size used for patches along the temporal dimension.
-            out_hidden_size (`int`, *optional*, defaults to 4096):
-                The output hidden size of the vision model.
-            intermediate_size (`int`, *optional*, defaults to 13696):
-                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     Example:
 
     ```python
@@ -290,36 +195,17 @@ class Glm4vMoeVisionConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
+@auto_docstring(checkpoint="zai-org/GLM-4.5V")
 class Glm4vMoeConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
-    GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of
-    GLM-4.5V [zai-org/GLM-4.5V](https://huggingface.co/zai-org/GLM-4.5V).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Glm4vMoeTextConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Glm4vMoeVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 151363):
-            The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 151364):
-            The video token index to encode the image prompt.
-        image_start_token_id (`int`, *optional*, defaults to 151339):
-            The image start token index to encode the start of image.
-        image_end_token_id (`int`, *optional*, defaults to 151340):
-            The image end token index to encode the end of image.
-        video_start_token_id (`int`, *optional*, defaults to 151341):
-            The video start token index to encode the start of video.
-        video_end_token_id (`int`, *optional*, defaults to 151342):
-            The video end token index to encode the end of video.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
+    image_start_token_id (`int`, *optional*, defaults to 151339):
+        The image start token index to encode the start of image.
+    image_end_token_id (`int`, *optional*, defaults to 151340):
+        The image end token index to encode the end of image.
+    video_start_token_id (`int`, *optional*, defaults to 151341):
+        The video start token index to encode the start of video.
+    video_end_token_id (`int`, *optional*, defaults to 151342):
+        The video end token index to encode the end of video.
 
     ```python
     >>> from transformers import Glm4vMoeForConditionalGeneration, Glm4vMoeConfig

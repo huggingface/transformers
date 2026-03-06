@@ -14,79 +14,70 @@
 """SAM3 Video model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="facebook/sam3")
 class Sam3VideoConfig(PreTrainedConfig):
     r"""
-    Configuration class for [`Sam3VideoModel`]. This combines configurations for the detector (Sam3) and tracker
-    (Sam2Video) components, along with detection-tracking fusion hyperparameters.
-
-    Instantiating a configuration defaults will yield a similar configuration to that of SAM 3
-    [facebook/sam3](https://huggingface.co/facebook/sam3) architecture.
-
-    This model integrates detection and tracking with various fusion heuristics including NMS, association,
-    hotstart, reconditioning, and occlusion handling.
-
-    Args:
-        detector_config (`dict` or `Sam3Config`, *optional*):
-            Configuration for the Sam3 detector model. If not provided, default Sam3Config will be used.
-        tracker_config (`dict` or `Sam2VideoConfig`, *optional*):
-            Configuration for the Sam2Video tracker model. If not provided, default Sam2VideoConfig will be used.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing weight matrices.
-        low_res_mask_size (`int`, *optional*, defaults to 288):
-            Size (height and width) of the low-resolution mask outputs from the tracker before upsampling to video resolution.
-        score_threshold_detection (`float`, *optional*, defaults to 0.5):
-            Probability threshold for detection outputs - only keep detections above this threshold.
-        det_nms_thresh (`float`, *optional*, defaults to 0.1):
-            IoU threshold for detection NMS (Non-Maximum Suppression).
-        assoc_iou_thresh (`float`, *optional*, defaults to 0.1):
-            IoU threshold for detection-to-track matching. A detection is considered "matched" to a tracklet if
-            it overlaps with the tracklet above this threshold. Often a loose threshold like 0.1.
-        trk_assoc_iou_thresh (`float`, *optional*, defaults to 0.5):
-            IoU threshold for detection-to-track matching, used to determine whether a masklet is "unmatched"
-            by any detections. Often a stricter threshold like 0.5.
-        new_det_thresh (`float`, *optional*, defaults to 0.7):
-            Probability threshold for a detection to be added as a new object.
-        recondition_on_trk_masks (`bool`, *optional*, defaults to `True`):
-            Whether to use tracked masks (True) or detection masks (False) for reconditioning. Use True when tracked
-            masks are higher quality and detector serves as validation signal to strengthen memory and prevent drift.
-        hotstart_delay (`int`, *optional*, defaults to 15):
-            Number of frames to buffer outputs during hotstart. We hold off the outputs for `hotstart_delay`
-            frames and remove tracklets based on hotstart heuristics.
-        hotstart_unmatch_thresh (`int`, *optional*, defaults to 8):
-            Number of unmatched frames required to remove a tracklet during hotstart period.
-        hotstart_dup_thresh (`int`, *optional*, defaults to 8):
-            Number of overlapping frames required to remove a duplicate tracklet during hotstart period.
-        suppress_unmatched_only_within_hotstart (`bool`, *optional*, defaults to `True`):
-            Whether to suppress masks only within hotstart period. If False, we can suppress masks even if
-            they start before hotstart period.
-        init_trk_keep_alive (`int`, *optional*, defaults to 30):
-            Initial keep-alive counter for new tracks.
-        max_trk_keep_alive (`int`, *optional*, defaults to 30):
-            Maximum keep-alive counter value. Tracks with matched detections get their counter increased up to this value.
-        min_trk_keep_alive (`int`, *optional*, defaults to -1):
-            Minimum keep-alive counter value. Tracks with unmatched detections get their counter decreased to this value.
-        suppress_overlapping_based_on_recent_occlusion_threshold (`float`, *optional*, defaults to 0.7):
-            Threshold for suppressing overlapping objects based on recent occlusion. Overlapping masks with
-            IoU above this threshold are suppressed based on which was most recently occluded.
-        decrease_trk_keep_alive_for_empty_masklets (`bool`, *optional*, defaults to `False`):
-            Whether to decrease keep-alive counter for masklets with zero area in SAM2 prediction.
-        fill_hole_area (`int`, *optional*, defaults to 16):
-            Minimum area (in pixels) for filling holes in masks and removing small sprinkles.
-        max_num_objects (`int`, *optional*, defaults to 10000):
-            Maximum number of objects to track. Default 10000 effectively turns off this limit.
-        recondition_every_nth_frame (`int`, *optional*, defaults to 16):
-            Frequency of mask reconditioning (in frames). Set to 0 to disable reconditioning.
-        high_conf_thresh (`float`, *optional*, defaults to 0.8):
-            High confidence threshold for reconditioning. Only detections above this threshold can recondition tracklets.
-        high_iou_thresh (`float`, *optional*, defaults to 0.8):
-            High IoU threshold for reconditioning. Only detections with IoU above this threshold can recondition tracklets.
+    detector_config (`dict` or `Sam3Config`, *optional*):
+        Configuration for the Sam3 detector model. If not provided, default Sam3Config will be used.
+    tracker_config (`dict` or `Sam2VideoConfig`, *optional*):
+        Configuration for the Sam2Video tracker model. If not provided, default Sam2VideoConfig will be used.
+    initializer_range (`float`, *optional*, defaults to 0.02):
+        The standard deviation of the truncated_normal_initializer for initializing weight matrices.
+    low_res_mask_size (`int`, *optional*, defaults to 288):
+        Size (height and width) of the low-resolution mask outputs from the tracker before upsampling to video resolution.
+    score_threshold_detection (`float`, *optional*, defaults to 0.5):
+        Probability threshold for detection outputs - only keep detections above this threshold.
+    det_nms_thresh (`float`, *optional*, defaults to 0.1):
+        IoU threshold for detection NMS (Non-Maximum Suppression).
+    assoc_iou_thresh (`float`, *optional*, defaults to 0.1):
+        IoU threshold for detection-to-track matching. A detection is considered "matched" to a tracklet if
+        it overlaps with the tracklet above this threshold. Often a loose threshold like 0.1.
+    trk_assoc_iou_thresh (`float`, *optional*, defaults to 0.5):
+        IoU threshold for detection-to-track matching, used to determine whether a masklet is "unmatched"
+        by any detections. Often a stricter threshold like 0.5.
+    new_det_thresh (`float`, *optional*, defaults to 0.7):
+        Probability threshold for a detection to be added as a new object.
+    recondition_on_trk_masks (`bool`, *optional*, defaults to `True`):
+        Whether to use tracked masks (True) or detection masks (False) for reconditioning. Use True when tracked
+        masks are higher quality and detector serves as validation signal to strengthen memory and prevent drift.
+    hotstart_delay (`int`, *optional*, defaults to 15):
+        Number of frames to buffer outputs during hotstart. We hold off the outputs for `hotstart_delay`
+        frames and remove tracklets based on hotstart heuristics.
+    hotstart_unmatch_thresh (`int`, *optional*, defaults to 8):
+        Number of unmatched frames required to remove a tracklet during hotstart period.
+    hotstart_dup_thresh (`int`, *optional*, defaults to 8):
+        Number of overlapping frames required to remove a duplicate tracklet during hotstart period.
+    suppress_unmatched_only_within_hotstart (`bool`, *optional*, defaults to `True`):
+        Whether to suppress masks only within hotstart period. If False, we can suppress masks even if
+        they start before hotstart period.
+    init_trk_keep_alive (`int`, *optional*, defaults to 30):
+        Initial keep-alive counter for new tracks.
+    max_trk_keep_alive (`int`, *optional*, defaults to 30):
+        Maximum keep-alive counter value. Tracks with matched detections get their counter increased up to this value.
+    min_trk_keep_alive (`int`, *optional*, defaults to -1):
+        Minimum keep-alive counter value. Tracks with unmatched detections get their counter decreased to this value.
+    suppress_overlapping_based_on_recent_occlusion_threshold (`float`, *optional*, defaults to 0.7):
+        Threshold for suppressing overlapping objects based on recent occlusion. Overlapping masks with
+        IoU above this threshold are suppressed based on which was most recently occluded.
+    decrease_trk_keep_alive_for_empty_masklets (`bool`, *optional*, defaults to `False`):
+        Whether to decrease keep-alive counter for masklets with zero area in SAM2 prediction.
+    fill_hole_area (`int`, *optional*, defaults to 16):
+        Minimum area (in pixels) for filling holes in masks and removing small sprinkles.
+    max_num_objects (`int`, *optional*, defaults to 10000):
+        Maximum number of objects to track. Default 10000 effectively turns off this limit.
+    recondition_every_nth_frame (`int`, *optional*, defaults to 16):
+        Frequency of mask reconditioning (in frames). Set to 0 to disable reconditioning.
+    high_conf_thresh (`float`, *optional*, defaults to 0.8):
+        High confidence threshold for reconditioning. Only detections above this threshold can recondition tracklets.
+    high_iou_thresh (`float`, *optional*, defaults to 0.8):
+        High IoU threshold for reconditioning. Only detections with IoU above this threshold can recondition tracklets.
 
     Example:
     ```python
