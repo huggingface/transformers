@@ -179,11 +179,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def _rms_norm_no_weight(x: torch.Tensor, eps: float) -> torch.Tensor:
-    variance = x.to(torch.float32).pow(2).mean(-1, keepdim=True)
-    return (x * torch.rsqrt(variance + eps)).to(x.dtype)
-
-
 def lambda_init_fn(layer_idx):
     return 0.8 - 0.6 * math.exp(-0.3 * layer_idx)
 
@@ -222,7 +217,7 @@ class DiffLlamaAttention(nn.Module):
         self.lambda_k1 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
         self.lambda_q2 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
         self.lambda_k2 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
-        self.groupnorm_eps = config.rms_norm_eps
+        self.groupnorm = nn.RMSNorm(2 * self.head_dim, eps=config.rms_norm_eps, elementwise_affine=False)
 
     def forward(
         self,
@@ -276,7 +271,7 @@ class DiffLlamaAttention(nn.Module):
         attn_output1, attn_output2 = torch.chunk(attn_output, 2, dim=1)
 
         attn_output = attn_output1 - lambda_full * attn_output2
-        attn_output = (1 - self.lambda_init) * _rms_norm_no_weight(attn_output, self.groupnorm_eps)
+        attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, -1)
         attn_output = self.o_proj(attn_output)
@@ -409,7 +404,7 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
 
         attn_output = attn_output1 - lambda_full * attn_output2
-        attn_output = (1 - self.lambda_init) * _rms_norm_no_weight(attn_output, self.groupnorm_eps)
+        attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, None
@@ -482,7 +477,7 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
 
         attn_output = attn_output1 - lambda_full * attn_output2
-        attn_output = (1 - self.lambda_init) * _rms_norm_no_weight(attn_output, self.groupnorm_eps)
+        attn_output = (1 - self.lambda_init) * self.groupnorm(attn_output)
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, -1)
         attn_output = self.o_proj(attn_output)
