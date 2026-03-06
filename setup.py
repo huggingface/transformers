@@ -124,7 +124,7 @@ _deps = [
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff==0.14.10",
-    "ty==0.0.12",
+    "ty==0.0.20",
     # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
     # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
     # `Trainer` tests (see references to `run_translation.py`).
