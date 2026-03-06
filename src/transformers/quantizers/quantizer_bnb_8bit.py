@@ -118,8 +118,8 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         return isinstance(module, bnb.nn.Linear8bitLt) and name != "bias"
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model.is_loaded_in_8bit = True  # type: ignore[attr-defined]
-        model.is_8bit_serializable = self.is_serializable()  # type: ignore[attr-defined]
+        setattr(model, "is_loaded_in_8bit", True)
+        model.is_8bit_serializable = self.is_serializable()
         return model
 
     def _process_model_before_weight_loading(
