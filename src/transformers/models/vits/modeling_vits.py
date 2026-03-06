@@ -1083,7 +1083,7 @@ class VitsEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([VitsEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
+
         self.layerdrop = config.layerdrop
 
     def forward(

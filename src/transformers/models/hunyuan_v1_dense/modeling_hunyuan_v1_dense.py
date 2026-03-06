@@ -397,7 +397,6 @@ class HunYuanDenseV1Model(HunYuanDenseV1PreTrainedModel):
         )
         self.norm = HunYuanDenseV1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = HunYuanDenseV1RotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

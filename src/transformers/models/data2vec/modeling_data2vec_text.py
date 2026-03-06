@@ -560,7 +560,6 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
         """
         super().__init__(config)
         self.config = config
-        self.gradient_checkpointing = False
 
         self.embeddings = Data2VecTextEmbeddings(config)
         self.encoder = Data2VecTextEncoder(config)

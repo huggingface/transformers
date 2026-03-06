@@ -604,7 +604,7 @@ class JetMoeModel(JetMoePreTrainedModel):
         )
         self.norm = JetMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = JetMoeRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
+
         self._attn_implementation = config._attn_implementation
 
         # Initialize weights and apply final processing

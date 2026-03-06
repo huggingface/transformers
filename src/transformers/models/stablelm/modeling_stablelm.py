@@ -464,7 +464,7 @@ class StableLmModel(StableLmPreTrainedModel):
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self._attn_implementation = config._attn_implementation
-        self.gradient_checkpointing = False
+
         self.rotary_emb = StableLmRotaryEmbedding(config=self.config)
 
         # Initialize weights and apply final processing

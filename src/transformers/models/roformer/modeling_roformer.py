@@ -407,7 +407,6 @@ class RoFormerEncoder(nn.Module):
             config.max_position_embeddings, config.hidden_size // config.num_attention_heads
         )
         self.layer = nn.ModuleList([RoFormerLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,

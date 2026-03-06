@@ -327,7 +327,7 @@ class MllamaVisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([MllamaVisionEncoderLayer(config, is_gated) for _ in range(num_layers)])
-        self.gradient_checkpointing = False
+
         self.config = config
 
     def forward(
@@ -1079,7 +1079,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
         self.norm = MllamaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = MllamaRotaryEmbedding(config=config)
 
-        self.gradient_checkpointing = False
         self.post_init()
 
     @merge_with_config_defaults

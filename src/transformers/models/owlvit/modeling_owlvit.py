@@ -603,7 +603,6 @@ class OwlViTEncoder(nn.Module):
     def __init__(self, config: OwlViTConfig):
         super().__init__()
         self.layers = nn.ModuleList([OwlViTEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,

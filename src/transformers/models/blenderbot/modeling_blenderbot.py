@@ -481,7 +481,6 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
         self.layers = nn.ModuleList([BlenderbotEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -627,7 +626,6 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         )
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

@@ -343,8 +343,6 @@ class LongT5Attention(nn.Module):
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
 
-        self.gradient_checkpointing = False
-
     @staticmethod
     def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
         """
@@ -536,8 +534,6 @@ class LongT5LocalAttention(nn.Module):
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
-
-        self.gradient_checkpointing = False
 
     @staticmethod
     # Copied from transformers.models.t5.modeling_t5.T5Attention._relative_position_bucket
@@ -1252,8 +1248,6 @@ class LongT5Stack(LongT5PreTrainedModel):
         )
         self.final_layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
-
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

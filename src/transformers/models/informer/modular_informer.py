@@ -383,7 +383,7 @@ class InformerEncoder(TimeSeriesTransformerEncoder):
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-        self.gradient_checkpointing = False
+
         if config.prediction_length is None:
             raise ValueError("The `prediction_length` config needs to be specified.")
 
@@ -509,7 +509,6 @@ class InformerDecoder(TimeSeriesTransformerDecoder):
         self.layers = nn.ModuleList([InformerDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

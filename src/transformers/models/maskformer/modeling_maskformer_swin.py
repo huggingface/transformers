@@ -647,8 +647,6 @@ class MaskFormerSwinEncoder(nn.Module):
             ]
         )
 
-        self.gradient_checkpointing = False
-
     def forward(
         self,
         hidden_states,

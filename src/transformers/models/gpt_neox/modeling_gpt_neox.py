@@ -334,7 +334,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         self.layers = nn.ModuleList([GPTNeoXLayer(config, i) for i in range(config.num_hidden_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.rotary_emb = GPTNeoXRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

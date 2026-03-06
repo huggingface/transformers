@@ -617,7 +617,6 @@ class Owlv2Encoder(nn.Module):
     def __init__(self, config: Owlv2Config):
         super().__init__()
         self.layers = nn.ModuleList([Owlv2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,

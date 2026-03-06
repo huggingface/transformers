@@ -175,8 +175,6 @@ class MT5Attention(nn.Module):
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
 
-        self.gradient_checkpointing = False
-
     @staticmethod
     def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
         """
@@ -646,7 +644,6 @@ class MT5Stack(MT5PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-        self.gradient_checkpointing = False
 
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings

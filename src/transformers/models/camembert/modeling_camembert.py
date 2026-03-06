@@ -597,7 +597,6 @@ class CamembertModel(CamembertPreTrainedModel):
         """
         super().__init__(config)
         self.config = config
-        self.gradient_checkpointing = False
 
         self.embeddings = CamembertEmbeddings(config)
         self.encoder = CamembertEncoder(config)

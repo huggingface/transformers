@@ -454,8 +454,6 @@ class GPTJModel(GPTJPreTrainedModel):
         self.h = nn.ModuleList([GPTJBlock(config, layer_idx=i) for i in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
-        self.gradient_checkpointing = False
-
         # Initialize weights and apply final processing
         self.post_init()
 

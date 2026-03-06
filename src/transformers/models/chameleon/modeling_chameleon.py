@@ -867,7 +867,6 @@ class ChameleonModel(ChameleonPreTrainedModel):
         self.norm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.vqmodel = ChameleonVQVAE._from_config(config.vq_config)
         self.rotary_emb = ChameleonRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -535,7 +535,7 @@ class BltLocalEncoder(BltPreTrainedModel):
 
     def __init__(self, config: BltLocalEncoderConfig):
         super().__init__(config)
-        self.gradient_checkpointing = False
+
         self.config = config
         self.layers = nn.ModuleList(
             [BltTransformerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -647,7 +647,7 @@ class BltLocalDecoder(BltPreTrainedModel):
 
     def __init__(self, config: BltLocalDecoderConfig):
         super().__init__(config)
-        self.gradient_checkpointing = False
+
         self.config = config
         self.cross_attn_decoder = True
         self.layers = nn.ModuleList(
@@ -916,7 +916,6 @@ class BltPatcher(BltPreTrainedModel):
 class BltModel(BltPreTrainedModel):
     def __init__(self, config: BltConfig):
         super().__init__(config)
-        self.gradient_checkpointing = False
 
         self.config = config
         self.local_encoder = BltLocalEncoder(config.encoder_config)

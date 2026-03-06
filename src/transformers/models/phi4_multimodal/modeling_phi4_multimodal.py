@@ -186,7 +186,6 @@ class Phi4MultimodalVisionEncoder(nn.Module):
         self.layers = nn.ModuleList(
             [Phi4MultimodalVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
-        self.gradient_checkpointing = False
 
     # Ignore copy
     @auto_docstring
@@ -927,7 +926,6 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
         self.encoders = nn.ModuleList(
             [Phi4MultimodalAudioConformerEncoderLayer(config) for _ in range(config.num_blocks)]
         )
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1498,7 +1496,6 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         self.norm = Phi4MultimodalRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Phi4MultimodalRotaryEmbedding(config=config)
 
-        self.gradient_checkpointing = False
         self.embed_dropout = nn.Dropout(config.embd_pdrop)
 
         self.embed_tokens_extend = Phi4MultimodalFeatureEmbedding(config)

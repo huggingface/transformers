@@ -229,7 +229,6 @@ class LwDetrViTEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([LwDetrViTLayer(config, i) for i in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -1099,8 +1098,6 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         self.dropout = config.dropout
         self.layers = nn.ModuleList([LwDetrDecoderLayer(config, i) for i in range(config.decoder_layers)])
         self.layernorm = nn.LayerNorm(config.d_model)
-
-        self.gradient_checkpointing = False
 
         self.ref_point_head = LwDetrMLPPredictionHead(2 * config.d_model, config.d_model, config.d_model, num_layers=2)
 

@@ -410,7 +410,7 @@ class SEWDFeatureEncoder(nn.Module):
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
             )
         self.conv_layers = nn.ModuleList(conv_layers)
-        self.gradient_checkpointing = False
+
         self._requires_grad = True
 
     def _freeze_parameters(self):
@@ -1007,7 +1007,6 @@ class SEWDTransformerEncoder(nn.Module):
             self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps, elementwise_affine=True)
 
         self.conv = ConvLayer(config) if getattr(config, "conv_kernel_size", 0) > 0 else None
-        self.gradient_checkpointing = False
 
     def get_rel_embedding(self):
         rel_embeddings = self.rel_embeddings.weight if self.relative_attention else None
@@ -1109,7 +1108,6 @@ class SEWDEncoder(nn.Module):
         self.pool = nn.AvgPool1d(config.squeeze_factor, config.squeeze_factor)
         self.encoder = SEWDTransformerEncoder(config)
         self.upsample = SEWDUpsampling(config)
-        self.gradient_checkpointing = False
 
     def forward(
         self,

@@ -871,7 +871,6 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
         self.query_scale = DabDetrMLP(config.hidden_size, config.hidden_size, config.hidden_size, 2)
         self.layers = nn.ModuleList([DabDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.norm = nn.LayerNorm(config.hidden_size) if config.normalize_before else None
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -982,7 +981,6 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
         self.config = config
         self.dropout = config.dropout
         self.num_layers = config.decoder_layers
-        self.gradient_checkpointing = False
 
         self.layers = nn.ModuleList(
             [DabDetrDecoderLayer(config, is_first=(layer_id == 0)) for layer_id in range(config.decoder_layers)]

@@ -586,7 +586,6 @@ class WhisperEncoder(WhisperPreTrainedModel):
         self.layers = nn.ModuleList([WhisperEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -719,7 +718,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

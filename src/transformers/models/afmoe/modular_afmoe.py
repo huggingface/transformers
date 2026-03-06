@@ -373,7 +373,6 @@ class AfmoeModel(AfmoePreTrainedModel):
         )
         self.norm = AfmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = AfmoeRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         self.post_init()
 

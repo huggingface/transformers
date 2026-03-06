@@ -430,7 +430,6 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.attn_implementation = config._attn_implementation
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

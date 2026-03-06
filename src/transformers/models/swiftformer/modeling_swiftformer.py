@@ -350,8 +350,6 @@ class SwiftFormerEncoder(nn.Module):
                 network.append(SwiftFormerEmbeddings(config, index=i))
         self.network = nn.ModuleList(network)
 
-        self.gradient_checkpointing = False
-
     def forward(
         self,
         hidden_states: torch.Tensor,

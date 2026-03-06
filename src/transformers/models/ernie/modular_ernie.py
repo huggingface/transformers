@@ -180,7 +180,6 @@ class ErnieModel(BertModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(self, config)
         self.config = config
-        self.gradient_checkpointing = False
 
         self.embeddings = ErnieEmbeddings(config)
         self.encoder = ErnieEncoder(config)

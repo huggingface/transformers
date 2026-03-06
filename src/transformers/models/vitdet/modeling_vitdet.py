@@ -534,7 +534,6 @@ class VitDetEncoder(nn.Module):
             )
 
         self.layer = nn.ModuleList(layers)
-        self.gradient_checkpointing = False
 
     def forward(
         self,

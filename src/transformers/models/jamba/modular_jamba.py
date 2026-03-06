@@ -637,7 +637,6 @@ class JambaModel(JambaPreTrainedModel):
 
         self.final_layernorm = JambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

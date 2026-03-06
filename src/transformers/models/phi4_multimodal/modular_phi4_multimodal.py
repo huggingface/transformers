@@ -1035,7 +1035,6 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
         self.encoders = nn.ModuleList(
             [Phi4MultimodalAudioConformerEncoderLayer(config) for _ in range(config.num_blocks)]
         )
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1363,7 +1362,6 @@ class Phi4MultimodalModel(Phi3Model):
         )
         self.norm = Phi4MultimodalRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

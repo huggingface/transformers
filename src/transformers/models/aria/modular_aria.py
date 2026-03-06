@@ -1128,7 +1128,7 @@ class AriaTextModel(LlamaModel):
         self.layers = nn.ModuleList(
             [AriaTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.gradient_checkpointing = False
+
         self.post_init()
 
 

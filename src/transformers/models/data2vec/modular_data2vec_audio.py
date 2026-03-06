@@ -118,7 +118,7 @@ class Data2VecAudioFeatureEncoder(Wav2Vec2FeatureEncoder):
         self.conv_layers = nn.ModuleList(
             [Data2VecAudioConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
         )
-        self.gradient_checkpointing = False
+
         self._requires_grad = True
 
 

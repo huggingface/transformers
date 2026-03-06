@@ -366,7 +366,6 @@ class Exaone4Model(Exaone4PreTrainedModel):
         )
         self.norm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Exaone4RotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

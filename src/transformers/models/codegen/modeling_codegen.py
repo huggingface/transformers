@@ -293,8 +293,6 @@ class CodeGenModel(CodeGenPreTrainedModel):
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
         self.rotary_dim = min(config.rotary_dim, config.n_ctx // config.num_attention_heads)
 
-        self.gradient_checkpointing = False
-
         # Initialize weights and apply final processing
         self.post_init()
 

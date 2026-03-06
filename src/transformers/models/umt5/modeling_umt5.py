@@ -594,7 +594,7 @@ class UMT5Stack(UMT5PreTrainedModel):
         self.dropout = nn.Dropout(config.dropout_rate)
 
         # Initialize weights and apply final processing
-        self.gradient_checkpointing = False
+
         self.post_init()
 
     def set_input_embeddings(self, new_embeddings):

@@ -217,7 +217,6 @@ class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
         )
         self.norm = Ernie4_5_MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Ernie4_5_MoeRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

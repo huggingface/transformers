@@ -621,8 +621,6 @@ class HieraEncoder(nn.Module):
                 stage_size = [i // s for i, s in zip(stage_size, config.query_stride)]
                 unroll_schedule = unroll_schedule[1:]
 
-        self.gradient_checkpointing = False
-
     def reroll(
         self, hidden_states: torch.Tensor, stage_idx: int, bool_masked_pos: torch.BoolTensor | None = None
     ) -> torch.Tensor:

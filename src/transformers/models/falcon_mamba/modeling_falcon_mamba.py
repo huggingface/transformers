@@ -703,7 +703,6 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
             [FalconMambaBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)]
         )
 
-        self.gradient_checkpointing = False
         self.norm_f = FalconMambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         # Initialize weights and apply final processing
         self.post_init()

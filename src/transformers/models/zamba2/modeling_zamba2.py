@@ -1268,7 +1268,6 @@ class Zamba2Model(Zamba2PreTrainedModel):
                     "`use_long_context` set to `True`: using rescaled `rope_theta` and extended `max_position_embeddings`."
                 )
             self.rotary_emb = Zamba2RotaryEmbedding(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

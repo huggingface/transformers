@@ -1605,7 +1605,6 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         self.reference_points_head = GroundingDinoMLPPredictionHead(
             config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2
         )
-        self.gradient_checkpointing = False
 
         # hack implementation for iterative bounding box refinement as in two-stage Deformable DETR
         self.bbox_embed = None

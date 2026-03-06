@@ -953,7 +953,6 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
         self.layers = nn.ModuleList([ProphetNetEncoderLayer(config) for _ in range(config.num_encoder_layers)])
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1069,7 +1068,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         )
         self.embeddings_layer_norm = LayerNorm(config.hidden_size)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

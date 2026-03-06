@@ -440,7 +440,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
         )
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.rotary_emb = PersimmonRotaryEmbedding(config=self.config)
-        self.gradient_checkpointing = False
+
         # Initialize weights and apply final processing
         self.post_init()
 

@@ -496,8 +496,6 @@ class RwkvModel(RwkvPreTrainedModel):
 
         self.layers_are_rescaled = False
 
-        self.gradient_checkpointing = False
-
         # Initialize weights and apply final processing
         self.post_init()
 

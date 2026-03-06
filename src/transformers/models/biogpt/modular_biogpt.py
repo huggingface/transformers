@@ -180,7 +180,6 @@ class BioGptModel(BioGptPreTrainedModel):
         self.layers = nn.ModuleList([BioGptDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.layer_norm = nn.LayerNorm(self.embed_dim)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

@@ -367,7 +367,6 @@ class MoonshineStreamingEncoder(MoonshineStreamingPreTrainedModel):
             [MoonshineStreamingEncoderLayer(config, idx) for idx in range(config.num_hidden_layers)]
         )
         self.final_norm = MoonshineStreamingLayerNorm(config.hidden_size)
-        self.gradient_checkpointing = False
 
         self.post_init()
 
@@ -784,7 +783,7 @@ class MoonshineStreamingDecoder(MoonshineStreamingPreTrainedModel):
         )
         self.norm = nn.LayerNorm(config.hidden_size, bias=False)
         self.rotary_emb = MoonshineStreamingRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
+
         self.pos_emb = nn.Embedding(self.config.max_position_embeddings, config.encoder_config.hidden_size)
 
         if config.encoder_config.hidden_size != self.config.hidden_size:

@@ -280,7 +280,6 @@ class MoonshineStreamingEncoder(MoonshineStreamingPreTrainedModel):
             [MoonshineStreamingEncoderLayer(config, idx) for idx in range(config.num_hidden_layers)]
         )
         self.final_norm = MoonshineStreamingLayerNorm(config.hidden_size)
-        self.gradient_checkpointing = False
 
         self.post_init()
 

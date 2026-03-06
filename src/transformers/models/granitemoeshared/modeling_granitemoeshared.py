@@ -545,7 +545,7 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         )
         self.norm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GraniteMoeSharedRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
+
         self.embedding_multiplier = config.embedding_multiplier
 
         # Initialize weights and apply final processing

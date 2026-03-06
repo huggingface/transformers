@@ -783,7 +783,6 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         )
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -972,7 +971,6 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         self.layers = nn.ModuleList([PegasusXDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

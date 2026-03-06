@@ -136,8 +136,6 @@ class Pix2StructVisionAttention(nn.Module):
         self.value = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.output = nn.Linear(self.inner_dim, self.hidden_size, bias=False)
 
-        self.gradient_checkpointing = False
-
     def forward(
         self,
         hidden_states,
@@ -288,7 +286,6 @@ class Pix2StructVisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([Pix2StructVisionLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -612,8 +609,6 @@ class Pix2StructTextAttention(nn.Module):
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
-
-        self.gradient_checkpointing = False
 
     @staticmethod
     # Copied from transformers.models.t5.modeling_t5.T5Attention._relative_position_bucket
@@ -970,7 +965,6 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-        self.gradient_checkpointing = False
 
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings

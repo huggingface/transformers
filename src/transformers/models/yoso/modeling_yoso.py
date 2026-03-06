@@ -516,7 +516,6 @@ class YosoEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([YosoLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(
         self,

@@ -364,7 +364,6 @@ class VideoMAEEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([VideoMAELayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(self, hidden_states: torch.Tensor) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
@@ -483,7 +482,6 @@ class VideoMAEDecoder(nn.Module):
             nn.Linear(config.decoder_hidden_size, decoder_num_labels) if decoder_num_labels > 0 else nn.Identity()
         )
 
-        self.gradient_checkpointing = False
         self.config = decoder_config
 
     def forward(self, hidden_states: torch.Tensor, return_token_num: int):

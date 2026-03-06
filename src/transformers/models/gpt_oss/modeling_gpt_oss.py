@@ -443,7 +443,6 @@ class GptOssModel(GptOssPreTrainedModel):
         )
         self.norm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GptOssRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

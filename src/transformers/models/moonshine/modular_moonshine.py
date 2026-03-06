@@ -455,7 +455,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         )
         self.layer_norm = nn.LayerNorm(embed_dim, bias=False)
         self.rotary_emb = MoonshineRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
+
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:

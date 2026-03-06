@@ -490,7 +490,6 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.gradient_checkpointing = False
 
         self.embeddings = BertGenerationEmbeddings(config)
         self.encoder = BertEncoder(config)

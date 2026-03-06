@@ -307,7 +307,6 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         # Ignore copy
         self.avg_pooler = nn.AvgPool1d(2, stride=2)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

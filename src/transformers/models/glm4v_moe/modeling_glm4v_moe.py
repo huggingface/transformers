@@ -789,7 +789,6 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
         )
         self.post_layernorm = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.gradient_checkpointing = False
         self.post_init()
 
     def rot_pos_emb(self, grid_thw):
@@ -978,7 +977,6 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
         self.norm = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Glm4vMoeTextRotaryEmbedding(config=config)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

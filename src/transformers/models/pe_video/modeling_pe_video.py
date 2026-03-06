@@ -513,7 +513,6 @@ class PeVideoEncoder(PeVideoPreTrainedModel):
         self.norm = PeVideoEncoderRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = PeVideoEncoderRotaryEmbedding(config=config)
         self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        self.gradient_checkpointing = False
 
         self.post_init()
 

@@ -556,7 +556,6 @@ class M2M100Encoder(M2M100PreTrainedModel):
         self.layers = nn.ModuleList([M2M100EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -704,7 +703,6 @@ class M2M100Decoder(M2M100PreTrainedModel):
         self.layers = nn.ModuleList([M2M100DecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

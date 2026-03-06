@@ -463,7 +463,6 @@ class VJEPA2Encoder(nn.Module):
             ]
         )
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.gradient_checkpointing = False
 
     @can_return_tuple
     def forward(
@@ -591,7 +590,7 @@ class VJEPA2Predictor(nn.Module):
     def __init__(self, config: VJEPA2Config):
         super().__init__()
         self.config = config
-        self.gradient_checkpointing = False
+
         self.embeddings = VJEPA2PredictorEmbeddings(config)
         drop_path_rates = [
             (

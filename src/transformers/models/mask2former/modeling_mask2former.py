@@ -1799,8 +1799,6 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
             mask_feature_size=self.mask_feature_size,
         )
 
-        self.gradient_checkpointing = False
-
     def forward(
         self,
         inputs_embeds: torch.Tensor | None = None,

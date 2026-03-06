@@ -491,7 +491,6 @@ class TimesFm2_5Model(TimesFm2_5PreTrainedModel):
             [TimesFm2_5DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.rotary_emb = TimesFm2_5RotaryEmbedding(config)
-        self.gradient_checkpointing = False
 
         self.post_init()
 

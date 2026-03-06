@@ -1020,7 +1020,6 @@ class MimiTransformerModel(nn.Module):
         )
         self._attn_implementation = config._attn_implementation
 
-        self.gradient_checkpointing = False
         self.config = config
 
     def forward(

@@ -913,7 +913,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
         self.gated_cross_attn_layers = nn.ModuleList(
             [IdeficsGatedCrossAttentionLayer(config, layer_idx=i) for i in range(num_cross_layers)]
         )
-        self.gradient_checkpointing = False
 
         self.norm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

@@ -455,7 +455,6 @@ class LasrEncoder(LasrPreTrainedModel):
 
     def __init__(self, config: LasrEncoderConfig):
         super().__init__(config)
-        self.gradient_checkpointing = False
 
         self.dropout = config.dropout
         self.dropout_positions = config.dropout_positions

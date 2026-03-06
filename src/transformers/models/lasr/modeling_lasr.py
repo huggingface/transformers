@@ -356,7 +356,6 @@ class LasrEncoderFeedForward(nn.Module):
 class LasrEncoderBlock(GradientCheckpointingLayer):
     def __init__(self, config: LasrEncoderConfig, layer_idx: int):
         super().__init__()
-        self.gradient_checkpointing = False
 
         self.feed_forward1 = LasrEncoderFeedForward(config)
         self.self_attn = LasrEncoderAttention(config, layer_idx)
@@ -469,7 +468,6 @@ class LasrEncoder(LasrPreTrainedModel):
 
     def __init__(self, config: LasrEncoderConfig):
         super().__init__(config)
-        self.gradient_checkpointing = False
 
         self.dropout = config.dropout
         self.dropout_positions = config.dropout_positions

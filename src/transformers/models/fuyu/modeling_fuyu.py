@@ -60,7 +60,6 @@ class FuyuModel(FuyuPreTrainedModel):
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size
         )
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

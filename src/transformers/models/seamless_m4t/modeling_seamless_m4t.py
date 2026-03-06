@@ -678,8 +678,6 @@ class SeamlessM4TConformerEncoder(nn.Module):
 
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self.gradient_checkpointing = False
-
     def forward(
         self,
         hidden_states,
@@ -1591,7 +1589,6 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
 
         self.layer_norm = nn.LayerNorm(config.hidden_size)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1770,7 +1767,6 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         self.layers = nn.ModuleList(layers)
         self.layer_norm = nn.LayerNorm(config.hidden_size)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

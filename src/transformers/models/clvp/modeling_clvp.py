@@ -678,8 +678,6 @@ class ClvpConditioningEncoder(nn.Module):
             [ClvpSelfAttention(self.decoder_config) for _ in range(self.decoder_config.num_mel_attn_blocks)]
         )
 
-        self.gradient_checkpointing = False
-
     def compute_groupnorm_groups(self, channels: int, groups: int = 32):
         """
         Calculates the value of `num_groups` for nn.GroupNorm. This logic is taken from the official tortoise
@@ -854,8 +852,6 @@ class ClvpEncoder(ClvpPreTrainedModel):
 
         self.projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
-        self.gradient_checkpointing = False
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1011,8 +1007,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
             [ClvpDecoderLayer(self.config, layer_idx=i) for i in range(self.config.num_hidden_layers)]
         )
         self.layer_norm = nn.LayerNorm(self.config.hidden_size, eps=self.config.layer_norm_epsilon)
-
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

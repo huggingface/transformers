@@ -685,7 +685,6 @@ class XmodModel(XmodPreTrainedModel):
         """
         super().__init__(config)
         self.config = config
-        self.gradient_checkpointing = False
 
         self.embeddings = XmodEmbeddings(config)
         self.encoder = XmodEncoder(config)

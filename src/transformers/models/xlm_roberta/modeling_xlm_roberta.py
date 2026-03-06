@@ -586,7 +586,6 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         """
         super().__init__(config)
         self.config = config
-        self.gradient_checkpointing = False
 
         self.embeddings = XLMRobertaEmbeddings(config)
         self.encoder = XLMRobertaEncoder(config)

@@ -624,7 +624,6 @@ class Data2VecVisionEncoder(nn.Module):
                 for i in range(config.num_hidden_layers)
             ]
         )
-        self.gradient_checkpointing = False
 
     def forward(
         self,

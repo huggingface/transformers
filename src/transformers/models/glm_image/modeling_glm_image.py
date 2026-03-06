@@ -687,7 +687,6 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
 
         self.blocks = nn.ModuleList([GlmImageVisionBlock(config) for _ in range(config.depth)])
 
-        self.gradient_checkpointing = False
         self.head_dim = head_dim
         self.post_init()
 
@@ -854,7 +853,6 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
         self.norm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GlmImageTextRotaryEmbedding(config=config)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

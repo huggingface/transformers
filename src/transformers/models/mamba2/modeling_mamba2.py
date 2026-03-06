@@ -829,7 +829,6 @@ class Mamba2Model(Mamba2PreTrainedModel):
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([Mamba2Block(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
 
-        self.gradient_checkpointing = False
         self.norm_f = Mamba2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         # Initialize weights and apply final processing
         self._register_load_state_dict_pre_hook(self.load_hook)

@@ -473,7 +473,6 @@ class BlenderbotSmallEncoder(BlenderbotSmallPreTrainedModel):
         self.layers = nn.ModuleList([BlenderbotSmallEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -615,7 +614,6 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
         )
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 

@@ -365,7 +365,6 @@ class DbrxModel(DbrxPreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
         self.blocks = nn.ModuleList([DbrxBlock(config, layer_idx) for layer_idx in range(config.n_layers)])
         self.norm_f = nn.LayerNorm(config.d_model, bias=False)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

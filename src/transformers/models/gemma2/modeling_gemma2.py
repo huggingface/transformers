@@ -391,7 +391,6 @@ class Gemma2Model(Gemma2PreTrainedModel):
         )
         self.norm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Gemma2RotaryEmbedding(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

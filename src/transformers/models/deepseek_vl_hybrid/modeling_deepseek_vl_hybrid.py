@@ -282,7 +282,6 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
 
         self.language_model = AutoModel.from_config(config=config.text_config)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing.
         self.post_init()
 

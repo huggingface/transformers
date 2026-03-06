@@ -715,8 +715,6 @@ class DonutSwinEncoder(nn.Module):
             ]
         )
 
-        self.gradient_checkpointing = False
-
     def forward(
         self,
         hidden_states: torch.Tensor,

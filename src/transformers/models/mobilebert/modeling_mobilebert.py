@@ -596,7 +596,6 @@ class MobileBertModel(MobileBertPreTrainedModel):
         """
         super().__init__(config)
         self.config = config
-        self.gradient_checkpointing = False
 
         self.embeddings = MobileBertEmbeddings(config)
         self.encoder = MobileBertEncoder(config)

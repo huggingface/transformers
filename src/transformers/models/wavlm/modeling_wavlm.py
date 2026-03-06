@@ -383,7 +383,6 @@ class WavLMEncoder(nn.Module):
         self.layers = nn.ModuleList(
             [WavLMEncoderLayer(config, has_relative_position_bias=(i == 0)) for i in range(config.num_hidden_layers)]
         )
-        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -460,7 +459,6 @@ class WavLMEncoderStableLayerNorm(nn.Module):
                 for i in range(config.num_hidden_layers)
             ]
         )
-        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -768,7 +766,7 @@ class WavLMFeatureEncoder(nn.Module):
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
             )
         self.conv_layers = nn.ModuleList(conv_layers)
-        self.gradient_checkpointing = False
+
         self._requires_grad = True
 
     def _freeze_parameters(self):

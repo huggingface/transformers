@@ -477,7 +477,6 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
         )
         self.norm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = DeepseekV2RotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

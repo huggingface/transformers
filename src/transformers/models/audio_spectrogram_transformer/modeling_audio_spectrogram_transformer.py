@@ -274,7 +274,6 @@ class ASTEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([ASTLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
 
     def forward(self, hidden_states: torch.Tensor) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):

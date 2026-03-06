@@ -377,7 +377,6 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         self.layernorm_final = nn.LayerNorm(config.hidden_size, bias=config.bias)
 
         self.lm_head = nn.Linear(config.hidden_size, config.output_vocab_size, bias=False)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -900,7 +899,7 @@ class BarkFineModel(BarkPreTrainedModel):
                 for _ in range(config.n_codes_given, config.n_codes_total)
             ]
         )
-        self.gradient_checkpointing = False
+
         self.n_codes_total = config.n_codes_total
 
         # Initialize weights and apply final processing

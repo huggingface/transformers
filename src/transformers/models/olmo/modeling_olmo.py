@@ -361,7 +361,6 @@ class OlmoModel(OlmoPreTrainedModel):
         )
         self.norm = OlmoLayerNorm(config.hidden_size)
         self.rotary_emb = OlmoRotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
