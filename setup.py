@@ -119,7 +119,7 @@ _deps = [
     "pytest-xdist",
     "pytest-order",
     "python>=3.10.0",
-    "regex!=2019.12.17",
+    "regex>=2025.10.22",
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
