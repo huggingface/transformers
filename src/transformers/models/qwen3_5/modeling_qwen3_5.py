@@ -1298,6 +1298,7 @@ class Qwen3_5ModelOutputWithPast(ModelOutput):
 
 
 class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
+    config: Qwen3_5TextConfig
     def __init__(self, config: Qwen3_5TextConfig):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
