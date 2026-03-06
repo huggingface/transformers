@@ -104,6 +104,9 @@ class Aimv2TextConfig(SiglipTextConfig):
 @dataclass(repr=False)
 class Aimv2Config(SiglipConfig):
     r"""
+    max_logit_scale (`float`, *optional*, defaults to `100.0`):
+        The maximum logit scale to use
+
     Example:
 
     ```python
