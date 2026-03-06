@@ -219,6 +219,8 @@ class RfDetrConfig(PreTrainedConfig):
             Number of groups for Group DETR attention mechanism, which helps reduce computational complexity.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        num_feature_levels (`int`, *optional*, defaults to 1):
+            Number of feature levels used in the multiscale deformable attention.
         disable_custom_kernels (`bool`, *optional*, defaults to `True`):
             Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
             kernels are not supported by PyTorch ONNX export.
@@ -292,6 +294,7 @@ class RfDetrConfig(PreTrainedConfig):
         decoder_activation_function="relu",
         # model
         num_queries=300,
+        num_feature_levels=1,
         attention_bias=True,
         attention_dropout=0.0,
         activation_dropout=0.0,
@@ -362,6 +365,7 @@ class RfDetrConfig(PreTrainedConfig):
         self.d_model = d_model
         self.dropout = dropout
         self.num_queries = num_queries
+        self.num_feature_levels = num_feature_levels
         self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_n_points = decoder_n_points
         self.decoder_layers = decoder_layers
