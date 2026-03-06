@@ -40,21 +40,16 @@ ONNX_UNSUPPORTED_MODEL_TYPES: set[str] = {
     "d_fine",  # SymInt not tracked with proxy (runtime assert in FX graph)
     "doge",  # FX decomposition failure (InsertTypePromotion pass fails at step 2/3)
     "grounding-dino",  # SymInt not tracked with proxy (runtime assert in FX graph)
-    "idefics3",  # aot_autograd: detach_ (in-place op) found in graph
+    "idefics3",  # GuardOnDataDependentSymNode: Eq(u0, 1) — dynamic batch dim guarded against 1 in repeat_kv
     "mm-grounding-dino",  # SymInt not tracked with proxy (runtime assert in FX graph)
     "modernvbert",  # SymInt not tracked with proxy (runtime assert in FX graph)
     "rt_detr_v2",  # SymInt not tracked with proxy (runtime assert in FX graph)
     "smolvlm",  # SymInt not tracked with proxy (runtime assert in FX graph)
-    "videomae",  # GuardOnDataDependentSymNode in mse_loss (dynamic masking at export time)
-    "wavlm",  # FX graph decomposition failure (non-contiguous tensor view in attention reshape)
     # --- FX step 3 / ONNX translation failures ---
     "maskformer-swin",  # 'int' object has no attribute 'name' in ONNX return node translation
     "swin2sr",  # Key 'b_mean' does not match value name 'type_as' in graph builder
     # --- Missing ONNX ops ---
-    "patchtsmixer",  # aten.randperm — no ONNX function registered
-    "splinter",  # aten.bincount — no ONNX function registered
-    # --- SDPA: 5D tensors not supported ---
-    "granite_speech",  # SDPA only supports 4D tensors; model uses 5D attention (grouped convolution)
+    "splinter",  # _prepare_question_positions: data-dependent shape (for n in num_questions / torch.where nonzero)
     # --- SDPA: attention mechanism not supported ---
     "falcon_mamba",  # does not support SDPA attention during FX export
     # --- ONNX Runtime runtime / graph errors ---
@@ -157,14 +152,18 @@ def patch_torch_for_onnx_export():
     #   - torch.unsqueeze: supports complex tensors
     #   - torch.where / torch.Tensor.where: handles dtype mismatches
     #   - torch.nn.RMSNorm.forward: bypasses aten._fused_rms_norm when elementwise_affine=False
-    #   - torch.nn.functional.scaled_dot_product_attention: handles equal q/kv heads (MHA) when enable_gqa=True
+    #  - torch.view / torch.reshape: adds contiguous() for non-contiguous tensors to avoid ONNX export errors
+    #  - torch.Tensor.view / torch.Tensor.reshape: adds contiguous() for non-contiguous tensors to avoid ONNX export errors
+    #  - torch.nn.functional.scaled_dot_product_attention: supports 5D blocked attention and disables GQA when q_num_heads == kv_num_heads to avoid ONNX export errors
     # These patches are only active during export and are reverted afterwards.
+    original_view = torch.Tensor.view
     original_torch_where = torch.where
+    original_reshape = torch.Tensor.reshape
     original_tensor_where = torch.Tensor.where
     original_torch_unsqueeze = torch.unsqueeze
     original_tensor_unsqueeze = torch.Tensor.unsqueeze
-    original_scaled_dot_product_attention = torch.nn.functional.scaled_dot_product_attention
     original_rms_norm_forward = torch.nn.RMSNorm.forward
+    original_scaled_dot_product_attention = torch.nn.functional.scaled_dot_product_attention
 
     def _torch_where(condition, x=None, y=None):
         if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor) and x.dtype != y.dtype:
@@ -198,11 +197,46 @@ def patch_torch_for_onnx_export():
         return original_rms_norm_forward(self, x)
 
     def _scaled_dot_product_attention(query, key, *args, enable_gqa: bool = False, **kwargs):
+        # When enable_gqa=True but q_num_heads == kv_num_heads, it is standard MHA, not GQA.
+        # The upstream ONNX SDPA function incorrectly asserts q_num_heads > kv_num_heads when
+        # enable_gqa=True, which fails for MHA models. Treat equal heads as MHA (enable_gqa=False).
         if enable_gqa and query.shape[1] == key.shape[1]:
             enable_gqa = False
+
+        # ONNX only supports 4D SDPA [B, H, S, D]. For 5D blocked attention [B, G, H, S, D]
+        # (e.g. GraniteSpeech local attention with num_blocks dim), flatten G into B, then unflatten.
+        if query.dim() == 5:
+            B, G = query.shape[0], query.shape[1]
+            query = query.flatten(0, 1)
+            key = key.flatten(0, 1)
+            value = args[0].flatten(0, 1)
+            args = (value,) + args[1:]
+            if kwargs.get("attn_mask") is not None and kwargs["attn_mask"].dim() == 5:
+                kwargs["attn_mask"] = kwargs["attn_mask"].flatten(0, 1)
+            out = original_scaled_dot_product_attention(query, key, *args, enable_gqa=enable_gqa, **kwargs)
+            return out.unflatten(0, (B, G))
+
         return original_scaled_dot_product_attention(query, key, *args, enable_gqa=enable_gqa, **kwargs)
 
+    def _view(self, *shape):
+        # aten.view.default fails on non-contiguous tensors (e.g. after transpose/permute).
+        # For ONNX export, storage aliasing is irrelevant; add contiguous() before view.
+        if not self.is_contiguous():
+            self = self.contiguous()
+        return original_view(self, *shape)
+
+    def _reshape(self, *shape):
+        # During FX tracing (FakeTensor), reshape does not automatically fall back to
+        # contiguous().view() for non-contiguous tensors. Add contiguous() explicitly.
+        if not self.is_contiguous():
+            self = self.contiguous()
+        return original_reshape(self, *shape)
+
+    torch.view = _view
+    torch.reshape = _reshape
+    torch.Tensor.view = _view
     torch.where = _torch_where
+    torch.Tensor.reshape = _reshape
     torch.Tensor.where = _tensor_where
     torch.unsqueeze = _unsqueeze
     torch.Tensor.unsqueeze = _unsqueeze
@@ -212,7 +246,11 @@ def patch_torch_for_onnx_export():
     try:
         yield
     finally:
+        torch.view = original_view
+        torch.reshape = original_reshape
+        torch.Tensor.view = original_view
         torch.where = original_torch_where
+        torch.Tensor.reshape = original_reshape
         torch.Tensor.where = original_tensor_where
         torch.unsqueeze = original_torch_unsqueeze
         torch.Tensor.unsqueeze = original_tensor_unsqueeze
