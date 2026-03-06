@@ -5,7 +5,7 @@
 #                          modular_pp_lcnet.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torchvision.transforms.v2.functional as tvF
@@ -13,9 +13,14 @@ import torchvision.transforms.v2.functional as tvF
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import SizeDict
+from ...utils import auto_docstring
 from ...utils.generic import TensorType
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class PPLCNetImageProcessorFast(BaseImageProcessorFast):
     """
     Fast image processor for PP-LCNet models (PyTorch-optimized, inherits from `BaseImageProcessorFast`).
@@ -35,12 +40,6 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
     size_divisor = None
 
     def __init__(self, **kwargs) -> None:
-        """
-        Initialize the PPLCNetImageProcessorFast.
-
-        Args:
-            **kwargs: Additional keyword arguments passed to `BaseImageProcessorFast`.
-        """
         super().__init__(**kwargs)
 
     def _preprocess(
@@ -117,8 +116,8 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
     def get_image_size(
         self,
         image: torch.Tensor,
-        target_short_edge: Union[int, None],
-        size_divisor: Optional[int] = None,
+        target_short_edge: int | None,
+        size_divisor: int | None = None,
     ) -> tuple[SizeDict, torch.Tensor]:
         """
         Calculate target image size for PyTorch tensors (preserve aspect ratio + align with size_divisor).

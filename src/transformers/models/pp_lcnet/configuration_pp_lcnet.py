@@ -6,8 +6,13 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class PPLCNetConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PPLCNet`]. It is used to instantiate a
