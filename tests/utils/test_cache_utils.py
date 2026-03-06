@@ -843,14 +843,15 @@ class SyntheticCacheTest(unittest.TestCase):
     def test_static_cache_out_of_bounds(self):
         """Test StaticCache raises IndexError for out-of-bounds positions."""
         static_cache = StaticCache(config=self.config, max_cache_len=self.max_cache_len)
-        pos_out_of_bounds = torch.tensor([self.max_cache_len])  # Position >= max_cache_len
+        prefill = torch.tensor([1.0, 2.0, 3.0, 4.0])[None, None, :, None]
+        # Fill-up the cache
+        static_cache.update(key_states=prefill, value_states=prefill, layer_idx=0)
 
         with self.assertRaises(IndexError):
             static_cache.update(
                 key_states=torch.tensor([[[[1.0]]]]),
                 value_states=torch.tensor([[[[1.0]]]]),
                 layer_idx=0,
-                cache_kwargs={"cache_position": pos_out_of_bounds},
             )
 
     def test_static_cache(self):
@@ -865,13 +866,12 @@ class SyntheticCacheTest(unittest.TestCase):
         """
         # Scenario 1: Fill up to near capacity
         static_cache = StaticCache(config=self.config, max_cache_len=self.max_cache_len)
-        prefill = torch.tensor([1.0, 2.0, 0.0, 0.0])[None, None, :, None]
-        static_cache.update(key_states=prefill, value_states=prefill, layer_idx=0, cache_kwargs=None)
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
+        static_cache.update(key_states=prefill, value_states=prefill, layer_idx=0)
         static_cache.update(
             key_states=torch.tensor(3.0)[None, None, None, None],
             value_states=torch.tensor(3.0)[None, None, None, None],
             layer_idx=0,
-            cache_kwargs={"cache_position": torch.tensor([2])},
         )
         self.assertEqual(
             static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0], "StaticCache Scenario 1 failed"

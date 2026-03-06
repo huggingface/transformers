@@ -38,6 +38,7 @@ if is_torch_available():
         Qwen3_5Config,
         Qwen3_5ForCausalLM,
         Qwen3_5ForConditionalGeneration,
+        Qwen3_5ForSequenceClassification,
         Qwen3_5Model,
         Qwen3_5TextConfig,
         Qwen3_5TextModel,
@@ -49,6 +50,7 @@ class Qwen3_5TextModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Qwen3_5TextModel
         causal_lm_class = Qwen3_5ForCausalLM
+        sequence_classification_class = Qwen3_5ForSequenceClassification
 
     def __init__(self, parent):
         super().__init__(parent=parent)
