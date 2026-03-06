@@ -900,6 +900,7 @@ class ParakeetTDTJointNetwork(nn.Module):
         return token_logits, duration_logits
 
 
+# TODO (ebezzam) eventually move to audio_utils or loss_utils for common usage?
 def tdt_loss(
     token_logits: torch.Tensor,
     duration_logits: torch.Tensor,
@@ -912,7 +913,7 @@ def tdt_loss(
     reduction: str = "mean",
 ) -> torch.Tensor:
     """
-    Compute TDT (Token-and-Duration Transducer) loss.
+    Compute TDT (Token-and-Duration Transducer) loss (https://arxiv.org/abs/2304.06795).
 
     Ported from NeMo's `TDTLossPytorch`. Unlike standard RNNT loss, this loss trains both
     the token prediction head and the duration prediction head. Uses vectorized anti-diagonal
@@ -933,8 +934,6 @@ def tdt_loss(
     Returns:
         Scalar loss tensor (or per-example losses if `reduction="none"`).
 
-    Reference:
-        *Token-and-Duration Transducer (TDT)* — https://arxiv.org/abs/2304.06795
     """
     device = token_logits.device
     batch_size, max_t, max_u, _ = token_logits.shape
@@ -1122,20 +1121,13 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 encoder_hidden_states_trimmed.unsqueeze(2),
                 decoder_output.unsqueeze(1),
             )
-            # token_logits: (batch, T, U+1, vocab_size+1)
-            # duration_logits: (batch, T, U+1, num_duration_bins)
-
-            # move labels to correct device to enable pipeline parallelism
-            labels = labels.to(token_logits.device)
-            encoder_lengths = encoder_lengths.to(token_logits.device)
-            target_lengths = target_lengths.to(token_logits.device)
 
             loss = tdt_loss(
                 token_logits=token_logits.float(),
                 duration_logits=duration_logits.float(),
-                targets=labels.int(),
-                logit_lengths=encoder_lengths.int(),
-                target_lengths=target_lengths.int(),
+                targets=labels.to(token_logits.device).int(),
+                logit_lengths=encoder_lengths.to(token_logits.device).int(),
+                target_lengths=target_lengths.to(token_logits.device).int(),
                 blank=self.config.pad_token_id,
                 durations=self.config.durations,
                 reduction="mean",
@@ -1162,8 +1154,8 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
         Args:
             return_timestamps (`bool`, *optional*, defaults to `False`):
-                Whether to return per-token timestamps in seconds. When `True`, forces
-                `return_dict_in_generate=True` and includes `token_timestamps` in the output.
+                Whether to return per-token timestamps and durations. When `True`, forces
+                `return_dict_in_generate=True` and includes `token_timestamps` and `token_durations` in the output.
 
         Example:
 
@@ -1178,28 +1170,33 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 
-        >>> inputs = processor(ds[0]["audio"]["array"])
+        >>> inputs = processor(ds[0]["audio"]["array"], sampling_rate=processor.feature_extractor.sampling_rate)
+        >>> inputs = inputs.to(model.device, dtype=model.dtype)
         >>> output = model.generate(**inputs, return_dict_in_generate=True, return_timestamps=True)
 
-        >>> transcription = processor.batch_decode(output.sequences, skip_special_tokens=True)
-        >>> print(transcription)
-        >>> print(output.token_timestamps)
+        >>> decoded_output, decoded_timestamps = processor.decode(
+        ...     output.sequences,
+        ...     token_timestamps=output.token_timestamps,
+        ...     token_durations=output.token_durations,
+        ...     skip_special_tokens=True
+        ... )
+        >>> print("Transcription:", decoded_output)
+        >>> print("Timestamped tokens:", decoded_timestamps)
         ```
         """
         kwargs["return_dict"] = True
         if return_timestamps:
             return_dict_in_generate = True
-
-        batch_size = input_features.shape[0]
         outputs: CausalLMOutput = self.forward(
             input_features=input_features,
             attention_mask=attention_mask,
             **kwargs,
         )
-        encoder_hidden_states = outputs.logits
 
+        # greedy TDT decoding, `GreedyBatchedTDTLabelLoopingComputer.torch_impl` in NeMo
+        encoder_hidden_states = outputs.logits
+        batch_size, sequence_length = encoder_hidden_states.shape[:2]
         device = encoder_hidden_states.device
-        sequence_length = encoder_hidden_states.shape[1]
         if attention_mask is not None:
             encoder_attention_mask = self._get_output_attention_mask(attention_mask, target_length=sequence_length)
             valid_lengths = encoder_attention_mask.sum(dim=1).int()
@@ -1227,6 +1224,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         last_label_time = torch.full((batch_size,), -1, dtype=torch.long, device=device)
 
         while active_mask.any():
+            active_mask_prev = active_mask.clone()
             safe_time_indices = torch.clamp(time_indices, max=sequence_length - 1)
             encoder_frames = encoder_hidden_states[batch_indices, safe_time_indices].unsqueeze(1)
 
@@ -1236,7 +1234,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
             tokens = token_logits.argmax(dim=-1)
             durations = duration_logits.argmax(dim=-1)
-            blank_mask = active_mask & (tokens == self.config.pad_token_id)
+            blank_mask = active_mask_prev & (tokens == self.config.pad_token_id)
 
             # Force blank duration >= 1 to guarantee forward progress
             durations = durations.masked_fill(blank_mask & (durations == 0), 1)
@@ -1275,7 +1273,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 advance_mask = active_mask & blank_mask
 
             # Record results for non-blank tokens found
-            emit_mask = active_mask & (tokens != self.config.pad_token_id)
+            emit_mask = active_mask_prev & (tokens != self.config.pad_token_id)
             for i in range(batch_size):
                 if emit_mask[i]:
                     all_tokens[i].append(tokens[i].item())
