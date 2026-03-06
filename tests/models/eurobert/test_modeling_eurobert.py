@@ -225,7 +225,7 @@ class EuroBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = EuroBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EuroBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=EuroBertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
