@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
 from torch import nn
-from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.utils.data import Dataset
 
 from .generation.configuration_utils import GenerationConfig
@@ -29,6 +28,8 @@ from .integrations.fsdp import is_fsdp_managed_module
 from .trainer import Trainer
 from .utils import is_datasets_available, logging
 
+if torch.distributed.is_available():
+    from torch.distributed.fsdp import FullyShardedDataParallel
 
 if is_datasets_available():
     import datasets
@@ -319,7 +320,7 @@ class Seq2SeqTrainer(Trainer):
 
         summon_full_params_context = (
             FullyShardedDataParallel.summon_full_params(self.model)
-            if isinstance(self.model, FullyShardedDataParallel)
+            if torch.distributed.is_available() and isinstance(self.model, FullyShardedDataParallel)
             else contextlib.nullcontext()
         )
 
