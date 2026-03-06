@@ -14,6 +14,7 @@
 """Tokenization classes for Bert."""
 
 import collections
+import os
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
@@ -29,12 +30,24 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
+
+    if not isinstance(vocab_file, str):
+        raise ValueError("vocab_file must be a string path")
+
+    if not os.path.exists(vocab_file):
+        raise FileNotFoundError(
+            f"Vocabulary file not found at path: {vocab_file}"
+        )
+
     vocab = collections.OrderedDict()
+
     with open(vocab_file, "r", encoding="utf-8") as reader:
         tokens = reader.readlines()
+
     for index, token in enumerate(tokens):
         token = token.rstrip("\n")
         vocab[token] = index
+
     return vocab
 
 
