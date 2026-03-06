@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, Hugging Face
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -78,6 +77,10 @@ class FunnelConfig(PreTrainedConfig):
             sequence length that is not a multiple of 2.
         pool_q_only (`bool`, *optional*, defaults to `True`):
             Whether or not to apply the pooling only to the query or to query, key and values for the attention layers.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     """
 
     model_type = "funnel"
@@ -108,8 +111,12 @@ class FunnelConfig(PreTrainedConfig):
         separate_cls=True,
         truncate_seq=True,
         pool_q_only=True,
+        pad_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.block_sizes = block_sizes
         self.block_repeats = [1] * len(block_sizes) if block_repeats is None else block_repeats

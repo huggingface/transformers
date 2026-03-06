@@ -234,10 +234,6 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModelForVisualQuestionAnswering
 
-### AutoModelForVision2Seq[[transformers.AutoModelForVision2Seq]]
-
-[[autodoc]] AutoModelForVision2Seq
-
 ## Time Series
 
 ### AutoModelForTimeSeriesPrediction[[transformers.AutoModelForTimeSeriesPrediction]]

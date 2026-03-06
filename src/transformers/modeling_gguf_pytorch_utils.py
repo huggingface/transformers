@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import re
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -103,7 +103,7 @@ class LlamaTensorProcessor(TensorProcessor):
         return GGUFTensor(weights, name, {})
 
     def _reverse_permute_weights(
-        self, weights: np.ndarray, n_head: int, num_kv_heads: Optional[int] = None
+        self, weights: np.ndarray, n_head: int, num_kv_heads: int | None = None
     ) -> np.ndarray:
         # Original permutation implementation
         # https://github.com/ggerganov/llama.cpp/blob/a38b884c6c4b0c256583acfaaabdf556c62fabea/convert_hf_to_gguf.py#L1402-L1408
@@ -326,8 +326,8 @@ def read_field(reader, field):
 def get_gguf_hf_weights_map(
     hf_model,
     processor: TensorProcessor,
-    model_type: Optional[str] = None,
-    num_layers: Optional[int] = None,
+    model_type: str | None = None,
+    num_layers: int | None = None,
     qual_name: str = "",
 ):
     """
@@ -481,7 +481,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # tie_word_embeddings is true otherwise false
     exceptions = ["falcon", "bloom"]
     parsed_parameters["config"]["tie_word_embeddings"] = (
-        all("output.weight" != tensor.name for tensor in reader.tensors) or architecture in exceptions
+        all(tensor.name != "output.weight" for tensor in reader.tensors) or architecture in exceptions
     )
 
     # Set GGUF-specific default values

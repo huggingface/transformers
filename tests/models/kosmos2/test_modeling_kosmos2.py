@@ -38,12 +38,13 @@ from transformers.utils import (
     is_vision_available,
 )
 
-from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
+    global_rng,
     ids_tensor,
     random_attention_mask,
 )
@@ -262,7 +263,6 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     pipeline_model_mapping = (
         {
             "feature-extraction": Kosmos2Model,
-            "image-to-text": Kosmos2ForConditionalGeneration,
             "image-text-to-text": Kosmos2ForConditionalGeneration,
         }
         if is_torch_available()
@@ -273,7 +273,6 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     test_attention_outputs = False
     _is_composite = True
 
-    # TODO: `image-to-text` pipeline for this model needs Processor.
     # TODO: Tiny model needs fixing for `image-text-to-text` (latent_query_num=3 not compatible with num_image_tokens=64).
     def is_pipeline_test_to_skip(
         self,
@@ -308,6 +307,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.config_tester = ConfigTester(
             self, config_class=Kosmos2Config, has_text_modality=False, common_properties=["latent_query_num"]
         )
+        global_rng.seed(0)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -413,6 +413,11 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         pass
 
     @pytest.mark.generate
+    @unittest.skip(reason="Kosmos2 does not support generation from no inputs")
+    def test_generate_without_input_ids(self):
+        pass
+
+    @pytest.mark.generate
     def test_left_padding_compatibility(self):
         # Overwrite -- kosmos2 needs to prepare `image_embeds_position_mask`, and it must be padded accordingly
         _, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -476,7 +481,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             outputs_from_embeds = model.generate(
                 input_ids=input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
-            self.assertTrue(has_similar_generate_outputs(outputs_from_ids, outputs_from_embeds))
+            assert_similar_generate_outputs(outputs_from_ids, outputs_from_embeds)
 
             # input_ids is not a required input on most models -- if we don't pass it, the newly generated tokens will
             # be the same
@@ -484,7 +489,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
             outputs_from_embeds.sequences = outputs_from_embeds.sequences[:, inputs_embeds.shape[1] :]
-            self.assertTrue(has_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds))
+            assert_similar_generate_outputs(outputs_from_embeds_wo_ids, outputs_from_embeds)
 
 
 # We will verify our results on an image of cute cats

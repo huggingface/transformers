@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -215,6 +214,12 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel, Wav2Vec2Model):
 
 class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel, Wav2Vec2ForCTC):
     def __init__(self, config):
+        r"""
+        config ([`Data2VecAudioForCTC`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`]  method to load the model weights.
+        """
         Data2VecAudioPreTrainedModel.__init__(self, config)
 
         self.data2vec_audio = Data2VecAudioModel(config)

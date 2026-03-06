@@ -156,11 +156,15 @@ class Qwen2VLVisionText2TextModelTester:
         input_ids[:, self.num_image_tokens] = self.image_token_id
         input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
 
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[:, self.num_image_tokens] = 1
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "mm_token_type_ids": mm_token_type_ids,
         }
         return config, inputs_dict
 
@@ -210,9 +214,10 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
             curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
+            model.base_model.rope_deltas = None
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
             input_ids = curr_input_dict["input_ids"][:1]
             pixel_values = curr_input_dict["pixel_values"][:one_img_length]
@@ -220,9 +225,10 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
 
+            model.base_model.rope_deltas = None
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
@@ -249,6 +255,14 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             forward_output = model(**input_dict)
             torch.testing.assert_close(
                 generation_output.logits[0], forward_output.logits[:, -1, :], rtol=1e-4, atol=1e-4
+            )
+
+            # Same happens if we call `generate` API instead of `forward`
+            generation_output_second = model.generate(
+                **input_dict, max_new_tokens=10, return_dict_in_generate=True, output_logits=True
+            )
+            torch.testing.assert_close(
+                generation_output.logits[0], generation_output_second.logits[0], rtol=1e-4, atol=1e-4
             )
 
     def attention_mask_padding_matches_padding_free_with_position_ids(
@@ -298,6 +312,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     input_ids=inputs_dict["input_ids"],
                     image_grid_thw=inputs_dict["image_grid_thw"],
                     attention_mask=inputs_dict["attention_mask"],
+                    mm_token_type_ids=inputs_dict["mm_token_type_ids"],
                 )  # [3, bs, padded-seq-len]
                 vision_padfree_positions = vision_position_ids[:, dummy_attention_mask.bool()].view(
                     3, -1
@@ -376,7 +391,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": True})
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
             model.enable_input_require_grads()
             model.train()
 

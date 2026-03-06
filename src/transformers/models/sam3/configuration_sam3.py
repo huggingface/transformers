@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Meta AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -402,6 +401,14 @@ class Sam3Config(PreTrainedConfig):
     [facebook/sam3](https://huggingface.co/facebook/sam3) architecture.
 
     This is the main configuration class that combines all sub-configurations for the SAM3 model.
+
+    <Tip>
+
+    SAM3 checkpoints with `model_type="sam3_video"` are compatible with `Sam3Model` since the video variant weights
+    are a superset of the image-only model weights. You may see a warning about model type mismatch when loading
+    such checkpoints, which can be safely ignored in this case.
+
+    </Tip>
 
     Args:
         vision_config (`dict` or `Sam3VisionConfig`, *optional*):

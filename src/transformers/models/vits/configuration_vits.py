@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Kakao Enterprise Authors and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -130,6 +129,8 @@ class VitsConfig(PreTrainedConfig):
             How random the duration prediction is. Larger values create more variation in the predicted durations.
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the output audio waveform is digitalized expressed in hertz (Hz).
+        pad_token_id (`int`, *optional*):
+            Padding token id.
 
     Example:
 
@@ -194,6 +195,7 @@ class VitsConfig(PreTrainedConfig):
         noise_scale=0.667,
         noise_scale_duration=0.8,
         sampling_rate=16_000,
+        pad_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -240,6 +242,7 @@ class VitsConfig(PreTrainedConfig):
         self.noise_scale = noise_scale
         self.noise_scale_duration = noise_scale_duration
         self.sampling_rate = sampling_rate
+        self.pad_token_id = pad_token_id
 
         if len(upsample_kernel_sizes) != len(upsample_rates):
             raise ValueError(
