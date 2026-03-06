@@ -34,22 +34,6 @@ rendered properly in your Markdown viewer.
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-from transformers import pipeline
-
-summarizer = pipeline(
-    "summarization",
-    model="patrickvonplaten/bert2bert-cnn_dailymail-fp16",
-    device=0
-)
-
-text = "Plants create energy through a process known as photosynthesis. This involves capturing sunlight and converting carbon dioxide and water into glucose and oxygen."
-print(summarizer(text))
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
 ```python
