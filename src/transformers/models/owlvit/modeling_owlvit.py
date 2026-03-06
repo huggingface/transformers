@@ -529,6 +529,10 @@ class OwlViTPreTrainedModel(PreTrainedModel):
         "hidden_states": OwlViTEncoderLayer,
         "attentions": OwlViTAttention,
     }
+    _keys_to_ignore_on_load_unexpected = [
+        r".*text_model.embeddings.position_ids",
+        r".*vision_model.embeddings.position_ids",
+    ]
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
