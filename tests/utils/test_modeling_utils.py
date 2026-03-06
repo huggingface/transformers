@@ -2252,6 +2252,14 @@ class ModelUtilsTest(TestCasePlus):
                 ):
                     _ = MixtralModel.from_pretrained(tmpdirname)
 
+    def test_experts_implementation_missing_module_cache_entry(self):
+        small_config = MixtralConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=32, num_attention_heads=8)
+
+        with patch.dict(sys.modules, {MixtralModel.__module__: None}):
+            model = MixtralModel(small_config)
+
+        self.assertIsInstance(model, MixtralModel)
+
     def test_composite_model_inherit_properties(self):
         model = MultimodalModel(PreTrainedConfig())
         # Make sure the top level inherited properties from its child language and vision models
