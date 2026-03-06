@@ -107,6 +107,7 @@ OBJECTS_TO_IGNORE = {
     "Mxfp4Config",
     "GlmAsrProcessor",
     "AudioFlamingo3Processor",
+    "FourOverSixConfig",
     "Llama4Processor",
     # Deprecated
     "InputExample",

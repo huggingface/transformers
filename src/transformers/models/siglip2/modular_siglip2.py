@@ -82,9 +82,6 @@ class Siglip2Tokenizer(GemmaTokenizer):
         if backend is not None and backend.normalizer is not None:
             backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), backend.normalizer])
 
-    def _unk_id(self) -> int:
-        raise AttributeError("_unk_id is not needed for SigLIP2.")
-
 
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 class Siglip2TextConfig(SiglipTextConfig):

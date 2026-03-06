@@ -768,12 +768,10 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
             Bounding box coordinates of the detected layout elements **in [0, 1000] scale**.
             Format is `[x_min, y_min, x_max, y_max]`.
             The tensor usually contains sorted valid boxes followed by zero-padding.
-
         labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             The **remapped** class indices for each layout element.
             These are not necessarily the raw detection class IDs, but indices mapped via
             `config.class_order` (e.g., mapping text/title/figure to specific reading-order category IDs).
-
         mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Boolean or Binary mask indicating valid detected elements after threshold filtering.
             - True: Valid layout element.
@@ -832,13 +830,13 @@ class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
         Classification logits (including no-object) for all queries.
-    order_logits (`tuple` of `torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
-        Order logits for all queries. The first dimension of each tensor is the batch size. The second dimension is the number of queries.
     pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
         possible padding). You can use [`~RTDetrImageProcessor.post_process_object_detection`] to retrieve the
         unnormalized (absolute) bounding boxes.
+    order_logits (`tuple` of `torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
+        Order logits for all queries. The first dimension of each tensor is the batch size. The second dimension is the number of queries.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
