@@ -1222,8 +1222,10 @@ class LwDetrModel(DeformableDetrModel):
             `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
                 - object_query (Tensor[batch_size, sequence_length, hidden_size]): Object query features. Later used to
                   directly predict a bounding box. (without the need of a decoder)
-                - output_proposals (Tensor[batch_size, sequence_length, 4]): Normalized proposals, after an inverse
-                  sigmoid.
+                - output_proposals (Tensor[batch_size, sequence_length, 4]): Normalized proposals in [0, 1] space.
+                  Invalid positions (padding or out-of-bounds) are filled with 0.
+                - invalid_mask (Tensor[batch_size, sequence_length, 1]): Boolean mask that is True for invalid positions
+                  (padded pixels or proposals whose coordinates fall outside (0.01, 0.99)).
         """
         batch_size = enc_output.shape[0]
         proposals = []
@@ -1260,14 +1262,14 @@ class LwDetrModel(DeformableDetrModel):
             _cur += height * width
         output_proposals = torch.cat(proposals, 1)
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
-        output_proposals = output_proposals.masked_fill(padding_mask.unsqueeze(-1), float(0))
-        output_proposals = output_proposals.masked_fill(~output_proposals_valid, float(0))
+        invalid_mask = padding_mask | ~output_proposals_valid.squeeze(-1)
+        invalid_mask = padding_mask.unsqueeze(-1) | ~output_proposals_valid
+        output_proposals = output_proposals.masked_fill(invalid_mask, float(0))
 
         # assign each pixel as an object query
         object_query = enc_output
-        object_query = object_query.masked_fill(padding_mask.unsqueeze(-1), float(0))
-        object_query = object_query.masked_fill(~output_proposals_valid, float(0))
-        return object_query, output_proposals
+        object_query = object_query.masked_fill(invalid_mask, float(0))
+        return object_query, output_proposals, invalid_mask
 
     @can_return_tuple
     @auto_docstring
@@ -1350,7 +1352,7 @@ class LwDetrModel(DeformableDetrModel):
         target = query_feat.unsqueeze(0).expand(batch_size, -1, -1)
         reference_points = reference_points.unsqueeze(0).expand(batch_size, -1, -1)
 
-        object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
+        object_query_embedding, output_proposals, invalid_mask = self.gen_encoder_output_proposals(
             source_flatten, ~mask_flatten, spatial_shapes_list
         )
 
@@ -1365,6 +1367,7 @@ class LwDetrModel(DeformableDetrModel):
             group_object_query = self.enc_output_norm[group_id](group_object_query)
 
             group_enc_outputs_class = self.enc_out_class_embed[group_id](group_object_query)
+            group_enc_outputs_class = group_enc_outputs_class.masked_fill(invalid_mask, float("-inf"))
             group_delta_bbox = self.enc_out_bbox_embed[group_id](group_object_query)
             group_enc_outputs_coord = refine_bboxes(output_proposals, group_delta_bbox)
 
@@ -1416,6 +1419,9 @@ class LwDetrModel(DeformableDetrModel):
             attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
         )
+
+    def get_proposal_pos_embed(self, proposals):
+        raise NotImplementedError("get_proposal_pos_embed is not used in LwDetrForObjectDetection")
 
 
 class LwDetrMLPPredictionHead(DeformableDetrMLPPredictionHead):
