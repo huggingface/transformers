@@ -23,7 +23,7 @@ from parameterized import parameterized
 from transformers import (
     PPOCRV5ServerDetConfig,
     PPOCRV5ServerDetForObjectDetection,
-    PPOCRV5ServerDetImageProcessor,
+    PPOCRV5ServerDetImageProcessorFast,
     is_torch_available,
     is_vision_available,
 )
@@ -37,7 +37,6 @@ from transformers.testing_utils import (
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
-
 
 if is_torch_available():
     import torch
@@ -70,6 +69,17 @@ class PPOCRV5ServerDetModelTester:
         return config, pixel_values
 
     def get_config(self) -> PPOCRV5ServerDetConfig:
+        backbone_config = {
+            "model_type": "hgnet_v2",
+            "arch": "L",
+            "return_idx": [0, 1, 2, 3],
+            "freeze_stem_only": True,
+            "freeze_at": 0,
+            "freeze_norm": True,
+            "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
+            "out_features": ["stage1", "stage2", "stage3", "stage4"]
+        }
+
         intraclblock_config = {
             "reduce_channel": [1, 1, 0],
             "return_channel": [1, 1, 0],
@@ -85,9 +95,8 @@ class PPOCRV5ServerDetModelTester:
         }
 
         config = PPOCRV5ServerDetConfig(
+            backbone_config=backbone_config,
             interpolate_mode="nearest",
-            stem_channels=[3, 32, 48],
-            use_learnable_affine_block=False,
             use_last_conv=True,
             class_expand=2048,
             dropout_prob=0.0,
@@ -97,7 +106,6 @@ class PPOCRV5ServerDetModelTester:
             reduce_factor=2,
             intraclblock_config=intraclblock_config,
             head_in_channels=1024,
-            k=50,
             mode="large",
             scale_factor=2,
             hidden_act="relu",
@@ -273,7 +281,7 @@ class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
         self.model = PPOCRV5ServerDetForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
-            PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
+            PPOCRV5ServerDetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
         )
         self.image = Image.open(
             requests.get(

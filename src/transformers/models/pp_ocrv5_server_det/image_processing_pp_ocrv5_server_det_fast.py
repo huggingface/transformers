@@ -29,7 +29,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import SizeDict
 from ...processing_utils import Unpack
-from ...utils import is_cv2_available
+from ...utils import auto_docstring, is_cv2_available
 from ...utils.generic import TensorType
 from .image_processing_pp_ocrv5_server_det import PPOCRV5ServerDetImageProcessorKwargs
 
@@ -403,6 +403,10 @@ def process(
     return boxes, scores
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     """
     Image processor for PPOCRV5 Server Det model, handling preprocessing (resizing, normalization)

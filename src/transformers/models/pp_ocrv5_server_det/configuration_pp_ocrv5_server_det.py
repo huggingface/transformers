@@ -21,9 +21,14 @@
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PPOCRV5ServerDet`]. It is used to instantiate a
@@ -45,8 +50,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
             The channel reduction factor used in the neck blocks to balance performance and complexity.
         intraclblock_config (`dict`, *optional*, defaults to `None`):
             Configuration for the Intra-Class Block modules, if any, used for enhancing feature representation.
-        k (`int`, *optional*, defaults to 50):
-            The candidate box number threshold for the head network, controlling the maximum number of text region candidates.
         mode (`str`, *optional*, defaults to `"large"`):
             The model scale mode, such as `"large"` or `"small"`, affecting the depth and width of the network.
         scale_factor (`int`, *optional*, defaults to 2):
@@ -78,7 +81,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         neck_out_channels: int = 256,
         reduce_factor: int = 2,
         intraclblock_config: dict | None = None,
-        k: int = 50,
         mode: str = "large",
         scale_factor: int = 2,
         hidden_act: str = "relu",
@@ -113,7 +115,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         self.intraclblock_config = intraclblock_config
 
         # ---- head ----
-        self.k = k
         self.scale_factor = scale_factor
         self.hidden_act = hidden_act
         self.kernel_list = kernel_list

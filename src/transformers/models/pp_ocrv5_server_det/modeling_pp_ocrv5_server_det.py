@@ -27,7 +27,8 @@ import torch.nn.functional as F
 from ...backbone_utils import load_backbone
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput
+from ...utils import auto_docstring, can_return_tuple
+from ...utils.output_capturing import capture_outputs
 from .configuration_pp_ocrv5_server_det import PPOCRV5ServerDetConfig
 
 
@@ -205,7 +206,7 @@ class PPOCRV5ServerDetIntraCLBlock(nn.Module):
         return identity + hidden_state
 
 
-class PPOCRV5ServerDetLKPAN(nn.Module):
+class PPOCRV5ServerDetLKPAN(PreTrainedModel):
     """
     Large Kernel Path Aggregation Network (Neck).
     It fuses features from multiple backbone stages (C2-C5) using a combination of
@@ -217,7 +218,7 @@ class PPOCRV5ServerDetLKPAN(nn.Module):
     """
 
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.interpolate_mode = config.interpolate_mode
 
         if config.mode == "lite":
@@ -283,7 +284,8 @@ class PPOCRV5ServerDetLKPAN(nn.Module):
             config.intraclblock_config, config.neck_out_channels // 4, reduce_factor=config.reduce_factor
         )
 
-    def forward(self, hidden_state: list[torch.Tensor]) -> torch.Tensor:
+    @capture_outputs()
+    def forward(self, hidden_state: list[torch.Tensor], **kwargs) -> torch.Tensor:
         """
         Forward pass of PPOCRV5ServerDetLKPAN.
 
@@ -331,7 +333,7 @@ class PPOCRV5ServerDetLKPAN(nn.Module):
         p3 = F.interpolate(p3, scale_factor=2, mode=self.interpolate_mode)
 
         fuse = torch.cat([p5, p4, p3, p2], dim=1)
-        return fuse
+        return BaseModelOutputWithNoAttention(last_hidden_state=fuse)
 
 
 class PPOCRV5ServerDetConvBNLayer(nn.Module):
@@ -590,7 +592,7 @@ class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
 
 
 @dataclass
-class PPOCRV5ServerDetModelOutput(ModelOutput):
+class PPOCRV5ServerDetModelOutput(BaseModelOutputWithNoAttention):
     """
     Output class for the PPOCRV5ServerDetModel.
 
@@ -598,16 +600,9 @@ class PPOCRV5ServerDetModelOutput(ModelOutput):
         logits (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
             Binary segmentation probability maps from the head. Higher values indicate
             higher probability of text presence.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, channels, height/32, width/32)`, *optional*):
-            Sequence of hidden-states from the last stage of the backbone.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of each stage) of various shapes.
-            Returned if `output_hidden_states=True` is passed or `config.output_hidden_states=True`.
     """
 
     logits: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
 class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
@@ -643,11 +638,17 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
                         nn.init.kaiming_uniform_(m.weight)
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
     """
     Core PPOCRV5 Server Det model.
     Integration of HGNetV2 (Backbone), PPOCRV5ServerDetLKPAN (Neck), and PPOCRV5ServerDetPFHeadLocal (Head).
     """
+
+    _can_record_outputs = {"hidden_states": PPOCRV5ServerDetLKPAN}
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
         """
@@ -657,17 +658,15 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
             config (PPOCRV5ServerDetConfig): Configuration object containing all model hyperparameters.
         """
         super().__init__(config)
-
-        self.backbone = load_backbone(config.backbone_config)
+        self.backbone = load_backbone(config)
         self.neck = PPOCRV5ServerDetLKPAN(config)
-        self.head = PPOCRV5ServerDetPFHeadLocal(config)
         self.post_init()
 
+    @capture_outputs
+    @can_return_tuple
     def forward(
         self,
         hidden_state: torch.FloatTensor,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | PPOCRV5ServerDetModelOutput:
         """
@@ -676,25 +675,20 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
         Args:
             hidden_state (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
                 Input image pixels.
-            output_hidden_states (`bool`, *optional*):
-                Whether to return all intermediate features.
-            return_dict (`bool`, *optional*):
-                Whether to return a `PPOCRV5ServerDetModelOutput` instead of a plain tuple.
 
-        Returns:
-            `PPOCRV5ServerDetModelOutput` or `tuple(torch.FloatTensor)`:
-                A `PPOCRV5ServerDetModelOutput` (if `return_dict=True` is passed or `config.use_return_dict=True`)
-                containing the segmentation logits and optional hidden states.
         """
         hidden_state = self.backbone(hidden_state).feature_maps
-        hidden_state = self.neck(hidden_state)
-        hidden_state = self.head(hidden_state)
 
-        return PPOCRV5ServerDetModelOutput(
-            logits=hidden_state,
-        )
+        outputs = self.neck(hidden_state)
+        breakpoint()
+
+        return PPOCRV5ServerDetModelOutput(logits=outputs.last_hidden_state)
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 @dataclass
 class PPOCRV5ServerDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
     """
@@ -710,9 +704,12 @@ class PPOCRV5ServerDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
     """
 
     logits: torch.FloatTensor | None = None
-    shape: torch.FloatTensor | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
     """
     PPOCRV5 Server Det model for object (text) detection tasks. Wraps the core PPOCRV5ServerDetModel
@@ -730,14 +727,14 @@ class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
         """
         super().__init__(config)
         self.model = PPOCRV5ServerDetModel(config)
+        self.head = PPOCRV5ServerDetPFHeadLocal(config)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: list[dict] | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | PPOCRV5ServerDetForObjectDetectionOutput:
         """
@@ -746,37 +743,17 @@ class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
                 Pixel values of the input images.
-            labels (`list[dict]`, *optional*):
-                Ground truth for training (not implemented in this forward pass).
-            output_hidden_states (`bool`, *optional*):
-                Whether to return backbone's intermediate states.
-            return_dict (`bool`, *optional*):
-                Whether to return a structured output object.
 
         Returns:
             `PPOCRV5ServerDetForObjectDetectionOutput` or `tuple(torch.FloatTensor)`:
                 The detection result containing `logits` (segmentation mask).
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.model(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        if not return_dict:
-            output = (outputs[0],)
-            if output_hidden_states:
-                output += (outputs[1], outputs[2])
-            else:
-                output += (outputs[1],)
-
-            return output
+        outputs = self.model(pixel_values)
+        logits = self.head(outputs.logits)
 
         return PPOCRV5ServerDetForObjectDetectionOutput(
-            logits=outputs.logits,
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            logits=logits,
         )
 
 
