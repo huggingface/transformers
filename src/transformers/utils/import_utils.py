@@ -505,7 +505,7 @@ def is_torch_bf16_gpu_available() -> bool:
     if is_torch_musa_available():
         return torch.musa.is_bf16_supported() if hasattr(torch, "musa") else False
     if is_torch_mlu_available():
-        return torch.mlu.is_bf16_supported()
+        return torch.mlu.is_bf16_supported() if hasattr(torch, "mlu") else False
     if is_torch_neuron_available():
         return getattr(torch, "neuron").is_bf16_supported()
     return False
