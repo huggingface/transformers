@@ -14,66 +14,63 @@
 """RAG model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import add_start_docstrings
+from ...utils import auto_docstring
 
 
-RAG_CONFIG_DOC = r"""
-    [`RagConfig`] stores the configuration of a *RagModel*. Configuration objects inherit from [`PreTrainedConfig`] and
-    can be used to control the model outputs. Read the documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        title_sep (`str`, *optional*, defaults to  `" / "`):
-            Separator inserted between the title and the text of the retrieved document when calling [`RagRetriever`].
-        doc_sep (`str`, *optional*, defaults to  `" // "`):
-            Separator inserted between the text of the retrieved document and the original input when calling
-            [`RagRetriever`].
-        n_docs (`int`, *optional*, defaults to 5):
-            Number of documents to retrieve.
-        max_combined_length (`int`, *optional*, defaults to 300):
-            Max length of contextualized input returned by [`~RagRetriever.__call__`].
-        retrieval_vector_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the document embeddings indexed by [`RagRetriever`].
-        retrieval_batch_size (`int`, *optional*, defaults to 8):
-            Retrieval batch size, defined as the number of queries issues concurrently to the faiss index encapsulated
-            [`RagRetriever`].
-        dataset (`str`, *optional*, defaults to `"wiki_dpr"`):
-            A dataset identifier of the indexed dataset in HuggingFace Datasets (list all available datasets and ids
-            using `datasets.list_datasets()`).
-        dataset_split (`str`, *optional*, defaults to `"train"`)
-            Which split of the `dataset` to load.
-        index_name (`str`, *optional*, defaults to `"compressed"`)
-            The index name of the index associated with the `dataset`. One can choose between `"legacy"`, `"exact"` and
-            `"compressed"`.
-        index_path (`str`, *optional*)
-            The path to the serialized faiss index on disk.
-        passages_path (`str`, *optional*):
-            A path to text passages compatible with the faiss index. Required if using
-            [`~models.rag.retrieval_rag.LegacyIndex`]
-        use_dummy_dataset (`bool`, *optional*, defaults to `False`)
-            Whether to load a "dummy" variant of the dataset specified by `dataset`.
-        label_smoothing (`float`, *optional*, defaults to 0.0):
-            Only relevant if `return_loss` is set to `True`. Controls the `epsilon` parameter value for label smoothing
-            in the loss calculation. If set to 0, no label smoothing is performed.
-        do_marginalize (`bool`, *optional*, defaults to `False`):
-            If `True`, the logits are marginalized over all documents by making use of
-            `torch.nn.functional.log_softmax`.
-        reduce_loss (`bool`, *optional*, defaults to `False`):
-            Whether or not to reduce the NLL loss using the `torch.Tensor.sum` operation.
-        do_deduplication (`bool`, *optional*, defaults to `True`):
-            Whether or not to deduplicate the generations from different context documents for a given input. Has to be
-            set to `False` if used while training with distributed backend.
-        exclude_bos_score (`bool`, *optional*, defaults to `False`):
-            Whether or not to disregard the BOS token when computing the loss.
-        output_retrieved(`bool`, *optional*, defaults to `False`):
-            If set to `True`, `retrieved_doc_embeds`, `retrieved_doc_ids`, `context_input_ids` and
-            `context_attention_mask` are returned. See returned tensors for more detail.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-"""
-
-
-@add_start_docstrings(RAG_CONFIG_DOC)
+@auto_docstring(checkpoint="")
 class RagConfig(PreTrainedConfig):
+    r"""
+    title_sep (`str`, *optional*, defaults to  `" / "`):
+        Separator inserted between the title and the text of the retrieved document when calling [`RagRetriever`].
+    doc_sep (`str`, *optional*, defaults to  `" // "`):
+        Separator inserted between the text of the retrieved document and the original input when calling
+        [`RagRetriever`].
+    n_docs (`int`, *optional*, defaults to 5):
+        Number of documents to retrieve.
+    max_combined_length (`int`, *optional*, defaults to 300):
+        Max length of contextualized input returned by [`~RagRetriever.__call__`].
+    retrieval_vector_size (`int`, *optional*, defaults to 768):
+        Dimensionality of the document embeddings indexed by [`RagRetriever`].
+    retrieval_batch_size (`int`, *optional*, defaults to 8):
+        Retrieval batch size, defined as the number of queries issues concurrently to the faiss index encapsulated
+        [`RagRetriever`].
+    dataset (`str`, *optional*, defaults to `"wiki_dpr"`):
+        A dataset identifier of the indexed dataset in HuggingFace Datasets (list all available datasets and ids
+        using `datasets.list_datasets()`).
+    dataset_split (`str`, *optional*, defaults to `"train"`):
+        Which split of the `dataset` to load.
+    index_name (`str`, *optional*, defaults to `"compressed"`):
+        The index name of the index associated with the `dataset`. One can choose between `"legacy"`, `"exact"` and
+        `"compressed"`.
+    index_path (`str`, *optional*):
+        The path to the serialized faiss index on disk.
+    passages_path (`str`, *optional*):
+        A path to text passages compatible with the faiss index. Required if using
+        [`~models.rag.retrieval_rag.LegacyIndex`]
+    use_dummy_dataset (`bool`, *optional*, defaults to `False`):
+        Whether to load a "dummy" variant of the dataset specified by `dataset`.
+    label_smoothing (`float`, *optional*, defaults to 0.0):
+        Only relevant if `return_loss` is set to `True`. Controls the `epsilon` parameter value for label smoothing
+        in the loss calculation. If set to 0, no label smoothing is performed.
+    do_marginalize (`bool`, *optional*, defaults to `False`):
+        If `True`, the logits are marginalized over all documents by making use of
+        `torch.nn.functional.log_softmax`.
+    reduce_loss (`bool`, *optional*, defaults to `False`):
+        Whether or not to reduce the NLL loss using the `torch.Tensor.sum` operation.
+    do_deduplication (`bool`, *optional*, defaults to `True`):
+        Whether or not to deduplicate the generations from different context documents for a given input. Has to be
+        set to `False` if used while training with distributed backend.
+    exclude_bos_score (`bool`, *optional*, defaults to `False`):
+        Whether or not to disregard the BOS token when computing the loss.
+    output_retrieved(`bool`, *optional*, defaults to `False`):
+        If set to `True`, `retrieved_doc_embeds`, `retrieved_doc_ids`, `context_input_ids` and
+        `context_attention_mask` are returned. See returned tensors for more detail.
+    prefix (`str`, *optional*):
+        A string prefix prepended to every input before passing to the generator model.
+    dataset_revision (`str`, *optional*,):
+        The revision (commit hash, tag, or branch) of the Hugging Face dataset used for retrieval.
+    """
+
     model_type = "rag"
     has_no_defaults_at_init = True
 

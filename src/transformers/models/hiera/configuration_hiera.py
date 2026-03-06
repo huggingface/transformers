@@ -15,85 +15,39 @@
 
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="facebook/hiera-base-224")
 class HieraConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`HieraModel`]. It is used to instantiate a Hiera
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Hiera
-    [facebook/hiera-base-224](https://huggingface.co/facebook/hiera-base-224) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        embed_dim (`int`, *optional*, defaults to 96):
-            Dimensionality of patch embedding.
-        image_size (`list(int)`, *optional*, defaults to `[224, 224]`):
-            The size (resolution) of input in the format (height, width) for images
-            and (frames, height, width) for videos.
-        patch_size (`list(int)`, *optional*, defaults to `[7, 7]`):
-            The size (resolution) of each patch.
-        patch_stride (`list(int)`, *optional*, defaults to `[4, 4]`):
-            The stride of the patch.
-        patch_padding (`list(int)`, *optional*, defaults to `[3, 3]`):
-            The padding of the patch.
-        mlp_ratio (`float`, *optional*, defaults to 4.0):
-            The ratio of mlp hidden dim to embedding dim.
-        depths (`list(int)`, *optional*, defaults to `[2, 3, 16, 3]`):
-            Depth of each layer in the Transformer encoder.
-        num_heads (`list(int)`, *optional*, defaults to `[1, 2, 4, 8]`):
-            Number of attention heads in each layer of the Transformer encoder.
-        embed_dim_multiplier (`float`, *optional*, defaults to 2.0):
-            The multiplier to the dimensionality of patch embedding in each layer of the Transformer encoder.
-        num_query_pool (`int`, *optional*, defaults to 3):
-            The number of query pool stages.
-        query_stride (`list(int)`, *optional*, defaults to `[2, 2]`):
-            The stride of the query pool.
-        masked_unit_size (`list(int)`, *optional*, defaults to `[8, 8]`):
-            The size of the masked unit.
-        masked_unit_attention (`list(bool)`, *optional*, defaults to `[True, True, False, False]`):
-            Whether to use masked unit attention in each layer of the Transformer encoder.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            The drop path rate.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder. If string, `"gelu"`, `"relu"`,
-            `"selu"` and `"gelu_new"` are supported.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices and
-            the zero_initializer for initializing all bias vectors.
-        layer_norm_init (`float`, *optional*, defaults to 1.0):
-            The initial weight value for layer normalization layers.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        decoder_hidden_size (`int`, *optional*):
-            Dimensionality of decoder embeddings for MAE pretraining.
-        decoder_depth (`int`, *optional*):
-            Depth of the decoder for MAE pretraining.
-        decoder_num_heads (`int`, *optional*):
-            Number of attention heads in each layer of the decoder for MAE pretraining.
-        normalize_pixel_loss (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the pixel loss by the number of pixels.
-        mask_ratio (`float`, *optional*, defaults to 0.6):
-            The ratio of masked tokens in the input.
-        out_features (`list[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        out_indices (`list[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-
+    layer_norm_init (`float`, *optional*, defaults to 1.0):
+        The initial weight value for layer normalization layers.
+    patch_stride (`list(int)`, *optional*, defaults to `[4, 4]`):
+        The stride of the patch.
+    patch_padding (`list(int)`, *optional*, defaults to `[3, 3]`):
+        The padding of the patch.
+    num_heads (`list(int)`, *optional*, defaults to `[1, 2, 4, 8]`):
+        Number of attention heads in each layer of the Transformer encoder.
+    embed_dim_multiplier (`float`, *optional*, defaults to 2.0):
+        The multiplier to the dimensionality of patch embedding in each layer of the Transformer encoder.
+    num_query_pool (`int`, *optional*, defaults to 3):
+        The number of query pool stages.
+    query_stride (`list(int)`, *optional*, defaults to `[2, 2]`):
+        The stride of the query pool.
+    masked_unit_size (`list(int)`, *optional*, defaults to `[8, 8]`):
+        The size of the masked unit.
+    masked_unit_attention (`list(bool)`, *optional*, defaults to `[True, True, False, False]`):
+        Whether to use masked unit attention in each layer of the Transformer encoder.
+    decoder_depth (`int`, *optional*):
+        Depth of the decoder for MAE pretraining.
+    normalize_pixel_loss (`bool`, *optional*, defaults to `True`):
+        Whether to normalize the pixel loss by the number of pixels.
+    mask_ratio (`float`, *optional*, defaults to 0.6):
+        The ratio of masked tokens in the input.
 
     Example:
 

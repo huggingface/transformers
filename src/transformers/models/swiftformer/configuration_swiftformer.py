@@ -14,57 +14,33 @@
 """SwiftFormer model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="MBZUAI/swiftformer-xs")
 class SwiftFormerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SwiftFormerModel`]. It is used to instantiate an
-    SwiftFormer model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the SwiftFormer
-    [MBZUAI/swiftformer-xs](https://huggingface.co/MBZUAI/swiftformer-xs) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels
-        depths (`list[int]`, *optional*, defaults to `[3, 3, 6, 4]`):
-            Depth of each stage
-        embed_dims (`list[int]`, *optional*, defaults to `[48, 56, 112, 220]`):
-            The embedding dimension at each stage
-        mlp_ratio (`int`, *optional*, defaults to 4):
-            Ratio of size of the hidden dimensionality of an MLP to the dimensionality of its input.
-        downsamples (`list[bool]`, *optional*, defaults to `[True, True, True, True]`):
-            Whether or not to downsample inputs between two stages.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (string). `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        down_patch_size (`int`, *optional*, defaults to 3):
-            The size of patches in downsampling layers.
-        down_stride (`int`, *optional*, defaults to 2):
-            The stride of convolution kernels in downsampling layers.
-        down_pad (`int`, *optional*, defaults to 1):
-            Padding in downsampling layers.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            Rate at which to increase dropout probability in DropPath.
-        drop_mlp_rate (`float`, *optional*, defaults to 0.0):
-            Dropout rate for the MLP component of SwiftFormer.
-        drop_conv_encoder_rate (`float`, *optional*, defaults to 0.0):
-            Dropout rate for the ConvEncoder component of SwiftFormer.
-        use_layer_scale (`bool`, *optional*, defaults to `True`):
-            Whether to scale outputs from token mixers.
-        layer_scale_init_value (`float`, *optional*, defaults to 1e-05):
-            Factor by which outputs from token mixers are scaled.
-        batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the batch normalization layers.
-
+    embed_dims (`list[int]`, *optional*, defaults to `[48, 56, 112, 220]`):
+        The embedding dimension at each stage
+    downsamples (`list[bool]`, *optional*, defaults to `[True, True, True, True]`):
+        Whether or not to downsample inputs between two stages.
+    down_patch_size (`int`, *optional*, defaults to 3):
+        The size of patches in downsampling layers.
+    down_stride (`int`, *optional*, defaults to 2):
+        The stride of convolution kernels in downsampling layers.
+    down_pad (`int`, *optional*, defaults to 1):
+        Padding in downsampling layers.
+    drop_mlp_rate (`float`, *optional*, defaults to 0.0):
+        Dropout rate for the MLP component of SwiftFormer.
+    drop_conv_encoder_rate (`float`, *optional*, defaults to 0.0):
+        Dropout rate for the ConvEncoder component of SwiftFormer.
+    use_layer_scale (`bool`, *optional*, defaults to `True`):
+        Whether to scale outputs from token mixers.
+    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
+        The epsilon used by the batch normalization layers.
 
     Example:
 

@@ -18,46 +18,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`EdgeTamVisionModel`]. It is used to instantiate a SAM
-    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    defaults will yield a similar configuration to that of SAM 2.1 Hiera-tiny
-    [facebook/EdgeTAM](https://huggingface.co/facebook/EdgeTAM) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `timm/repvit_m1.dist_in1k`):
-            Configuration for the vision backbone. This is used to instantiate the backbone using
-            `AutoModel.from_config`.
-        backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
-            The list of channel dimensions for the backbone.
-        backbone_feature_sizes (`List[List[int]]`, *optional*, defaults to `[[256, 256], [128, 128], [64, 64]]`):
-            The spatial sizes of the feature maps from the backbone.
-        fpn_hidden_size (`int`, *optional*, defaults to 256):
-            The hidden dimension of the FPN.
-        fpn_kernel_size (`int`, *optional*, defaults to 1):
-            The kernel size for the convolutions in the neck.
-        fpn_stride (`int`, *optional*, defaults to 1):
-            The stride for the convolutions in the neck.
-        fpn_padding (`int`, *optional*, defaults to 0):
-            The padding for the convolutions in the neck.
-        fpn_top_down_levels (`List[int]`, *optional*, defaults to `[2, 3]`):
-            The levels for the top-down FPN connections.
-        num_feature_levels (`int`, *optional*, defaults to 3):
-            The number of feature levels from the FPN to use.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the neck.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon for the layer normalization.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+    backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
+        The list of channel dimensions for the backbone.
+    backbone_feature_sizes (`List[List[int]]`, *optional*, defaults to `[[256, 256], [128, 128], [64, 64]]`):
+        The spatial sizes of the feature maps from the backbone.
+    fpn_hidden_size (`int`, *optional*, defaults to 256):
+        The hidden dimension of the FPN.
+    fpn_kernel_size (`int`, *optional*, defaults to 1):
+        The kernel size for the convolutions in the neck.
+    fpn_stride (`int`, *optional*, defaults to 1):
+        The stride for the convolutions in the neck.
+    fpn_padding (`int`, *optional*, defaults to 0):
+        The padding for the convolutions in the neck.
+    fpn_top_down_levels (`List[int]`, *optional*, defaults to `[2, 3]`):
+        The levels for the top-down FPN connections.
+    num_feature_levels (`int`, *optional*, defaults to 3):
+        The number of feature levels from the FPN to use.
     """
 
     base_config_key = "vision_config"
@@ -115,31 +98,15 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
+@auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamPromptEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`EdgeTamPromptEncoder`]. The [`EdgeTamPromptEncoder`]
-    module is used to encode the input 2D points and bounding boxes.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        image_size (`int`, *optional*, defaults to 1024):
-            The expected output resolution of the image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        mask_input_channels (`int`, *optional*, defaults to 16):
-            The number of channels to be fed to the `MaskDecoder` module.
-        num_point_embeddings (`int`, *optional*, defaults to 4):
-            The number of point embeddings to be used.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the encoder and pooler.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        scale (`float`, *optional*, defaults to 1):
-            The scale factor for the prompt encoder.
+    mask_input_channels (`int`, *optional*, defaults to 16):
+        The number of channels to be fed to the `MaskDecoder` module.
+    num_point_embeddings (`int`, *optional*, defaults to 4):
+        The number of point embeddings to be used.
+    scale (`float`, *optional*, defaults to 1):
+        The scale factor for the prompt encoder.
     """
 
     base_config_key = "prompt_encoder_config"
@@ -167,40 +134,25 @@ class EdgeTamPromptEncoderConfig(PreTrainedConfig):
         self.scale = scale
 
 
+@auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamMaskDecoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`EdgeTamMaskDecoder`]. It is used to instantiate a EDGETAM
-    memory encoder according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the EDGETAM mask decoder.
-        mlp_dim (`int`, *optional*, defaults to 2048):
-            The dimension of the MLP in the two-way transformer.
-        num_hidden_layers (`int`, *optional*, defaults to 2):
-            The number of hidden layers in the two-way transformer.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            The number of attention heads in the two-way transformer.
-        attention_downsample_rate (`int`, *optional*, defaults to 2):
-            The downsample rate for the attention layers.
-        num_multimask_outputs (`int`, *optional*, defaults to 3):
-            The number of multimask outputs.
-        iou_head_depth (`int`, *optional*, defaults to 3):
-            The depth of the IoU head.
-        iou_head_hidden_dim (`int`, *optional*, defaults to 256):
-            The hidden dimension of the IoU head.
-        dynamic_multimask_via_stability (`bool`, *optional*, defaults to `True`):
-            Whether to use dynamic multimask via stability.
-        dynamic_multimask_stability_delta (`float`, *optional*, defaults to 0.05):
-            The stability delta for the dynamic multimask.
-        dynamic_multimask_stability_thresh (`float`, *optional*, defaults to 0.98):
-            The stability threshold for the dynamic multimask.
-
+    mlp_dim (`int`, *optional*, defaults to 2048):
+        The dimension of the MLP in the two-way transformer.
+    attention_downsample_rate (`int`, *optional*, defaults to 2):
+        The downsample rate for the attention layers.
+    num_multimask_outputs (`int`, *optional*, defaults to 3):
+        The number of multimask outputs.
+    iou_head_depth (`int`, *optional*, defaults to 3):
+        The depth of the IoU head.
+    iou_head_hidden_dim (`int`, *optional*, defaults to 256):
+        The hidden dimension of the IoU head.
+    dynamic_multimask_via_stability (`bool`, *optional*, defaults to `True`):
+        Whether to use dynamic multimask via stability.
+    dynamic_multimask_stability_delta (`float`, *optional*, defaults to 0.05):
+        The stability delta for the dynamic multimask.
+    dynamic_multimask_stability_thresh (`float`, *optional*, defaults to 0.98):
+        The stability threshold for the dynamic multimask.
     """
 
     base_config_key = "mask_decoder_config"
@@ -240,61 +192,41 @@ class EdgeTamMaskDecoderConfig(PreTrainedConfig):
         self.attention_downsample_rate = attention_downsample_rate
 
 
+@auto_docstring(checkpoint="facebook/EdgeTAM")
 class EdgeTamConfig(PreTrainedConfig):
     r"""
-    [`EdgeTamConfig`] is the configuration class to store the configuration of a [`EdgeTamModel`]. It is used to instantiate a
-    EDGETAM model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
-    configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
-    [facebook/edgetam.1-hiera-tiny](https://huggingface.co/facebook/edgetam.1-hiera-tiny) architecture.
+    prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):
+         Dictionary of configuration options used to initialize [`EdgeTamPromptEncoderConfig`].
+    mask_decoder_config (Union[`dict`, `EdgeTamMaskDecoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`EdgeTamMaskDecoderConfig`].
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+     Example:
 
-    <Tip>
+     ```python
+     >>> from transformers import (
+     ...     EdgeTamVisionConfig,
+     ...     EdgeTamPromptEncoderConfig,
+     ...     EdgeTamMaskDecoderConfig,
+     ...     EdgeTamModel,
+     ... )
 
-    EdgeTAM checkpoints with `model_type="edgetam_video"` are compatible with `EdgeTamModel` since the video variant
-    weights are a superset of the image-only model weights. You may see a warning about model type mismatch when
-    loading such checkpoints, which can be safely ignored in this case.
+     >>> # Initializing a EdgeTamConfig with `"facebook/edgetam.1_hiera_tiny"` style configuration
+     >>> configuration = EdgeTamConfig()
 
-    </Tip>
+     >>> # Initializing a EdgeTamModel (with random weights) from the `"facebook/edgetam.1_hiera_tiny"` style configuration
+     >>> model = EdgeTamModel(configuration)
 
-    Args:
-        vision_config (Union[`dict`, `EdgeTamVisionConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`EdgeTamVisionConfig`].
-        prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`EdgeTamPromptEncoderConfig`].
-        mask_decoder_config (Union[`dict`, `EdgeTamMaskDecoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`EdgeTamMaskDecoderConfig`].
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation for parameter initialization.
+     >>> # Accessing the model configuration
+     >>> configuration = model.config
 
-    Example:
+     >>> # We can also initialize a EdgeTamConfig from a EdgeTamVisionConfig, EdgeTamPromptEncoderConfig, and EdgeTamMaskDecoderConfig
+     >>> # Initializing EDGETAM vision encoder, memory attention, and memory encoder configurations
+     >>> vision_config = EdgeTamVisionConfig()
+     >>> prompt_encoder_config = EdgeTamPromptEncoderConfig()
+     >>> mask_decoder_config = EdgeTamMaskDecoderConfig()
 
-    ```python
-    >>> from transformers import (
-    ...     EdgeTamVisionConfig,
-    ...     EdgeTamPromptEncoderConfig,
-    ...     EdgeTamMaskDecoderConfig,
-    ...     EdgeTamModel,
-    ... )
-
-    >>> # Initializing a EdgeTamConfig with `"facebook/edgetam.1_hiera_tiny"` style configuration
-    >>> configuration = EdgeTamConfig()
-
-    >>> # Initializing a EdgeTamModel (with random weights) from the `"facebook/edgetam.1_hiera_tiny"` style configuration
-    >>> model = EdgeTamModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-
-    >>> # We can also initialize a EdgeTamConfig from a EdgeTamVisionConfig, EdgeTamPromptEncoderConfig, and EdgeTamMaskDecoderConfig
-    >>> # Initializing EDGETAM vision encoder, memory attention, and memory encoder configurations
-    >>> vision_config = EdgeTamVisionConfig()
-    >>> prompt_encoder_config = EdgeTamPromptEncoderConfig()
-    >>> mask_decoder_config = EdgeTamMaskDecoderConfig()
-
-    >>> config = EdgeTamConfig(vision_config, prompt_encoder_config, mask_decoder_config)
-    ```
+     >>> config = EdgeTamConfig(vision_config, prompt_encoder_config, mask_decoder_config)
+     ```
     """
 
     model_type = "edgetam"

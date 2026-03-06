@@ -14,81 +14,58 @@
 """Perceiver model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="deepmind/language-perceiver")
 class PerceiverConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PerceiverModel`]. It is used to instantiate an
-    Perceiver model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Perceiver
-    [deepmind/language-perceiver](https://huggingface.co/deepmind/language-perceiver) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        num_latents (`int`, *optional*, defaults to 256):
-            The number of latents.
-        d_latents (`int`, *optional*, defaults to 1280):
-            Dimension of the latent embeddings.
-        d_model (`int`, *optional*, defaults to 768):
-            Dimension of the inputs. Should only be provided in case [*PerceiverTextPreprocessor*] is used or no
-            preprocessor is provided.
-        num_blocks (`int`, *optional*, defaults to 1):
-            Number of blocks in the Transformer encoder.
-        num_self_attends_per_block (`int`, *optional*, defaults to 26):
-            The number of self-attention layers per block.
-        num_self_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each self-attention layer in the Transformer encoder.
-        num_cross_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each cross-attention layer in the Transformer encoder.
-        qk_channels (`int`, *optional*):
-            Dimension to project the queries + keys before applying attention in the cross-attention and self-attention
-            layers of the encoder. Will default to preserving the dimension of the queries if not specified.
-        v_channels (`int`, *optional*):
-            Dimension to project the values before applying attention in the cross-attention and self-attention layers
-            of the encoder. Will default to preserving the dimension of the queries if not specified.
-        cross_attention_shape_for_attention (`str`, *optional*, defaults to `"kv"`):
-            Dimension to use when downsampling the queries and keys in the cross-attention layer of the encoder.
-        self_attention_widening_factor (`int`, *optional*, defaults to 1):
-            Dimension of the feed-forward layer in the cross-attention layer of the Transformer encoder.
-        cross_attention_widening_factor (`int`, *optional*, defaults to 1):
-            Dimension of the feed-forward layer in the self-attention layers of the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        use_query_residual (`float`, *optional*, defaults to `True`):
-            Whether to add a query residual in the cross-attention layer of the encoder.
-        vocab_size (`int`, *optional*, defaults to 262):
-            Vocabulary size for the masked language modeling model.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that the masked language modeling model might ever be used with. Typically set
-            this to something large just in case (e.g., 512 or 1024 or 2048).
-        image_size (`int`, *optional*, defaults to 56):
-            Size of the images after preprocessing, for [`PerceiverForImageClassificationLearned`].
-        train_size (`list[int]`, *optional*, defaults to `[368, 496]`):
-            Training size of the images for the optical flow model.
-        num_frames (`int`, *optional*, defaults to 16):
-            Number of video frames used for the multimodal autoencoding model.
-        audio_samples_per_frame (`int`, *optional*, defaults to 1920):
-            Number of audio samples per frame for the multimodal autoencoding model.
-        samples_per_patch (`int`, *optional*, defaults to 16):
-            Number of audio samples per patch when preprocessing the audio for the multimodal autoencoding model.
-        output_shape (`list[int]`, *optional*, defaults to `[1, 16, 224, 224]`):
-            Shape of the output (batch_size, num_frames, height, width) for the video decoder queries of the multimodal
-            autoencoding model. This excludes the channel dimension.
-        output_num_channels (`int`, *optional*, defaults to 512):
-            Number of output channels for each modalitiy decoder.
+    num_latents (`int`, *optional*, defaults to 256):
+        The number of latents.
+    d_latents (`int`, *optional*, defaults to 1280):
+        Dimension of the latent embeddings.
+    num_blocks (`int`, *optional*, defaults to 1):
+        Number of blocks in the Transformer encoder.
+    num_self_attends_per_block (`int`, *optional*, defaults to 26):
+        The number of self-attention layers per block.
+    num_self_attention_heads (`int`, *optional*, defaults to 8):
+        Number of attention heads for each self-attention layer in the Transformer encoder.
+    num_cross_attention_heads (`int`, *optional*, defaults to 8):
+        Number of attention heads for each cross-attention layer in the Transformer encoder.
+    qk_channels (`int`, *optional*):
+        Dimension to project the queries + keys before applying attention in the cross-attention and self-attention
+        layers of the encoder. Will default to preserving the dimension of the queries if not specified.
+    v_channels (`int`, *optional*):
+        Dimension to project the values before applying attention in the cross-attention and self-attention layers
+        of the encoder. Will default to preserving the dimension of the queries if not specified.
+    cross_attention_shape_for_attention (`str`, *optional*, defaults to `"kv"`):
+        Dimension to use when downsampling the queries and keys in the cross-attention layer of the encoder.
+    self_attention_widening_factor (`int`, *optional*, defaults to 1):
+        Dimension of the feed-forward layer in the cross-attention layer of the Transformer encoder.
+    cross_attention_widening_factor (`int`, *optional*, defaults to 1):
+        Dimension of the feed-forward layer in the self-attention layers of the Transformer encoder.
+    use_query_residual (`float`, *optional*, defaults to `True`):
+        Whether to add a query residual in the cross-attention layer of the encoder.
+    image_size (`int`, *optional*, defaults to 56):
+        Size of the images after preprocessing, for [`PerceiverForImageClassificationLearned`].
+    train_size (`list[int]`, *optional*, defaults to `[368, 496]`):
+        Training size of the images for the optical flow model.
+    num_frames (`int`, *optional*, defaults to 16):
+        Number of video frames used for the multimodal autoencoding model.
+    audio_samples_per_frame (`int`, *optional*, defaults to 1920):
+        Number of audio samples per frame for the multimodal autoencoding model.
+    samples_per_patch (`int`, *optional*, defaults to 16):
+        Number of audio samples per patch when preprocessing the audio for the multimodal autoencoding model.
+    output_shape (`list[int]`, *optional*, defaults to `[1, 16, 224, 224]`):
+        Shape of the output (batch_size, num_frames, height, width) for the video decoder queries of the multimodal
+        autoencoding model. This excludes the channel dimension.
+    output_num_channels (`int`, *optional*, defaults to 512):
+        Number of output channels for each modalitiy decoder.
+    _label_trainable_num_channels (`int`, *optional*, defaults to 1024):
+        NNumber of channels in the trainable label.
 
     Example:
 
