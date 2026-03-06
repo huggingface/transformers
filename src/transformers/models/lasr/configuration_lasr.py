@@ -159,9 +159,7 @@ class LasrEncoderConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
 
-        super().__init__(
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class LasrCTCConfig(PreTrainedConfig):

@@ -36,6 +36,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoModel
 from .configuration_lasr import LasrCTCConfig, LasrEncoderConfig
 
 
@@ -591,7 +592,7 @@ class LasrForCTC(LasrPreTrainedModel):
 
     def __init__(self, config: LasrCTCConfig):
         super().__init__(config)
-        self.encoder = LasrEncoder(config.encoder_config)
+        self.encoder = AutoModel.from_config(config.encoder_config)
         # Conv rather than linear to be consistent with NeMO decoding layer
         self.ctc_head = nn.Conv1d(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
 
@@ -643,8 +644,7 @@ class LasrForCTC(LasrPreTrainedModel):
             )
             input_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
 
-            # assuming that padded tokens are filled with -100
-            # when not being attended to
+            # assuming that padded tokens are filled with pad_token_id when not being attended to
             labels_mask = labels != self.config.pad_token_id
             target_lengths = labels_mask.sum(-1)
             flattened_targets = labels.masked_select(labels_mask)
