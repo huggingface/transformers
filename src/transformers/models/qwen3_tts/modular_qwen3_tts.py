@@ -82,7 +82,6 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeCode2WavMlp,
     Qwen3OmniMoeCode2WavTransformerLayer,
     Qwen3OmniMoeCode2WavDecoderResidualUnit,
-    Qwen3OmniMoeCode2WavDecoderBlock,
     Qwen3OmniMoeCode2WavTransformerModel,
 )
 from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3MLP, Qwen3RMSNorm, Qwen3RotaryEmbedding
@@ -524,7 +523,7 @@ class Qwen3TTSTalkerTextPreTrainedModel(Qwen3TTSBasePreTrainedModel):
     _supports_static_cache = False
 
 
-class Qwen3TTSTokenizerV2PreTrainedModel(Qwen3TTSBasePreTrainedModel):
+class Qwen3TTSTokenizerV2DecoderPreTrainedModel(Qwen3TTSBasePreTrainedModel):
     config_class = Qwen3TTSTokenizerV2Code2WavConfig
     _can_compile_fullgraph = False
     _no_split_modules = ["Qwen3TTSTokenizerV2Block"]
@@ -546,11 +545,20 @@ class Qwen3TTSTokenizerV1DecoderBigVGANModel(Qwen2_5OmniToken2WavBigVGANModel):
         ])
 
 
-class Qwen3TTSTokenizerV2TransformerModel(Qwen3OmniMoeCode2WavTransformerModel):
+class Qwen3TTSTokenizerV2TransformerModel(Qwen3TTSTokenizerV2DecoderPreTrainedModel):
     def __init__(self, config: Qwen3TTSTokenizerV2Code2WavConfig):
         super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Qwen3TTSTokenizerV2Block(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = Qwen3TTSRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Qwen3TTSTokenizerV2RotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+        self.has_sliding_layers = "sliding_attention" in self.config.layer_types
+        self.window_size = config.sliding_window
         self.input_proj = nn.Linear(config.latent_dim, config.hidden_size)
         self.output_proj = nn.Linear(config.hidden_size, config.latent_dim)
+        self.post_init()
 
     @check_model_inputs
     @auto_docstring
@@ -615,8 +623,29 @@ class Qwen3TTSTokenizerV2TransformerModel(Qwen3OmniMoeCode2WavTransformerModel):
         )
 
 
-class Qwen3TTSTokenizerV2Block(Qwen3OmniMoeCode2WavDecoderBlock):
+class Qwen3TTSTokenizerV2Block(Qwen3OmniMoeCode2WavTransformerLayer):
     pass
+
+
+class Qwen3TTSTokenizerV2DecoderBlock(Qwen3TTSTokenizerV2DecoderPreTrainedModel):
+    def __init__(self, config: Qwen3TTSTokenizerV2Code2WavConfig, layer_idx):
+        super().__init__(config)
+        in_dim = config.decoder_dim // 2**layer_idx
+        out_dim = config.decoder_dim // 2 ** (layer_idx + 1)
+        upsample_rate = config.upsample_rates[layer_idx]
+        block = [
+            SnakeBeta(in_dim),
+            Qwen3TTSTokenizerV2CausalTransConvNet(in_dim, out_dim, 2 * upsample_rate, upsample_rate),
+        ]
+        for dilation in (1, 3, 9):
+            block.append(Qwen3TTSTokenizerV2ResidualUnit(out_dim, dilation))
+        self.block = nn.ModuleList(block)
+        self.post_init()
+
+    def forward(self, hidden, **kwargs):
+        for block in self.block:
+            hidden = block(hidden)
+        return hidden
 
 
 # ─── Talker Model (text-to-acoustic) ──────────────────────────────────────────
@@ -1976,7 +2005,7 @@ class Qwen3TTSTokenizerV2SplitResidualVectorQuantizer(nn.Module):
         return quantized
 
 
-class Qwen3TTSTokenizerV2Decoder(Qwen3TTSTokenizerV2PreTrainedModel):
+class Qwen3TTSTokenizerV2Decoder(Qwen3TTSTokenizerV2DecoderPreTrainedModel):
     config_class = Qwen3TTSTokenizerV2Code2WavConfig
 
     def __init__(self, config: Qwen3TTSTokenizerV2Code2WavConfig):
@@ -2007,7 +2036,7 @@ class Qwen3TTSTokenizerV2Decoder(Qwen3TTSTokenizerV2PreTrainedModel):
 
         decoder = [Qwen3TTSTokenizerV2CausalConvNet(config.latent_dim, config.decoder_dim, 7)]
         for i in range(len(config.upsample_rates)):
-            decoder.append(Qwen3TTSTokenizerV2Block(config, i))
+            decoder.append(Qwen3TTSTokenizerV2DecoderBlock(config, i))
         output_dim = config.decoder_dim // 2 ** len(config.upsample_rates)
         decoder += [
             SnakeBeta(output_dim),
