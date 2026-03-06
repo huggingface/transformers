@@ -22,7 +22,6 @@ logger = logging.get_logger(__file__)
 
 ONNX_UNSUPPORTED_MODEL_TYPES: set[str] = {
     # --- FX graph / torch.export failures (SymInt not tracked with proxy) ---
-    "bigbird_pegasus",  # CUDA device-side assert triggered during export
     "colmodernvbert",  # SymInt not tracked with proxy (runtime assert in FX graph)
     "d_fine",  # SymInt not tracked with proxy (runtime assert in FX graph)
     "doge",  # FX decomposition failure (InsertTypePromotion pass fails at step 2/3)
@@ -48,6 +47,7 @@ ONNX_UNSUPPORTED_MODEL_TYPES: set[str] = {
     "fine_acoustics",  # BarkFineModel: attention_mask exported as rank-3 but ORT expects rank-2
     "dia",  # Squeeze dimension error in ONNX Runtime (node_squeeze: dim must be 1 not 7)
     "flava",  # ForPreTraining: Where node provider type not set in ORT; FlavaModel: optimization renames outputs
+    "gemma3n_text",  # past_key_values.layers.0 aliased to shared_layers.0 at ONNX export time (not ORT optimizer)
     "higgs_audio_v2",  # Where node condition cannot broadcast (shape mismatch {3,14,1} vs {20,32})
     "idefics2",  # Invalid ONNX graph: tensor(float) input to Gather node expects tensor(int64)
     "kosmos-2",  # Where node (index_put): incompatible dimensions in shape inference
@@ -79,13 +79,11 @@ ONNX_EXTREMELY_INACCURATE_MODEL_TYPES: set[str] = {
     "wav2vec2",  # 0.4% mismatch in projected_quantized_states
     "wav2vec2-conformer",  # 0.5% mismatch in projected_quantized_states
     "xlm",  # 6.2% mismatch in end_top_index
+    "xlnet",  # 2.9% mismatch in start_top_index
 }
 
 
-ONNX_DISABLED_OPTIMIZATION_MODEL_TYPES: set[str] = {
-    # Optimization renames past_key_values outputs
-    "gemma3n_text",  # optimization renames past_key_values outputs (shared_layers instead of layers)
-}
+ONNX_DISABLED_OPTIMIZATION_MODEL_TYPES: set[str] = {}
 
 
 class OnnxExporter(DynamoExporter):
