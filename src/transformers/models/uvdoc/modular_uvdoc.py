@@ -23,10 +23,20 @@ from ...image_utils import (
 )
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, filter_out_non_signature_kwargs
+from ...utils import (
+    ModelOutput, 
+    filter_out_non_signature_kwargs, 
+    auto_docstring, 
+    can_return_tuple,
+)
+from ...utils.output_capturing import capture_outputs
 from ...utils.generic import TensorType
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class UVDocConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`UVDocModel`]. It is used to instantiate a
@@ -122,185 +132,10 @@ class UVDocConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class UVDocImageProcessor(BaseImageProcessor):
-    r"""
-    Image processor for the UVDoc model, tailored for document rectification tasks.
-    This processor handles all preprocessing (resize, rescale, normalize, channel flip) and postprocessing
-    steps required for UVDoc model inference on document images, using numpy-based operations for broad
-    compatibility with PIL/numpy/torch image inputs.
-
-    Args:
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the pixel values from [0, 255] to [0, 1] using `rescale_factor`.
-        rescale_factor (`Union[int, float]`, *optional*, defaults to `1/255`):
-            Factor to scale pixel values by (e.g., 1/255 scales 0-255 to 0-1).
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the input images using `image_mean` and `image_std`. Normalization aligns
-            input data with the statistics used during UVDoc model training.
-        image_mean (`Union[float, List[float]]`, *optional*, defaults to `[0.406, 0.456, 0.485]`):
-            Mean values for image normalization (RGB order), matching the training dataset statistics.
-        image_std (`Union[float, List[float]]`, *optional*, defaults to `[0.225, 0.224, 0.229]`):
-            Standard deviation values for image normalization (RGB order), matching the training dataset statistics.
-
-    Attributes:
-        model_input_names (`List[str]`):
-            List of input names expected by the UVDoc model (only "pixel_values" for image inputs).
+@auto_docstring(
+    custom_intro="""
     """
-
-    model_input_names = ["pixel_values"]
-
-    def __init__(
-        self,
-        do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = [0.406, 0.456, 0.485],
-        image_std: Optional[Union[float, list[float]]] = [0.225, 0.224, 0.229],
-        **kwargs,
-    ) -> None:
-        """
-        Initialize the UVDocImageProcessor with specified preprocessing parameters.
-        Sets default size if not provided and stores all preprocessing hyperparameters.
-        """
-        super().__init__(**kwargs)
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-
-    @filter_out_non_signature_kwargs()
-    def preprocess(
-        self,
-        images: ImageInput,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[Union[int, float]] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        return_tensors: Optional[Union[TensorType, str]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> BatchFeature:
-        """
-        Preprocess input images for UVDoc model inference (numpy-based implementation).
-
-        Args:
-            images (`ImageInput`):
-                Input images to process (can be PIL images, numpy arrays, torch tensors, or lists thereof).
-            do_rescale (`bool`, *optional*):
-                Override the do_rescale flag (defaults to self.do_rescale).
-            rescale_factor (`Union[int, float]`, *optional*):
-                Override the rescale factor (defaults to self.rescale_factor).
-            do_normalize (`bool`, *optional*):
-                Override the do_normalize flag (defaults to self.do_normalize).
-            image_mean (`Union[float, List[float]]`, *optional*):
-                Override the normalization mean (defaults to self.image_mean).
-            image_std (`Union[float, List[float]]`, *optional*):
-                Override the normalization std (defaults to self.image_std).
-            return_tensors (`Union[TensorType, str]`, *optional*):
-                Type of tensors to return (e.g., "pt" for PyTorch tensors, "np" for numpy arrays).
-            data_format (`Union[str, ChannelDimension]`, *optional*, defaults to `ChannelDimension.FIRST`):
-                Output channel dimension format (FIRST = [C, H, W], LAST = [H, W, C]).
-            input_data_format (`Union[str, ChannelDimension]`, *optional*):
-                Channel dimension format of the input images (inferred if None).
-
-        Returns:
-            `BatchFeature`: A BatchFeature object containing the processed "pixel_values" tensor.
-
-        Raises:
-            ValueError: If input images are of invalid type (not PIL/numpy/torch).
-        """
-        do_rescale = self.do_rescale if do_rescale is None else do_rescale
-        rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
-        do_normalize = self.do_normalize if do_normalize is None else do_normalize
-        image_mean = self.image_mean if image_mean is None else image_mean
-        image_std = self.image_std if image_std is None else image_std
-
-        images = make_flat_list_of_images(images)
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-        )
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        # All transformations expect numpy arrays
-        images = [to_numpy_array(image) for image in images]
-
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        if do_rescale:
-            images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
-
-        if do_normalize:
-            images = [
-                self.normalize(image, image_mean, image_std, input_data_format=input_data_format) for image in images
-            ]
-        # flip color channels from RGB to BGR
-        images = [flip_channel_order(image, input_data_format=input_data_format) for image in images]
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        encoded_inputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
-
-        return encoded_inputs
-
-    def post_process_document_rectification(self, images, scale=None):
-        """
-        Postprocess UVDoc model outputs to get rectified document images (numpy-based).
-        Converts model output tensors back to 0-255 RGB images ready for saving/display.
-
-        Args:
-            images (`Union[np.ndarray, Tuple[np.ndarray, ...], List[np.ndarray]]`):
-                Raw model outputs (logits) to postprocess (batch of images).
-            scale (`Union[str, float, int]`, *optional*, defaults to 255.0):
-                Scaling factor to convert normalized outputs back to 0-255 pixel values.
-
-        Returns:
-            `List[np.ndarray]`: List of rectified document images (uint8, [H, W, C], RGB).
-        """
-        scale = np.float32(scale) if isinstance(scale, (str, float)) else np.float32(255.0)
-
-        return [self.doctr(image, scale) for image in images]
-
-    def doctr(self, pred: Union[np.ndarray, tuple[np.ndarray, ...]], scale) -> np.ndarray:
-        """
-        Core postprocessing logic for a single document image (numpy-based).
-        Converts model output tensor to a valid RGB image (uint8, [H, W, C]).
-
-        Args:
-            pred (`Union[np.ndarray, Tuple[np.ndarray, ...]]`):
-                Raw model output for a single image (or tuple containing the output).
-            scale (`np.float32`):
-                Scaling factor to convert normalized values to 0-255.
-
-        Returns:
-            `np.ndarray`: Rectified document image (uint8, [H, W, C], RGB).
-
-        Raises:
-            AssertionError: If input is not a numpy array.
-        """
-        if isinstance(pred, tuple):
-            image = pred[0].cpu().detach().numpy()
-        else:
-            image = pred.cpu().detach().numpy()
-        assert isinstance(image, np.ndarray), "Invalid input 'image' in DocTrPostProcess. Expected a numpy array."
-        image = image.squeeze()
-        image = image.transpose(1, 2, 0)
-        image *= scale
-        image = image[:, :, ::-1]
-        image = image.astype("uint8", copy=False)
-        return image
-
-
+)
 class UVDocImageProcessorFast(BaseImageProcessorFast):
     """
     Fast image processor for UVDoc models (PyTorch-optimized, inherits from `BaseImageProcessorFast`).
@@ -583,7 +418,7 @@ class UVDocModelOutput(ModelOutput):
         last_hidden_state (`torch.FloatTensor`, *optional*):
             Last hidden state from bridge layers of shape [B, C, H, W]
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of hidden states from each bridge layer (if output_hidden_states=True)
+            Tuple of hidden states from each bridge layer
     """
 
     logits: Optional[torch.FloatTensor] = None
@@ -591,6 +426,10 @@ class UVDocModelOutput(ModelOutput):
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class UVDocPreTrainedModel(PreTrainedModel):
     """
     Base class for all UVDoc pre-trained models.
@@ -693,6 +532,10 @@ class UVDocPointPositions2D(nn.Module):
         return hidden_state
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class UVDocModel(UVDocPreTrainedModel):
     """
     Core UVDoc model for document rectification.
@@ -701,12 +544,6 @@ class UVDocModel(UVDocPreTrainedModel):
     """
 
     def __init__(self, config: UVDocConfig) -> None:
-        """
-        Initialize UVDoc core model with configuration.
-
-        Args:
-            config (`UVDocConfig`): UVDoc model configuration
-        """
         super().__init__(config)
 
         self.upsample_size = config.upsample_size
@@ -734,11 +571,11 @@ class UVDocModel(UVDocPreTrainedModel):
 
         self.post_init()
 
+    @capture_outputs
+    @can_return_tuple
     def forward(
         self,
         hidden_state: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[tuple[torch.FloatTensor, ...], UVDocModelOutput]:
         """
@@ -746,17 +583,8 @@ class UVDocModel(UVDocPreTrainedModel):
 
         Args:
             hidden_state (`torch.FloatTensor`): Input image tensor of shape [B, C, H, W]
-            output_hidden_states (`bool`, *optional*):
-                Whether to return hidden states from bridge layers
-            return_dict (`bool`, *optional*):
-                Whether to return a UVDocModelOutput object instead of a plain tuple
 
-        Returns:
-            `Union[Tuple[torch.FloatTensor, ...], UVDocModelOutput]`:
-                - If return_dict=True: UVDocModelOutput with logits, last_hidden_state, hidden_states
-                - If return_dict=False: Tuple containing (last_hidden_state, [hidden_states], logits)
         """
-        hidden_states = () if output_hidden_states else None
 
         identity = hidden_state
         original_height, original_width = hidden_state.shape[2:]
@@ -768,15 +596,11 @@ class UVDocModel(UVDocPreTrainedModel):
         )
         hidden_state = self.resnet_head(hidden_state)
         resnet_down = self.resnet_down(hidden_state)
-        if output_hidden_states:
-            hidden_states = hidden_states + (resnet_down,)
 
         bridge_outputs = []
         for bridge_layer in self.bridge:
             bridge_out = bridge_layer(resnet_down)
             bridge_outputs.append(bridge_out)
-            if output_hidden_states:
-                hidden_states = hidden_states + (bridge_out,)
 
         last_hidden_state = bridge_outputs[-1] if bridge_outputs else None
 
@@ -795,17 +619,10 @@ class UVDocModel(UVDocPreTrainedModel):
         rearranged_bezier_mesh = upsampled_2d_bezier_mesh.permute(0, 2, 3, 1)
         rectified_image_output = F.grid_sample(identity, rearranged_bezier_mesh, align_corners=True)
 
-        if not return_dict:
-            output = (last_hidden_state,)
-            if output_hidden_states:
-                output += (hidden_states,)
-            output += (rectified_image_output,)
-            return output
 
         return UVDocModelOutput(
             logits=rectified_image_output,
             last_hidden_state=last_hidden_state,
-            hidden_states=hidden_states if output_hidden_states else None,
         )
 
 
@@ -826,6 +643,10 @@ class UVDocForDocumentRectificationOutput(BaseModelOutputWithNoAttention):
     shape: Optional[torch.FloatTensor] = None
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class UVDocForDocumentRectification(UVDocPreTrainedModel):
     """
     Wrapper class for UVDoc model focused on document rectification task.
@@ -835,22 +656,15 @@ class UVDocForDocumentRectification(UVDocPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
 
     def __init__(self, config: UVDocConfig) -> None:
-        """
-        Initialize UVDoc document rectification wrapper model.
-
-        Args:
-            config (`UVDocConfig`): UVDoc model configuration
-        """
         super().__init__(config)
         self.model = UVDocModel(config)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[list[dict[str, Any]]] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[tuple[torch.FloatTensor, ...], UVDocForDocumentRectificationOutput]:
         """
@@ -858,43 +672,19 @@ class UVDocForDocumentRectification(UVDocPreTrainedModel):
 
         Args:
             pixel_values (`torch.FloatTensor`): Input image tensor of shape [B, C, H, W] (preprocessed)
-            labels (`List[Dict[str, Any]]`, *optional*):
-                Training labels (not used in inference)
-            output_hidden_states (`bool`, *optional*):
-                Whether to return hidden states from the core model
-            return_dict (`bool`, *optional*):
-                Whether to return a UVDocForDocumentRectificationOutput object instead of a plain tuple
 
-        Returns:
-            `Union[Tuple[torch.FloatTensor, ...], UVDocForDocumentRectificationOutput]`:
-                - If return_dict=True: Structured output with logits, last_hidden_state, hidden_states
-                - If return_dict=False: Plain tuple with corresponding values
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.model(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.model(pixel_values)
 
-        if not return_dict:
-            output = (outputs[0],)
-            if output_hidden_states:
-                output += (outputs[1], outputs[2])
-            else:
-                output += (outputs[1],)
-
-            return output
         return UVDocForDocumentRectificationOutput(
             logits=outputs.logits,
             last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
         )
 
 
 __all__ = [
     "UVDocForDocumentRectification",
-    "UVDocImageProcessor",
     "UVDocImageProcessorFast",
     "UVDocConfig",
     "UVDocModel",

@@ -4,15 +4,19 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_uvdoc.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import Optional, Union
 
 import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...utils import auto_docstring
 from ...utils.generic import TensorType
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class UVDocImageProcessorFast(BaseImageProcessorFast):
     """
     Fast image processor for UVDoc models (PyTorch-optimized, inherits from `BaseImageProcessorFast`).
@@ -34,9 +38,9 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -97,7 +101,7 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
 
         return [self.doctr(image, scale) for image in images]
 
-    def doctr(self, pred: Union[torch.Tensor, tuple[torch.Tensor, ...]], scale: torch.Tensor) -> torch.Tensor:
+    def doctr(self, pred: torch.Tensor | tuple[torch.Tensor, ...], scale: torch.Tensor) -> torch.Tensor:
         """
         Core fast postprocessing logic for a single document image (pure PyTorch).
         Converts model output tensor to a valid RGB image (uint8, [H, W, C]) without CPU conversion.

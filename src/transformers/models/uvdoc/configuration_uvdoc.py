@@ -5,8 +5,13 @@
 #                          modular_uvdoc.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class UVDocConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`UVDocModel`]. It is used to instantiate a

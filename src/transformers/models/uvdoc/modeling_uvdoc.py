@@ -5,7 +5,7 @@
 #                          modular_uvdoc.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -14,7 +14,8 @@ import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...utils.output_capturing import capture_outputs
 from .configuration_uvdoc import UVDocConfig
 
 
@@ -31,7 +32,7 @@ class UVDocResidualBlockWithDilation(nn.Module):
         out_channels: int,
         kernel_size: int,
         stride: int = 1,
-        downsample: Optional[bool] = None,
+        downsample: bool | None = None,
         is_top: bool = False,
     ) -> None:
         """
@@ -183,14 +184,18 @@ class UVDocModelOutput(ModelOutput):
         last_hidden_state (`torch.FloatTensor`, *optional*):
             Last hidden state from bridge layers of shape [B, C, H, W]
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of hidden states from each bridge layer (if output_hidden_states=True)
+            Tuple of hidden states from each bridge layer
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    logits: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class UVDocPreTrainedModel(PreTrainedModel):
     """
     Base class for all UVDoc pre-trained models.
@@ -293,6 +298,10 @@ class UVDocPointPositions2D(nn.Module):
         return hidden_state
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class UVDocModel(UVDocPreTrainedModel):
     """
     Core UVDoc model for document rectification.
@@ -334,29 +343,20 @@ class UVDocModel(UVDocPreTrainedModel):
 
         self.post_init()
 
+    @capture_outputs
+    @can_return_tuple
     def forward(
         self,
         hidden_state: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Any,
-    ) -> Union[tuple[torch.FloatTensor, ...], UVDocModelOutput]:
+    ) -> tuple[torch.FloatTensor, ...] | UVDocModelOutput:
         """
         Forward pass of UVDoc core model for document rectification.
 
         Args:
             hidden_state (`torch.FloatTensor`): Input image tensor of shape [B, C, H, W]
-            output_hidden_states (`bool`, *optional*):
-                Whether to return hidden states from bridge layers
-            return_dict (`bool`, *optional*):
-                Whether to return a UVDocModelOutput object instead of a plain tuple
 
-        Returns:
-            `Union[Tuple[torch.FloatTensor, ...], UVDocModelOutput]`:
-                - If return_dict=True: UVDocModelOutput with logits, last_hidden_state, hidden_states
-                - If return_dict=False: Tuple containing (last_hidden_state, [hidden_states], logits)
         """
-        hidden_states = () if output_hidden_states else None
 
         identity = hidden_state
         original_height, original_width = hidden_state.shape[2:]
@@ -368,15 +368,11 @@ class UVDocModel(UVDocPreTrainedModel):
         )
         hidden_state = self.resnet_head(hidden_state)
         resnet_down = self.resnet_down(hidden_state)
-        if output_hidden_states:
-            hidden_states = hidden_states + (resnet_down,)
 
         bridge_outputs = []
         for bridge_layer in self.bridge:
             bridge_out = bridge_layer(resnet_down)
             bridge_outputs.append(bridge_out)
-            if output_hidden_states:
-                hidden_states = hidden_states + (bridge_out,)
 
         last_hidden_state = bridge_outputs[-1] if bridge_outputs else None
 
@@ -395,17 +391,9 @@ class UVDocModel(UVDocPreTrainedModel):
         rearranged_bezier_mesh = upsampled_2d_bezier_mesh.permute(0, 2, 3, 1)
         rectified_image_output = F.grid_sample(identity, rearranged_bezier_mesh, align_corners=True)
 
-        if not return_dict:
-            output = (last_hidden_state,)
-            if output_hidden_states:
-                output += (hidden_states,)
-            output += (rectified_image_output,)
-            return output
-
         return UVDocModelOutput(
             logits=rectified_image_output,
             last_hidden_state=last_hidden_state,
-            hidden_states=hidden_states if output_hidden_states else None,
         )
 
 
@@ -422,10 +410,14 @@ class UVDocForDocumentRectificationOutput(BaseModelOutputWithNoAttention):
             Reserved for future use (shape information)
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    shape: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor | None = None
+    shape: torch.FloatTensor | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    """
+)
 class UVDocForDocumentRectification(UVDocPreTrainedModel):
     """
     Wrapper class for UVDoc model focused on document rectification task.
@@ -445,50 +437,26 @@ class UVDocForDocumentRectification(UVDocPreTrainedModel):
         self.model = UVDocModel(config)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[list[dict[str, Any]]] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Any,
-    ) -> Union[tuple[torch.FloatTensor, ...], UVDocForDocumentRectificationOutput]:
+    ) -> tuple[torch.FloatTensor, ...] | UVDocForDocumentRectificationOutput:
         """
         Forward pass of UVDoc document rectification model.
 
         Args:
             pixel_values (`torch.FloatTensor`): Input image tensor of shape [B, C, H, W] (preprocessed)
-            labels (`List[Dict[str, Any]]`, *optional*):
-                Training labels (not used in inference)
-            output_hidden_states (`bool`, *optional*):
-                Whether to return hidden states from the core model
-            return_dict (`bool`, *optional*):
-                Whether to return a UVDocForDocumentRectificationOutput object instead of a plain tuple
 
-        Returns:
-            `Union[Tuple[torch.FloatTensor, ...], UVDocForDocumentRectificationOutput]`:
-                - If return_dict=True: Structured output with logits, last_hidden_state, hidden_states
-                - If return_dict=False: Plain tuple with corresponding values
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.model(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.model(pixel_values)
 
-        if not return_dict:
-            output = (outputs[0],)
-            if output_hidden_states:
-                output += (outputs[1], outputs[2])
-            else:
-                output += (outputs[1],)
-
-            return output
         return UVDocForDocumentRectificationOutput(
             logits=outputs.logits,
             last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
         )
 
 
