@@ -31,6 +31,6 @@ class PPOCRV5ServerDetImageProcessorKwargs(ImagesKwargs, total=False):
         todo
     """
 
-    limit_side_len = 960
-    limit_type = "max"
-    max_side_limit = 4000
+    limit_side_len: int
+    limit_type: str
+    max_side_limit: int

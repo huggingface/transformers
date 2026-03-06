@@ -33,14 +33,13 @@ from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
-    ModelOutput,
-    is_cv2_available,
-    logging,
     auto_docstring,
     can_return_tuple,
+    is_cv2_available,
+    logging,
 )
-from ...utils.output_capturing import capture_outputs
 from ...utils.generic import TensorType
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 
 
@@ -113,8 +112,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         kernel_list: list[int] = [3, 2, 2],
         **kwargs,
     ) -> None:
-        super().__init__(**kwargs)
-
         self.mode = mode
         self.interpolate_mode = interpolate_mode
 
@@ -144,6 +141,8 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         self.scale_factor = scale_factor
         self.hidden_act = hidden_act
         self.kernel_list = kernel_list
+
+        super().__init__(**kwargs)
 
 
 def polygon_area(box: np.ndarray) -> float:
@@ -521,9 +520,9 @@ class PPOCRV5ServerDetImageProcessorKwargs(ImagesKwargs, total=False):
         todo
     """
 
-    limit_side_len = 960
-    limit_type = "max"
-    max_side_limit = 4000
+    limit_side_len: int
+    limit_type: str
+    max_side_limit: int
 
 
 @auto_docstring(
@@ -695,7 +694,6 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
             return None, (None, None)
 
         return SizeDict(height=resize_height, width=resize_width), torch.tensor([height, width], dtype=torch.float32)
-
 
 
 class PPOCRV5ServerDetDSConv(nn.Module):
@@ -1151,13 +1149,11 @@ class PPOCRV5ServerDetDBHead(nn.Module):
 
     Args:
         in_channels (`int`): Input channel depth.
-        k (`int`, *optional*, defaults to 50): Amplification factor for the binarization step.
         kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`): Kernel sizes for the internal Head.
     """
 
-    def __init__(self, in_channels: int, k: int = 50, kernel_list: list[int] = [3, 2, 2]):
+    def __init__(self, in_channels: int, kernel_list: list[int] = [3, 2, 2]):
         super().__init__()
-        self.k = k
         self.binarize = PPOCRV5ServerDetHead(in_channels=in_channels, kernel_list=kernel_list)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
@@ -1224,7 +1220,7 @@ class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
     """
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
-        super().__init__(in_channels=config.neck_out_channels, k=config.k, kernel_list=config.kernel_list)
+        super().__init__(in_channels=config.neck_out_channels, kernel_list=config.kernel_list)
 
         self.up_conv = nn.Upsample(scale_factor=config.scale_factor, mode=config.interpolate_mode)
         if config.mode == "large":
@@ -1313,9 +1309,8 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
     Core PPOCRV5 Server Det model.
     Integration of HGNetV2 (Backbone), PPOCRV5ServerDetLKPAN (Neck), and PPOCRV5ServerDetPFHeadLocal (Head).
     """
-    _can_record_outputs = {
-        "hidden_states": PPOCRV5ServerDetLKPAN
-    }
+
+    _can_record_outputs = {"hidden_states": PPOCRV5ServerDetLKPAN}
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
         """
@@ -1345,9 +1340,7 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
 
         """
         hidden_state = self.backbone(hidden_state).feature_maps
-        
         outputs = self.neck(hidden_state)
-        breakpoint()
 
         return PPOCRV5ServerDetModelOutput(logits=outputs.last_hidden_state)
 

@@ -87,8 +87,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         kernel_list: list[int] = [3, 2, 2],
         **kwargs,
     ) -> None:
-        super().__init__(**kwargs)
-
         self.mode = mode
         self.interpolate_mode = interpolate_mode
 
@@ -118,6 +116,8 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         self.scale_factor = scale_factor
         self.hidden_act = hidden_act
         self.kernel_list = kernel_list
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["PPOCRV5ServerDetConfig"]

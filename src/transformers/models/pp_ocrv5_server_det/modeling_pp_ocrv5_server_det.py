@@ -485,13 +485,11 @@ class PPOCRV5ServerDetDBHead(nn.Module):
 
     Args:
         in_channels (`int`): Input channel depth.
-        k (`int`, *optional*, defaults to 50): Amplification factor for the binarization step.
         kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`): Kernel sizes for the internal Head.
     """
 
-    def __init__(self, in_channels: int, k: int = 50, kernel_list: list[int] = [3, 2, 2]):
+    def __init__(self, in_channels: int, kernel_list: list[int] = [3, 2, 2]):
         super().__init__()
-        self.k = k
         self.binarize = PPOCRV5ServerDetHead(in_channels=in_channels, kernel_list=kernel_list)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
@@ -558,7 +556,7 @@ class PPOCRV5ServerDetPFHeadLocal(PPOCRV5ServerDetDBHead):
     """
 
     def __init__(self, config: PPOCRV5ServerDetConfig):
-        super().__init__(in_channels=config.neck_out_channels, k=config.k, kernel_list=config.kernel_list)
+        super().__init__(in_channels=config.neck_out_channels, kernel_list=config.kernel_list)
 
         self.up_conv = nn.Upsample(scale_factor=config.scale_factor, mode=config.interpolate_mode)
         if config.mode == "large":
@@ -678,9 +676,7 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
 
         """
         hidden_state = self.backbone(hidden_state).feature_maps
-
         outputs = self.neck(hidden_state)
-        breakpoint()
 
         return PPOCRV5ServerDetModelOutput(logits=outputs.last_hidden_state)
 
