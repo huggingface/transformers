@@ -1841,10 +1841,10 @@ class Qwen3TTSTalkerTextPreTrainedModel(Qwen3TTSBasePreTrainedModel):
     _supports_static_cache = False
 
 
-@auto_docstring
-class Qwen3TTSTokenizerV2PreTrainedModel(Qwen3TTSBasePreTrainedModel):
-    config_class = Qwen3TTSTokenizerV2Config
+class Qwen3TTSTokenizerV2DecoderPreTrainedModel(Qwen3TTSBasePreTrainedModel):
+    config_class = Qwen3TTSTokenizerV2Code2WavConfig
     _can_compile_fullgraph = False
+    _no_split_modules = ["Qwen3TTSTokenizerV2Block"]
 
 
 def kaiser_sinc_filter1d(cutoff, half_width, kernel_size):
@@ -2115,96 +2115,19 @@ class Qwen3TTSTokenizerV1DecoderBigVGANModel(Qwen3TTSPreTrainedModel):
         return torch.clamp(output_waveform, min=-1.0, max=1.0).squeeze().cpu()
 
 
-class Qwen3TTSTokenizerV2Code2WavTransformerLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Qwen3TTSTokenizerV2Code2WavConfig, layer_idx):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.self_attn = Qwen3TTSTokenizerV2Code2WavAttention(config, layer_idx)
-        self.mlp = Qwen3TTSTokenizerV2Code2WavMlp(config)
-        self.input_layernorm = Qwen3TTSTokenizerV2Code2WavRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Qwen3TTSTokenizerV2Code2WavRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.self_attn_layer_scale = Qwen3TTSTokenizerV2Code2WavLayerScale(config)
-        self.mlp_layer_scale = Qwen3TTSTokenizerV2Code2WavLayerScale(config)
-        self.attention_type = "sliding_attention"
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
-                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
-                query_sequence_length, key_sequence_length)` if default attention is used.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            **kwargs,
-        )
-        hidden_states = residual + self.self_attn_layer_scale(hidden_states)
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + self.mlp_layer_scale(hidden_states)
-
-        return hidden_states
-
-
-@auto_docstring
-class Qwen3TTSTokenizerV2TransformerModel(Qwen3TTSTokenizerV2PreTrainedModel):
-    _can_record_outputs = {
-        "hidden_states": Qwen3TTSTokenizerV2Code2WavTransformerLayer,
-        "attentions": Qwen3TTSTokenizerV2Code2WavAttention,
-    }
-
+class Qwen3TTSTokenizerV2TransformerModel(Qwen3TTSTokenizerV2DecoderPreTrainedModel):
     def __init__(self, config: Qwen3TTSTokenizerV2Code2WavConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [
-                Qwen3TTSTokenizerV2Code2WavTransformerLayer(config, layer_idx)
-                for layer_idx in range(config.num_hidden_layers)
-            ]
+            [Qwen3TTSTokenizerV2Block(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = Qwen3TTSTokenizerV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = Qwen3TTSRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen3TTSTokenizerV2RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
         self.window_size = config.sliding_window
         self.input_proj = nn.Linear(config.latent_dim, config.hidden_size)
         self.output_proj = nn.Linear(config.hidden_size, config.latent_dim)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     @check_model_inputs
@@ -2270,42 +2193,85 @@ class Qwen3TTSTokenizerV2TransformerModel(Qwen3TTSTokenizerV2PreTrainedModel):
         )
 
 
-class Qwen3TTSTokenizerV2Code2WavDecoderResidualUnit(nn.Module):
-    def __init__(self, dim: int = 16, dilation: int = 1):
+class Qwen3TTSTokenizerV2Block(GradientCheckpointingLayer):
+    def __init__(self, config: Qwen3TTSTokenizerV2Code2WavConfig, layer_idx):
         super().__init__()
+        self.hidden_size = config.hidden_size
+        self.self_attn = Qwen3TTSTokenizerV2Code2WavAttention(config, layer_idx)
+        self.mlp = Qwen3TTSTokenizerV2Code2WavMlp(config)
+        self.input_layernorm = Qwen3TTSTokenizerV2Code2WavRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Qwen3TTSTokenizerV2Code2WavRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.self_attn_layer_scale = Qwen3TTSTokenizerV2Code2WavLayerScale(config)
+        self.mlp_layer_scale = Qwen3TTSTokenizerV2Code2WavLayerScale(config)
+        self.attention_type = "sliding_attention"
 
-        self.act1 = SnakeBeta(dim)
-        self.conv1 = Qwen3TTSTokenizerV2CausalConvNet(dim, dim, kernel_size=7, dilation=dilation)
-        self.act2 = SnakeBeta(dim)
-        self.conv2 = Qwen3TTSTokenizerV2CausalConvNet(dim, dim, kernel_size=1)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*):
+                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
+                query_sequence_length, key_sequence_length)` if default attention is used.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
+        residual = hidden_states
 
-    def forward(self, hidden_state):
-        residual = hidden_state
+        hidden_states = self.input_layernorm(hidden_states)
 
-        hidden_state = self.act1(hidden_state)
-        hidden_state = self.conv1(hidden_state)
-        hidden_state = self.act2(hidden_state)
-        hidden_state = self.conv2(hidden_state)
-        return hidden_state + residual
+        # Self Attention
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
+        )
+        hidden_states = residual + self.self_attn_layer_scale(hidden_states)
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + self.mlp_layer_scale(hidden_states)
+
+        return hidden_states
 
 
-class Qwen3TTSTokenizerV2Block(Qwen3TTSTokenizerV2PreTrainedModel):
+class Qwen3TTSTokenizerV2DecoderBlock(Qwen3TTSTokenizerV2DecoderPreTrainedModel):
     def __init__(self, config: Qwen3TTSTokenizerV2Code2WavConfig, layer_idx):
         super().__init__(config)
         in_dim = config.decoder_dim // 2**layer_idx
         out_dim = config.decoder_dim // 2 ** (layer_idx + 1)
         upsample_rate = config.upsample_rates[layer_idx]
-
         block = [
             SnakeBeta(in_dim),
             Qwen3TTSTokenizerV2CausalTransConvNet(in_dim, out_dim, 2 * upsample_rate, upsample_rate),
         ]
-
         for dilation in (1, 3, 9):
-            block.append(Qwen3TTSTokenizerV2Code2WavDecoderResidualUnit(out_dim, dilation))
-
+            block.append(Qwen3TTSTokenizerV2ResidualUnit(out_dim, dilation))
         self.block = nn.ModuleList(block)
-
         self.post_init()
 
     def forward(self, hidden, **kwargs):
@@ -3594,7 +3560,7 @@ class Qwen3TTSTokenizerV2SplitResidualVectorQuantizer(nn.Module):
         return quantized
 
 
-class Qwen3TTSTokenizerV2Decoder(Qwen3TTSTokenizerV2PreTrainedModel):
+class Qwen3TTSTokenizerV2Decoder(Qwen3TTSTokenizerV2DecoderPreTrainedModel):
     config_class = Qwen3TTSTokenizerV2Code2WavConfig
 
     def __init__(self, config: Qwen3TTSTokenizerV2Code2WavConfig):
@@ -3627,7 +3593,7 @@ class Qwen3TTSTokenizerV2Decoder(Qwen3TTSTokenizerV2PreTrainedModel):
 
         decoder = [Qwen3TTSTokenizerV2CausalConvNet(config.latent_dim, config.decoder_dim, 7)]
         for i in range(len(config.upsample_rates)):
-            decoder.append(Qwen3TTSTokenizerV2Block(config, i))
+            decoder.append(Qwen3TTSTokenizerV2DecoderBlock(config, i))
         output_dim = config.decoder_dim // 2 ** len(config.upsample_rates)
         decoder += [
             SnakeBeta(output_dim),
@@ -3662,6 +3628,12 @@ class Qwen3TTSTokenizerV2Decoder(Qwen3TTSTokenizerV2PreTrainedModel):
             wavs.append(wav_chunk[..., context_size * self.total_upsample :])
             start_index = end_index
         return torch.cat(wavs, dim=-1)
+
+
+@auto_docstring
+class Qwen3TTSTokenizerV2PreTrainedModel(Qwen3TTSBasePreTrainedModel):
+    config_class = Qwen3TTSTokenizerV2Config
+    _can_compile_fullgraph = False
 
 
 @dataclass
