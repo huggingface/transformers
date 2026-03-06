@@ -14,7 +14,7 @@
 from typing import TYPE_CHECKING
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -24,36 +24,19 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="magic-leap-community/superglue_indoor")
 class SuperGlueConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SuperGlueModel`]. It is used to instantiate a
-    SuperGlue model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the SuperGlue
-    [magic-leap-community/superglue_indoor](https://huggingface.co/magic-leap-community/superglue_indoor) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
-            The config object or dictionary of the keypoint detector.
-        hidden_size (`int`, *optional*, defaults to 256):
-            The dimension of the descriptors.
-        keypoint_encoder_sizes (`list[int]`, *optional*, defaults to `[32, 64, 128, 256]`):
-            The sizes of the keypoint encoder layers.
-        gnn_layers_types (`list[str]`, *optional*, defaults to `['self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross']`):
-            The types of the GNN layers. Must be either 'self' or 'cross'.
-        num_attention_heads (`int`, *optional*, defaults to 4):
-            The number of heads in the GNN layers.
-        sinkhorn_iterations (`int`, *optional*, defaults to 100):
-            The number of Sinkhorn iterations.
-        matching_threshold (`float`, *optional*, defaults to 0.0):
-            The matching threshold.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
-            decoder-only or encoder-only architectures.
+    keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
+        The config object or dictionary of the keypoint detector.
+    keypoint_encoder_sizes (`list[int]`, *optional*, defaults to `[32, 64, 128, 256]`):
+        The sizes of the keypoint encoder layers.
+    gnn_layers_types (`list[str]`, *optional*, defaults to `['self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross']`):
+        The types of the GNN layers. Must be either 'self' or 'cross'.
+    sinkhorn_iterations (`int`, *optional*, defaults to 100):
+        The number of Sinkhorn iterations.
+    matching_threshold (`float`, *optional*, defaults to 0.0):
+        The matching threshold.
 
     Examples:
         ```python

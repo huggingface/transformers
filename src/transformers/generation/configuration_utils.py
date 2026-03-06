@@ -36,6 +36,8 @@ from ..utils import (
 
 
 if TYPE_CHECKING:
+    import torch
+
     from ..configuration_utils import PreTrainedConfig
     from ..modeling_utils import PreTrainedModel
 
@@ -100,11 +102,11 @@ class GenerationConfig(PushToHubMixin):
 
     </Tip>
 
-    Note: the configuration field that are still `None` will be overriden by `GenerationConfig._get_default_generation_params()`
+    Note: the configuration fields that are still `None` will be overridden by `GenerationConfig._get_default_generation_params()`
     during the generation loop. If you want to use different values for these fields, make sure to explicitly set them in the
     generation config.
 
-    Arg:
+    Args:
         > Parameters that control the length of the output
 
         max_length (`int`, *optional*):
@@ -337,6 +339,15 @@ class GenerationConfig(PushToHubMixin):
     """
 
     extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits")
+
+    # Tensor versions of token IDs, set by _prepare_special_tokens() at generation time
+    _bos_token_tensor: "torch.Tensor | None"
+    _eos_token_tensor: "torch.Tensor | None"
+    _pad_token_tensor: "torch.Tensor | None"
+    _decoder_start_token_tensor: "torch.Tensor | None"
+
+    # Hash to detect whether the instance was modified after loading
+    _original_object_hash: int | None
 
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
@@ -793,7 +804,7 @@ class GenerationConfig(PushToHubMixin):
 
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 

@@ -14,72 +14,41 @@
 """CPMAnt model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="openbmb/cpm-ant-10b")
 class CpmAntConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CpmAntModel`]. It is used to instantiate an
-    CPMAnt model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the CPMAnt
-    [openbmb/cpm-ant-10b](https://huggingface.co/openbmb/cpm-ant-10b) architecture.
+    position_bias_num_buckets (`int`, *optional*, defaults to 512):
+        The number of position_bias buckets.
+    position_bias_max_distance (`int`, *optional*, defaults to 2048):
+        The maximum sequence length that this model might ever be used with. Typically set this to something large
+        just in case (e.g., 512 or 1024 or 2048).
+    prompt_types (`int`, *optional*, defaults to 32):
+        The type of prompt.
+    prompt_length (`int`, *optional*, defaults to 32):
+        The length of prompt.
+    segment_types (`int`, *optional*, defaults to 32):
+        The type of segment.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+     Example:
 
-    Args:
-        vocab_size (`int`, *optional*, defaults to 30720):
-            Vocabulary size of the CPMAnt model. Defines the number of different tokens that can be represented by the
-            `input` passed when calling [`CpmAntModel`].
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the encoder layers.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads in the Transformer encoder.
-        dim_head (`int`, *optional*, defaults to 128):
-            Dimension of attention heads for each attention layer in the Transformer encoder.
-        dim_ff (`int`, *optional*, defaults to 10240):
-            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 48):
-            Number of layers of the Transformer encoder.
-        dropout_p (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder.
-        position_bias_num_buckets (`int`, *optional*, defaults to 512):
-            The number of position_bias buckets.
-        position_bias_max_distance (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        init_std (`float`, *optional*, defaults to 1.0):
-            Initialize parameters with std = init_std.
-        prompt_types (`int`, *optional*, defaults to 32):
-            The type of prompt.
-        prompt_length (`int`, *optional*, defaults to 32):
-            The length of prompt.
-        segment_types (`int`, *optional*, defaults to 32):
-            The type of segment.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether to use cache.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
+     ```python
+     >>> from transformers import CpmAntModel, CpmAntConfig
 
-    Example:
+     >>> # Initializing a CPMAnt cpm-ant-10b style configuration
+     >>> configuration = CpmAntConfig()
 
-    ```python
-    >>> from transformers import CpmAntModel, CpmAntConfig
+     >>> # Initializing a model from the cpm-ant-10b style configuration
+     >>> model = CpmAntModel(configuration)
 
-    >>> # Initializing a CPMAnt cpm-ant-10b style configuration
-    >>> configuration = CpmAntConfig()
-
-    >>> # Initializing a model from the cpm-ant-10b style configuration
-    >>> model = CpmAntModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+     >>> # Accessing the model configuration
+     >>> configuration = model.config
+     ```"""
 
     model_type = "cpmant"
 

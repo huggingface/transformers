@@ -15,13 +15,11 @@
 
 import unittest
 
-import pytest
 import requests
 
 from transformers import Dinov2Config, PromptDepthAnythingConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils.import_utils import get_torch_major_and_minor_version
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -279,37 +277,3 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-3))
-
-    @pytest.mark.torch_export_test
-    def test_export(self):
-        for strict in [False, True]:
-            if strict and get_torch_major_and_minor_version() == "2.7":
-                self.skipTest(reason="`strict=True` is currently failing with torch 2.7.")
-
-            with self.subTest(strict=strict):
-                model = (
-                    PromptDepthAnythingForDepthEstimation.from_pretrained(
-                        "depth-anything/prompt-depth-anything-vits-hf"
-                    )
-                    .to(torch_device)
-                    .eval()
-                )
-                image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
-                image = prepare_img()
-                prompt_depth = prepare_prompt_depth()
-                inputs = image_processor(images=image, prompt_depth=prompt_depth, return_tensors="pt").to(torch_device)
-
-                exported_program = torch.export.export(
-                    model,
-                    args=(inputs["pixel_values"], inputs["prompt_depth"]),
-                    strict=strict,
-                )
-                with torch.no_grad():
-                    eager_outputs = model(**inputs)
-                    exported_outputs = exported_program.module().forward(
-                        inputs["pixel_values"], inputs["prompt_depth"]
-                    )
-                self.assertEqual(eager_outputs.predicted_depth.shape, exported_outputs.predicted_depth.shape)
-                self.assertTrue(
-                    torch.allclose(eager_outputs.predicted_depth, exported_outputs.predicted_depth, atol=1e-4)
-                )

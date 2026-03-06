@@ -1495,13 +1495,11 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
         if past_key_values is not None and past_key_values.get_seq_length() > 0:
             model_inputs["image_embeds"] = None
             model_inputs["image_embeds_position_mask"] = None
-            model_inputs["position_ids"] = (
-                Kosmos2_5TextSinusoidalPositionalEmbedding.create_position_ids_from_input_ids(
-                    input_ids,
-                    padding_idx=self.config.pad_token_id,
-                    past_key_values_length=0,
-                )[:, -cache_position.shape[0] :]
-            )
+
+            # Kosmos2.5 starts position_ids at `pad_token_id`...
+            if model_inputs.get("position_ids") is not None:
+                # NOTE: we need this op out-of-place, otherwise it modifies the `model_kwargs` dict used in `generate` in-place!
+                model_inputs["position_ids"] = model_inputs["position_ids"] + 1 + self.config.pad_token_id
 
         # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
         elif image_embeds_position_mask is not None:
