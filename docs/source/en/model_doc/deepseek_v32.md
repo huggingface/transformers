@@ -17,6 +17,7 @@ limitations under the License.
 be rendered properly in your Markdown viewer.
 
 -->
+*This model was released on {release_date} and added to Hugging Face Transformers on 2026-03-05.*
 
 # DeepSeek-V3.2
 
