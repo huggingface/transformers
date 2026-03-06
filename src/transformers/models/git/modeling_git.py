@@ -416,6 +416,7 @@ class GitEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([GitLayer(config, i) for i in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -705,6 +706,7 @@ class GitVisionEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([GitVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,

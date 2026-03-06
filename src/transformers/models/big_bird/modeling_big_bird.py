@@ -1332,6 +1332,7 @@ class BigBirdEncoder(nn.Module):
         self.layer = nn.ModuleList(
             [BigBirdLayer(config, seed=layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        self.gradient_checkpointing = False
 
     def set_attention_type(self, value: str):
         if value not in ["original_full", "block_sparse"]:

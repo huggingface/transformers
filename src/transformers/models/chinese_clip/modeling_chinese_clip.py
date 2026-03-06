@@ -603,6 +603,7 @@ class ChineseCLIPTextEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([ChineseCLIPTextLayer(config) for i in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
