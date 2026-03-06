@@ -695,20 +695,7 @@ class IsaacProcessor(ProcessorMixin):
         vision_token: str = "<image>",
         max_sequence_length: int = 16384,
         rescale_factor: float | None = None,
-        config: IsaacConfig | dict | None = None,
     ) -> None:
-        if isinstance(config, dict):
-            config = IsaacConfig(**config)
-
-        if config is not None:
-            vision_token = config.vision_token
-            max_sequence_length = config.max_sequence_length
-            rescale_factor = config.vision_rescale_factor
-
-        resolved_rescale_factor = float(rescale_factor) if rescale_factor is not None else float(1 / 255)
-        if config is not None:
-            config.vision_rescale_factor = resolved_rescale_factor
-
         if chat_template is None:
             chat_template = getattr(tokenizer, "chat_template", None)
 
