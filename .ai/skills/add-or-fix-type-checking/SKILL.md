@@ -1,3 +1,8 @@
+---
+name: add-or-fix-type-checking
+description: Fixes broken typing checks detected by ty, make style, or make check-repo. Use when typing errors appear in local runs, CI, or PR logs.
+---
+
 # Add Or Fix Type Checking
 
 Use this skill to fix typing failures reported by `ty`, `make style`, or `make check-repo` (typically through `utils/check_types.py`).
