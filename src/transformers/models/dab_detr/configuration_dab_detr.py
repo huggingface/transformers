@@ -15,98 +15,40 @@
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="IDEA-Research/dab_detr-base")
 class DabDetrConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DabDetrModel`]. It is used to instantiate
-    a DAB-DETR model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the DAB-DETR
-    [IDEA-Research/dab_detr-base](https://huggingface.co/IDEA-Research/dab_detr-base) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `ResNetConfig()`):
-            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
-            case it will default to `ResNetConfig()`.
-        num_queries (`int`, *optional*, defaults to 300):
-            Number of object queries, i.e. detection slots. This is the maximal number of objects
-            [`DabDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
-        encoder_layers (`int`, *optional*, defaults to 6):
-            Number of encoder layers.
-        encoder_ffn_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the "intermediate" (often named feed-forward) layer in encoder.
-        encoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
-        decoder_ffn_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-            Indicates whether the transformer model architecture is an encoder-decoder or not.
-        activation_function (`str` or `function`, *optional*, defaults to `"prelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        hidden_size (`int`, *optional*, defaults to 256):
-            This parameter is a general dimension parameter, defining dimensions for components such as the encoder layer and projection parameters in the decoder layer, among others.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (`float`, *optional*, defaults to 1.0):
-            The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        auxiliary_loss (`bool`, *optional*, defaults to `False`):
-            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-        dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when `use_timm_backbone` = `True`.
-        class_cost (`float`, *optional*, defaults to 2):
-            Relative weight of the classification error in the Hungarian matching cost.
-        bbox_cost (`float`, *optional*, defaults to 5):
-            Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
-        giou_cost (`float`, *optional*, defaults to 2):
-            Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
-        cls_loss_coefficient (`float`, *optional*, defaults to 2):
-            Relative weight of the classification loss in the object detection loss function.
-        bbox_loss_coefficient (`float`, *optional*, defaults to 5):
-            Relative weight of the L1 bounding box loss in the object detection loss.
-        giou_loss_coefficient (`float`, *optional*, defaults to 2):
-            Relative weight of the generalized IoU loss in the object detection loss.
-        focal_alpha (`float`, *optional*, defaults to 0.25):
-            Alpha parameter in the focal loss.
-        temperature_height (`int`, *optional*, defaults to 20):
-            Temperature parameter to tune the flatness of positional attention (HEIGHT)
-        temperature_width (`int`, *optional*, defaults to 20):
-            Temperature parameter to tune the flatness of positional attention (WIDTH)
-        query_dim (`int`, *optional*, defaults to 4):
-            Query dimension parameter represents the size of the output vector.
-        random_refpoints_xy (`bool`, *optional*, defaults to `False`):
-            Whether to fix the x and y coordinates of the anchor boxes with random initialization.
-        keep_query_pos (`bool`, *optional*, defaults to `False`):
-            Whether to concatenate the projected positional embedding from the object query into the original query (key) in every decoder layer.
-        num_patterns (`int`, *optional*, defaults to 0):
-            Number of pattern embeddings.
-        normalize_before (`bool`, *optional*, defaults to `False`):
-            Whether we use a normalization layer in the Encoder or not.
-        sine_position_embedding_scale (`float`, *optional*, defaults to 'None'):
-            Scaling factor applied to the normalized positional encodings.
-        initializer_bias_prior_prob (`float`, *optional*):
-            The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
-            If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
+    num_queries (`int`, *optional*, defaults to 300):
+        Number of object queries, i.e. detection slots. This is the maximal number of objects
+        [`DabDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
+    dilation (`bool`, *optional*, defaults to `False`):
+        Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when `use_timm_backbone` = `True`.
+    temperature_height (`int`, *optional*, defaults to 20):
+        Temperature parameter to tune the flatness of positional attention (HEIGHT)
+    temperature_width (`int`, *optional*, defaults to 20):
+        Temperature parameter to tune the flatness of positional attention (WIDTH)
+    query_dim (`int`, *optional*, defaults to 4):
+        Query dimension parameter represents the size of the output vector.
+    random_refpoints_xy (`bool`, *optional*, defaults to `False`):
+        Whether to fix the x and y coordinates of the anchor boxes with random initialization.
+    keep_query_pos (`bool`, *optional*, defaults to `False`):
+        Whether to concatenate the projected positional embedding from the object query into the original query (key) in every decoder layer.
+    num_patterns (`int`, *optional*, defaults to 0):
+        Number of pattern embeddings.
+    normalize_before (`bool`, *optional*, defaults to `False`):
+        Whether we use a normalization layer in the Encoder or not.
+    sine_position_embedding_scale (`float`, *optional*, defaults to 'None'):
+        Scaling factor applied to the normalized positional encodings.
+    initializer_bias_prior_prob (`float`, *optional*):
+        The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
+        If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
 
 
     Examples:

@@ -21,28 +21,17 @@
 from typing import Any, Literal
 
 from ...configuration_utils import PretrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="ModernVBERT/modernvbert")
 class ModernVBertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ModernVBert`] model. It is used to
-    instantiate a ModernVBert model according to the specified arguments and defines the model architecture.
-    e.g. [ModernVBERT/modernvbert](https://huggingface.co/ModernVBERT/modernvbert).
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs.
-    See the documentation for [`PretrainedConfig`] for more details.
-
-    Args:
-        text_config (`AutoConfig`, *optional*): Configuration for the text encoder.
-        vision_config (`ModernVBertVisionConfig`, *optional*): Configuration for the vision encoder.
-        image_token_id (`int | None`, *optional*, defaults to 50407): The token id reserved for image tokens inserted into the text stream.
-        pixel_shuffle_factor (`int | None`, *optional*, defaults to 4): Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
-        initializer_range (`float | None`, *optional*, defaults to 0.02): The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_cutoff_factor (`float | None`, *optional*, defaults to 2.0): The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
-        classifier_pooling (`Literal["cls", "mean"]`, *optional*, defaults to `"cls"`): The pooling strategy to use for classification tasks.
-        classifier_dropout (`float | None`, *optional*, defaults to 0.0): The dropout probability for the classification head.
-        classifier_bias (`bool | None`, *optional*, defaults to `False`): Whether to add a bias term to the classification head.
+    pixel_shuffle_factor (`int | None`, *optional*, defaults to 4): Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
+    initializer_cutoff_factor (`float | None`, *optional*, defaults to 2.0): The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
+    classifier_pooling (`Literal["cls", "mean"]`, *optional*, defaults to `"cls"`): The pooling strategy to use for classification tasks.
+    classifier_bias (`bool | None`, *optional*, defaults to `False`): Whether to add a bias term to the classification head
 
     Example:
     ```python

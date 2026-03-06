@@ -234,6 +234,12 @@ class VoxtralRealtimeForConditionalGenerationModelTest(
     @unittest.skip(
         reason="This test does not apply to VoxtralRealtime since input_features must be provided along input_ids"
     )
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip(
+        reason="This test does not apply to VoxtralRealtime since input_features must be provided along input_ids"
+    )
     def attention_mask_padding_matches_padding_free_with_position_ids(self):
         pass
 
@@ -289,6 +295,12 @@ class VoxtralRealtimeForConditionalGenerationModelTest(
         reason="VoxtralRealtime output contains non-tensor padding_cache state that is incompatible with DataParallel gather"
     )
     def test_multi_gpu_data_parallel_forward(self):
+        pass
+
+    @unittest.skip(
+        reason="VoxtralRealtime only supports static and offloaded_static cache implementations, not quantized cache"
+    )
+    def test_generate_with_quant_cache(self):
         pass
 
 

@@ -22,46 +22,16 @@ import math
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
 class Phi4MultimodalVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Phi4MultimodalVisionModel`]. It is used to instantiate a
-    Phi4Multimodal vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of
-    [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1152):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 4304):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 27):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 448):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        crop_size (`int`, *optional*, defaults to 448):
-            Crop size for the input images.
-        image_token_id (`int`, *optional*, defaults to 200010):
-            The image token id.
-        feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer of the encoder from which to extract image features.
+    crop_size (`int`, *optional*, defaults to 448):
+        Crop size for the input images.
+    feature_layer (`int`, *optional*, defaults to -2):
+        The index of the layer of the encoder from which to extract image features.
 
     Example:
 
@@ -109,65 +79,47 @@ class Phi4MultimodalVisionConfig(PreTrainedConfig):
         self.feature_layer = feature_layer
 
 
+@auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
 class Phi4MultimodalAudioConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Phi4MultimodalAudioModel`]. It is used to instantiate a
-    Phi4Multimodal audio encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of
-    [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the encoder layers.
-        intermediate_size (`int`, *optional*, defaults to 1536):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_blocks (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        activation (`str`, *optional*, defaults to `"swish"`):
-            The non-linear activation function in the MLPs.
-        chunk_size (`int`, *optional*, defaults to -1):
-            The chunk size to create the masks.
-        left_chunk (`int`, *optional*, defaults to 18):
-            The left chunk to create the masks.
-        dropout_rate (`float`, *optional*, defaults to 0.0):
-            The dropout ratio.
-        ext_pw_out_channel (`int`, *optional*, defaults to 1024):
-            Number of out channels in the point-wise conv modules.
-        depthwise_separable_out_channel (`int`, *optional*, defaults to 1024):
-            Number of out channels in the depth-wise separable conv modules.
-        depthwise_multiplier (`int`, *optional*, defaults to 1):
-            Input size multiplier for the depth-wise separable conv modules.
-        kernel_size (`int`, *optional*, defaults to 3):
-            Kernel size for the depth-wise separable conv modules.
-        conv_activation (`str`, *optional*, defaults to `"swish"`):
-            The non-linear activation function in the conv modules.
-        input_size (`int`, *optional*, defaults to 80):
-            Input size for the audio model.
-        conv_glu_type (`str`, *optional*, defaults to `"swish"`):
-            The non-linear activation function in the point-wise conv modules.
-        time_reduction (`int`, *optional*, defaults to 8):
-            Time reduction (subsampling factor).
-        bias_max_distance (`int`, *optional*, defaults to 1000):
-            Max distance for the relative attention bias module.
-        bias_symmetric (`bool`, *optional*, defaults to `False`):
-            Whether the relative attention bias should be symmetric or not.
-        nemo_activation (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in the nemo conv modules.
-        nemo_conv_channels (`int`, *optional*, defaults to 1024):
-            Number of channels in the nemo conv modules.
-        downsample_rate (`int`, *optional*, defaults to 1):
-            Downsample rate for the audio feature extractor.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        audio_token_id (`int`, *optional*, defaults to 200011):
-            The audio token id.
-        feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer of the encoder from which to extract audio features.
+    num_blocks (`int`, *optional*, defaults to 24):
+        Number of hidden layers in the Transformer encoder.
+    downsample_rate (`int`, *optional*, defaults to 1):
+        Downsample rate for the audio feature extractor.
+    activation (`str`, *optional*, defaults to `"swish"`):
+        The non-linear activation function in the MLPs.
+    chunk_size (`int`, *optional*, defaults to -1):
+        The chunk size to create the masks.
+    left_chunk (`int`, *optional*, defaults to 18):
+        The left chunk to create the masks.
+    dropout_rate (`float`, *optional*, defaults to 0.0):
+        The dropout ratio.
+    ext_pw_out_channel (`int`, *optional*, defaults to 1024):
+        Number of out channels in the point-wise conv modules.
+    depthwise_separable_out_channel (`int`, *optional*, defaults to 1024):
+        Number of out channels in the depth-wise separable conv modules.
+    depthwise_multiplier (`int`, *optional*, defaults to 1):
+        Input size multiplier for the depth-wise separable conv modules.
+    kernel_size (`int`, *optional*, defaults to 3):
+        Kernel size for the depth-wise separable conv modules.
+    conv_activation (`str`, *optional*, defaults to `"swish"`):
+        The non-linear activation function in the conv modules.
+    input_size (`int`, *optional*, defaults to 80):
+        Input size for the audio model.
+    conv_glu_type (`str`, *optional*, defaults to `"swish"`):
+        The non-linear activation function in the point-wise conv modules.
+    time_reduction (`int`, *optional*, defaults to 8):
+        Time reduction (subsampling factor).
+    bias_max_distance (`int`, *optional*, defaults to 1000):
+        Max distance for the relative attention bias module.
+    bias_symmetric (`bool`, *optional*, defaults to `False`):
+        Whether the relative attention bias should be symmetric or not.
+    nemo_activation (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function in the nemo conv modules.
+    nemo_conv_channels (`int`, *optional*, defaults to 1024):
+        Number of channels in the nemo conv modules.
+    feature_layer (`int`, *optional*, defaults to -2):
+        The index of the layer of the encoder from which to extract audio features.
 
     Example:
 
@@ -242,78 +194,12 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
         self.nemo_final_size = length
 
 
+@auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
 class Phi4MultimodalConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Phi4MultimodalModel`]. It is used to instantiate a
-    Phi4Multimodal model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the
-    [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 200064):
-            Vocabulary size of the Phi-3 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Phi3Model`].
-        hidden_size (`int`, *optional*, defaults to 3072):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 8192):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        resid_pdrop (`float`, *optional*, defaults to 0.0):
-            Dropout probability for mlp outputs.
-        embd_pdrop (`int`, *optional*, defaults to 0.0):
-            The dropout ratio for the embeddings.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio after computing the attention scores.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon value used for the RMSNorm.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`. Whether to tie weight embeddings or not.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        bos_token_id (`int`, *optional*, defaults to 199999):
-            The id of the "beginning-of-sequence" token.
-        eos_token_id (`int` or `list[int]`, *optional*, defaults to `[199999, 200020]`):
-            The id of the "end-of-sequence" token.
-        pad_token_id (`int`, *optional*, defaults to 199999):
-            The id of the padding token.
-        original_max_position_embeddings (`int`, *optional*, defaults to 4096):
-            The maximum sequence length that this model was trained with. This is used to determine the size of the
-            original RoPE embeddings when using long scaling.
-        sliding_window (`int`, *optional*):
-            Sliding window attention window size. If `None`, no sliding window is applied.
-        vision_config (`Phi4MultimodalVisionConfig` or `dict`, *optional*):
-            The vision config for the underlying image embedding model. If not provided, will default to the configuration
-            used to instantiate a model similar in architecture as
-            [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct).
-        audio_config (`Phi4MultimodalAudioConfig` or `dict`, *optional*):
-            The audio config for the underlying audio embedding model. If not provided, will default to the configuration
-            used to instantiate a model similar in architecture as
-            [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct).
+    original_max_position_embeddings (`int`, *optional*, defaults to 4096):
+        The maximum sequence length that this model was trained with. This is used to determine the size of the
+        original RoPE embeddings when using long scaling.
 
     Example:
 
