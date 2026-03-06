@@ -1620,12 +1620,12 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
-        spatial_merge_size = self.config.vision_config.spatial_merge_size
 
         # Separate video grid thw into multiple grids because timestamps are used to seperate videos.
         if video_grid_thw is not None:
             video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
             video_grid_thw[:, 0] = 1
+        spatial_merge_size = self.config.vision_config.spatial_merge_size
 
         mrope_position_deltas = []
         position_ids = torch.zeros(
