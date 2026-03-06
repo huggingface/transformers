@@ -671,21 +671,9 @@ class IsaacConfig(PretrainedConfig):
         self.vision_token = vision_token
 
 
+@auto_docstring
 class IsaacProcessor(ProcessorMixin):
-    """Processor that pairs the Isaac image processor with the Qwen2 tokenizer.
-
-    Args:
-        image_processor: Vision preprocessor (fast) used for patch extraction.
-        tokenizer: Qwen2 tokenizer instance.
-        chat_template (str or dict, optional): Chat template used by `apply_chat_template`.
-        vision_token (str, optional): Placeholder token marking image locations. Defaults to "<image>".
-        max_sequence_length (int, optional): Maximum combined text+vision tokens kept. Defaults to 16384.
-        rescale_factor (float, optional): Image rescale factor; defaults to 1/255.
-        config (IsaacConfig | dict, optional): If provided, overrides processor defaults from the model config.
-
-    Returns:
-        BatchFeature: Top-level batched text and vision tensors.
-    """
+    """Processor that pairs the Isaac image processor with the Qwen2 tokenizer."""
 
     def __init__(
         self,
