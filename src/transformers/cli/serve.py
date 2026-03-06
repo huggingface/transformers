@@ -810,6 +810,9 @@ class Serve:
 
         # Continuous batching only supports text-only models
         if self.get_model_modality(model, processor=processor) != Modality.LLM:
+            logger.warning_once(
+                "Continuous batching is not supported for non-text-only models. Falling back to regular generate."
+            )
             return self.generate_chat_completion(req)
 
         tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
