@@ -2556,7 +2556,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     if not (self.get_parameter(source_param_name) == self.get_parameter(target_param_name)).all():
                         logger.warning(
                             f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
-                            f"{target_param_name}, but both are present in the checkpoints with DIFFERENT VALUES, so we will NOT "
+                            f"{target_param_name}, but both are present in the checkpoints with different values, so we will NOT "
                             "tie them. You should update the config with `tie_word_embeddings=False` to silence this warning."
                         )
                         # Remove from internal attribute to correctly reflect actual tied weights

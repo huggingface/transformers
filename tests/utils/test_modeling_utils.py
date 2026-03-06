@@ -1476,9 +1476,39 @@ class ModelUtilsTest(TestCasePlus):
                     # Make sure both state dict are the same
                     compare_state_dicts(model.state_dict(), new_model.state_dict())
 
-    def test_tied_weights_are_not_tied_if_both_present(self):
-        """Test that if both the source and target of tied weights are present, we do NOT tie them, and instead
+    def test_tied_weights_are_not_tied_if_both_present_but_different(self):
+        """Test that if both the source and target of tied weights are present and different, we do NOT tie them, and instead
         raise a warning"""
+        model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
+        # Just to be sure it's actually tied
+        self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Save the config
+            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                f.write(json.dumps(model.config.to_dict()))
+
+            state_dict = model.state_dict()
+            # Clone every param to make sure nothing is tied -> we save everything
+            state_dict = {k: v.clone() for k, v in state_dict.items()}
+            # Make sure the target tied weights has a different value than the source
+            state_dict["linear_2.weight"] = state_dict["linear_2.weight"] + 2
+            safe_save_file(state_dict, os.path.join(tmp_dir, "model.safetensors"))
+
+            logger = logging.get_logger("transformers.modeling_utils")
+            with CaptureLogger(logger) as cl:
+                new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
+
+            # We should have raised a warning here saying that we will NOT tie the weights
+            self.assertIn("both are present in the checkpoints with different values, so we will NOT tie them", cl.out)
+            # Assert no missing keys
+            self.assertSetEqual(load_info["missing_keys"], set(), msg=f"{load_info['missing_keys']} are missing!")
+            # It should not be the same weight anymore
+            self.assertIsNot(
+                new_model.linear.weight, new_model.linear_2.weight, msg="Weights are tied but they should not!"
+            )
+
+    def test_tied_weights_are_tied_if_both_present_and_similar(self):
+        """Test that if both the source and target of tied weights are present but have same values, we tie them"""
         model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
         # Just to be sure it's actually tied
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
@@ -1492,20 +1522,16 @@ class ModelUtilsTest(TestCasePlus):
             state_dict = {k: v.clone() for k, v in state_dict.items()}
             safe_save_file(state_dict, os.path.join(tmp_dir, "model.safetensors"))
 
-            logger = logging.get_logger("transformers.modeling_utils")
-            with CaptureLogger(logger) as cl:
-                new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
+            new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
 
-            # We should have raised a warning here saying that we will NOT tie the weights
-            self.assertIn("both are present in the checkpoints, so we will NOT tie them.", cl.out)
             # Assert no missing keys
             self.assertSetEqual(load_info["missing_keys"], set(), msg=f"{load_info['missing_keys']} are missing!")
-            # It should not be the same weight anymore
-            self.assertIsNot(
-                new_model.linear.weight, new_model.linear_2.weight, msg="Weights are tied but they should not!"
+            # It should still be the same weight
+            self.assertIs(
+                new_model.linear.weight, new_model.linear_2.weight, msg="Weights are NOT tied but they should be!"
             )
 
-            # Make sure both state dict are the same (the values are still the same, it's just not tied)
+            # Make sure both state dict are the same
             compare_state_dicts(model.state_dict(), new_model.state_dict())
 
     def test_tied_weights_are_missing_if_both_absent(self):
