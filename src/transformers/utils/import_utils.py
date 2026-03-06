@@ -498,14 +498,14 @@ def is_torch_bf16_gpu_available() -> bool:
     if is_torch_hpu_available():
         return True
     if is_torch_npu_available():
-        return torch.npu.is_bf16_supported() if hasattr(torch, "npu") else False
+        return getattr(torch, "npu").is_bf16_supported() if hasattr(torch, "npu") else False
     if is_torch_mps_available():
         # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
         return torch.backends.mps.is_macos_or_newer(14, 0)
     if is_torch_musa_available():
-        return torch.musa.is_bf16_supported() if hasattr(torch, "musa") else False
+        return getattr(torch, "musa").is_bf16_supported() if hasattr(torch, "musa") else False
     if is_torch_mlu_available():
-        return torch.mlu.is_bf16_supported() if hasattr(torch, "mlu") else False
+        return getattr(torch, "mlu").is_bf16_supported()
     if is_torch_neuron_available():
         return getattr(torch, "neuron").is_bf16_supported()
     return False
