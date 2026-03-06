@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+from collections.abc import Container
 from dataclasses import dataclass
 
 import torch
@@ -307,17 +308,28 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     def forward(
-        self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+        self,
+        hidden_states: torch.Tensor,
+        returned_hidden_states: Container[int] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         hidden_states = self.input_linear(hidden_states)
+        exported_hidden_states = []
+        if returned_hidden_states is None:
+            returned_hidden_states = []
+        if 0 in returned_hidden_states:
+            exported_hidden_states.append(hidden_states)
         for idx, layer in enumerate(self.layers, start=1):
             hidden_states = layer(hidden_states, attention_dists=self.attention_dists)
+            if idx in returned_hidden_states:
+                exported_hidden_states.append(hidden_states)
 
             if idx == self.num_layers // 2:
                 hidden_states_mid = hidden_states.clone()
                 hidden_states_mid = self.out(hidden_states_mid)
                 hidden_states += self.out_mid(nn.Softmax(dim=-1)(hidden_states_mid))
-
+        if len(exported_hidden_states) > 0:
+            hidden_states = torch.cat(exported_hidden_states + [hidden_states], dim=-1)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
@@ -371,8 +383,11 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
     def get_audio_features(
         self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        audio_outputs = self.encoder(input_features, return_dict=True, **kwargs)
-        projected_embeds = self.projector(audio_outputs.last_hidden_state)
+        audio_outputs = self.encoder(
+            input_features, returned_hidden_states=self.config.encoder_hidden_layers, return_dict=True, **kwargs
+        )
+        encoder_embeds = audio_outputs.last_hidden_state
+        projected_embeds = self.projector(encoder_embeds)
         audio_outputs.pooler_output = projected_embeds
 
         return audio_outputs
