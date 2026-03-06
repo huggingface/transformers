@@ -28,7 +28,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Ernie4_5_VL_MoeImageProcessorFast, Ernie4_5_VL_MoeProcessor
+    from transformers import Ernie4_5_VLMoeImageProcessorFast, Ernie4_5_VLMoeProcessor
 
 if is_torch_available():
     import torch
@@ -37,13 +37,13 @@ if is_torch_available():
 @require_vision
 @require_torch
 @require_torchvision
-class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = Ernie4_5_VL_MoeProcessor
+class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Ernie4_5_VLMoeProcessor
 
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        processor = Ernie4_5_VL_MoeProcessor.from_pretrained(
+        processor = Ernie4_5_VLMoeProcessor.from_pretrained(
             "hf-internal-testing/Ernie-VL-Moe-Small",
             patch_size=4,
             size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56},
@@ -85,23 +85,23 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         video_processor = self.get_video_processor()
 
-        processor = Ernie4_5_VL_MoeProcessor(
+        processor = Ernie4_5_VLMoeProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
         processor.save_pretrained(self.tmpdirname)
-        processor = Ernie4_5_VL_MoeProcessor.from_pretrained(self.tmpdirname)
+        processor = Ernie4_5_VLMoeProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertIsInstance(processor.tokenizer, TokenizersBackend)
-        self.assertIsInstance(processor.image_processor, Ernie4_5_VL_MoeImageProcessorFast)
+        self.assertIsInstance(processor.image_processor, Ernie4_5_VLMoeImageProcessorFast)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         video_processor = self.get_video_processor()
 
-        processor = Ernie4_5_VL_MoeProcessor(
+        processor = Ernie4_5_VLMoeProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
 
@@ -118,7 +118,7 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         video_processor = self.get_video_processor()
 
-        processor = Ernie4_5_VL_MoeProcessor(
+        processor = Ernie4_5_VLMoeProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
 

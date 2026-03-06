@@ -14,62 +14,28 @@
 """SegFormer model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="ByteDance-Seed/SeedOss-36B")
 class SegformerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SegformerModel`]. It is used to instantiate an
-    SegFormer model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the SegFormer
-    [nvidia/segformer-b0-finetuned-ade-512-512](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
-    architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        num_encoder_blocks (`int`, *optional*, defaults to 4):
-            The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
-        depths (`list[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
-            The number of layers in each encoder block.
-        sr_ratios (`list[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
-            Sequence reduction ratios in each encoder block.
-        hidden_sizes (`list[int]`, *optional*, defaults to `[32, 64, 160, 256]`):
-            Dimension of each of the encoder blocks.
-        patch_sizes (`list[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
-            Patch size before each encoder block.
-        strides (`list[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
-            Stride before each encoder block.
-        num_attention_heads (`list[int]`, *optional*, defaults to `[1, 2, 5, 8]`):
-            Number of attention heads for each attention layer in each block of the Transformer encoder.
-        mlp_ratios (`list[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
-            Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
-            encoder blocks.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        classifier_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probability before the classification head.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        drop_path_rate (`float`, *optional*, defaults to 0.1):
-            The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        decoder_hidden_size (`int`, *optional*, defaults to 256):
-            The dimension of the all-MLP decode head.
-        semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
-            The index that is ignored by the loss function of the semantic segmentation model.
+    num_encoder_blocks (`int`, *optional*, defaults to 4):
+        The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
+    depths (`list[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
+        The number of layers in each encoder block.
+    sr_ratios (`list[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
+        Sequence reduction ratios in each encoder block.
+    patch_sizes (`list[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
+        Patch size before each encoder block.
+    strides (`list[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
+        Stride before each encoder block.
+    mlp_ratios (`list[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
+        Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
+        encoder blocks.
 
     Example:
 

@@ -15,60 +15,19 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="adept/persimmon-8b-base")
 class PersimmonConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`PersimmonModel`]. It is used to instantiate an
-    Persimmon model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the
-    [adept/persimmon-8b-base](https://huggingface.co/adept/persimmon-8b-base).
+    r""".
+    qk_layernorm (`bool`, *optional*, default to `True`):
+        Whether or not to normalize the Queries and Keys after projecting the hidden states
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 262144):
-            Vocabulary size of the Persimmon model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`PersimmonModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 16384):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 36):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 64):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"relu2"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 16384):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        tie_word_embeddings(`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        qk_layernorm (`bool`, *optional*, default to `True`):
-            Whether or not to normalize the Queries and Keys after projecting the hidden states
-        hidden_dropout (`float`, *optional*, default to 0.0):
-            The dropout ratio after applying the MLP to the hidden states.
-        attention_dropout (`float`, *optional*, default to 0.0):
-            The dropout ratio after computing the attention scores.
-
-        Example:
+    Example:
 
     ```python
     >>> from transformers import PersimmonModel, PersimmonConfig
