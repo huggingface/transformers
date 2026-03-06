@@ -88,14 +88,12 @@ benchmark:
 	python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=diff backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
 
 codex:
-	rm -f CLAUDE.md
 	cp .ai/AGENTS.md AGENTS.md
 	rm -rf .agents/skills
 	mkdir -p .agents/skills
 	find .ai/skills -mindepth 1 -maxdepth 1 -type d -exec cp -R {} .agents/skills/ \;
 
 claude:
-	rm -f AGENTS.md
 	cp .ai/AGENTS.md CLAUDE.md
 	rm -rf .claude/skills
 	mkdir -p .claude/skills

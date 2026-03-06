@@ -259,19 +259,19 @@ To configure the repository for each agent system:
 make codex
 ```
 
-- Removes `CLAUDE.md` if present
 - Recreates `AGENTS.md` from `.ai/AGENTS.md`
 - Recreates `.agents/skills/` from `.ai/skills/`
+- Leaves Claude files in place (`CLAUDE.md`, `.claude/skills/...`)
 
 ```bash
 make claude
 ```
 
-- Removes `AGENTS.md` if present
 - Recreates `CLAUDE.md` from `.ai/AGENTS.md`
 - Recreates `.claude/skills/` from `.ai/skills/`
+- Leaves Codex files in place (`AGENTS.md`, `.agents/skills/...`)
 
-Both targets are idempotent: re-running `make codex` or `make claude` will recreate the generated files cleanly from `.ai/`.
+Both targets are idempotent: re-running `make codex` or `make claude` will recreate generated files cleanly from `.ai/`, and both agent setups can coexist in the same checkout.
 
 ## Create a Pull Request
 
