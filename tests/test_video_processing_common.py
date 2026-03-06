@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,6 @@ from copy import deepcopy
 
 import numpy as np
 import pytest
-from packaging import version
 
 from transformers import AutoVideoProcessor
 from transformers.testing_utils import (
@@ -203,8 +201,6 @@ class VideoProcessingTestMixin:
     def test_can_compile_fast_video_processor(self):
         if self.fast_video_processing_class is None:
             self.skipTest("Skipping compilation test as fast video processor is not defined")
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         torch.compiler.reset()
         video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, return_tensors="torch")

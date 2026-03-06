@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Image processor class for Idefics."""
 
 from collections.abc import Callable
-from typing import Optional, Union
 
 from PIL import Image
 
@@ -47,7 +45,7 @@ class IdeficsImageProcessorKwargs(ImagesKwargs, total=False):
         Resize to image size
     """
 
-    transform: Optional[Callable]
+    transform: Callable | None
     image_size: dict[str, int]
 
 
@@ -95,11 +93,11 @@ class IdeficsImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         image_size: int = 224,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        image_num_channels: Optional[int] = 3,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        image_num_channels: int | None = 3,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -114,14 +112,14 @@ class IdeficsImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        image_num_channels: Optional[int] = 3,
-        image_size: Optional[dict[str, int]] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        transform: Optional[Callable] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        image_num_channels: int | None = 3,
+        image_size: dict[str, int] | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        transform: Callable | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        return_tensors: str | TensorType | None = TensorType.PYTORCH,
         **kwargs,
     ) -> TensorType:
         """

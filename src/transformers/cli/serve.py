@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from __future__ import annotations
+
 import asyncio
 import base64
 import copy
@@ -28,7 +31,7 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 from io import BytesIO
 from threading import Thread
-from typing import TYPE_CHECKING, Annotated, Optional, TypedDict, Union
+from typing import TYPE_CHECKING, Annotated, TypedDict
 
 import typer
 from huggingface_hub import scan_cache_dir
@@ -313,9 +316,9 @@ class TimedModel:
 
     def __init__(
         self,
-        model: "PreTrainedModel",
+        model: PreTrainedModel,
         timeout_seconds: int,
-        processor: Union["ProcessorMixin", "PreTrainedTokenizerFast"] | None = None,
+        processor: ProcessorMixin | PreTrainedTokenizerFast | None = None,
     ):
         self.model = model
         self._name_or_path = str(model.name_or_path)
@@ -387,7 +390,7 @@ class Serve:
             ),
         ] = None,
         quantization: Annotated[
-            Optional[str],
+            str | None,
             typer.Option(help="Which quantization method to use. choices: 'bnb-4bit', 'bnb-8bit'"),
         ] = None,
         host: Annotated[str, typer.Option(help="Interface the server will listen to.")] = "localhost",
@@ -663,7 +666,7 @@ class Serve:
         finish_reason: str | None = None,
         tool_calls: list[ChoiceDeltaToolCall] | None = None,
         decode_stream: DecodeStream | None = None,
-        tokenizer: Optional["PreTrainedTokenizerFast"] = None,
+        tokenizer: PreTrainedTokenizerFast | None = None,
     ) -> ChatCompletionChunk:
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
@@ -727,6 +730,9 @@ class Serve:
         Returns:
             `str`: The built chunk, a string containing a JSON string with the payload.
         """
+        if isinstance(chunk, str):
+            # Error paths may yield pre-formatted strings — pass them through as-is.
+            return chunk if chunk.startswith("data: ") else f"data: {chunk}\n\n"
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
     @staticmethod
@@ -839,8 +845,22 @@ class Serve:
                 for result in self.running_continuous_batching_manager.request_id_iter(request_id):
                     n_tokens_generated += 1
 
+                    # Always yield the token content (even for the final FINISHED token)
+                    if result.generated_tokens:
+                        token_id = result.generated_tokens[-1]
+                        yield self.build_chat_completion_chunk(
+                            request_id=request_id,
+                            content=token_id,
+                            model=model_id_and_revision,
+                            decode_stream=decode_stream,
+                            tokenizer=tokenizer,
+                        )
+
                     if result.status == RequestStatus.FINISHED:
-                        generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
+                        generated_all_tokens = (
+                            generation_config.max_new_tokens is not None
+                            and n_tokens_generated >= generation_config.max_new_tokens
+                        )
 
                         # If the tokenizer has an eos_token, we can have a more robust check.
                         if hasattr(tokenizer, "eos_token"):
@@ -855,14 +875,6 @@ class Serve:
                             model=model_id_and_revision,
                         )
                         break
-                    else:
-                        yield self.build_chat_completion_chunk(
-                            request_id=request_id,
-                            content=result.generated_tokens[-1],
-                            model=model_id_and_revision,
-                            decode_stream=decode_stream,
-                            tokenizer=tokenizer,
-                        )
 
             except Exception as e:
                 logger.error(str(e))
@@ -926,7 +938,7 @@ class Serve:
             return JSONResponse(json_chunk, media_type="application/json")
 
     @staticmethod
-    def get_model_modality(model: "PreTrainedModel", processor=None) -> Modality:
+    def get_model_modality(model: PreTrainedModel, processor=None) -> Modality:
         if processor is not None:
             if isinstance(processor, PreTrainedTokenizerBase):
                 return Modality.LLM
@@ -1192,7 +1204,10 @@ class Serve:
                             _request_id, content=result, model=model_id_and_revision
                         )
 
-                generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
+                generated_all_tokens = (
+                    generation_config.max_new_tokens is not None
+                    and n_tokens_generated >= generation_config.max_new_tokens
+                )
 
                 # If the tokenizer has an eos_token, we can have a more robust check.
                 if hasattr(streamer.tokenizer, "eos_token"):
@@ -1728,7 +1743,7 @@ class Serve:
         self.last_messages = messages
         return req_continues_last_messages
 
-    def get_quantization_config(self) -> Optional[BitsAndBytesConfig]:
+    def get_quantization_config(self) -> BitsAndBytesConfig | None:
         """
         Returns the quantization config for the given CLI arguments.
 
@@ -1838,9 +1853,7 @@ class Serve:
         logger.info(f"Loaded model {model_id_and_revision}")
         return model, data_processor
 
-    def load_model_and_processor(
-        self, model_id_and_revision: str
-    ) -> tuple["PreTrainedModel", "PreTrainedTokenizerFast"]:
+    def load_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
         """
         Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
 
@@ -1865,7 +1878,7 @@ class Serve:
 
         return model, processor
 
-    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", "ProcessorMixin"]:
+    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, ProcessorMixin]:
         """
         Loads the audio model and processor from the given model ID and revision into the ServeCommand instance.
 

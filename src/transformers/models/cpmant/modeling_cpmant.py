@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The OpenBMB Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """PyTorch CPMAnt"""
 
 import math
-from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -87,10 +85,10 @@ class CpmAntAttention(nn.Module):
         hidden_kv: torch.Tensor,
         attention_mask: torch.BoolTensor,
         position_bias: torch.Tensor,
-        output_attentions: Optional[bool] = False,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        output_attentions: bool | None = False,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
     ):
         """
         Args:
@@ -175,11 +173,11 @@ class CpmAntSelfAttentionBlock(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_bias: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        position_bias: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
     ):
         """
         Args:
@@ -299,11 +297,11 @@ class CpmAntTransformerBlock(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_bias: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        position_bias: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
     ):
         """
         Args:
@@ -348,11 +346,11 @@ class CpmAntEncoder(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: torch.Tensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
     ):
         """
         Args:
@@ -578,15 +576,15 @@ class CpmAntModel(CpmAntPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPast]:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithPast:
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
             Indices of input sequence tokens in the vocabulary.
@@ -705,18 +703,18 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
-        attention_mask: Optional[torch.Tensor] = None,  # dummy parameter for text-generation pipeline
-        cache_position: Optional[torch.Tensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        labels: torch.Tensor | None = None,
+        return_dict: bool | None = None,
+        attention_mask: torch.Tensor | None = None,  # dummy parameter for text-generation pipeline
+        cache_position: torch.Tensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> Union[tuple, CausalLMOutputWithPast]:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
             Indices of input sequence tokens in the vocabulary.

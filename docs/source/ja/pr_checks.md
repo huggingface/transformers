@@ -102,14 +102,7 @@ CIは、`ci/circleci: check_code_quality` チェック内でこれらのチェ�
 
 
 ```bash
-make quality
-```
-
-時間がかかることがあります。したがって、現在のブランチで変更したファイルのみで同じことを実行するには、次のコマンドを実行します。
-
-
-```bash
-make fixup
+make check-repo
 ```
 
 この最後のコマンドは、リポジトリの整合性のためのすべての追加のチェックも実行します。それらを詳しく見てみましょう。
@@ -119,7 +112,7 @@ make fixup
 これには、あなたのPRがリポジトリを適切な状態に保ったままであることを確認するためのすべてのテストが含まれており、ci/`circleci: check_repository_consistency` チェックによって実行されます。ローカルでこのチェックを実行するには、以下を実行します。
 
 ```bash
-make repo-consistency
+make check-repo
 ```
 
 これを確認します：
@@ -137,7 +130,7 @@ make repo-consistency
 
 
 ```bash
-make fix-copies
+make fix-repo
 ```
 
 追加のチェックポイントは、新しいモデルを追加するPull Request（PR）に関連しています。主に次の点を確認します：

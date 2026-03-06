@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -905,8 +904,8 @@ def replace_class_node(
     Returns:
         A new class node corresponding to the modular definition.
     """
-    all_bases = [get_full_attribute_name(k.value) for k in modular_class_node.bases]
-    if any(base is None for base in all_bases):
+    all_new_bases = {get_full_attribute_name(k.value): k for k in modular_class_node.bases}
+    if any(base is None for base in all_new_bases.keys()):
         raise ValueError(f"Could not parse the name of the bases for {modular_class_node.name.value}")
 
     original_modeling_node = mapper.classes[renamed_super_class]
@@ -925,7 +924,7 @@ def replace_class_node(
 
     # If we explicitly passed a new base with common suffix to an old base, it is for switching the prefix
     # e.g. if the "natural" parent class is `PreTrainedModel` but we wanted to rename it to `PreTrainedVisionModel`
-    additional_bases = [base for base in all_bases if base != original_super_class]
+    additional_bases = {base for base in all_new_bases.keys() if base != original_super_class}
     new_class_bases = []
     for original_base in original_modeling_node.bases:
         new_base = original_base
@@ -937,8 +936,20 @@ def replace_class_node(
                 if len(suffix) > 0 and suffix[0].isupper():
                     new_name_node = original_base.value.with_changes(value=additional_base_name)
                     new_base = original_base.with_changes(value=new_name_node)
+                    # Remove from set
+                    additional_bases.discard(additional_base_name)
                     break
         new_class_bases.append(new_base)
+    # Add potential additional classes that may not be inherited as the parent does not use them, and that were not
+    # already replaced above
+    original_bases = {get_full_attribute_name(k.value) for k in original_modeling_node.bases}
+    new_class_bases.extend(
+        [all_new_bases[added_base] for added_base in additional_bases if added_base not in original_bases]
+    )
+    # If we have both `nn.Module` and `GradientCheckpointingLayer`, remove `nn.Module`
+    new_class_bases_names = {get_full_attribute_name(k.value) for k in new_class_bases}
+    if "nn.Module" in new_class_bases_names and "GradientCheckpointingLayer" in new_class_bases_names:
+        new_class_bases = [k for k in new_class_bases if get_full_attribute_name(k.value) != "nn.Module"]
 
     # Use class decorators redefined in modular file if any
     new_class_decorators = (
@@ -1012,7 +1023,9 @@ def replace_class_node(
             modular_node = modular_methods[name]
 
             # If we match the pattern, we should avoid inheriting the method
-            if re.match(r"\ndef .*\(.*\):\n    raise.*Error\(.*", mapper.python_module.code_for_node(modular_node)):
+            if re.match(
+                r"\ndef .*\(.*\).*:.*\n    raise.*Error\(.*", mapper.python_module.code_for_node(modular_node)
+            ):
                 continue
 
             # Compute new method docstring
@@ -1264,7 +1277,7 @@ class ModularFileMapper(ModuleMapper):
                     imported_object = self.python_module.code_for_node(imported_.name)
                     self.model_specific_imported_objects[imported_object] = import_module
         if m.matches(node.module, m.Name()):
-            if "transformers" == import_module:
+            if import_module == "transformers":
                 raise ValueError(
                     f"You are importing from {import_module} directly using global imports. Import from the correct local path"
                 )
@@ -1746,14 +1759,10 @@ def create_modules(
     return files
 
 
-def run_ruff(code, check=False):
-    if check:
-        command = ["ruff", "check", "-", "--fix", "--exit-zero"]
-    else:
-        command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-    stdout, _ = process.communicate(input=code.encode())
-    return stdout.decode()
+def run_ruff(file: str):
+    """Run `ruff` linter and formatter on `file`, as in `make style`"""
+    subprocess.run(["ruff", "check", file, "--fix"], stdout=subprocess.DEVNULL)
+    subprocess.run(["ruff", "format", file], stdout=subprocess.DEVNULL)
 
 
 def convert_modular_file(modular_file: str, source_library: str | None = "transformers") -> dict[str, str]:
@@ -1798,9 +1807,7 @@ def convert_modular_file(modular_file: str, source_library: str | None = "transf
                 header = AUTO_GENERATED_MESSAGE.format(
                     relative_path=relative_path, short_name=os.path.basename(relative_path)
                 )
-                ruffed_code = run_ruff(header + module.code, True)
-                formatted_code = run_ruff(ruffed_code, False)
-                output[file] = formatted_code
+                output[file] = header + module.code
         return output
     else:
         print(f"modular pattern not found in {modular_file}, exiting")
@@ -1815,8 +1822,11 @@ def save_modeling_files(modular_file: str, converted_files: dict[str, str]):
         new_file_name = modular_file.replace("modular_", f"{file_name_prefix}_").replace(
             ".py", f"{file_name_suffix}.py"
         )
+        # Write the file
         with open(new_file_name, "w", encoding="utf-8") as f:
             f.write(converted_files[file_type])
+        # Run ruff on the new file
+        run_ruff(new_file_name)
 
 
 def count_loc(file_path: str) -> int:

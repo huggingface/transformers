@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +29,7 @@ Use from the root of the repo with:
 python utils/check_inits.py
 ```
 
-for a check that will error in case of inconsistencies (used by `make repo-consistency`).
+for a check that will error in case of inconsistencies (used by `make check-repo`).
 
 There is no auto-fix possible here sadly :-(
 """
@@ -308,7 +307,6 @@ def get_transformers_submodules() -> list[str]:
 IGNORE_SUBMODULES = [
     "convert_pytorch_checkpoint_to_tf2",
     "models.esm.openfold_utils",
-    "modeling_attn_mask_utils",
     "safetensors_conversion",
     "modeling_gguf_pytorch_utils",
     "kernels.falcon_mamba",

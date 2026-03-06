@@ -304,6 +304,10 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    @unittest.skip("LayoutLM needs specific combination of config values and cannot run with defaults")
+    def test_model_forward_default_config_values(self):
+        pass
+
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)

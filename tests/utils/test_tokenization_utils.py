@@ -198,6 +198,21 @@ class TokenizerPushToHubTester(unittest.TestCase):
             self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizerFast")
 
 
+@require_tokenizers
+class TokenizersBackendTest(unittest.TestCase):
+    def test_clean_up_tokenization_spaces(self):
+        tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
+
+        text_with_artifacts = "Hello , how are you ? I 'm here ."
+        token_ids = tokenizer.encode(text_with_artifacts)
+
+        decoded_no_cleanup = tokenizer.decode(token_ids, clean_up_tokenization_spaces=False)
+        self.assertEqual(decoded_no_cleanup, "Hello , how are you ? I 'm here .")
+
+        decoded_with_cleanup = tokenizer.decode(token_ids, clean_up_tokenization_spaces=True)
+        self.assertEqual(decoded_with_cleanup, "Hello, how are you? I'm here.")
+
+
 class TrieTest(unittest.TestCase):
     def test_trie(self):
         trie = Trie()

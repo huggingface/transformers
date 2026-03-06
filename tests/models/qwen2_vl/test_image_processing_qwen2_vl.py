@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import itertools
+import json
 import tempfile
 import unittest
 
@@ -136,24 +137,18 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
             self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "min_pixels"))
-            self.assertTrue(hasattr(image_processing, "max_pixels"))
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
             self.assertTrue(hasattr(image_processing, "patch_size"))
             self.assertTrue(hasattr(image_processing, "temporal_patch_size"))
             self.assertTrue(hasattr(image_processing, "merge_size"))
 
-    def test_image_processor_from_dict_with_kwargs(self):
+    def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.min_pixels, 56 * 56)
-            self.assertEqual(image_processor.max_pixels, 28 * 28 * 1280)
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, min_pixels=256 * 256, max_pixels=640 * 640
-            )
-            self.assertEqual(image_processor.min_pixels, 256 * 256)
-            self.assertEqual(image_processor.max_pixels, 640 * 640)
+            image_processor = image_processing_class(**self.image_processor_dict)
+            obj = json.loads(image_processor.to_json_string())
+            for key, value in self.image_processor_dict.items():
+                if key not in ["min_pixels", "max_pixels"]:
+                    self.assertEqual(obj[key], value)
 
     def test_select_best_resolution(self):
         # Test with a final resize resolution

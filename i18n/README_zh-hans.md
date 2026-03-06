@@ -101,7 +101,7 @@ Transformers 充当跨文本、计算机视觉、音频、视频与多模态的�
 
 ## 安装
 
-Transformers 支持 Python 3.9+，以及 [PyTorch](https://pytorch.org/get-started/locally/) 2.1+。
+Transformers 支持 Python 3.10+，以及 [PyTorch](https://pytorch.org/get-started/locally/) 2.4+。
 
 使用 [venv](https://docs.python.org/3/library/venv.html) 或 [uv](https://docs.astral.sh/uv/)（一个基于 Rust 的快速 Python 包与项目管理器）创建并激活虚拟环境：
 
