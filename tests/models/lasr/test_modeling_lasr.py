@@ -19,7 +19,6 @@ import unittest
 from transformers import is_datasets_available, is_torch_available, pipeline
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -305,7 +304,6 @@ class LasrForCTCModelTest(ModelTesterMixin, unittest.TestCase):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
 
-@require_read_token
 class LasrForCTCIntegrationTest(unittest.TestCase):
     _dataset = None
 
