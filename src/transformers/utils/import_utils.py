@@ -475,10 +475,10 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
         try:
             import torch_neuronx  # noqa: F401
 
-            # Will raise a RuntimeError if no Neuron is found
+            # Will raise a RuntimeError if no Neuron is found, or AttributeError if torch.neuron is not available
             _ = getattr(torch, "neuron").device_count()
             return getattr(torch, "neuron").is_available()
-        except RuntimeError:
+        except (AttributeError, RuntimeError):
             return False
 
     return hasattr(torch, "neuron") and torch.neuron.is_available()
