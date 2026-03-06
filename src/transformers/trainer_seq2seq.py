@@ -333,7 +333,7 @@ class Seq2SeqTrainer(Trainer):
             self.model.generation_config._from_model_config = False
 
         # Retrieves GenerationConfig from model.generation_config
-        # Update with defaults because earlier the generation config used ot be init
+        # Update with defaults because earlier the generation config used to be init
         # with default values. Now we init it with `None` and keep defaults for BC
         gen_config = self.model.generation_config
         default_gen_config = gen_config._get_default_generation_params()
@@ -378,7 +378,7 @@ class Seq2SeqTrainer(Trainer):
                 else self.processing_class.eos_token_id
             )
         else:
-            if self.model.config.pad_token_id is not None:
+            if getattr(self.model.config, "pad_token_id", None) is not None:
                 pad_token_id = self.model.config.pad_token_id
             else:
                 raise ValueError("Pad_token_id must be set in the configuration of the model, in order to pad tensors")

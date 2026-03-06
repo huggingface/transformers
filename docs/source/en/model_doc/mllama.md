@@ -108,6 +108,7 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ## MllamaProcessor
 
 [[autodoc]] MllamaProcessor
+    - __call__
 
 ## MllamaImageProcessor
 

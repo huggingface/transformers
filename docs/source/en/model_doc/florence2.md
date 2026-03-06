@@ -171,16 +171,19 @@ print(parsed_answer)
 ## Florence2Processor
 
 [[autodoc]] Florence2Processor
+    - __call__
 
 ## Florence2Model
 
 [[autodoc]] Florence2Model
     - forward
+    - get_image_features
 
 ## Florence2ForConditionalGeneration
 
 [[autodoc]] Florence2ForConditionalGeneration
     - forward
+    - get_image_features
 
 ## Florence2VisionBackbone
 

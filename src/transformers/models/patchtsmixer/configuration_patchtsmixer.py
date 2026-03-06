@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 IBM and HuggingFace Inc. team. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PatchTSMixer model configuration"""
-
-from typing import Optional, Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -85,9 +82,6 @@ class PatchTSMixerConfig(PreTrainedConfig):
             error "mse".
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal weight initialization distribution.
-        post_init (`bool`, *optional*, defaults to `False`):
-            Whether to use custom weight initialization from `transformers` library, or the default initialization in
-            `PyTorch`. Setting it to `False` performs `PyTorch` weight initialization.
         norm_eps (`float`, *optional*, defaults to 1e-05):
             A value added to the denominator for numerical stability of normalization.
         mask_type (`str`, *optional*, defaults to `"random"`):
@@ -167,28 +161,27 @@ class PatchTSMixerConfig(PreTrainedConfig):
         self_attn_heads: int = 1,
         use_positional_encoding: bool = False,
         positional_encoding_type: str = "sincos",
-        scaling: Optional[Union[str, bool]] = "std",
+        scaling: str | bool | None = "std",
         loss: str = "mse",
         init_std: float = 0.02,
-        post_init: bool = False,
         norm_eps: float = 1e-5,
         # Pretrain model configuration
         mask_type: str = "random",
         random_mask_ratio: float = 0.5,
-        num_forecast_mask_patches: Optional[Union[list[int], int]] = [2],
+        num_forecast_mask_patches: list[int] | int | None = [2],
         mask_value: int = 0,
         masked_loss: bool = True,
         channel_consistent_masking: bool = True,
-        unmasked_channel_indices: Optional[list[int]] = None,
+        unmasked_channel_indices: list[int] | None = None,
         # General head configuration
         head_dropout: float = 0.2,
         distribution_output: str = "student_t",
         # Prediction head configuration
         prediction_length: int = 16,
-        prediction_channel_indices: Optional[list] = None,
+        prediction_channel_indices: list | None = None,
         # Classification/Regression configuration
         num_targets: int = 3,
-        output_range: Optional[list] = None,
+        output_range: list | None = None,
         head_aggregation: str = "max_pool",
         **kwargs,
     ):
@@ -223,7 +216,6 @@ class PatchTSMixerConfig(PreTrainedConfig):
         self.self_attn = self_attn
         self.self_attn_heads = self_attn_heads
         self.init_std = init_std
-        self.post_init = post_init
         self.distribution_output = distribution_output
         self.loss = loss
         self.num_parallel_samples = num_parallel_samples

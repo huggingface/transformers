@@ -301,7 +301,7 @@ class RagTestMixin:
             out = retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=config.generator.prefix,
+                prefix=None,
                 return_tensors="pt",
             )
 
@@ -369,7 +369,7 @@ class RagTestMixin:
             out = retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=config.generator.prefix,
+                prefix=None,
                 return_tensors="pt",
             )
 
@@ -428,7 +428,7 @@ class RagTestMixin:
             out = retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=config.generator.prefix,
+                prefix=None,
                 return_tensors="pt",
                 n_docs=n_docs,
             )
@@ -497,7 +497,7 @@ class RagTestMixin:
             out = retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=config.generator.prefix,
+                prefix=None,
                 return_tensors="pt",
                 n_docs=retriever_n_docs,
             )

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +14,10 @@
 
 
 from collections import OrderedDict, defaultdict
+from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -55,7 +55,7 @@ def _load_cv_utils_kernel_once():
         return
 
     try:
-        cv_utils_kernel = get_kernel("kernels-community/cv_utils")
+        cv_utils_kernel = get_kernel("kernels-community/cv-utils")
     except Exception as e:
         logger.warning_once(
             f"Failed to load cv_utils kernel (your torch/cuda setup may not be supported): {e}. "
@@ -69,8 +69,8 @@ class Sam3VideoInferenceCache:
 
     def __init__(
         self,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
+        inference_device: torch.device | str = "cpu",
+        inference_state_device: torch.device | str = "cpu",
         max_vision_features_cache_size: int = 1,
     ):
         self.inference_device = inference_device
@@ -95,7 +95,7 @@ class Sam3VideoInferenceCache:
                 cached[key] = value
         self._vision_features[frame_idx] = cached
 
-    def get_vision_features(self, frame_idx: int) -> Optional[dict]:
+    def get_vision_features(self, frame_idx: int) -> dict | None:
         """Get cached vision features, automatically moved to inference device."""
         if frame_idx not in self._vision_features:
             return None
@@ -141,13 +141,13 @@ class Sam3VideoInferenceSession:
 
     def __init__(
         self,
-        video: Optional[torch.FloatTensor] = None,
-        video_height: Optional[int] = None,
-        video_width: Optional[int] = None,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
-        video_storage_device: Union[torch.device, str] = "cpu",
-        dtype: Union[torch.dtype, str] = "float32",
+        video: torch.FloatTensor | None = None,
+        video_height: int | None = None,
+        video_width: int | None = None,
+        inference_device: torch.device | str = "cpu",
+        inference_state_device: torch.device | str = "cpu",
+        video_storage_device: torch.device | str = "cpu",
+        dtype: torch.dtype | str = "float32",
         max_vision_features_cache_size: int = 1,
     ):
         # store as a dictionary to avoid double memory allocation with torch.cat when adding new frames
@@ -208,7 +208,7 @@ class Sam3VideoInferenceSession:
         self.output_buffer = []
 
     @property
-    def num_frames(self) -> Optional[int]:
+    def num_frames(self) -> int | None:
         """Number of frames in the video."""
         return len(self.processed_frames) if self.processed_frames is not None else None
 
@@ -321,8 +321,8 @@ class Sam3VideoInferenceSession:
         self,
         obj_idx: int,
         frame_idx: int,
-        output_key: Optional[str] = None,
-        output_value: Optional[Union[torch.Tensor, dict]] = None,
+        output_key: str | None = None,
+        output_value: torch.Tensor | dict | None = None,
         is_conditioning_frame: bool = True,
     ):
         """
@@ -381,7 +381,7 @@ class Sam3VideoInferenceSession:
         return value
 
     # Video frame management
-    def add_new_frame(self, pixel_values: torch.Tensor, frame_idx: Optional[int] = None) -> int:
+    def add_new_frame(self, pixel_values: torch.Tensor, frame_idx: int | None = None) -> int:
         """Add new frame with automatic device placement."""
         pixel_values = pixel_values.to(self.video_storage_device, dtype=self.dtype, non_blocking=True)
         if pixel_values.dim() == 4:
@@ -478,13 +478,13 @@ class Sam3VideoSegmentationOutput(ModelOutput):
         The frame index of the video.
     """
 
-    object_ids: Optional[list[int]] = None
-    obj_id_to_mask: Optional[dict[int, torch.FloatTensor]] = None
-    obj_id_to_score: Optional[dict[int, float]] = None
-    obj_id_to_tracker_score: Optional[dict[int, float]] = None
-    removed_obj_ids: Optional[set[int]] = None
-    suppressed_obj_ids: Optional[set[int]] = None
-    frame_idx: Optional[int] = None
+    object_ids: list[int] | None = None
+    obj_id_to_mask: dict[int, torch.FloatTensor] | None = None
+    obj_id_to_score: dict[int, float] | None = None
+    obj_id_to_tracker_score: dict[int, float] | None = None
+    removed_obj_ids: set[int] | None = None
+    suppressed_obj_ids: set[int] | None = None
+    frame_idx: int | None = None
 
 
 class Sam3VideoPreTrainedModel(PreTrainedModel):
@@ -591,7 +591,8 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 text_embeds = self.detector_model.get_text_features(
                     input_ids=inference_session.prompt_input_ids[prompt_id],
                     attention_mask=inference_session.prompt_attention_masks[prompt_id],
-                )
+                    return_dict=True,
+                ).pooler_output
                 inference_session.prompt_embeddings[prompt_id] = text_embeds
             else:
                 text_embeds = inference_session.prompt_embeddings[prompt_id]
@@ -1145,7 +1146,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
     def _suppress_object_pw_area_shrinkage(
         self,
         pred_masks,
-        prompt_ids: Optional[list[int]] = None,
+        prompt_ids: list[int] | None = None,
     ):
         """
         This function suppresses masks that shrink in area after applying pixelwise non-overlapping constraints.
@@ -1179,7 +1180,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         inference_session: Sam3VideoInferenceSession,
         frame_idx: int,
         low_res_masks: Tensor,
-        reconditioned_masks: Optional[dict[int, Tensor]] = None,
+        reconditioned_masks: dict[int, Tensor] | None = None,
     ):
         """
         Run Sam3Tracker memory encoder, enforcing non-overlapping constraints globally.
@@ -1502,7 +1503,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         det_out: dict[str, Tensor],
         tracker_low_res_masks_global: Tensor,
         tracker_update_plan: dict,
-        reconditioned_obj_ids: Optional[set] = None,
+        reconditioned_obj_ids: set | None = None,
     ):
         """
         Build output dictionary with low-resolution masks.
@@ -1694,8 +1695,8 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
     def forward(
         self,
         inference_session: Sam3VideoInferenceSession,
-        frame_idx: Optional[int] = None,
-        frame: Optional[torch.Tensor] = None,
+        frame_idx: int | None = None,
+        frame: torch.Tensor | None = None,
         reverse: bool = False,
         **kwargs,
     ):
@@ -1763,7 +1764,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         self,
         inference_session: Sam3VideoInferenceSession,
         start_frame_idx: int,
-        max_frame_num_to_track: Optional[int] = None,
+        max_frame_num_to_track: int | None = None,
         reverse: bool = False,
     ):
         num_frames = inference_session.num_frames
@@ -1781,20 +1782,31 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         return processing_order, end_frame_idx
 
     @torch.inference_mode()
+    @auto_docstring(
+        custom_intro="""
+        Propagate the prompts to get grounding results for the entire video. Used when initializing an inference session with a whole video.
+        Yields Sam3VideoSegmentationOutput for each frame.
+        """
+    )
     def propagate_in_video_iterator(
         self,
         inference_session: Sam3VideoInferenceSession,
-        start_frame_idx=0,
-        max_frame_num_to_track=None,
-        reverse=False,
-    ):
-        """
-        Propagate the prompts to get grounding results for the entire video. This method
-        is a generator and yields inference outputs for all frames in the range specified
-        by `start_frame_idx`, `max_frame_num_to_track`, and `reverse`.
-
-        Yields:
-            `Sam3VideoSegmentationOutput`: The segmentation output for each frame.
+        start_frame_idx: int = 0,
+        max_frame_num_to_track: int | None = None,
+        reverse: bool = False,
+        show_progress_bar: bool = False,
+    ) -> Iterator[Sam3VideoSegmentationOutput]:
+        r"""
+        inference_session (`Sam3VideoInferenceSession`):
+            The video inference session object.
+        start_frame_idx (`int`, *optional*, defaults to `0`):
+            The starting frame index for propagation.
+        max_frame_num_to_track (`int`, *optional*):
+            The maximum number of frames to track. If not provided, all frames in the video will be tracked.
+        reverse (`bool`, *optional*, defaults to `False`):
+            Whether to propagate in reverse.
+        show_progress_bar (`bool`, *optional*, defaults to `False`):
+            Whether to show a progress bar during propagation.
         """
         processing_order, end_frame_idx = self._get_processing_order(
             inference_session,
@@ -1804,7 +1816,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         )
 
         hotstart_buffer = []
-        for frame_idx in tqdm(processing_order):
+        for frame_idx in tqdm(processing_order, desc="propagate in video", disable=not show_progress_bar):
             out = self(inference_session=inference_session, frame_idx=frame_idx, reverse=reverse)
 
             if self.hotstart_delay > 0:
@@ -1827,8 +1839,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             else:
                 yield_list = [out]  # output the current frame
 
-            for yield_out in yield_list:
-                yield yield_out
+            yield from yield_list
 
 
 @torch.jit.script

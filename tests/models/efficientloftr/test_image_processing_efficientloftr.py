@@ -16,7 +16,6 @@ import unittest
 
 import numpy as np
 import pytest
-from packaging import version
 from parameterized import parameterized
 
 from transformers.testing_utils import (
@@ -467,8 +466,6 @@ class EfficientLoFTRImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         """Override the generic test since EfficientLoFTR requires image pairs."""
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")
-        if version.parse(torch.__version__) < version.parse("2.3"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         torch.compiler.reset()
         input_image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=False)

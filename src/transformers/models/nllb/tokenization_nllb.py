@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -90,8 +88,8 @@ class NllbTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -101,12 +99,18 @@ class NllbTokenizer(TokenizersBackend):
         mask_token="<mask>",
         src_lang=None,
         tgt_lang=None,
+        _spm_precompiled_charsmap: str | None = None,
         additional_special_tokens=None,
+        extra_special_tokens=None,
         legacy_behaviour=False,
         **kwargs,
     ):
-        if additional_special_tokens is None:
-            additional_special_tokens = kwargs.get("extra_special_tokens", FAIRSEQ_LANGUAGE_CODES)
+        # V5: extra_special_tokens takes precedence over additional_special_tokens (deprecated)
+        # Handle case where both are passed (ie. from config and user override)
+        if extra_special_tokens is not None:
+            additional_special_tokens = extra_special_tokens
+        elif additional_special_tokens is None:
+            additional_special_tokens = FAIRSEQ_LANGUAGE_CODES
 
         mask_token = (
             AddedToken(mask_token, normalized=True, lstrip=True, special=True)
@@ -136,19 +140,16 @@ class NllbTokenizer(TokenizersBackend):
             )
         )
 
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Replace(Regex(r"[\n\r\t]"), " "),
-                normalizers.NFKC(),
-                normalizers.Replace(Regex(r" {2,}"), " "),
-            ]
-        )
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Sequence(
+                [
+                    normalizers.Precompiled(_spm_precompiled_charsmap),
+                    normalizers.Replace(Regex(r" {2,}"), " "),
+                ]
+            )
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
-
-        # Remove extra_special_tokens from kwargs if present to avoid conflict
-        kwargs.pop("extra_special_tokens", None)
 
         super().__init__(
             bos_token=bos_token,
@@ -190,7 +191,7 @@ class NllbTokenizer(TokenizersBackend):
         self.set_src_lang_special_tokens(self._src_lang)
 
     def _build_translation_inputs(
-        self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
+        self, raw_inputs, return_tensors: str, src_lang: str | None, tgt_lang: str | None, **extra_kwargs
     ):
         """Used by translation pipeline, to prepare inputs for the generate function"""
         if src_lang is None or tgt_lang is None:
@@ -205,12 +206,12 @@ class NllbTokenizer(TokenizersBackend):
         self,
         src_texts: list[str],
         src_lang: str = "eng_Latn",
-        tgt_texts: Optional[list[str]] = None,
+        tgt_texts: list[str] | None = None,
         tgt_lang: str = "fra_Latn",
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
+        max_length: int | None = None,
+        max_target_length: int | None = None,
         padding: str = "longest",
-        return_tensors: Optional[str] = None,
+        return_tensors: str | None = None,
         truncation: bool = True,
         **kwargs,
     ) -> BatchEncoding:
@@ -269,22 +270,24 @@ class NllbTokenizer(TokenizersBackend):
         - In default mode: Prefix=[src_lang_code], suffix = [eos]
         """
         self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
+        lang_code_token = src_lang
 
         if self.legacy_behaviour:
             self.prefix_tokens = []
             self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+            self._tokenizer.post_processor = processors.TemplateProcessing(
+                single=["$A", self.eos_token, lang_code_token],
+                pair=["$A", "$B", self.eos_token, lang_code_token],
+                special_tokens=[(self.eos_token, self.eos_token_id), (lang_code_token, self.cur_lang_code)],
+            )
         else:
             self.prefix_tokens = [self.cur_lang_code]
             self.suffix_tokens = [self.eos_token_id]
-
-        prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
-        suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
-
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
-            pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
-            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
-        )
+            self._tokenizer.post_processor = processors.TemplateProcessing(
+                single=[lang_code_token, "$A", self.eos_token],
+                pair=[lang_code_token, "$A", "$B", self.eos_token],
+                special_tokens=[(self.eos_token, self.eos_token_id), (lang_code_token, self.cur_lang_code)],
+            )
 
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target lang setting.
@@ -292,21 +295,24 @@ class NllbTokenizer(TokenizersBackend):
         - In default mode: Prefix=[tgt_lang_code], suffix = [eos]
         """
         self.cur_lang_code = self.convert_tokens_to_ids(lang)
+        lang_code_token = lang
+
         if self.legacy_behaviour:
             self.prefix_tokens = []
             self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+            self._tokenizer.post_processor = processors.TemplateProcessing(
+                single=["$A", self.eos_token, lang_code_token],
+                pair=["$A", "$B", self.eos_token, lang_code_token],
+                special_tokens=[(self.eos_token, self.eos_token_id), (lang_code_token, self.cur_lang_code)],
+            )
         else:
             self.prefix_tokens = [self.cur_lang_code]
             self.suffix_tokens = [self.eos_token_id]
-
-        prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
-        suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
-
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
-            pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
-            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
-        )
+            self._tokenizer.post_processor = processors.TemplateProcessing(
+                single=[lang_code_token, "$A", self.eos_token],
+                pair=[lang_code_token, "$A", "$B", self.eos_token],
+                special_tokens=[(self.eos_token, self.eos_token_id), (lang_code_token, self.cur_lang_code)],
+            )
 
 
 __all__ = ["NllbTokenizer"]
