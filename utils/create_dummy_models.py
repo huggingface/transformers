@@ -26,7 +26,7 @@ from pathlib import Path
 
 from check_config_docstrings import get_checkpoint_from_config_class
 from datasets import load_dataset
-from get_test_info import get_model_to_tester_mapping, get_tester_classes_for_model
+from get_test_info import get_model_to_tester_mapping, get_tester_classes_for_model, get_test_module
 from huggingface_hub import create_repo, hf_api, upload_folder
 
 from transformers import (
@@ -121,6 +121,20 @@ UNCONVERTIBLE_MODEL_ARCHITECTURES = {
     "XLMRobertaForCausalLM",
     "XLMRobertaForSequenceClassification",
     "XLMRobertaForQuestionAnswering",
+}
+
+
+config_class_to_model_tester_map = {
+    "Qwen3OmniMoeConfig": None,
+    "Qwen2_5OmniConfig": None,
+    "Qwen3_5Config": "Qwen3_5VisionText2TextModelTester",
+    "Qwen3_5MoeConfig": "Qwen3_5MoeVisionText2TextModelTester",
+    "InstructBlipConfig": "InstructBlipForConditionalGenerationDecoderOnlyModelTester",
+    "InstructBlipVideoConfig": "InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester",
+    "MllamaConfig": "MllamaVisionText2TextModelTester",
+    "Gemma3nConfig": "Gemma3nVision2TextModelTester",
+    "Gemma3Config": "Gemma3Vision2TextModelTester",
+    "VideoLlama3Config": "VideoLlama3VisionText2TextModelTester",
 }
 
 
@@ -406,6 +420,29 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
     return processor
 
 
+# recursively get the correct config
+def _get_exact_config(_config, config_class):
+
+    # breakpoint()
+    if isinstance(_config, config_class):
+        return _config
+
+    # TODO: T5Gemma2 has `encoder` and `decoder` instead `_config`
+
+    # We consider both cases: real config or dict (for `FastSpeech2ConformerConfig`'s encoder/decoder config, which are only module config)
+    config_dict = _config.to_dict() if not isinstance(_config, dict) else _config
+
+    keys = [x for x in config_dict.keys() if x.endswith("_config") or x in ["encoder", "decoder"]]
+    for key in keys:
+        sub_config = getattr(_config, key) if not isinstance(_config, dict) else _config[key]
+        if sub_config is not None:
+            maybe_config = _get_exact_config(sub_config, config_class)
+            if isinstance(maybe_config, config_class):
+                return maybe_config
+
+    return _config
+
+
 # TODO: Sam2Video will fail here
 def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     """Retrieve a tiny configuration from `config_class` using each model's `ModelTester`.
@@ -501,45 +538,72 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
         )
         raise ValueError(error)
 
-    # recursively get the correct config
-    def _get_exact_config(_config, config_class):
-
-        # breakpoint()
-        if isinstance(_config, config_class):
-            return _config
-
-        # TODO: T5Gemma2 has `encoder` and `decoder` instead `_config`
-
-        # We consider both cases: real config or dict (for `FastSpeech2ConformerConfig`'s encoder/decoder config, which are only module config)
-        config_dict = _config.to_dict() if not isinstance(_config, dict) else _config
-
-        keys = [x for x in config_dict.keys() if x.endswith("_config") or x in ["encoder", "decoder"]]
-        for key in keys:
-            sub_config = getattr(_config, key) if not isinstance(_config, dict) else _config[key]
-            if sub_config is not None:
-                maybe_config = _get_exact_config(sub_config, config_class)
-                if isinstance(maybe_config, config_class):
-                    return maybe_config
-
-        return _config
-
     # breakpoint()
     config = _get_exact_config(config, config_class)
 
     # TODO: For `pe_audio_video`: the tester only gives `PeAudioVideoEncoderConfig` and can't create model for `PeAudioVideoModel`
-    #   we try to find if `config` is a subconfig for `config_class`. If so, return `config_class()` after setting that attr. to `config`
-    # TODO: But this might get very large model?
     # TODO: This part is necessary for Gemma3Model!
-    # if not isinstance(config, config_class):
-    #     config_from_class = config_class()
-    #     keys = config_from_class.to_dict().keys()
-    #     for key in keys:
-    #         if key.endswith("_config"):
-    #             o = getattr(config_from_class, key)
-    #             if isinstance(config, o.__class__):
-    #                 setattr(config_from_class, key, config)
-    #                 config = config_from_class
-    #                 break
+    # TODO: Make this part much better without duplicating the code and less error prone
+    # breakpoint()
+    if not isinstance(config, config_class):
+        model_tester_class_name = config_class_to_model_tester_map.get(config_class.__name__, None)
+        if model_tester_class_name is not None:
+            test_module = get_test_module(test_file)
+            new_model_tester_class = getattr(test_module, model_tester_class_name)
+
+
+            #　TODO: Avoid code duplication
+            # TODO: we need to make sure the kwargs are actually arguments!
+            #   But we are likely NOT to override anymore! Let's do something easy and quick here despite ugly.
+            try:
+                # breakpoint()
+                new_model_tester = new_model_tester_class(parent=None, **model_tester_kwargs)
+            except TypeError as e:
+
+                # if "vocab_size" in model_tester_kwargs:
+                model_tester_kwargs_new = {k: v for k, v in model_tester_kwargs.items() if k != "vocab_size"}
+
+                # we need to handle unusual arguments, like "config_kwargs" in `PeVideoTextModelTester` (not good practice but understandable)
+                for k, v in model_tester_kwargs_new.items():
+                    if isinstance(v, dict):
+                        model_tester_kwargs_new[k] = {k1: v1 for k1, v1 in v.items() if k1 != "vocab_size"}
+
+                new_model_tester = new_model_tester_class(parent=None, **model_tester_kwargs_new)
+
+            ### new_model_tester = new_model_tester_class(parent=None, **model_tester_kwargs)
+
+            model_tester = new_model_tester
+
+            if hasattr(model_tester, "get_pipeline_config"):
+                config = model_tester.get_pipeline_config()
+            elif hasattr(model_tester, "prepare_config_and_inputs"):
+                # `PoolFormer` has no `get_config` defined. Furthermore, it's better to use `prepare_config_and_inputs` even if
+                # `get_config` is defined, since there might be some extra changes in `prepare_config_and_inputs`.
+                config = model_tester.prepare_config_and_inputs()[0]
+            elif hasattr(model_tester, "get_config"):
+                config = model_tester.get_config()
+            else:
+                error = (
+                    f"Tiny config not created for {model_type} - the model tester {model_tester_class.__name__} lacks"
+                    " necessary method to create config."
+                )
+                raise ValueError(error)
+
+
+        # TODO: Disabled as this causes issues due to much larger models
+        # # TODO: For `pe_audio_video`: the tester only gives `PeAudioVideoEncoderConfig` and can't create model for `PeAudioVideoModel`
+        # #   we try to find if `config` is a subconfig for `config_class`. If so, return `config_class()` after setting that attr. to `config`
+        # # TODO: But this might get very large model?
+        # # TODO: This part is necessary for Gemma3Model!
+        # config_from_class = config_class()
+        # keys = config_from_class.to_dict().keys()
+        # for key in keys:
+        #     if key.endswith("_config"):
+        #         o = getattr(config_from_class, key)
+        #         if isinstance(config, o.__class__):
+        #             setattr(config_from_class, key, config)
+        #             config = config_from_class
+        #             break
 
     # breakpoint()
     # make sure this is long enough (some model tester has `20` for this attr.) to pass `text-generation`
@@ -1353,7 +1417,22 @@ def build(config_class, models_to_create, output_dir):
         error = None
         try:
             # breakpoint()
-            model = build_model(pytorch_arch, tiny_config, output_dir=output_dir)
+
+            used_tiny_config = tiny_config
+
+            # TODO: Some model_type will include multiple `pytorch_arch` but they might actually have different `self.config_class`
+            #   (e.g. Qwen3_5Config from qwen3_5, and `Qwen3_5ForCausalLM`
+            #   Let's first try to get the component maybe
+            if pytorch_arch.config_class != config_class:
+                used_tiny_config = _get_exact_config(tiny_config, pytorch_arch.config_class)
+
+            # TODO: If we can't get the exact config, let's skip to avoid issue
+            # TODO: Maybe add as an error info
+            if pytorch_arch.config_class != used_tiny_config.__class__:
+                del result["pytorch"][pytorch_arch.__name__]
+                continue
+
+            model = build_model(pytorch_arch, used_tiny_config, output_dir=output_dir)
         except Exception as e:
 
             # TODO: hacky way to make `T5GemmaEncoderModel` work
@@ -1708,3 +1787,27 @@ if __name__ == "__main__":
 # FastSpeech2ConformerTokenizer vs AutTokenizer --> the later can't load from `espnet/fastspeech2_conformer` ??
 # "Pop2PianoConfig" Require `pip install essentia==2.1b6.dev1034`
 # NemotronConfig ==> can't convert fast tokenizer because `Exception: Unk token `<unk>` not found in the vocabulary`
+
+
+# track but get large model:
+# BarkConfig, ClvpConfig, Emu3Config, JanusConfig
+
+
+
+# PeAudioVideoConfig : Only deal with PeAudioVideoEncoderConfig and PeAudioVideoEncoder
+
+# Qwen3OmniMoeConfig: Only deal with Qwen3OmniMoeThinkerConfig and Qwen3OmniMoeThinkerForConditionalGeneration
+# Qwen2_5OmniConfig: Only deal with Qwen2_5OmniThinkerConfig and Qwen2_5OmniThinkerForConditionalGenerationTester
+
+
+# Qwen3_5Config: Deal with both `Qwen3_5TextConfig` and `Qwen3_5Config` but only get the first
+# Qwen3_5MoeConfig: Deal with both `Qwen3_5MoeTextConfig` and `Qwen3_5MoeConfig`
+
+# InstructBlipConfig: deal 4 types
+# InstructBlipVideoConfig: deal 4 types
+
+# MllamaConfig: deal 2 types
+# Gemma3nConfig: deal 3 types
+# Gemma3Config: deal 2 types
+# VideoLlama3Config: deal 3 tyipes
+
